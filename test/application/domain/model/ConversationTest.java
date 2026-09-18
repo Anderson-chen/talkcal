@@ -1,3 +1,5 @@
+package application.domain.model;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -152,8 +154,56 @@ class ConversationTest {
     }
 
     @Nested
-    @DisplayName("規則 3：歷史只能追加")
-    class AppendOnly {
+    @DisplayName("規則 3：已回覆的輪次不可修改")
+    class AnsweredRoundsAreFinal {
+
+        @Nested
+        @DisplayName("撤回提問")
+        class Withdraw {
+
+            Conversation conversation = Conversation.start();
+
+            @Test
+            @DisplayName("沒有待回覆的提問時撤回會被拒")
+            void rejectWithoutQuestion() {
+                assertThrows(IllegalStateException.class, conversation::withdrawQuestion);
+            }
+
+            @Test
+            @DisplayName("撤回後回到提問前，可以重新提問")
+            void withdrawThenAskAgain() {
+                conversation.ask("中午吃什麼");
+
+                conversation.withdrawQuestion();
+
+                assertFalse(conversation.awaitingReply());
+                assertTrue(conversation.messages().isEmpty());
+                conversation.ask("中午吃什麼");
+                assertTrue(conversation.awaitingReply());
+            }
+
+            @Test
+            @DisplayName("只撤回最後的提問，已回覆的輪次保留")
+            void keepAnsweredRounds() {
+                conversation.ask("中午吃什麼");
+                conversation.recordReply("牛肉麵");
+                conversation.ask("熱量多少");
+
+                conversation.withdrawQuestion();
+
+                assertEquals(List.of(user("中午吃什麼"), assistant("牛肉麵")), conversation.messages());
+            }
+
+            @Test
+            @DisplayName("已回覆後撤回會被拒，歷史不變")
+            void rejectAfterReply() {
+                conversation.ask("中午吃什麼");
+                conversation.recordReply("牛肉麵");
+
+                assertThrows(IllegalStateException.class, conversation::withdrawQuestion);
+                assertEquals(List.of(user("中午吃什麼"), assistant("牛肉麵")), conversation.messages());
+            }
+        }
 
         @Test
         @DisplayName("從外部無法修改歷史訊息")

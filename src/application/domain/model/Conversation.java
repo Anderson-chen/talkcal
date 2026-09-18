@@ -1,3 +1,5 @@
+package application.domain.model;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -54,11 +56,19 @@ public final class Conversation {
         messages.add(new Message(Role.ASSISTANT, text));
     }
 
+    // 只能撤回還沒得到回覆的提問；已回覆的輪次不可修改（規則 3）
+    public void withdrawQuestion() {
+        if (!awaitingReply()) {
+            throw new IllegalStateException("沒有待回覆的提問，不能撤回");
+        }
+        messages.removeLast();
+    }
+
     public boolean awaitingReply() {
         return !messages.isEmpty() && messages.getLast().role() == Role.USER;
     }
 
-    // 歷史只能追加，對外只給不可變的快照（規則 3）
+    // 對外只給不可變的快照，外部無法修改歷史（規則 3）
     public List<Message> messages() {
         return List.copyOf(messages);
     }
