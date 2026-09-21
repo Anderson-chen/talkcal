@@ -1,1 +1,8 @@
 /out/
+
+# Gradle
+/build/
+/.gradle/
+
+# IntelliJ 的舊 module 檔；專案改用 Gradle 匯入後不再需要
+*.iml
