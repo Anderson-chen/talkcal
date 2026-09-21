@@ -4,5 +4,6 @@
 /build/
 /.gradle/
 
-# IntelliJ 的舊 module 檔；專案改用 Gradle 匯入後不再需要
+# IntelliJ：IDE 狀態不進版控，專案結構由 build.gradle 描述就夠了
+/.idea/
 *.iml
