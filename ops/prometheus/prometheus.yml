@@ -11,14 +11,17 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
-  # (2) 我們的 Spring app —— 目前是「佔位」狀態。
-  #     app 還沒加 web server / actuator，所以這個 target 現在會是紅的(DOWN)，這是正常的。
+  # (2) 我們的 Spring app —— app 已是 HTTP 入口(port 8090)，但還沒開 metrics 端點。
+  #     目前 build.gradle 只有 spring-boot-starter-web，還沒加 actuator / micrometer，
+  #     所以 /actuator/prometheus 還不存在，這個 target 會是紅的(DOWN)，這是正常的。
   #     下一步替 app 加上 spring-boot-starter-actuator + micrometer-registry-prometheus，
-  #     它就會在 /actuator/prometheus 吐指標，這裡一個字都不用改，target 自己會變綠。
+  #     並在 application.properties 把 prometheus 端點露出來，這裡就會自動變綠、不必再改。
   #
+  #     埠是 8090 不是 8080：8080 讓給常駐的 llama-server，app 的 HTTP 入口挪到 8090
+  #     （見 src/main/resources/application.properties 的 server.port）。
   #     host.docker.internal = 容器眼中的「你這台機器」。app 用 ./gradlew bootRun 跑在 host 上，
   #     Prometheus 要透過這個名字才找得到它（compose.yaml 已把這名字接到 host-gateway）。
   - job_name: eat-app
     metrics_path: /actuator/prometheus   # Spring Boot 吐 Prometheus 指標的預設路徑
     static_configs:
-      - targets: ["host.docker.internal:8080"]
+      - targets: ["host.docker.internal:8090"]
