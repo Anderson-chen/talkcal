@@ -1,0 +1,20 @@
+# Grafana 的「資料源自動接線」：容器一啟動就照這個檔把資料源建好，
+# 不必每次開 UI 手動加。改了這個檔 → 重啟 grafana 容器就生效。
+
+apiVersion: 1
+
+datasources:
+  # 指標來源：指到 prometheus 容器。用服務名 "prometheus" 是因為同一個 compose 網路裡，
+  # 容器之間可直接用服務名互相找到（Docker 內建 DNS），不必寫 IP。
+  - name: Prometheus
+    type: prometheus
+    access: proxy               # 由 Grafana 後端去打 Prometheus，不是叫你的瀏覽器去打
+    url: http://prometheus:9090
+    isDefault: true             # 沒特別指定時就用這個資料源
+
+  # 日誌來源：指到 loki 容器。現在還沒有人往 Loki 送 log，所以查不到內容是正常的，
+  # 但資料源本身會是通的（綠燈）。等之後加了 log 收集器就有東西可查。
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100

@@ -1,0 +1,79 @@
+# 這個 stack 只做一件事：把「觀測環境」用 Docker 一次拉起來，跟 Java app 完全分離。
+# app 還是照常 ./gradlew bootRun 跑在你自己機器上（host），這裡的容器只負責「收資料 + 畫圖」。
+#
+# 三個角色，各司其職（詳見 README）：
+#   prometheus —— 存指標(metrics)。每隔幾秒去抓 app 吐出來的數字，存成時間序列。
+#   loki       —— 存日誌(logs)。集中放 log，之後可以在 Grafana 用同一個介面查。
+#   grafana    —— 畫圖。它自己不存資料，只去跟上面兩個要資料來畫。
+#
+# 刻意不寫 version: 欄位 —— Compose v2 已經不看它了，寫了反而跳 warning。
+
+# 給這組容器一個共同名字前綴，跟別的專案的容器分開；也讓 `docker compose down` 一次收乾淨。
+name: eat-observability
+
+services:
+  # ── 指標資料庫 ────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v3.1.0     # 釘死版本，換機器也拉到同一版（跟 build.gradle 釘 JDK 版本同個道理）
+    container_name: eat-prometheus
+    command:
+      # 預設就會讀這個檔，明寫是為了「一眼看到它讀哪個設定」
+      - --config.file=/etc/prometheus/prometheus.yml
+      # 打開熱重載 API：改了 scrape 設定後 `curl -X POST localhost:9090/-/reload` 就生效，不必重啟容器
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"                   # 開 http://localhost:9090 可看 Prometheus 自己的介面
+    volumes:
+      # :ro = 唯讀。設定檔由版控管，不讓容器改它
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # 具名 volume：抓到的資料存這，容器重建後資料還在
+      - prometheus-data:/prometheus
+    extra_hosts:
+      # Linux 容器預設沒有 host.docker.internal 這個名字。明寫這行後，容器裡就能用它指回
+      # 「你自己這台機器」——這樣 Prometheus 才抓得到跑在 host 上的 Spring app。跨平台都一致。
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped           # 當掉/開機自動拉回來，但你手動 down 掉就別雞婆重啟
+
+  # ── 日誌資料庫 ────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:3.3.0
+    container_name: eat-loki
+    command: -config.file=/etc/loki/loki-config.yaml
+    ports:
+      - "3100:3100"                   # Loki 的 API 埠。之後 log 收集器(Promtail/Alloy)往這裡送
+    volumes:
+      - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki-data:/loki
+    restart: unless-stopped
+
+  # ── 畫圖前台 ─────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: eat-grafana
+    ports:
+      - "3000:3000"                   # 主角。開 http://localhost:3000 就是儀表板
+    environment:
+      # 學習用、只在 localhost 跑，關掉登入省事：一開網頁就是 Admin，不必記帳密。
+      # 要練權限管理再把這三行拿掉，改用預設帳密 admin / admin 登入。
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      # 少一個「要不要回報使用狀況」的背景行為
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+    volumes:
+      # provisioning：讓 Grafana 一啟動就自動把 Prometheus / Loki 兩個資料源接好，
+      # 不必每次開 UI 手動加。設定用版控管，環境重建也一致。
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      # 只保證「先啟動」順序，不保證對方已 ready；Grafana 的資料源健康檢查本來就會自己重試，夠用。
+      - prometheus
+      - loki
+    restart: unless-stopped
+
+# 具名 volume：資料交給 Docker 管，不落在專案資料夾裡（所以不必動 .gitignore）。
+# 要整組資料清掉重來：docker compose down -v
+volumes:
+  prometheus-data:
+  loki-data:
+  grafana-data:

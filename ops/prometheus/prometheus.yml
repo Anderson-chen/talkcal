@@ -1,0 +1,24 @@
+# Prometheus 的工作：照 scrape_configs 列的對象，每隔 scrape_interval 去抓一次數字存起來。
+# 這個檔現在有兩個抓取對象，其中 app 那個「還沒東西可抓」—— 先把設定擺好，等 app 開了端點就通。
+
+global:
+  scrape_interval: 15s      # 每 15 秒抓一輪。學習用夠了；要更即時可縮短，但資料量會變大
+  evaluation_interval: 15s  # 告警規則多久算一次（目前沒設規則，先放著）
+
+scrape_configs:
+  # (1) Prometheus 抓自己 —— 一定會有資料，用來確認「這套抓取機制本身是活的」
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # (2) 我們的 Spring app —— 目前是「佔位」狀態。
+  #     app 還沒加 web server / actuator，所以這個 target 現在會是紅的(DOWN)，這是正常的。
+  #     下一步替 app 加上 spring-boot-starter-actuator + micrometer-registry-prometheus，
+  #     它就會在 /actuator/prometheus 吐指標，這裡一個字都不用改，target 自己會變綠。
+  #
+  #     host.docker.internal = 容器眼中的「你這台機器」。app 用 ./gradlew bootRun 跑在 host 上，
+  #     Prometheus 要透過這個名字才找得到它（compose.yaml 已把這名字接到 host-gateway）。
+  - job_name: eat-app
+    metrics_path: /actuator/prometheus   # Spring Boot 吐 Prometheus 指標的預設路徑
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
