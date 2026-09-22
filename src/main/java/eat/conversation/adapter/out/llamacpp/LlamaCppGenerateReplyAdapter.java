@@ -22,7 +22,7 @@ import java.util.Optional;
  * 看得見它的不是 core（core 只認得 GenerateReplyPort），而是組裝根：
  * 整個專案只有那一個地方會 new 它，其餘所有程式都只透過 port 使用它。
  *
- * 前面三塊零件（Json、ChatRequest、ChatResponse）全是 package-private，
+ * 兩塊翻譯零件（ChatRequest、ChatResponse）都是 package-private，
  * 在這裡被組合起來，然後從外面完全看不到。
  */
 public final class LlamaCppGenerateReplyAdapter implements GenerateReplyPort {

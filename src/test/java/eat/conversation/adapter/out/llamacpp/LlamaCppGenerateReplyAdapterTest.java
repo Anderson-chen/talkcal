@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Adapter 的整合測試：對「真正的」llama-server 跑。
  *
  * 這個 package 的測試分兩層：
- * Json、JsonParser、ChatRequest、ChatResponse 各自有單元測試，
+ * ChatRequest、ChatResponse 各自有單元測試，
  * 那是純函式，邏輯在那裡就守完了；
  * Adapter 本身扣掉那些零件之後，剩下的責任只有「把它們串起來，並跟真實世界往返」——
  * HTTP、編碼、逾時、失敗包裝，全都是只有對真東西講話才驗得出來的事。

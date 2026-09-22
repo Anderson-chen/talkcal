@@ -12,7 +12,7 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
  * 把架構規則寫成會失敗的測試。
  *
  * 為什麼需要這個檔案：Java 的 package 沒有依賴方向的概念。
- * package-private 擋得住「別人看見 Json 這個 class」，
+ * package-private 擋得住「別人看見 ChatRequest 這個 class」，
  * 但擋不住 AskQuestionService 去 import 一個 llama.cpp 的 Adapter ——
  * 那樣寫編譯器一聲不吭，測試照樣全綠，架構就是這樣一點一點爛掉的。
  *
@@ -92,6 +92,21 @@ class ArchitectureTest {
             noClasses().that().resideInAPackage("..application..")
                     .should().dependOnClassesThat().resideInAPackage("org.springframework..")
                     .because("業務規則綁死在框架上，就換不掉框架、也沒法脫離容器單獨測 domain");
+
+    /**
+     * core 不准依賴 Jackson。跟上一條同一個道理，只是換成序列化函式庫。
+     *
+     * 這條擋的是最常見的那種滲透：為了讓 Conversation 能直接丟給 Jackson 序列化，
+     * 在 domain 的欄位上加 @JsonProperty、@JsonIgnore。那看起來只是「加個註解」，
+     * 實際上是讓「資料怎麼在線路上呈現」這件事跑進了業務規則裡 ——
+     * 從此改一個 JSON 欄位名要動 Entity，而 Entity 的形狀開始被外部格式牽著走。
+     * 要序列化就在 adapter 自己定義一份 wire format（ChatRequest.Body 就是這樣做的）。
+     */
+    @ArchTest
+    static final ArchRule coreMustNotDependOnJackson =
+            noClasses().that().resideInAPackage("..application..")
+                    .should().dependOnClassesThat().resideInAPackage("com.fasterxml.jackson..")
+                    .because("資料在線路上長什麼樣是 adapter 的事，不該反過來決定 Entity 的形狀");
 
     /**
      * package 之間不可以繞成環。
