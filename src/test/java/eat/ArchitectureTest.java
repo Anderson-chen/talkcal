@@ -49,7 +49,7 @@ class ArchitectureTest {
 
     /**
      * 兩側的 adapter 互不認識。
-     * console 要換成 web、llama.cpp 要換成 OpenAI，都不該牽動另一側。
+     * 入口那側（目前是 HTTP 的 ChatController）換成別的、llama.cpp 換成 OpenAI，都不該牽動另一側。
      */
     @ArchTest
     static final ArchRule inboundAdaptersMustNotDependOnOutboundAdapters =
@@ -78,6 +78,20 @@ class ArchitectureTest {
             noClasses().that().resideInAPackage("..application..")
                     .should().dependOnClassesThat().resideInAnyPackage("java.net..", "javax.net..")
                     .because("怎麼把提問送出去是 adapter 的事，core 只知道有個 port");
+
+    /**
+     * core 不准依賴 Spring。這條是「導入 Spring」這件事的護欄。
+     *
+     * Spring 是組裝時的框架 —— 它負責把 bean 兜起來、把 web 請求接進來，這些都是最外圈的事。
+     * 一旦 @Component、@Autowired、@Service 爬進 application/domain，業務規則就跟框架焊死了：
+     * 想單獨用純 JUnit 測一個 Conversation 得先起半個容器，想換框架得改動核心。
+     * 允許 Spring 待在 adapter 和組裝根（那本來就是它的地盤），但到 core 的門口為止。
+     */
+    @ArchTest
+    static final ArchRule coreMustNotDependOnSpring =
+            noClasses().that().resideInAPackage("..application..")
+                    .should().dependOnClassesThat().resideInAPackage("org.springframework..")
+                    .because("業務規則綁死在框架上，就換不掉框架、也沒法脫離容器單獨測 domain");
 
     /**
      * package 之間不可以繞成環。

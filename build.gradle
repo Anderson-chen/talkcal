@@ -1,7 +1,12 @@
+import org.springframework.boot.gradle.plugin.SpringBootPlugin
+
 plugins {
     id 'java'
     // 讓 ./gradlew run 能直接啟動組裝根
     id 'application'
+    // Spring Boot 只負責「組裝」這件事：把散落的 bean 兜起來、打包成可執行 jar、提供 bootRun。
+    // 業務規則一個字都不會碰到它 —— 見 build 檔最後那條 ArchUnit 規則守著這件事。
+    id 'org.springframework.boot' version '3.5.8'
 }
 
 repositories {
@@ -18,6 +23,18 @@ java {
 }
 
 dependencies {
+    // Spring Boot 的 BOM：一次釘住所有 spring-boot-* 與其傳遞依賴的版本，下面就不必寫版號。
+    // 用 Gradle 原生的 platform() 吃 BOM，而不是額外掛 io.spring.dependency-management 外掛 ——
+    // 後者在 Gradle 9 上會踩到已被移除的 API，platform() 是 Gradle 自己的機制，乾淨。
+    // BOM 座標直接取自上面套用的 Boot 外掛版本，不必再寫一次 3.5.8，改版只改一個地方。
+    implementation platform(SpringBootPlugin.BOM_COORDINATES)
+
+    // web starter：嵌入式 Tomcat + Spring MVC + Jackson（JSON 序列化）。
+    // 這一包讓「第二個 inbound adapter」變成可能 —— 同一個 AskQuestionUseCase，
+    // 除了 console 之外，現在也能被一個 @RestController 從 HTTP 那頭呼叫。
+    // 它取代（並涵蓋）了原本的 spring-boot-starter，所以不必兩個都寫。
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
     // BOM 統一管理 JUnit 各模組的版本，下面就不必逐一寫版號
     testImplementation platform('org.junit:junit-bom:5.12.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -50,10 +67,4 @@ tasks.named('test') {
 
 application {
     mainClass = 'eat.Application'
-}
-
-tasks.named('run') {
-    // Gradle 預設不把主控台的輸入接給被執行的程式，
-    // 少了這行 ConsoleChatAdapter 一啟動就讀到 EOF 直接結束
-    standardInput = System.in
 }
