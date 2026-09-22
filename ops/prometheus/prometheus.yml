@@ -25,3 +25,15 @@ scrape_configs:
     metrics_path: /actuator/prometheus   # Spring Boot 吐 Prometheus 指標的預設路徑
     static_configs:
       - targets: ["host.docker.internal:8090"]
+
+  # (3) llama.cpp 的 llama-server —— LLM 那顆本體。加了 --metrics 就在 8080/metrics 吐指標
+  #     （launch.json 的 runtimeArgs 已補上 --metrics；沒帶這旗標的話這個 target 會是紅的）。
+  #     不必寫 metrics_path：llama-server 用的就是 Prometheus 預設的 /metrics，不像上面 app 要改成
+  #     /actuator/prometheus。埠 8080 是 llama-server 常駐的埠（app 讓到 8090 就是為了它）。
+  #     看得到的指標：predicted_tokens_seconds（生成速度 t/s）、prompt_tokens_seconds（prompt t/s）、
+  #     requests_processing（處理中）、requests_deferred（排隊中，併發塞車看它）、
+  #     tokens_predicted_total / prompt_tokens_total（累計 counter）。
+  #     實際清單以 `curl localhost:8080/metrics` 這個 build 吐出來的為準（此 build 沒有 kv_cache 相關指標）。
+  - job_name: llama-cpp
+    static_configs:
+      - targets: ["host.docker.internal:8080"]

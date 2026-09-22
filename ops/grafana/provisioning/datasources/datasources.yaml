@@ -11,6 +11,10 @@ datasources:
     access: proxy               # 由 Grafana 後端去打 Prometheus，不是叫你的瀏覽器去打
     url: http://prometheus:9090
     isDefault: true             # 沒特別指定時就用這個資料源
+    # 釘死一個固定 uid：沒指定的話 Grafana 會隨機產一個，
+    # 那 provision 進來的 dashboard 就對不到這個資料源、panel 全空。
+    # 寫死 uid，dashboard JSON 才能穩穩用 "uid": "prometheus" 指到它。
+    uid: prometheus
 
   # 日誌來源：指到 loki 容器。現在還沒有人往 Loki 送 log，所以查不到內容是正常的，
   # 但資料源本身會是通的（綠燈）。等之後加了 log 收集器就有東西可查。

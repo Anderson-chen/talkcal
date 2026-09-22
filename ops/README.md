@@ -30,6 +30,8 @@ docker compose down -v      # 關掉並清空資料，整組重來
 - **Grafana、Prometheus、Loki 三個都會起來、互相接通**（資料源綠燈）。
 - 但**還沒有 app 的資料**：
   - Prometheus 的 `eat-app` 抓取目標會是**紅的(DOWN)**——因為 app 還沒有 web server / metrics 端點。**這是正常的**，環境本身沒問題。
+  - `llama-cpp` 抓取目標已設好（抓 `8080/metrics`）。要它變綠：llama-server 啟動要帶 `--metrics`
+    （`.claude/launch.json` 已補上），**改完要重啟 llama-server** 才生效；沒帶這旗標時 `/metrics` 回 501、target 是紅的。
   - Loki 裡查不到 log——因為還沒有人往它送 log。同樣正常。
 
 換句話說，這一步只把「空的觀測環境」立起來、等資料進來。

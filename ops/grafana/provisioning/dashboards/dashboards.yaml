@@ -1,0 +1,25 @@
+# Grafana 的「dashboard 自動載入」：跟隔壁 datasources 那檔同個道理 ——
+# 容器一啟動就把下面 path 裡的 dashboard JSON 全部讀進來，不必開 UI 手動建、手動匯入。
+# dashboard 因此也進版控、可重現：換台機器 `docker compose up` 就有同一張圖。
+#
+# path 是「容器裡」的路徑，不是你硬碟上的。compose.yaml 已經把整個
+# ./grafana/provisioning 掛到容器的 /etc/grafana/provisioning（唯讀），
+# 所以這個資料夾裡的 *.json 會出現在下面這個 path，不必再改 compose。
+#
+# 改了這裡或改了 dashboard JSON → 重啟 grafana 容器就生效：
+#   docker compose restart grafana
+
+apiVersion: 1
+
+providers:
+  - name: eat-dashboards
+    # 讓「在 UI 上動過的版本」不會一重啟就被檔案蓋掉前，先問一下 ——
+    # 學習用途下設 false：以檔案為準，UI 上的臨時修改重啟後會被檔案覆蓋回去。
+    # 想在 UI 上試改就別存檔，或把試好的結果貼回 JSON。
+    disableDeletion: false
+    updateIntervalSeconds: 30   # 每 30 秒掃一次檔案有沒有變，改 JSON 不必每次重啟
+    allowUiUpdates: false       # UI 上不給存回，逼你把變更寫進版控的 JSON
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      # 讓 Grafana 依資料夾結構分組（將來 app、llama 各放一個子資料夾就自動分頁）
+      foldersFromFilesStructure: true
