@@ -52,6 +52,13 @@ dependencies {
     // 把架構規則寫成測試。Java 的 package 沒有依賴方向的概念，
     // 少了它「core 不准依賴 adapter」就只是口頭約定，編譯器不會管
     testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
+
+    // 為了 @WebMvcTest 與 MockMvc：ChatController 幾乎每一行都是在跟 Spring 講話
+    // （路由、@RequestBody 綁定、@ExceptionHandler），不經過 Spring 測等於沒測。
+    // 這一包也會拉進 Mockito、AssertJ、Hamcrest，但專案一律手寫假物件，不用 mock 框架 ——
+    // 拉進來只是因為它們是 starter 的傳遞依賴，用不到就當作沒有。
+    // （版本由上面的 Boot BOM 管，不必寫版號。）
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 
 // 程式與註解都有中文，編碼一定要明寫。
