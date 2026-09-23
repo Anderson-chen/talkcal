@@ -63,6 +63,29 @@ $env:K6_WEB_DASHBOARD_EXPORT="perf/results/smoke-report.html"; k6 run -o web-das
 這條路零設定、最快看到東西；要把壓測曲線跟 app／llama.cpp 的指標**疊在同一張圖**上看，
 才需要走下面「接進既有 Grafana」那條。
 
+### load：找併發上限
+
+全程約 4~5 分鐘，會把 llama-server 壓到超過容量：
+
+```bash
+k6 run perf/load.js
+```
+
+只想先確認腳本沒寫錯，把每段縮成 10 秒（約 2 分鐘；樣本少，數字只看趨勢）：
+
+```powershell
+$env:HOLD_S="10"; k6 run perf/load.js
+```
+
+llama-server 改了 `-np`（slot 數）時，用 `SLOTS` 對上，三段平台會跟著變：
+
+```powershell
+$env:SLOTS="2"; k6 run perf/load.js
+```
+
+跑的時候開著 Grafana 的 **llama.cpp — LLM server** 與 **eat — Spring app** 兩張 dashboard，
+`above` 那段會看到「排隊中」離開 0、p95 往上跳。
+
 ## 怎麼讀結果
 
 k6 收工時印一張表，看三個地方就夠：
@@ -85,22 +108,44 @@ k6 收工時印一張表，看三個地方就夠：
 跟 app 對上游 llama.cpp 給的 2 分鐘逾時對齊；不然 k6 預設 60 秒先斷線，
 會把「模型還在想」誤判成「app 掛了」。
 
-**第一次請求會偏慢**：模型要載進記憶體、暖 KV cache。真的要看穩定延遲時，
-第一輪當暖身、別算進門檻（load 測試那步再處理）。
+**第一次請求會偏慢**：暖 KV cache 等。真的要看穩定延遲時，第一輪當暖身、別算進門檻 ——
+`load.js` 就是這樣做的：第一題獨立成 `warmup` 段，不設任何門檻。
+
+## 怎麼讀 load 的結果
+
+`load.js` 不是一路往上加 VU，而是**三段平台**，每段維持一陣子、各自有門檻：
+
+| 段 | VU | 意思 |
+|----|----|------|
+| `below` | 1 | 低於容量，當基準線 |
+| `at` | `SLOTS`（預設 4） | 剛好等於 llama-server 的 slot 數，每個請求都有位子 |
+| `above` | `SLOTS×2` | 超過容量，多出來的請求只能排隊 |
+
+收工報表會分段印出 `http_req_duration{scenario:below/at/above}`，**直接比三個 p95**：
+
+- `at` 跟 `below` 差不多 → slot 夠用，平行處理沒拖慢彼此。
+- `above` 明顯跳上去（例如翻倍）→ 膝蓋就在 `SLOTS`，多的請求在排隊。
+
+為什麼不用一路往上加（ramping）？那樣所有併發數的數字全混在一個 p95 裡，比不出「從哪裡開始變慢」。
+分段的另一個好處：k6 收工報表**只印有設門檻的子指標**，所以分段門檻同時也是「讓報表分段印」的開關。
+
+`slot 數` 怎麼查：`GET http://localhost:8080/props` 的 `total_slots`。launch.json 沒帶 `-np`，
+所以目前是 llama.cpp 自己決定的預設值（4）。
 
 ## 現在做到哪
 
 - **`smoke.js`** —— 1 個 VU、跑幾輪，單獨證明「k6 打得到 /api/chat，兩側契約都對」。
   這是負載測試的地基：先確定路是通的，才有資格談「多少併發下會垮」。
+  故意送錯的那個請求有標成「預期回 400」，所以 `http_req_failed` 是真的失敗率（應為 0%）。
+- **`load.js`** —— 三段平台找併發上限，暖身不算數。
+- **`lib/chat.js`** —— 兩支腳本共用的位址、請求參數、正常回覆的檢查。
+  load 是第二個使用者，這時才抽出來（只有 smoke 時抽是過早抽象）。
 
 ## 下一步（之後才做，一次一件）
 
-1. **`load.js`：真正的負載。** 用 ramping VUs（例如 1→3→5 慢慢加），配一池不同的問題，
-   跑固定時間，看延遲怎麼隨併發惡化。到這步再把 smoke 裡寫死的 `BASE_URL`、問題池
-   抽成共用的 `config.js`（現在只有一支腳本用，抽了反而是過早抽象）。
-2. **找併發上限。** 單機 llama.cpp 平行度有限，VU 加過頭只會排隊+逾時。
-   目標是找出「延遲開始爆掉」的那個併發數，而不是把數字衝高。
-3. **把 k6 指標接進既有的 Grafana。** k6 能把指標 remote-write 進 Prometheus，
+1. **換 slot 數看膝蓋移動。** launch.json 加 `-np 2` 或 `-np 8` 重啟 llama-server，配 `SLOTS` 再跑一次，
+   驗證「膝蓋 = slot 數」這個假設。注意 slot 多了每個請求分到的 GPU 算力會變少，單一請求可能反而變慢。
+2. **把 k6 指標接進既有的 Grafana。** k6 能把指標 remote-write 進 Prometheus，
    壓測曲線就能跟 app 的指標（`ops/` 那套）疊在同一張 Grafana 圖上看。要做的是：
    - `ops/compose.yaml` 的 prometheus `command:` 加一行 `--web.enable-remote-write-receiver`
      （打開接收端；預設是關的）。
@@ -109,11 +154,14 @@ k6 收工時印一張表，看三個地方就夠：
      k6 run -o experimental-prometheus-rw perf/load.js
      ```
      （用 `K6_PROMETHEUS_RW_SERVER_URL` 指到 `http://localhost:9090/api/v1/write`。）
-   - 這一步要等 `ops/README.md` 的「讓 app 吐指標」先做完，兩邊指標才有得疊。
+   - app 那邊的指標已經在吐（`eat-app` target 是綠的），接上後就能三層疊圖。
 
 ## 檔案結構
 
 ```
 perf/
-└── smoke.js        # 最小規模的契約 + 連通性驗證
+├── lib/
+│   └── chat.js     # 共用：位址、請求參數、正常回覆的檢查
+├── smoke.js        # 最小規模的契約 + 連通性驗證
+└── load.js         # 三段平台找併發上限
 ```

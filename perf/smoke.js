@@ -12,11 +12,7 @@
 
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-
-// 位址走環境變數而不是寫死 —— 跟 Application.java 用 -Dllamacpp.baseUri 指位址是同個道理：
-// 換目標不必動程式。沒給就打本機常駐的那台。
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8090';
-const CHAT_URL = `${BASE_URL}/api/chat`;
+import { CHAT_URL, QUESTIONS, ask, jsonParams } from './lib/chat.js';
 
 export const options = {
   // 最小規模：一個人、問幾輪。smoke 要的是「快、確定」，不是「多」。
@@ -37,17 +33,11 @@ export const options = {
   },
 };
 
-// 幾個短問題輪流問。刻意短，讓生成時間有上界；刻意不同，避免每次都命中同一份快取、
-// 測出不真實的「假快」。
-const QUESTIONS = [
-  '用一句話介紹你自己。',
-  '2 加 2 等於多少？',
-  '推薦一種台灣小吃，只要名字。',
-];
-
 export default function () {
   contractRejectsBlankQuestion();
-  happyPathReturnsReply();
+  // 契約的另一半：正常問題該回 200、reply 要有東西（檢查寫在 lib/chat.js 的 ask）。
+  // 照順序輪流問池子裡的前幾題 —— smoke 要可重現，不要隨機。
+  ask(QUESTIONS[__ITER % QUESTIONS.length]);
 
   // 每輪之間喘一下，別把單機的 llama.cpp 逼到滿載 —— smoke 只是要證明能通，不是要壓垮它。
   sleep(1);
@@ -56,40 +46,13 @@ export default function () {
 // 契約的一半：空白問題該被擋成 400。
 // 這條由 Conversation 用 IllegalArgumentException 擋、ChatController 翻成 400。
 // 它完全不碰模型，所以又快又穩 —— 就算 llama.cpp 沒開，這個 check 也該過。
-// 模型掛掉時，下面 happyPath 會紅、這裡會綠，一眼看出是「模型層 down」而不是「整條路壞了」。
+// 模型掛掉時，ask 那條會紅、這裡會綠，一眼看出是「模型層 down」而不是「整條路壞了」。
 function contractRejectsBlankQuestion() {
-  const res = http.post(CHAT_URL, JSON.stringify({ question: '   ' }), jsonParams());
+  // 告訴 k6「這個請求回 400 才是對的」。不標的話 k6 把所有非 2xx 都算進 http_req_failed，
+  // 報表上會出現一個嚇人的 50% 失敗率 —— 其實全是這些故意送錯的請求。
+  const params = jsonParams({ responseCallback: http.expectedStatuses(400) });
+  const res = http.post(CHAT_URL, JSON.stringify({ question: '   ' }), params);
   check(res, {
     '空白問題回 400': (r) => r.status === 400,
   });
-}
-
-// 契約的另一半：正常問題該回 200，而且 reply 要有東西。
-// 這條會真的叫模型生一次字，是這支 smoke 裡唯一「慢」的部分。
-function happyPathReturnsReply() {
-  const question = QUESTIONS[__ITER % QUESTIONS.length];
-  const res = http.post(CHAT_URL, JSON.stringify({ question }), jsonParams());
-  check(res, {
-    '正常問題回 200': (r) => r.status === 200,
-    'reply 非空白': (r) => replyText(r).length > 0,
-  });
-}
-
-function jsonParams() {
-  return {
-    headers: { 'Content-Type': 'application/json' },
-    // app 對上游 llama.cpp 給了 2 分鐘逾時，k6 這端也要放寬到同等級。
-    // 不設的話 k6 預設 60 秒就自己斷線，你會把「模型還在想」誤判成「app 掛了」。
-    timeout: '120s',
-  };
-}
-
-// 把 reply 安全地挖出來：body 不是預期的 JSON（例如 502 回了錯誤物件）時不要讓腳本自己炸，
-// 回空字串讓上面的 check 判它是「沒拿到回覆」就好。
-function replyText(res) {
-  try {
-    return (res.json('reply') || '').trim();
-  } catch (e) {
-    return '';
-  }
 }
