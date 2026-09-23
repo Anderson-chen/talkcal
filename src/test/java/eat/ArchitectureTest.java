@@ -74,6 +74,13 @@ class ArchitectureTest {
      * 只要 core 自己開始用 java.net.http，協定細節一樣滲進來了。
      */
     @ArchTest
+    static final ArchRule onlyTheCompositionRootMayKnowTheRetrievalAdapter =
+            noClasses().that().resideOutsideOfPackages("eat", "..adapter.out.knowledge..")
+                    .should().dependOnClassesThat().resideInAPackage("..adapter.out.knowledge..")
+                    .because("關鍵字比對只是第一版檢索，之後要換成 embedding；"
+                            + "讓它漏進 core 或別的 adapter，那一換就會牽一髮動全身");
+
+    @ArchTest
     static final ArchRule coreMustNotTouchHttp =
             noClasses().that().resideInAPackage("..application..")
                     .should().dependOnClassesThat().resideInAnyPackage("java.net..", "javax.net..")

@@ -4,6 +4,7 @@ import eat.conversation.application.domain.model.Conversation;
 import eat.conversation.application.domain.model.Reply;
 import eat.conversation.application.domain.service.AskQuestionService;
 import eat.conversation.application.port.in.AskQuestionUseCase;
+import eat.conversation.application.port.out.RetrievePassagesPort;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -120,7 +121,10 @@ class LlamaCppGenerateReplyAdapterTest {
     void carriesConversationHistory() {
         // 走完整條鏈：UseCase -> Service -> Port -> Adapter -> 真的 server。
         // 第二輪不重複提那個數字，模型還答得出來，就證明歷史確實被攤平送出
-        AskQuestionUseCase useCase = new AskQuestionService(adapter());
+        // 這題驗的是對話歷史有沒有送出去，跟檢索無關，所以給一個什麼都找不到的知識庫 ——
+        // 沒有片段時送出的就是原始提問，等同於還沒導入 RAG 之前的行為。
+        RetrievePassagesPort nothingFound = question -> List.of();
+        AskQuestionUseCase useCase = new AskQuestionService(nothingFound, adapter());
         Conversation conversation = Conversation.start("你是簡潔的助理，用繁體中文回答");
 
         // 用陳述句而不是「請記住」：後者會觸發模型「我沒有記憶」的自我認知反射，

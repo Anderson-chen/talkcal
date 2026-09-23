@@ -7,8 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import eat.conversation.application.domain.model.Conversation;
+import eat.conversation.application.domain.model.Passage;
 import eat.conversation.application.domain.model.Reply;
 import eat.conversation.application.port.out.GenerateReplyPort;
+import eat.conversation.application.port.out.RetrievePassagesPort;
 
 import java.util.List;
 import java.util.Optional;
@@ -19,6 +21,10 @@ import org.junit.jupiter.api.Test;
 
 @DisplayName("AskQuestionService")
 class AskQuestionServiceTest {
+
+    // 假知識庫：什麼都找不到。不關心檢索的測試用這個，
+    // 因為沒有片段時送出的就是原始提問，等同於還沒導入 RAG 的行為。
+    private static final RetrievePassagesPort NOTHING_FOUND = question -> List.of();
 
     private static Conversation.Message user(String text) {
         return new Conversation.Message(Conversation.Role.USER, text);
@@ -49,7 +55,8 @@ class AskQuestionServiceTest {
         @DisplayName("回傳模型的回覆，並依序記進對話")
         void recordsQuestionAndReply() {
             Conversation conversation = Conversation.start();
-            AskQuestionService service = new AskQuestionService((instruction, messages) -> new Reply("牛肉麵"));
+            AskQuestionService service =
+                    new AskQuestionService(NOTHING_FOUND, (instruction, messages) -> new Reply("牛肉麵"));
 
             Reply reply = service.askQuestion(conversation, "中午吃什麼");
 
@@ -66,10 +73,60 @@ class AskQuestionServiceTest {
             conversation.recordReply("牛肉麵");
             RecordingPort port = new RecordingPort();
 
-            new AskQuestionService(port).askQuestion(conversation, "熱量多少");
+            new AskQuestionService(NOTHING_FOUND, port).askQuestion(conversation, "熱量多少");
 
             assertEquals(Optional.of("你是營養師"), port.instruction);
             assertEquals(List.of(user("中午吃什麼"), assistant("牛肉麵"), user("熱量多少")), port.messages);
+        }
+    }
+
+    @Nested
+    @DisplayName("先檢索再提問")
+    class Retrieval {
+
+        @Test
+        @DisplayName("檢索到的片段帶著出處一起送給模型")
+        void sendsGroundedQuestion() {
+            RecordingPort port = new RecordingPort();
+            RetrievePassagesPort found = question ->
+                    List.of(new Passage("中火煎四分鐘再翻面。", "鮭魚.md > 烹調建議"));
+
+            new AskQuestionService(found, port).askQuestion(Conversation.start(), "鮭魚要煎幾分鐘？");
+
+            assertEquals(List.of(user("""
+                    參考資料：
+                    [1]（鮭魚.md > 烹調建議）中火煎四分鐘再翻面。
+
+                    請依據上述參考資料回答，資料中沒有提到的內容不要自行推測。
+
+                    問題：鮭魚要煎幾分鐘？""")), port.messages);
+        }
+
+        @Test
+        @DisplayName("什麼都沒檢索到時，送出的就是原始提問")
+        void sendsPlainQuestionWhenNothingFound() {
+            RecordingPort port = new RecordingPort();
+
+            new AskQuestionService(NOTHING_FOUND, port).askQuestion(Conversation.start(), "鮭魚要煎幾分鐘？");
+
+            assertEquals(List.of(user("鮭魚要煎幾分鐘？")), port.messages);
+        }
+
+        @Test
+        @DisplayName("檢索失敗：例外原樣往外丟，對話還沒被動過，也不會呼叫模型")
+        void retrievalFailureLeavesConversationUntouched() {
+            Conversation conversation = Conversation.start();
+            RuntimeException unreachable = new IllegalStateException("檢索服務連不上");
+            RetrievePassagesPort failing = question -> { throw unreachable; };
+            AskQuestionService service =
+                    new AskQuestionService(failing, (instruction, messages) -> fail("不應該呼叫模型"));
+
+            RuntimeException thrown = assertThrows(RuntimeException.class,
+                    () -> service.askQuestion(conversation, "鮭魚要煎幾分鐘？"));
+
+            assertSame(unreachable, thrown);
+            assertEquals(List.of(), conversation.messages());
+            assertFalse(conversation.awaitingReply());
         }
     }
 
@@ -81,7 +138,8 @@ class AskQuestionServiceTest {
         @DisplayName("空白提問被 model 拒絕，不會呼叫模型")
         void blankQuestionSkipsModel() {
             Conversation conversation = Conversation.start();
-            AskQuestionService service = new AskQuestionService((instruction, messages) -> fail("不應該呼叫模型"));
+            AskQuestionService service =
+                    new AskQuestionService(NOTHING_FOUND, (instruction, messages) -> fail("不應該呼叫模型"));
 
             assertThrows(IllegalArgumentException.class, () -> service.askQuestion(conversation, "  "));
             assertEquals(List.of(), conversation.messages());
@@ -100,7 +158,8 @@ class AskQuestionServiceTest {
             conversation.ask("中午吃什麼");
             conversation.recordReply("牛肉麵");
             RuntimeException timeout = new IllegalStateException("連線逾時");
-            AskQuestionService service = new AskQuestionService((instruction, messages) -> { throw timeout; });
+            AskQuestionService service =
+                    new AskQuestionService(NOTHING_FOUND, (instruction, messages) -> { throw timeout; });
 
             RuntimeException thrown = assertThrows(RuntimeException.class,
                     () -> service.askQuestion(conversation, "熱量多少"));
@@ -113,7 +172,8 @@ class AskQuestionServiceTest {
         @Test
         @DisplayName("模型回覆空白（建立不了 Reply）：視同失敗，同樣撤回提問")
         void blankReplyWithdrawsQuestion() {
-            AskQuestionService service = new AskQuestionService((instruction, messages) -> new Reply("  "));
+            AskQuestionService service =
+                    new AskQuestionService(NOTHING_FOUND, (instruction, messages) -> new Reply("  "));
 
             assertThrows(IllegalArgumentException.class, () -> service.askQuestion(conversation, "中午吃什麼"));
             assertEquals(List.of(), conversation.messages());
@@ -122,8 +182,10 @@ class AskQuestionServiceTest {
         @Test
         @DisplayName("撤回後再問一次，就等於重試")
         void askAgainAfterFailure() {
-            AskQuestionService failing = new AskQuestionService((instruction, messages) -> { throw new IllegalStateException("連線逾時"); });
-            AskQuestionService working = new AskQuestionService((instruction, messages) -> new Reply("牛肉麵"));
+            AskQuestionService failing = new AskQuestionService(NOTHING_FOUND,
+                    (instruction, messages) -> { throw new IllegalStateException("連線逾時"); });
+            AskQuestionService working = new AskQuestionService(NOTHING_FOUND,
+                    (instruction, messages) -> new Reply("牛肉麵"));
 
             assertThrows(IllegalStateException.class, () -> failing.askQuestion(conversation, "中午吃什麼"));
             working.askQuestion(conversation, "中午吃什麼");

@@ -1,9 +1,12 @@
 package eat;
 
+import eat.conversation.adapter.out.knowledge.KeywordRetrievePassagesAdapter;
+import eat.conversation.adapter.out.knowledge.SampleKnowledgeBase;
 import eat.conversation.adapter.out.llamacpp.LlamaCppGenerateReplyAdapter;
 import eat.conversation.application.domain.service.AskQuestionService;
 import eat.conversation.application.port.in.AskQuestionUseCase;
 import eat.conversation.application.port.out.GenerateReplyPort;
+import eat.conversation.application.port.out.RetrievePassagesPort;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -19,7 +22,8 @@ import java.net.URI;
  * 這種 import 組合在其他任何檔案裡出現，都代表分層漏了。
  *
  * 這裡負責的只有一件事：決定「哪個介面用哪個實作」。
- * 目前只有一個決定要下 —— GenerateReplyPort 用 llama.cpp 那個實作。
+ * 目前有兩個決定要下：GenerateReplyPort 用 llama.cpp 那個實作，
+ * RetrievePassagesPort 用關鍵字比對那個實作。
  * 要換成 OpenAI 或 Claude，改的是下面 generateReplyPort() 那一個 @Bean，
  * AskQuestionService、Conversation、ChatController、所有測試一個字都不用動。
  *
@@ -51,7 +55,7 @@ public class Application {
         SpringApplication.run(Application.class, args);
     }
 
-    // 這兩個 @Bean 就是全部的接線：真正的實作在回傳型別上被換成介面，之後誰也看不到 llama.cpp。
+    // 這幾個 @Bean 就是全部的接線：真正的實作在回傳型別上被換成介面，之後誰也看不到 llama.cpp。
     // 順序不必自己管，Spring 看參數型別就知道誰要先建 ——
     // askQuestion 要一個 GenerateReplyPort，容器就會先把下面這個 @Bean 建好再餵進來。
 
@@ -60,8 +64,18 @@ public class Application {
         return new LlamaCppGenerateReplyAdapter(LLAMA_CPP_BASE_URI);
     }
 
+    // 上一步這裡還是個「永遠找不到東西」的空知識庫，現在換成真的會檢索的實作。
+    // 換掉的就只有這一行 —— AskQuestionService、GroundedQuestion、Conversation、
+    // ChatController、GenerateReplyPort 那一側，一個字都沒動。
+    // 之後換成 embedding 檢索，動的也還是只有這裡。
     @Bean
-    AskQuestionUseCase askQuestion(GenerateReplyPort generateReplyPort) {
-        return new AskQuestionService(generateReplyPort);
+    RetrievePassagesPort retrievePassagesPort() {
+        return new KeywordRetrievePassagesAdapter(SampleKnowledgeBase.passages());
+    }
+
+    @Bean
+    AskQuestionUseCase askQuestion(RetrievePassagesPort retrievePassagesPort,
+                                   GenerateReplyPort generateReplyPort) {
+        return new AskQuestionService(retrievePassagesPort, generateReplyPort);
     }
 }
