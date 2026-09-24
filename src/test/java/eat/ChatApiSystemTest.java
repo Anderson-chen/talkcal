@@ -44,7 +44,7 @@ import org.springframework.http.ResponseEntity;
  * RANDOM_PORT 而不是固定 8090：那個埠常常已經被你自己跑著的應用佔住了。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-//@Tag("integration")
+@Tag("integration")
 @DisplayName("Chat API（整個應用 + 真模型）")
 class ChatApiSystemTest {
 
