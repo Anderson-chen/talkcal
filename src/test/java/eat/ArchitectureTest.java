@@ -78,8 +78,8 @@ class ArchitectureTest {
     static final ArchRule onlyTheCompositionRootMayKnowTheKnowledgeAdapters =
             noClasses().that().resideOutsideOfPackages("eat", "..adapter.out.knowledge..")
                     .should().dependOnClassesThat().resideInAPackage("..adapter.out.knowledge..")
-                    .because("關鍵字比對只是第一版檢索，之後要換成 embedding；"
-                            + "讓它漏進 core 或別的 adapter，那一換就會牽一髮動全身");
+                    .because("檢索方式遲早會換（全文搜尋、hybrid、加 rerank）；"
+                            + "讓實作漏進 core 或別的 adapter，那一換就會牽一髮動全身");
 
     /**
      * Adapter 這個字尾是有意義的，不是隨手加的裝飾。

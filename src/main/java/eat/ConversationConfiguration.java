@@ -26,8 +26,6 @@ import java.net.URI;
  * 這裡負責的只有一件事：決定「哪個介面用哪個實作」。
  * 目前有兩個決定要下 —— GenerateReplyPort 用 llama.cpp 那個實作、
  * RetrievePassagesPort 用向量檢索那個實作。
- * 關鍵字那個實作還在（KeywordRetrievePassagesAdapter），沒有被刪掉：
- * 它不需要第二台 server，想把環境簡化成一台時換回來就是改這裡一行。
  *
  * 跟 Application 拆開，是因為兩者回答的是不同問題：
  * 那邊回答「怎麼啟動」，這邊回答「誰接誰」。
@@ -69,9 +67,9 @@ class ConversationConfiguration {
         return new LlamaCppGenerateReplyAdapter(LLAMA_CPP_BASE_URI);
     }
 
-    // 從關鍵字比對換成向量檢索。動的就只有這個 Bean 這一行 ——
+    // 要換成別種檢索（全文搜尋、hybrid、加 rerank），動的就只有這個 Bean 這一行 ——
     // AskQuestionService、GroundedQuestion、Conversation、Passage、RetrievePassagesPort、
-    // ChatController、GenerateReplyPort 那一側，以及所有測試，一個字都沒改。
+    // ChatController、GenerateReplyPort 那一側，以及所有測試，一個字都不用改。
     //
     // 這裡疊了兩層：LlamaCppEmbedText 負責「文字怎麼變成向量」（HTTP、JSON），
     // EmbeddingRetrievePassagesAdapter 負責「拿到向量之後怎麼挑片段」（餘弦、排序、門檻）。

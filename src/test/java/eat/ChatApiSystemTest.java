@@ -34,8 +34,8 @@ import org.springframework.http.ResponseEntity;
  *
  * 關鍵在於這個測試一個具體 adapter 都不認識：它只打 POST /api/chat。
  * 接線是 ConversationConfiguration 決定的，所以它測的永遠是「應用現在的樣子」——
- * 哪天把檢索的 @Bean 從關鍵字換成 embedding，同一題自動變成兩台 server 的端到端，
- * 這個檔案一個字都不用改。連接線本身有沒有接錯，也一起驗到了。
+ * 哪天換掉檢索或生成的 @Bean，同一題自動跟著測新的接法，這個檔案一個字都不用改。
+ * 連接線本身有沒有接錯，也一起驗到了。
  *
  * 放在根 package eat：它測的是整個應用，不屬於任何一個模組 —— 跟 ArchitectureTest 同一個理由。
  * 名字留了 System 是因為同一個端點已經有一個 ChatControllerTest，兩者必須分得開；

@@ -10,7 +10,7 @@ import java.util.List;
  * 這些片段等於是「已經手動切好的 chunk」：每一段自己讀得懂，而且都掛著出處。
  * 真正的索引流程（讀檔、切段、存起來）是後面的事 —— 那條線長出來之後，這個類別就會被刪掉。
  *
- * 內容是中文的：上面那個 adapter 用單字比對，對英文幾乎無效。
+ * 內容全是中文，因為目前的 embedding 模型（bge-m3）是挑中文檢索能力選的。
  */
 public final class SampleKnowledgeBase {
 

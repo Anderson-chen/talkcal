@@ -44,7 +44,7 @@ public record GroundedQuestion(String question, List<Passage> passages) {
         // 另外兩個選項刻意沒選：
         // 一是告訴模型「沒有找到參考資料」—— 那等於暗示它「你可以自由發揮」，
         //   反而常釣出「我找不到相關資料」這種對使用者沒用的回覆；
-        // 二是直接拒答、連模型都不呼叫 —— 太武斷，關鍵字比對漏掉不代表模型自己不知道。
+        // 二是直接拒答、連模型都不呼叫 —— 太武斷，檢索漏掉不代表模型自己不知道。
         // 這是一條真正的業務規則，之後要改只改這一個 if。
         if (passages.isEmpty()) {
             return question;

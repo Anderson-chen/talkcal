@@ -10,9 +10,9 @@ import java.util.Objects;
 /**
  * 用向量相似度檢索片段（RetrievePassagesPort 的第二個實作）。
  *
- * 跟 KeywordRetrievePassagesAdapter 比，差別只在「怎麼算相關」：
- * 前者比字面有沒有重疊，這裡比意思像不像。於是「三文魚」配得上「鮭魚」，
- * 而「幾分鐘」也不會再因為一個「分」字就撈到「營養成分」。
+ * 「怎麼算相關」在這裡的答案是「比意思像不像」，不是「比字面有沒有重疊」。
+ * 於是「三文魚」配得上「鮭魚」（一個字都沒重疊），
+ * 而「幾分鐘」也不會因為一個「分」字就撈到「營養成分」。
  *
  * core 那一側對這件事一無所知 —— 它只知道有個 RetrievePassagesPort。
  */
@@ -124,8 +124,9 @@ public final class EmbeddingRetrievePassagesAdapter implements RetrievePassagesP
     private synchronized List<Indexed> index() {
         if (index == null) {
             index = knowledgeBase.stream()
-                    // 出處跟內文一起算進向量，理由與關鍵字那版相同：
-                    // 標題本身就帶著語意，而且這是切段時把標題接回片段的同一招
+                    // 出處跟內文一起算進向量：標題本身就帶著語意
+                    //（「鮭魚.md > 營養成分」裡的「營養」），
+                    // 這跟切段時把標題接回片段開頭是同一招，幾乎零成本
                     .map(passage -> new Indexed(passage,
                             embedText.embed(passage.source() + "\n" + passage.text())))
                     .toList();
