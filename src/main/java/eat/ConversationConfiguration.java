@@ -1,8 +1,7 @@
 package eat;
 
-import eat.conversation.adapter.out.knowledge.EmbeddingRetrievePassagesAdapter;
 import eat.conversation.adapter.out.knowledge.SampleKnowledgeBase;
-import eat.conversation.adapter.out.knowledge.llamacpp.LlamaCppEmbedText;
+import eat.conversation.adapter.out.knowledge.llamacpp.LlamaCppRetrievePassagesAdapter;
 import eat.conversation.adapter.out.reply.llamacpp.LlamaCppGenerateReplyAdapter;
 import eat.conversation.application.domain.service.AskQuestionService;
 import eat.conversation.application.port.in.AskQuestionUseCase;
@@ -71,14 +70,11 @@ class ConversationConfiguration {
     // AskQuestionService、GroundedQuestion、Conversation、Passage、RetrievePassagesPort、
     // ChatController、GenerateReplyPort 那一側，以及所有測試，一個字都不用改。
     //
-    // 這裡疊了兩層：LlamaCppEmbedText 負責「文字怎麼變成向量」（HTTP、JSON），
-    // EmbeddingRetrievePassagesAdapter 負責「拿到向量之後怎麼挑片段」（餘弦、排序、門檻）。
-    // 分開的好處是換 embedding 供應商只動內層那一個。
+    // 換 embedding 供應商也是換這一行，但換的是整個 adapter，不是只換「文字變向量」那一段：
+    // 檢索門檻是對 bge-m3 量出來的，換了模型就得重量，所以門檻跟著供應商走。
     @Bean
     RetrievePassagesPort retrievePassagesPort() {
-        return new EmbeddingRetrievePassagesAdapter(
-                new LlamaCppEmbedText(EMBEDDING_BASE_URI),
-                SampleKnowledgeBase.passages());
+        return new LlamaCppRetrievePassagesAdapter(EMBEDDING_BASE_URI, SampleKnowledgeBase.passages());
     }
 
     @Bean

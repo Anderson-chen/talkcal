@@ -85,7 +85,7 @@ class ArchitectureTest {
      * Adapter 這個字尾是有意義的，不是隨手加的裝飾。
      *
      * adapter 圈裡有兩種類別：一種實作 core 的 outbound port（換掉它 core 無感），
-     * 另一種是 adapter 內部自己的接縫實作（例如 LlamaCppEmbedText 之於 EmbedText）。
+     * 另一種是 adapter 內部的零件（例如 ChatRequest、EmbeddingResponse 這些協定翻譯）。
      * 兩種都在 adapter.out 底下，從 package 看不出差別 —— 所以用字尾區分，並用這條規則守著。
      */
     @ArchTest
@@ -94,7 +94,7 @@ class ArchitectureTest {
                     .and().haveSimpleNameEndingWith("Adapter")
                     .should().dependOnClassesThat().resideInAPackage("..application.port.out..")
                     .because("Adapter 這個字尾在這個專案裡專指「實作 core 的某個 outbound port」；"
-                            + "adapter 圈內部的實作（例如 LlamaCppEmbedText 之於 EmbedText）不叫 Adapter，"
+                            + "adapter 圈內部的零件（例如 ChatRequest、EmbeddingResponse）不叫 Adapter，"
                             + "不然從名字看不出它站在哪一層");
 
     /**
