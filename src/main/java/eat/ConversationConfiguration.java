@@ -1,7 +1,8 @@
 package eat;
 
-import eat.conversation.adapter.out.knowledge.KeywordRetrievePassagesAdapter;
+import eat.conversation.adapter.out.knowledge.EmbeddingRetrievePassagesAdapter;
 import eat.conversation.adapter.out.knowledge.SampleKnowledgeBase;
+import eat.conversation.adapter.out.knowledge.llamacpp.LlamaCppEmbedText;
 import eat.conversation.adapter.out.reply.llamacpp.LlamaCppGenerateReplyAdapter;
 import eat.conversation.application.domain.service.AskQuestionService;
 import eat.conversation.application.port.in.AskQuestionUseCase;
@@ -24,7 +25,9 @@ import java.net.URI;
  *
  * 這裡負責的只有一件事：決定「哪個介面用哪個實作」。
  * 目前有兩個決定要下 —— GenerateReplyPort 用 llama.cpp 那個實作、
- * RetrievePassagesPort 用關鍵字比對那個實作。兩個都只是一行 new。
+ * RetrievePassagesPort 用向量檢索那個實作。
+ * 關鍵字那個實作還在（KeywordRetrievePassagesAdapter），沒有被刪掉：
+ * 它不需要第二台 server，想把環境簡化成一台時換回來就是改這裡一行。
  *
  * 跟 Application 拆開，是因為兩者回答的是不同問題：
  * 那邊回答「怎麼啟動」，這邊回答「誰接誰」。
@@ -51,6 +54,12 @@ class ConversationConfiguration {
     private static final URI LLAMA_CPP_BASE_URI =
             URI.create(System.getProperty("llamacpp.baseUri", "http://127.0.0.1:8080"));
 
+    // embedding 是另一台 server、另一顆模型（bge-m3），所以是另一個位址。
+    // 生成用的 qwen3:8b 不能兼差：它沒被訓練成「向量距離 = 語意相似度」，
+    // 而且為了一個向量跑一次 8B 推論貴得離譜。
+    private static final URI EMBEDDING_BASE_URI =
+            URI.create(System.getProperty("llamacpp.embeddingBaseUri", "http://127.0.0.1:8081"));
+
     // 這幾個 Bean 就是全部的接線：真正的實作在回傳型別上被換成介面，之後誰也看不到 llama.cpp。
     // 順序不必自己管，Spring 看參數型別就知道誰要先建 ——
     // askQuestion 要兩個 port，容器就會先把下面那兩個建好再餵進來。
@@ -60,12 +69,18 @@ class ConversationConfiguration {
         return new LlamaCppGenerateReplyAdapter(LLAMA_CPP_BASE_URI);
     }
 
-    // 換成 embedding 檢索時，動的只有這一個 Bean ——
-    // AskQuestionService、GroundedQuestion、Conversation、Passage、
-    // ChatController、GenerateReplyPort 那一側，一個字都不用改。
+    // 從關鍵字比對換成向量檢索。動的就只有這個 Bean 這一行 ——
+    // AskQuestionService、GroundedQuestion、Conversation、Passage、RetrievePassagesPort、
+    // ChatController、GenerateReplyPort 那一側，以及所有測試，一個字都沒改。
+    //
+    // 這裡疊了兩層：LlamaCppEmbedText 負責「文字怎麼變成向量」（HTTP、JSON），
+    // EmbeddingRetrievePassagesAdapter 負責「拿到向量之後怎麼挑片段」（餘弦、排序、門檻）。
+    // 分開的好處是換 embedding 供應商只動內層那一個。
     @Bean
     RetrievePassagesPort retrievePassagesPort() {
-        return new KeywordRetrievePassagesAdapter(SampleKnowledgeBase.passages());
+        return new EmbeddingRetrievePassagesAdapter(
+                new LlamaCppEmbedText(EMBEDDING_BASE_URI),
+                SampleKnowledgeBase.passages());
     }
 
     @Bean
