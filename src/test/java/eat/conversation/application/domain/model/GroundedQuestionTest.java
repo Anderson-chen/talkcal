@@ -16,9 +16,9 @@ import java.util.List;
 @DisplayName("GroundedQuestion")
 class GroundedQuestionTest {
 
-    private static final Passage 烹調 =
+    private static final Passage COOKING =
             new Passage("中火煎四分鐘再翻面，避免過熟。", "鮭魚.md > 烹調建議");
-    private static final Passage 保存 =
+    private static final Passage STORAGE =
             new Passage("新鮮的需冷藏於 0~4°C。", "鮭魚.md > 保存方式");
 
     @Nested
@@ -29,7 +29,7 @@ class GroundedQuestionTest {
         @DisplayName("組成「參考資料 → 防幻覺指令 → 問題」三段")
         void composesText() {
             GroundedQuestion grounded =
-                    new GroundedQuestion("鮭魚要煎幾分鐘？", List.of(烹調));
+                    new GroundedQuestion("鮭魚要煎幾分鐘？", List.of(COOKING));
 
             assertEquals("""
                     參考資料：
@@ -44,7 +44,7 @@ class GroundedQuestionTest {
         @DisplayName("多個片段依序編號，模型才有辦法指名出處")
         void numbersPassagesInOrder() {
             GroundedQuestion grounded =
-                    new GroundedQuestion("鮭魚怎麼處理？", List.of(烹調, 保存));
+                    new GroundedQuestion("鮭魚怎麼處理？", List.of(COOKING, STORAGE));
 
             assertEquals("""
                     參考資料：
@@ -81,7 +81,7 @@ class GroundedQuestionTest {
         @DisplayName("提問是 null 或空白時拒絕（規則 4）")
         void rejectBlankQuestion(String question) {
             assertThrows(IllegalArgumentException.class,
-                    () -> new GroundedQuestion(question, List.of(烹調)));
+                    () -> new GroundedQuestion(question, List.of(COOKING)));
         }
 
         @Test
@@ -95,11 +95,11 @@ class GroundedQuestionTest {
     @Test
     @DisplayName("建構後外部再改原本的清單，影響不到已經建好的提問")
     void copiesPassages() {
-        List<Passage> mutable = new ArrayList<>(List.of(烹調));
+        List<Passage> mutable = new ArrayList<>(List.of(COOKING));
         GroundedQuestion grounded = new GroundedQuestion("鮭魚要煎幾分鐘？", mutable);
 
-        mutable.add(保存);
+        mutable.add(STORAGE);
 
-        assertEquals(List.of(烹調), grounded.passages());
+        assertEquals(List.of(COOKING), grounded.passages());
     }
 }
