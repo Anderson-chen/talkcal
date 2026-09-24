@@ -1,4 +1,4 @@
-package eat.conversation.adapter.out.llamacpp;
+package eat.conversation.adapter.out.reply.llamacpp;
 
 import eat.conversation.application.domain.model.Conversation;
 import org.junit.jupiter.api.DisplayName;

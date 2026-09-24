@@ -22,7 +22,7 @@ import java.util.Objects;
  *
  * 少了 --embedding 那個旗標，/v1/embeddings 不會開，這裡會收到 HTTP 錯誤。
  */
-public final class LlamaCppEmbedTextAdapter implements EmbedText {
+public final class LlamaCppEmbedText implements EmbedText {
 
     private static final String EMBEDDINGS_PATH = "/v1/embeddings";
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
@@ -34,11 +34,11 @@ public final class LlamaCppEmbedTextAdapter implements EmbedText {
     private final Duration requestTimeout;
     private final HttpClient httpClient;
 
-    public LlamaCppEmbedTextAdapter(URI baseUri) {
+    public LlamaCppEmbedText(URI baseUri) {
         this(baseUri, DEFAULT_REQUEST_TIMEOUT);
     }
 
-    public LlamaCppEmbedTextAdapter(URI baseUri, Duration requestTimeout) {
+    public LlamaCppEmbedText(URI baseUri, Duration requestTimeout) {
         Objects.requireNonNull(baseUri, "baseUri 不可為 null");
         this.endpoint = baseUri.resolve(EMBEDDINGS_PATH);
         this.requestTimeout = Objects.requireNonNull(requestTimeout, "requestTimeout 不可為 null");

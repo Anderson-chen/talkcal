@@ -3,7 +3,10 @@ package eat.conversation.adapter.out.knowledge;
 /**
  * 把一段文字變成向量。
  *
- * 這不是 port —— core 永遠不會認識它。它是檢索 adapter 內部的接縫，存在的理由有兩個：
+ * 這不是 port —— core 永遠不會認識它。
+ * 所以它的實作叫 LlamaCppEmbedText 而不是 ...Adapter：
+ * 在這個專案裡 Adapter 這個字尾專指「實作 core 的某個 outbound port」，
+ * ArchitectureTest 有一條規則守著這個約定。它是檢索 adapter 內部的接縫，存在的理由有兩個：
  * 1. 讓「算餘弦、排序、取前幾筆」那些邏輯不必開 embedding server 就能測。
  * 2. 換 embedding 供應商（llama.cpp、OpenAI、本機 ONNX）時，只換這個介面的實作。
  *

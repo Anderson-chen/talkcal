@@ -1,4 +1,4 @@
-package eat.conversation.adapter.out.llamacpp;
+package eat.conversation.adapter.out.reply.llamacpp;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

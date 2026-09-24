@@ -2,7 +2,7 @@ package eat;
 
 import eat.conversation.adapter.out.knowledge.KeywordRetrievePassagesAdapter;
 import eat.conversation.adapter.out.knowledge.SampleKnowledgeBase;
-import eat.conversation.adapter.out.llamacpp.LlamaCppGenerateReplyAdapter;
+import eat.conversation.adapter.out.reply.llamacpp.LlamaCppGenerateReplyAdapter;
 import eat.conversation.application.domain.service.AskQuestionService;
 import eat.conversation.application.port.in.AskQuestionUseCase;
 import eat.conversation.application.port.out.GenerateReplyPort;
@@ -20,7 +20,7 @@ import java.net.URI;
  * 上面同時出現了 adapter.out 和 application 的 port ——
  * 這種 import 組合出現在其他任何檔案裡，都代表分層漏了。
  * ArchitectureTest 有兩條規則守著這件事：只有 package eat 和 adapter 自己那一包，
- * 才可以認識 ..adapter.out.llamacpp.. 與 ..adapter.out.knowledge..。
+ * 才可以認識 ..adapter.out.reply.llamacpp.. 與 ..adapter.out.knowledge..。
  *
  * 這裡負責的只有一件事：決定「哪個介面用哪個實作」。
  * 目前有兩個決定要下 —— GenerateReplyPort 用 llama.cpp 那個實作、

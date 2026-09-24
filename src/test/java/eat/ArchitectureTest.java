@@ -5,6 +5,7 @@ import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
@@ -58,28 +59,49 @@ class ArchitectureTest {
                     .because("inbound 只該透過 port 使喚 core，core 才決定要不要呼叫 outbound");
 
     /**
-     * 只有組裝根可以認識具體的 llama.cpp 實作。
-     * 這條守住的是「換一行 new 就能換掉 LLM」這個承諾 ——
-     * 一旦有第二個地方 import 它，那個承諾就破了。
+     * 只有組裝根可以認識具體的實作。下面兩條是同一句話套在 adapter.out 的兩個子樹上。
+     *
+     * adapter.out 底下每個 package 就是「某一個 outbound port 的實作們」：
+     * reply 放 GenerateReplyPort 的、knowledge 放 RetrievePassagesPort 的，
+     * 供應商一律再往下一層（reply.llamacpp、knowledge.llamacpp）。
+     *
+     * 守住的是「換一行 new 就能換掉實作」這個承諾 —— 一旦有第二個地方 import 它，那個承諾就破了。
+     * 順帶也擋掉了 reply 與 knowledge 互相依賴：兩邊都在對方的允許清單之外。
      */
     @ArchTest
-    static final ArchRule onlyTheCompositionRootMayKnowLlamaCpp =
-            noClasses().that().resideOutsideOfPackages("eat", "..adapter.out.llamacpp..")
-                    .should().dependOnClassesThat().resideInAPackage("..adapter.out.llamacpp..")
+    static final ArchRule onlyTheCompositionRootMayKnowTheReplyAdapters =
+            noClasses().that().resideOutsideOfPackages("eat", "..adapter.out.reply..")
+                    .should().dependOnClassesThat().resideInAPackage("..adapter.out.reply..")
                     .because("挑選實作是組裝時的決定，散到別處就等於把供應商焊死在程式裡");
 
-    /**
-     * core 不准碰 HTTP。
-     * 這條是前一條的補充：就算沒有 import adapter，
-     * 只要 core 自己開始用 java.net.http，協定細節一樣滲進來了。
-     */
     @ArchTest
-    static final ArchRule onlyTheCompositionRootMayKnowTheRetrievalAdapter =
+    static final ArchRule onlyTheCompositionRootMayKnowTheKnowledgeAdapters =
             noClasses().that().resideOutsideOfPackages("eat", "..adapter.out.knowledge..")
                     .should().dependOnClassesThat().resideInAPackage("..adapter.out.knowledge..")
                     .because("關鍵字比對只是第一版檢索，之後要換成 embedding；"
                             + "讓它漏進 core 或別的 adapter，那一換就會牽一髮動全身");
 
+    /**
+     * Adapter 這個字尾是有意義的，不是隨手加的裝飾。
+     *
+     * adapter 圈裡有兩種類別：一種實作 core 的 outbound port（換掉它 core 無感），
+     * 另一種是 adapter 內部自己的接縫實作（例如 LlamaCppEmbedText 之於 EmbedText）。
+     * 兩種都在 adapter.out 底下，從 package 看不出差別 —— 所以用字尾區分，並用這條規則守著。
+     */
+    @ArchTest
+    static final ArchRule adapterSuffixIsReservedForPortImplementations =
+            classes().that().resideInAPackage("..adapter.out..")
+                    .and().haveSimpleNameEndingWith("Adapter")
+                    .should().dependOnClassesThat().resideInAPackage("..application.port.out..")
+                    .because("Adapter 這個字尾在這個專案裡專指「實作 core 的某個 outbound port」；"
+                            + "adapter 圈內部的實作（例如 LlamaCppEmbedText 之於 EmbedText）不叫 Adapter，"
+                            + "不然從名字看不出它站在哪一層");
+
+    /**
+     * core 不准碰 HTTP。
+     * 這條是前面那幾條的補充：就算沒有 import adapter，
+     * 只要 core 自己開始用 java.net.http，協定細節一樣滲進來了。
+     */
     @ArchTest
     static final ArchRule coreMustNotTouchHttp =
             noClasses().that().resideInAPackage("..application..")

@@ -37,8 +37,8 @@ import org.junit.jupiter.api.Test;
  *   llama-server -m bge-m3-Q8_0.gguf --embedding --port 8081
  */
 @Tag("integration")
-@DisplayName("LlamaCppEmbedTextAdapter（真實 embedding server）")
-class LlamaCppEmbedTextAdapterTest {
+@DisplayName("LlamaCppEmbedText（真實 embedding server）")
+class LlamaCppEmbedTextTest {
 
     // 跟 chat 那台分開：兩個不同的模型、兩個不同的埠
     private static final URI BASE_URI =
@@ -50,8 +50,8 @@ class LlamaCppEmbedTextAdapterTest {
                 () -> "embedding server 沒有在 " + BASE_URI + " 執行，跳過整合測試");
     }
 
-    private static LlamaCppEmbedTextAdapter adapter() {
-        return new LlamaCppEmbedTextAdapter(BASE_URI);
+    private static LlamaCppEmbedText adapter() {
+        return new LlamaCppEmbedText(BASE_URI);
     }
 
     @Nested
@@ -72,7 +72,7 @@ class LlamaCppEmbedTextAdapterTest {
         @Test
         @DisplayName("同樣的文字算兩次，結果一模一樣")
         void isDeterministic() {
-            LlamaCppEmbedTextAdapter adapter = adapter();
+            LlamaCppEmbedText adapter = adapter();
 
             assertArrayEquals(adapter.embed("鮭魚"), adapter.embed("鮭魚"), 0f);
         }
@@ -85,7 +85,7 @@ class LlamaCppEmbedTextAdapterTest {
         @Test
         @DisplayName("換句話說的兩句話，比毫不相干的那句更接近")
         void similarMeaningScoresHigher() {
-            LlamaCppEmbedTextAdapter adapter = adapter();
+            LlamaCppEmbedText adapter = adapter();
             float[] 鮭魚營養 = adapter.embed("鮭魚富含 Omega-3 脂肪酸與優質蛋白質");
             float[] 換句話說 = adapter.embed("三文魚有很多好脂肪");
             float[] 不相干 = adapter.embed("今天天氣很好，適合出門散步");

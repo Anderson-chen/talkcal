@@ -1,4 +1,4 @@
-package eat.conversation.adapter.out.llamacpp;
+package eat.conversation.adapter.out.reply.llamacpp;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
