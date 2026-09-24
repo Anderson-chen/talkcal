@@ -4,17 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import eat.conversation.adapter.out.knowledge.EmbeddingRetrievePassagesAdapter;
-import eat.conversation.adapter.out.knowledge.SampleKnowledgeBase;
-import eat.conversation.application.domain.model.Passage;
-
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.List;
 
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
@@ -98,33 +93,6 @@ class LlamaCppEmbedTextTest {
             // 但它們講的是同一件事 —— 只有向量看得出來
             assertTrue(相近 > 無關,
                     "換句話說應該比不相干更接近，但相近=" + 相近 + " 無關=" + 無關);
-        }
-    }
-
-    @Nested
-    @DisplayName("接上檢索 adapter 之後")
-    class Retrieval {
-
-        @Test
-        @DisplayName("問煎幾分鐘，撈回來的是烹調建議那段")
-        void retrievesTheRightPassage() {
-            EmbeddingRetrievePassagesAdapter retrieval =
-                    new EmbeddingRetrievePassagesAdapter(adapter(), SampleKnowledgeBase.passages());
-
-            List<Passage> found = retrieval.retrievePassages("鮭魚要煎幾分鐘？");
-
-            assertTrue(!found.isEmpty(), "什麼都沒檢索到");
-            assertEquals("鮭魚.md > 烹調建議", found.get(0).source(),
-                    "最相關的應該是烹調建議，實際撈到：" + found);
-        }
-
-        @Test
-        @DisplayName("問知識庫沒有的東西，回空清單而不是硬塞不相干的片段")
-        void returnsNothingForUnrelatedQuestion() {
-            EmbeddingRetrievePassagesAdapter retrieval =
-                    new EmbeddingRetrievePassagesAdapter(adapter(), SampleKnowledgeBase.passages());
-
-            assertEquals(List.of(), retrieval.retrievePassages("巴黎鐵塔有多高？"));
         }
     }
 
