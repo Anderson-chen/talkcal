@@ -14,7 +14,7 @@ import java.util.List;
  * （提問回覆交替、系統指令只設一次、歷史不可修改），
  * 跟「單次提問怎麼組」是兩個層次的關注點，混在一起 Conversation 會越長越胖。
  */
-public record GroundedQuestion(String question, List<Passage> passages) {
+public record GroundedQuestion(Question question, List<Passage> passages) {
 
     // 防幻覺的那句話。放在參考資料「之後」、問題「之前」是有考量的：
     // 放最前面會被後面大量的資料淹掉；放在問題之後又離問題太遠。
@@ -23,9 +23,9 @@ public record GroundedQuestion(String question, List<Passage> passages) {
             "請依據上述參考資料回答，資料中沒有提到的內容不要自行推測。";
 
     public GroundedQuestion {
-        // 提問文字不可為 null 或空白（規則 4）
-        if (question == null || question.isBlank()) {
-            throw new IllegalArgumentException("提問文字不可為 null 或空白");
+        // 空白與否已經由 Question 保證（規則 4），這裡只剩「有沒有給」要檢查
+        if (question == null) {
+            throw new IllegalArgumentException("提問不可為 null");
         }
         if (passages == null) {
             throw new IllegalArgumentException("參考片段不可為 null；沒有檢索到東西請傳空清單");
@@ -47,7 +47,7 @@ public record GroundedQuestion(String question, List<Passage> passages) {
         // 二是直接拒答、連模型都不呼叫 —— 太武斷，檢索漏掉不代表模型自己不知道。
         // 這是一條真正的業務規則，之後要改只改這一個 if。
         if (passages.isEmpty()) {
-            return question;
+            return question.text();
         }
 
         StringBuilder text = new StringBuilder("參考資料：\n");
@@ -62,7 +62,7 @@ public record GroundedQuestion(String question, List<Passage> passages) {
         }
         text.append('\n').append(GROUNDING_INSTRUCTION).append("\n\n");
         // 「問題：」這個前綴是分隔線，免得模型把提問當成參考資料的最後一段
-        text.append("問題：").append(question);
+        text.append("問題：").append(question.text());
         return text.toString();
     }
 }

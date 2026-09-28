@@ -111,7 +111,7 @@ class ChatApiSystemTest {
     void rejectsBlankQuestion() {
         // 這題在 ChatControllerTest 也有，但那是切片測試裡用假 use case 演出來的。
         // 這裡驗的是真的接起來之後，那條規則還在原位 ——
-        // 提問在 GroundedQuestion 就被擋下，所以這題秒回，不會等模型
+        // 提問在 Question 就被擋下，檢索和模型都不會被驚動，所以這題秒回
         ResponseEntity<String> response =
                 restTemplate.postForEntity("/api/chat", new ChatController.Request("  "), String.class);
 

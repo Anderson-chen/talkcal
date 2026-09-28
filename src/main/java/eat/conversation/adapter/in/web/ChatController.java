@@ -62,7 +62,7 @@ public final class ChatController {
 
     /**
      * 提問不合規（null 或空白）是「呼叫端送錯東西」，對應 400。
-     * 這條規則由 Conversation 以 IllegalArgumentException 擋下，我們只負責翻成 HTTP 的語言。
+     * 這條規則由 model（Question）以 IllegalArgumentException 擋下，我們只負責翻成 HTTP 的語言。
      */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Failure> onInvalidQuestion(IllegalArgumentException e) {

@@ -135,11 +135,15 @@ class AskQuestionServiceTest {
     class InvalidQuestion {
 
         @Test
-        @DisplayName("空白提問被 model 拒絕，不會呼叫模型")
-        void blankQuestionSkipsModel() {
+        @DisplayName("空白提問被 model 拒絕，檢索和模型都不會被呼叫")
+        void blankQuestionSkipsRetrievalAndModel() {
             Conversation conversation = Conversation.start();
-            AskQuestionService service =
-                    new AskQuestionService(NOTHING_FOUND, (instruction, messages) -> fail("不應該呼叫模型"));
+            // 檢索也要換成「一被呼叫就失敗」的版本，不能用 NOTHING_FOUND：
+            // NOTHING_FOUND 對空白字串照樣回空清單，檢索有沒有先跑，這題根本看不出來。
+            // 真的 adapter 就沒那麼寬鬆 —— 它會拿空白字串去打 embedding server
+            AskQuestionService service = new AskQuestionService(
+                    question -> fail("不應該呼叫檢索"),
+                    (instruction, messages) -> fail("不應該呼叫模型"));
 
             assertThrows(IllegalArgumentException.class, () -> service.askQuestion(conversation, "  "));
             assertEquals(List.of(), conversation.messages());
