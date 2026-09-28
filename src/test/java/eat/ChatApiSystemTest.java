@@ -48,19 +48,27 @@ import org.springframework.http.ResponseEntity;
 @DisplayName("Chat API（整個應用 + 真模型）")
 class ChatApiSystemTest {
 
-    // 跟正式程式讀同一個系統屬性，才不會一邊指到別台、一邊還在檢查本機那台
+    // 跟正式程式讀同一組系統屬性，才不會一邊指到別台、一邊還在檢查本機那台
     private static final URI LLAMA_CPP_BASE_URI =
             URI.create(System.getProperty("llamacpp.baseUri", "http://127.0.0.1:8080"));
+    private static final URI EMBEDDING_BASE_URI =
+            URI.create(System.getProperty("llamacpp.embeddingBaseUri", "http://127.0.0.1:8081"));
 
     @Autowired
     TestRestTemplate restTemplate;
 
     @BeforeAll
-    static void requireRunningServer() {
+    static void requireRunningServers() {
         // 這個檢查刻意是 static 的 @BeforeAll：它會在 Spring 容器被載入之前跑，
-        // server 沒開就整個類別跳過，不必先花時間把應用啟起來才發現沒東西可測
-        Assumptions.assumeTrue(isHealthy(),
-                () -> "llama-server 沒有在 " + LLAMA_CPP_BASE_URI + " 執行，跳過系統測試");
+        // server 沒開就整個類別跳過，不必先花時間把應用啟起來才發現沒東西可測。
+        //
+        // 兩台都要檢查：一次提問先檢索（8081）再生成（8080），少了哪一台整條線都是 502。
+        // 只檢查 8080 的話，8081 沒開時這裡不會跳過而是變紅 —— 環境沒準備好被說成程式壞了。
+        // 分兩次檢查，跳過的訊息才講得出是哪一台沒開
+        Assumptions.assumeTrue(isHealthy(LLAMA_CPP_BASE_URI),
+                () -> "llama-server（生成）沒有在 " + LLAMA_CPP_BASE_URI + " 執行，跳過系統測試");
+        Assumptions.assumeTrue(isHealthy(EMBEDDING_BASE_URI),
+                () -> "embedding server（檢索）沒有在 " + EMBEDDING_BASE_URI + " 執行，跳過系統測試");
     }
 
     private ResponseEntity<ChatController.Response> ask(String question) {
@@ -110,9 +118,9 @@ class ChatApiSystemTest {
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
     }
 
-    private static boolean isHealthy() {
+    private static boolean isHealthy(URI baseUri) {
         try {
-            HttpRequest request = HttpRequest.newBuilder(LLAMA_CPP_BASE_URI.resolve("/health"))
+            HttpRequest request = HttpRequest.newBuilder(baseUri.resolve("/health"))
                     .timeout(Duration.ofSeconds(3))
                     .GET()
                     .build();
