@@ -37,3 +37,19 @@ scrape_configs:
   - job_name: llama-cpp
     static_configs:
       - targets: ["host.docker.internal:8080"]
+
+  # (4) llama.cpp 的「嵌入」伺服器 —— 同一支 llama-server.exe，但載的是 bge-m3、開 --embedding，
+  #     常駐在 8081（見 .claude/launch.json 的 llama-embedding-server）。它也帶了 --metrics。
+  #
+  #     為什麼要獨立一個 job_name 而不是併進上面的 llama-cpp：
+  #     兩台吐出來的 metric「名字完全一樣」（都是 llamacpp:xxx），只能靠 label 分辨來源。
+  #     拆成兩個 job，就多了 job="llama-cpp" / job="llama-embedding" 這個天然的分界，
+  #     查詢時寫 llamacpp:prompt_tokens_seconds{job="llama-embedding"} 就只會拿到這台的。
+  #     （也因為這樣，llama-cpp.json 裡原本沒過濾的查詢全都補上了 {job="llama-cpp"}，
+  #       否則這台的數字會混進那張圖。）
+  #
+  #     嵌入伺服器「不生成 token」，所以 predicted_* 那組永遠是 0 —— 它只做 prompt 的前向計算。
+  #     真正有意義的是 prompt_tokens_seconds（嵌入吞吐）與 requests_processing/deferred（塞不塞）。
+  - job_name: llama-embedding
+    static_configs:
+      - targets: ["host.docker.internal:8081"]

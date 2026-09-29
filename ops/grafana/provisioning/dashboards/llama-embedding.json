@@ -1,7 +1,7 @@
 {
-  "uid": "llama-cpp",
-  "title": "llama.cpp — LLM server",
-  "tags": ["eat", "llm"],
+  "uid": "llama-embedding",
+  "title": "llama.cpp — 嵌入伺服器 (bge-m3)",
+  "tags": ["eat", "llm", "embedding"],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,
@@ -14,16 +14,16 @@
     {
       "id": 1,
       "type": "timeseries",
-      "title": "生成速度 (tokens/s)",
-      "description": "llamacpp:predicted_tokens_seconds —— 最近一次生成的平均吞吐。這是最直覺的『快不快』：併發一上去、它掉下來，就是模型被塞住了。你單發時實測約 60~70 t/s。",
+      "title": "嵌入吞吐 (tokens/s)",
+      "description": "llamacpp:prompt_tokens_seconds{job=\"llama-embedding\"} —— 這台把文字讀進去、算成向量的速度。嵌入伺服器只有『讀進來』這個階段，所以這條就是它的主吞吐指標，地位等同 LLM 那張圖的『生成速度』。注意 job 過濾一定要帶：8080 的 LLM 也吐同名指標，不過濾就會兩台混在一起。",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "llamacpp:predicted_tokens_seconds{job=\"llama-cpp\"}",
-          "legendFormat": "生成 t/s"
+          "expr": "llamacpp:prompt_tokens_seconds{job=\"llama-embedding\"}",
+          "legendFormat": "嵌入 t/s"
         }
       ],
       "fieldConfig": {
@@ -42,20 +42,20 @@
       "id": 2,
       "type": "timeseries",
       "title": "請求：處理中 vs 排隊中",
-      "description": "llamacpp:requests_processing（正在跑）與 requests_deferred（排隊等）。壓測時重點看這裡：deferred 一旦離開 0 往上爬，就是併發超過 llama-server 能同時處理的量、開始塞車了 —— 這通常就是延遲爆掉的源頭。",
+      "description": "requests_processing（正在算）與 requests_deferred（排隊等）。嵌入通常是「短而密」的流量 —— 一次 RAG 檢索可能同時丟進幾十段文字，所以這裡比 LLM 那邊更容易看到 deferred 抬頭。deferred 離開 0 就是併發超過這台能同時吃的量。",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "llamacpp:requests_processing{job=\"llama-cpp\"}",
+          "expr": "llamacpp:requests_processing{job=\"llama-embedding\"}",
           "legendFormat": "處理中"
         },
         {
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "llamacpp:requests_deferred{job=\"llama-cpp\"}",
+          "expr": "llamacpp:requests_deferred{job=\"llama-embedding\"}",
           "legendFormat": "排隊中"
         }
       ],
@@ -75,22 +75,22 @@
     {
       "id": 3,
       "type": "timeseries",
-      "title": "Prompt 處理速度 (tokens/s)",
-      "description": "llamacpp:prompt_tokens_seconds —— 讀進『你送的問題+歷史』有多快（prefill/預填）。跟生成速度分開看：長 prompt 會讓這條變重，但它跟『生成』是兩個不同階段。",
+      "title": "累計處理 tokens",
+      "description": "counter：prompt_tokens_total —— 這台自啟動以來總共嵌入了幾個 token，只增不減。看的是『做了多少工』的絕對量。它旁邊那張『每秒速率』就是從這條 counter 算出來的（見右下角那個 panel）。這裡刻意不放 tokens_predicted_total：嵌入伺服器不生成 token，那條永遠是 0。",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "llamacpp:prompt_tokens_seconds{job=\"llama-cpp\"}",
-          "legendFormat": "prompt t/s"
+          "expr": "llamacpp:prompt_tokens_total{job=\"llama-embedding\"}",
+          "legendFormat": "累計嵌入 tokens"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "none",
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
         },
         "overrides": []
       },
@@ -102,28 +102,23 @@
     {
       "id": 4,
       "type": "timeseries",
-      "title": "累計 tokens（生成 vs prompt）",
-      "description": "counter：tokens_predicted_total（總共生成幾個 token）與 prompt_tokens_total（總共讀進幾個）。只增不減，看的是『這台自啟動以來做了多少工』。要看『每秒生成率』就把 query 改成 rate(llamacpp:tokens_predicted_total[1m])。",
+      "title": "每秒嵌入速率（由 counter 推算）",
+      "description": "rate(prompt_tokens_total[1m]) —— 用 rate() 從 counter 算出的每秒速率。窗口 1m 是抓取間隔 15s 的 4 倍，保證窗內有足夠樣本、圖不會斷；跟其他儀表板的 rate() 一致。這跟左上角那張的差別，正是這個 panel 存在的理由 —— 左上是 llama.cpp 自己回報的『最後一批的瞬時平均』，這裡要的是 Prometheus 依時間窗自己算出來的『持續速率』。前者會在閒置時卡住不動，後者閒置時會掉到 0。",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "llamacpp:tokens_predicted_total{job=\"llama-cpp\"}",
-          "legendFormat": "生成累計"
-        },
-        {
-          "refId": "B",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "llamacpp:prompt_tokens_total{job=\"llama-cpp\"}",
-          "legendFormat": "prompt 累計"
+          "expr": "rate(llamacpp:prompt_tokens_total{job=\"llama-embedding\"}[1m])",
+          "legendFormat": "嵌入 t/s（rate）"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
+          "unit": "none",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
         },
         "overrides": []
       },
