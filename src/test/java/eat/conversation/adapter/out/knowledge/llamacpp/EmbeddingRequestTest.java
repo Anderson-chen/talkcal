@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,7 +35,7 @@ class EmbeddingRequestTest {
         assertFalse(body.contains("\n"), "JSON 裡不該有真正的換行：" + body);
         assertFalse(body.contains("\t"), "JSON 裡不該有真正的 tab：" + body);
         // 二、讀回來要跟原文完全相同 —— 跳脫對不對，讓剖析器自己說了算
-        assertEquals(original, new ObjectMapper().readTree(body).get("input").asText());
+        assertEquals(original, new ObjectMapper().readTree(body).get("input").asString());
     }
 
     @ParameterizedTest(name = "文字 = [{0}]")

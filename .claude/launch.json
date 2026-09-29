@@ -45,6 +45,14 @@
         "C:\\llm\\logs\\llama-embedding-server.log"
       ],
       "port": 8081
+    },
+    {
+      "name": "eat",
+      "runtimeExecutable": "C:\\project\\eat\\gradlew.bat",
+      "runtimeArgs": [
+        "bootRun"
+      ],
+      "port": 8090
     }
   ]
 }

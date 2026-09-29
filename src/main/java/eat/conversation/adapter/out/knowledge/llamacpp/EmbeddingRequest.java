@@ -1,8 +1,8 @@
 package eat.conversation.adapter.out.knowledge.llamacpp;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * 組出 llama.cpp /v1/embeddings 的 request body。
@@ -36,7 +36,7 @@ final class EmbeddingRequest {
     private static String write(Body body) {
         try {
             return JSON.writeValueAsString(body);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             // 序列化的是我們自己組好的資料，寫不出來代表程式接錯線，不是外界的問題
             throw new IllegalStateException("組 request body 失敗", e);
         }

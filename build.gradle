@@ -6,7 +6,7 @@ plugins {
     id 'application'
     // Spring Boot 只負責「組裝」這件事：把散落的 bean 兜起來、打包成可執行 jar、提供 bootRun。
     // 業務規則一個字都不會碰到它 —— 見 build 檔最後那條 ArchUnit 規則守著這件事。
-    id 'org.springframework.boot' version '3.5.8'
+    id 'org.springframework.boot' version '4.1.1'
 }
 
 repositories {
@@ -26,14 +26,16 @@ dependencies {
     // Spring Boot 的 BOM：一次釘住所有 spring-boot-* 與其傳遞依賴的版本，下面就不必寫版號。
     // 用 Gradle 原生的 platform() 吃 BOM，而不是額外掛 io.spring.dependency-management 外掛 ——
     // 後者在 Gradle 9 上會踩到已被移除的 API，platform() 是 Gradle 自己的機制，乾淨。
-    // BOM 座標直接取自上面套用的 Boot 外掛版本，不必再寫一次 3.5.8，改版只改一個地方。
+    // BOM 座標直接取自上面套用的 Boot 外掛版本，不必再寫一次版號，改版只改一個地方。
     implementation platform(SpringBootPlugin.BOM_COORDINATES)
 
     // web starter：嵌入式 Tomcat + Spring MVC + Jackson（JSON 序列化）。
+    // Boot 4 把原本的 starter-web 改名成 starter-webmvc：名字直接講出是哪一套 web 堆疊（對比 webflux），
+    // 舊名字還留著但已標為 deprecated。Jackson 也跟著換成 3.x，套件從 com.fasterxml.jackson 搬到 tools.jackson。
     // 這一包讓「第二個 inbound adapter」變成可能 —— 同一個 AskQuestionUseCase，
     // 除了 console 之外，現在也能被一個 @RestController 從 HTTP 那頭呼叫。
     // 它取代（並涵蓋）了原本的 spring-boot-starter，所以不必兩個都寫。
-    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 
     // 打開 /actuator/*：健康檢查、指標等維運用的入口。它自動 instrument 出 HTTP 延遲、
     // JVM、執行緒池等「通用指標」，一行採集程式都不用寫 —— 業務指標才要自己用 Micrometer 埋。
@@ -43,8 +45,10 @@ dependencies {
     // （版本由上面的 Boot BOM 管，不必寫版號）。
     runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 
-    // BOM 統一管理 JUnit 各模組的版本，下面就不必逐一寫版號
-    testImplementation platform('org.junit:junit-bom:5.12.2')
+
+    // JUnit 的版本交給上面的 Boot BOM 管（Boot 4 帶的是 JUnit 6）。
+    // 原本另外釘了一份 junit-bom 5.x，但兩份 BOM 同時存在時 Gradle 會挑較高的版本，
+    // 寫在這裡的版號變成看起來有效、其實沒作用的假資訊，乾脆拿掉。
     testImplementation 'org.junit.jupiter:junit-jupiter'
     // 執行期才需要的啟動器；沒有它 Gradle 找不到測試引擎
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -59,6 +63,9 @@ dependencies {
     // 拉進來只是因為它們是 starter 的傳遞依賴，用不到就當作沒有。
     // （版本由上面的 Boot BOM 管，不必寫版號。）
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // Boot 4 把測試切片拆進各自的模組：@WebMvcTest、@AutoConfigureMockMvc 不再附在 starter-test 裡，
+    // 用到哪一層的切片就引哪一層的 test starter，對應 main 的 starter-webmvc。
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 }
 
 // 程式與註解都有中文，編碼一定要明寫。
@@ -85,6 +92,9 @@ testing {
             dependencies {
                 // 測的是正式程式，所以要看得到 main 的類別
                 implementation project()
+                // Boot 4 把 TestRestTemplate 搬成獨立模組；只有 ChatApiSystemTest（真的走 HTTP）用得到，
+                // 所以只加在這個 suite，不污染單元測試的 classpath
+                implementation 'org.springframework.boot:spring-boot-resttestclient'
             }
             targets.configureEach {
                 testTask.configure {

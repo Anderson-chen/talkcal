@@ -1,9 +1,10 @@
 package eat.conversation.adapter.out.knowledge.llamacpp;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Objects;
 
@@ -19,8 +20,11 @@ final class EmbeddingResponse {
 
     // 跟 ChatResponse 用同一組設定：FAIL_ON_TRAILING_TOKENS 讓「一個完整的值後面還有東西」
     // 直接失敗。少了它，被截斷的回應會安靜地只讀前半段，把故障偽裝成正常結果
-    private static final ObjectMapper JSON = new ObjectMapper()
-            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+    // Jackson 3 的 mapper 建好就不可變，設定只能在 builder 上做（2.x 那種 new 完再 enable 已經不行）。
+    // 這個功能在 Jackson 3 其實已經預設開啟，仍然明寫：這裡依賴的是它的效果，不想依賴某一版的預設值。
+    private static final ObjectMapper JSON = JsonMapper.builder()
+            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+            .build();
 
     private EmbeddingResponse() {
     }
@@ -82,7 +86,7 @@ final class EmbeddingResponse {
         Objects.requireNonNull(json, "json 不可為 null");
         try {
             return JSON.readTree(json);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             // 讀不懂的 JSON 算「給進來的東西本身不對」，跟下面那些「讀得懂但內容不能用」
             // 的 IllegalStateException 分開，呼叫端光看型別就能分辨
             throw new IllegalArgumentException("回應不是合法的 JSON", e);
@@ -92,9 +96,9 @@ final class EmbeddingResponse {
     private static String describeError(JsonNode error) {
         // 格式不如預期時也不能再炸一次 —— 那會蓋掉原本的錯誤
         JsonNode message = error.get("message");
-        if (message != null && message.isTextual()) {
-            return message.asText();
+        if (message != null && message.isString()) {
+            return message.asString();
         }
-        return error.isTextual() ? error.asText() : error.toString();
+        return error.isString() ? error.asString() : error.toString();
     }
 }

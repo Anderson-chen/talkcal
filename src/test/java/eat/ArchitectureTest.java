@@ -125,6 +125,9 @@ class ArchitectureTest {
     /**
      * core 不准依賴 Jackson。跟上一條同一個道理，只是換成序列化函式庫。
      *
+     * 兩個套件都要擋：Jackson 3 把 core/databind 搬到 tools.jackson，
+     * 但註解（@JsonProperty 那些）刻意留在 com.fasterxml.jackson.annotation 沒動。
+     *
      * 這條擋的是最常見的那種滲透：為了讓 Conversation 能直接丟給 Jackson 序列化，
      * 在 domain 的欄位上加 @JsonProperty、@JsonIgnore。那看起來只是「加個註解」，
      * 實際上是讓「資料怎麼在線路上呈現」這件事跑進了業務規則裡 ——
@@ -134,7 +137,7 @@ class ArchitectureTest {
     @ArchTest
     static final ArchRule coreMustNotDependOnJackson =
             noClasses().that().resideInAPackage("..application..")
-                    .should().dependOnClassesThat().resideInAPackage("com.fasterxml.jackson..")
+                    .should().dependOnClassesThat().resideInAnyPackage("com.fasterxml.jackson..", "tools.jackson..")
                     .because("資料在線路上長什麼樣是 adapter 的事，不該反過來決定 Entity 的形狀");
 
     /**

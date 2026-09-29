@@ -1,7 +1,7 @@
 package eat.conversation.adapter.out.reply.llamacpp;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 import eat.conversation.application.domain.model.Conversation;
 
@@ -63,7 +63,7 @@ final class ChatRequest {
     private static String write(Body body) {
         try {
             return JSON.writeValueAsString(body);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             // 序列化的是我們自己在上面組好的資料，寫不出來代表程式接錯線，
             // 不是外界的問題，所以不當成「呼叫失敗」而是當成 bug 往外丟
             throw new IllegalStateException("組 request body 失敗", e);

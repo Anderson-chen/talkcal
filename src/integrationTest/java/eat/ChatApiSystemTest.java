@@ -19,7 +19,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -43,6 +44,8 @@ import org.springframework.http.ResponseEntity;
  * RANDOM_PORT 而不是固定 8090：那個埠常常已經被你自己跑著的應用佔住了。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// Boot 4 起 TestRestTemplate 不再自動出現在 @SpringBootTest 的容器裡，要明說才會建一個指向隨機埠的
+@AutoConfigureTestRestTemplate
 @DisplayName("Chat API（整個應用 + 真模型）")
 class ChatApiSystemTest {
 
