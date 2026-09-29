@@ -1,6 +1,6 @@
 package eat;
 
-import eat.conversation.adapter.out.knowledge.SampleKnowledgeBase;
+import eat.conversation.adapter.out.knowledge.MarkdownKnowledgeBase;
 import eat.conversation.adapter.out.knowledge.llamacpp.LlamaCppRetrievePassagesAdapter;
 import eat.conversation.adapter.out.reply.llamacpp.LlamaCppGenerateReplyAdapter;
 import eat.conversation.application.domain.service.AskQuestionService;
@@ -74,7 +74,7 @@ class ConversationConfiguration {
     // 檢索門檻是對 bge-m3 量出來的，換了模型就得重量，所以門檻跟著供應商走。
     @Bean
     RetrievePassagesPort retrievePassagesPort() {
-        return new LlamaCppRetrievePassagesAdapter(EMBEDDING_BASE_URI, SampleKnowledgeBase.passages());
+        return new LlamaCppRetrievePassagesAdapter(EMBEDDING_BASE_URI, MarkdownKnowledgeBase.passages());
     }
 
     @Bean

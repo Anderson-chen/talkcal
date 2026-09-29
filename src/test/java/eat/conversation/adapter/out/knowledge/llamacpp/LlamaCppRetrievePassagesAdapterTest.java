@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.sun.net.httpserver.HttpServer;
-import eat.conversation.adapter.out.knowledge.SampleKnowledgeBase;
+import eat.conversation.adapter.out.knowledge.MarkdownKnowledgeBase;
 import eat.conversation.adapter.out.knowledge.llamacpp.LlamaCppRetrievePassagesAdapter.Indexed;
 import eat.conversation.application.domain.model.Passage;
 
@@ -302,7 +302,7 @@ class LlamaCppRetrievePassagesAdapterTest {
         }
 
         private LlamaCppRetrievePassagesAdapter retrieval() {
-            return new LlamaCppRetrievePassagesAdapter(BASE_URI, SampleKnowledgeBase.passages());
+            return new LlamaCppRetrievePassagesAdapter(BASE_URI, MarkdownKnowledgeBase.passages());
         }
 
         @ParameterizedTest(name = "{0} → {1}")
