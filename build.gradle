@@ -68,16 +68,47 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 tasks.named('test') {
-    useJUnitPlatform {
-        // 預設跳過需要真 llama-server 的整合測試，讓 ./gradlew test 是秒回的。
-        // 要連它們一起跑：./gradlew test -PwithIntegration
-        if (!project.hasProperty('withIntegration')) {
-            excludeTags 'integration'
-        }
-    }
+    useJUnitPlatform()
     testLogging {
         events 'passed', 'skipped', 'failed'
     }
+}
+
+// 需要真 llama-server 的整合測試，放在自己的 source set：src/integrationTest/java。
+// 用目錄分開而不是用 @Tag 過濾：./gradlew test 只看得到單元測試、保持秒回，
+// 要跑整合測試就 ./gradlew integrationTest。
+// IntelliJ 認得每個 source set 屬於哪個測試 task，所以在 src/integrationTest 裡按 ▶ 會走 :integrationTest、
+// 在 src/test 裡按 ▶ 走 :test —— 單一檔案、整個 package 都照這個分，不必任何 IDE 設定。
+testing {
+    suites {
+        integrationTest(JvmTestSuite) {
+            dependencies {
+                // 測的是正式程式，所以要看得到 main 的類別
+                implementation project()
+            }
+            targets.configureEach {
+                testTask.configure {
+                    // 兩個都要跑時先跑秒回的那個，壞掉的單元測試不必等模型回完才知道
+                    shouldRunAfter tasks.named('test')
+                    testLogging {
+                        events 'passed', 'skipped', 'failed'
+                    }
+                }
+            }
+        }
+    }
+}
+
+configurations {
+    // JUnit、Spring Boot Test、BOM 這些跟單元測試一樣，直接沿用而不是再抄一份
+    integrationTestImplementation.extendsFrom testImplementation
+    integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+tasks.named('check') {
+    // ./gradlew build 不跑整合測試（要真 server、又慢），但至少要編得過：
+    // 否則改了某個方法的簽名，只有整合測試用到的地方壞了也沒人發現，直到下次有人想跑它
+    dependsOn tasks.named('integrationTestClasses')
 }
 
 application {

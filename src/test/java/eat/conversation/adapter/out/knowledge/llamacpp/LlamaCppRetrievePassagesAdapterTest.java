@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.sun.net.httpserver.HttpServer;
-import eat.conversation.adapter.out.knowledge.MarkdownKnowledgeBase;
 import eat.conversation.adapter.out.knowledge.llamacpp.LlamaCppRetrievePassagesAdapter.Indexed;
 import eat.conversation.application.domain.model.Passage;
 
@@ -16,29 +15,20 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.List;
 
-import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 /**
- * 三種測試，各守各的，沒有一種需要假物件：
+ * 兩種測試，各守各的，沒有一種需要假物件：
  *
  * - select() 與 cosineSimilarity() 是純計算，直接餵手寫的向量。
  * - 「embedding server 還沒開」那組守啟動與恢復的契約，只需要一個沒人用的埠。
- * - 對真模型那組守檢索品質，需要 8081 真的在跑，所以標成 integration、預設不跑。
+ *
+ * 對真模型的檢索品質需要 8081 真的在跑，放在 src/integrationTest 的 RetrievalQualityTest，這裡不跑。
  *
  * 協定本身（送出什麼、怎麼讀回應）由 EmbeddingRequestTest、EmbeddingResponseTest 守，這裡不重複。
  */
@@ -175,7 +165,7 @@ class LlamaCppRetrievePassagesAdapterTest {
     /**
      * 啟動順序不該是個需要人記得的規矩：8081 比應用晚開，應用也要能自己恢復。
      *
-     * 這組不標 integration —— 它需要的「外部環境」只是一個沒人在聽的埠，哪台機器都有。
+     * 這組留在單元測試這邊 —— 它需要的「外部環境」只是一個沒人在聽的埠，哪台機器都有。
      *
      * 恢復那題非得讓 server「從沒開變成開了」不可。只讓它一直不開、連問兩次是抓不到壞法的：
      * 就算索引失敗時被存成空的，第二次提問算「問題本身」的向量時照樣連不上、照樣丟例外，
@@ -234,7 +224,7 @@ class LlamaCppRetrievePassagesAdapterTest {
          *
          * 它不驗協定，所以專案不架假 server 的那個理由（對協定的誤解會同時寫進 adapter 和假 server）
          * 在這裡不成立 —— 這題要的只是「剛才連不上的那個埠，現在有人接了」。
-         * 協定對不對，由 EmbeddingResponseTest 和下面對真模型那組守著。
+         * 協定對不對，由 EmbeddingResponseTest 和對真模型的 RetrievalQualityTest 守著。
          */
         private static HttpServer startEmbeddingServerOn(int port) throws IOException {
             HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
@@ -250,105 +240,6 @@ class LlamaCppRetrievePassagesAdapterTest {
             });
             server.start();
             return server;
-        }
-    }
-
-    /**
-     * 檢索品質：對真的 embedding server、真的知識庫、正式用的地板與相對門檻。
-     *
-     * 上面那些手寫向量的測試驗的是「拿到向量之後怎麼挑」—— 排序、兩道關卡、topK，
-     * 那些是純邏輯，手寫向量就守得完。這一組驗的是只有真模型才答得出來的問題：
-     * 那兩個門檻，對真實的問法到底合不合用。
-     *
-     * 所以這裡不架假 server，理由跟 LlamaCppGenerateReplyAdapterTest 寫的一樣：
-     * 假 server 回的向量是我們自己編的，編出來的當然「語意正確」——
-     * 那只證明我們會編數字。
-     *
-     * 順帶也守住了「文字變向量」那一段跟真實世界的往返：
-     * 中文送不過去（UTF-8 壞掉）、每次回的維度不一樣（cosineSimilarity 會直接炸）、
-     * 向量沒抓到語意（三文魚那題），這幾種壞法在這裡都會紅。
-     *
-     * 這六題就是當初用來訂那兩個數字的量測樣本。把它們留成測試，
-     * 之後有人調門檻、換 embedding 模型、或改知識庫內容，就會被擋下來 ——
-     * 那兩個數字是調參不是定理，沒有測試守著，調壞了不會有人發現。
-     *
-     * 實測到的分數分布（bge-m3 加這份知識庫）：
-     *   不相干的問題    0.27 ~ 0.32
-     *   相關但問得抽象  0.50 ~ 0.56
-     *   問得具體        0.76 ~ 0.79
-     * 地板 0.40 取在前兩段中間那片空白，相對門檻 0.9 負責在有訊號時擋掉
-     * 「同一份文件但不同主題」的段落。
-     *
-     * 標籤下在 @Nested 上，所以預設的 ./gradlew test 只會排除這一組，
-     * 同一個檔案裡其他不需要 8081 的測試照跑。
-     */
-    @Nested
-    @Tag("integration")
-    @DisplayName("對真模型的檢索品質")
-    class RetrievalQuality {
-
-        // 跟正式程式讀同一個系統屬性，才不會一邊指到別台、一邊還在檢查本機那台
-        private static final URI BASE_URI =
-                URI.create(System.getProperty("llamacpp.embeddingBaseUri", "http://127.0.0.1:8081"));
-
-        @BeforeAll
-        static void requireRunningServer() {
-            // 跟 LlamaCppGenerateReplyAdapterTest 同一套：server 沒開時整組「跳過」而不是「失敗」——
-            // 環境沒準備好不等於程式壞了，這兩件事必須分得開，
-            // 否則紅燈很快就會被當成背景雜訊。
-            // 用 @BeforeAll 而不是 @BeforeEach：健康檢查一次就夠，不必每題打一次
-            Assumptions.assumeTrue(isHealthy(),
-                    () -> "embedding server 沒有在 " + BASE_URI + " 執行，跳過檢索品質測試");
-        }
-
-        private LlamaCppRetrievePassagesAdapter retrieval() {
-            return new LlamaCppRetrievePassagesAdapter(BASE_URI, MarkdownKnowledgeBase.passages());
-        }
-
-        @ParameterizedTest(name = "{0} → {1}")
-        @CsvSource({
-                // 問得具體，用詞跟片段幾乎重疊
-                "鮭魚要煎幾分鐘？,         鮭魚.md > 烹調建議",
-                "雞胸肉有多少蛋白質？,     雞胸肉.md > 營養成分",
-                // 同義詞：「三文魚」跟「鮭魚」一個字都沒重疊，關鍵字比對得分是 0
-                "三文魚有什麼營養？,       鮭魚.md > 營養成分",
-                // 抽象問法：一個字都對不上，整排分數掉到 0.5 以下。
-                // 這題正是「絕對門檻 0.5」會誤殺、換成地板 0.40 才救得回來的那一題
-                "深海魚對身體有什麼好處？, 鮭魚.md > 營養成分",
-        })
-        @DisplayName("撈得到，而且第一段是對的")
-        void retrievesTheRightPassage(String question, String expectedSource) {
-            List<Passage> found = retrieval().retrievePassages(question);
-
-            assertTrue(!found.isEmpty(), "什麼都沒檢索到：" + question);
-            assertEquals(expectedSource, found.get(0).source(),
-                    "最相關的那段不對，實際撈到：" + found);
-        }
-
-        @ParameterizedTest(name = "{0}")
-        @ValueSource(strings = {"巴黎鐵塔有多高？", "如何學習 Java？"})
-        @DisplayName("知識庫沒有的東西：回空清單，不硬塞不相干的片段")
-        void returnsNothingForUnrelatedQuestion(String question) {
-            // 硬塞比不給更糟：GroundedQuestion 那句「只依資料回答」會反咬一口，
-            // 模型會拿著雞胸肉的資料說「參考資料中沒有提到巴黎鐵塔」
-            assertEquals(List.of(), retrieval().retrievePassages(question));
-        }
-
-        private static boolean isHealthy() {
-            try {
-                HttpRequest request = HttpRequest.newBuilder(BASE_URI.resolve("/health"))
-                        .timeout(Duration.ofSeconds(3))
-                        .GET()
-                        .build();
-                HttpResponse<String> response = HttpClient.newHttpClient()
-                        .send(request, HttpResponse.BodyHandlers.ofString());
-                return response.statusCode() == 200;
-            } catch (IOException e) {
-                return false;
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return false;
-            }
         }
     }
 }

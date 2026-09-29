@@ -16,7 +16,6 @@ import java.time.Duration;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,7 +28,7 @@ import org.springframework.http.ResponseEntity;
  *
  * 跟其他測試的分工：
  * - ChatControllerTest 是 web 切片，只載入 controller、use case 用假的 —— 驗協定翻譯。
- * - LlamaCpp*AdapterTest 各自對一台 server —— 驗某一個 adapter 跟真實世界的往返。
+ * - LlamaCppGenerateReplyAdapterTest、RetrievalQualityTest 各自對一台 server —— 驗某一個 adapter 跟真實世界的往返。
  * - 這裡驗的是「這些東西接起來之後，整個應用到底能不能用」。
  *
  * 關鍵在於這個測試一個具體 adapter 都不認識：它只打 POST /api/chat。
@@ -39,12 +38,11 @@ import org.springframework.http.ResponseEntity;
  *
  * 放在根 package eat：它測的是整個應用，不屬於任何一個模組 —— 跟 ArchitectureTest 同一個理由。
  * 名字留了 System 是因為同一個端點已經有一個 ChatControllerTest，兩者必須分得開；
- * 「需要外部環境」這件事還是由 @Tag("integration") 標示，預設的 ./gradlew test 不會跑到。
+ * 「需要外部環境」這件事由它所在的 src/integrationTest 表達，預設的 ./gradlew test 不會跑到。
  *
  * RANDOM_PORT 而不是固定 8090：那個埠常常已經被你自己跑著的應用佔住了。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Tag("integration")
 @DisplayName("Chat API（整個應用 + 真模型）")
 class ChatApiSystemTest {
 

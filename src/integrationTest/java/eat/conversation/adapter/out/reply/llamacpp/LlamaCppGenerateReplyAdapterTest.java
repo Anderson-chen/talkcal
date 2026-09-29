@@ -8,7 +8,6 @@ import eat.conversation.application.port.out.RetrievePassagesPort;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -40,10 +39,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 因為依賴外部環境，server 沒開時整個類別會被「跳過」而不是「失敗」——
  * 環境沒準備好不等於程式壞了，這兩件事必須分得開，否則紅燈很快就會被當成背景雜訊。
  *
- * 跟專案其他測試一樣用 Test 結尾；「需要外部環境」這件事由 @Tag("integration") 標示，
- * IntelliJ 的執行設定可以用它過濾掉這些慢測試。
+ * 跟專案其他測試一樣用 Test 結尾；「需要外部環境」這件事由它所在的 src/integrationTest 表達，
+ * ./gradlew test 看不到它，要跑就 ./gradlew integrationTest。
  */
-@Tag("integration")
 @DisplayName("LlamaCppGenerateReplyAdapter（真實 server）")
 class LlamaCppGenerateReplyAdapterTest {
 
