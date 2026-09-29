@@ -45,6 +45,11 @@ dependencies {
     // （版本由上面的 Boot BOM 管，不必寫版號）。
     runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 
+    // Swagger UI + OpenAPI 文件：啟動時掃 @RestController，自動產出 /v3/api-docs（機器讀的 JSON）
+    // 與 /swagger-ui.html（人點的頁面）。文件是「從程式長出來」的，路由改了文件跟著改，不會過期。
+    // 版號要自己寫：springdoc 不在 Boot 的 BOM 裡。springdoc 的主版號跟著 Boot 走：2.x 配 Boot 3、3.x 配 Boot 4。
+    // implementation 而不是 runtimeOnly：ChatController 要 import 它的 @Operation 等註解來補說明。
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1'
 
     // JUnit 的版本交給上面的 Boot BOM 管（Boot 4 帶的是 JUnit 6）。
     // 原本另外釘了一份 junit-bom 5.x，但兩份 BOM 同時存在時 Gradle 會挑較高的版本，

@@ -141,6 +141,19 @@ class ArchitectureTest {
                     .because("資料在線路上長什麼樣是 adapter 的事，不該反過來決定 Entity 的形狀");
 
     /**
+     * core 不准依賴 OpenAPI 的註解。跟 Jackson 那條同一個道理，只是換成 API 文件。
+     *
+     * @Schema、@Operation 描述的是「HTTP 上長什麼樣」，那是 ChatController 這個 adapter 的事。
+     * 一旦為了讓文件好看就在 Conversation 或 Reply 上加 @Schema，domain 就開始替某一種協定打扮了。
+     * 要寫文件，就寫在 adapter 自己的 wire format（ChatController.Request/Response）上。
+     */
+    @ArchTest
+    static final ArchRule coreMustNotDependOnOpenApi =
+            noClasses().that().resideInAPackage("..application..")
+                    .should().dependOnClassesThat().resideInAnyPackage("io.swagger..", "org.springdoc..")
+                    .because("API 文件描述的是線路格式，屬於 inbound adapter，不該滲進業務規則");
+
+    /**
      * package 之間不可以繞成環。
      * 循環依賴是「這兩包其實分不開」的訊號，而且會讓任何一邊都無法單獨測試。
      */

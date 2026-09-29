@@ -4,6 +4,11 @@ import eat.conversation.application.domain.model.Conversation;
 import eat.conversation.application.domain.model.Reply;
 import eat.conversation.application.port.in.AskQuestionUseCase;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -36,6 +41,8 @@ import java.util.Objects;
  */
 @RestController
 @RequestMapping("/api/chat")
+// OpenAPI 的註解只准出現在 adapter 這一圈（ArchitectureTest 守著），它們描述的是 HTTP 長相，不是業務規則
+@Tag(name = "chat", description = "跟模型對話：先從知識庫檢索相關片段，再交給模型生成回覆")
 public final class ChatController {
 
     private final AskQuestionUseCase askQuestion;
@@ -54,6 +61,16 @@ public final class ChatController {
      * 這裡半條都不重複寫。
      */
     @PostMapping
+    @Operation(summary = "問一題，拿一題的回覆",
+            description = "無狀態單輪：每個請求各自開一段新對話，不記得上一題問了什麼。")
+    // 三個碼就是這個端點的契約。springdoc 看不到 controller 自己的 @ExceptionHandler，
+    // 不寫的話文件只剩 200，看起來像永遠不會失敗；而一旦手寫了任何一個，200 也得自己列。
+    // description 是寫給呼叫端的：遇到這個碼該怎麼辦，而不是伺服器內部發生了什麼。
+    @ApiResponse(responseCode = "200", description = "拿到模型的回覆")
+    @ApiResponse(responseCode = "400", description = "提問是 null 或空白，改好再送",
+            content = @Content(schema = @Schema(implementation = Failure.class)))
+    @ApiResponse(responseCode = "502", description = "模型或檢索服務沒回應或出錯，不是呼叫端的問題，稍後重試",
+            content = @Content(schema = @Schema(implementation = Failure.class)))
     public Response ask(@RequestBody Request request) {
         Conversation conversation = Conversation.start();
         Reply reply = askQuestion.askQuestion(conversation, request.question());
@@ -88,12 +105,17 @@ public final class ChatController {
 
     // 這個 adapter 自己的對外資料格式（wire format），只服務 HTTP/JSON，不外流到 core。
     // 用巢狀 record 表明「它們是 ChatController 的請求/回應形狀」，而不是通用領域型別。
-    public record Request(String question) {
+    // @Schema 寫在這裡而不是 Question / Reply 上：文件描述的是線路格式，domain 不該替 HTTP 打扮。
+    public record Request(
+            @Schema(description = "要問模型的問題，不可空白", example = "雞胸肉一百克有多少蛋白質？")
+            String question) {
     }
 
-    public record Response(String reply) {
+    public record Response(
+            @Schema(description = "模型的回覆") String reply) {
     }
 
-    public record Failure(String error) {
+    public record Failure(
+            @Schema(description = "給人看的錯誤原因") String error) {
     }
 }
