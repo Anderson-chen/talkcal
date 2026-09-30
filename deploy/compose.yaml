@@ -1,0 +1,198 @@
+# 這個 stack 是「在本機模擬雲端部署」：把原本用 .bat 跑在 Windows 上的服務，一個一個搬進容器。
+# 跟 ops/ 分開：ops/ 是觀測（看別人），這裡是被部署的服務本身（被看的那些）。
+#
+# 目前搬了兩顆模型：Qwen3-8B 生成（8080）、bge-m3 embedding（8081）。app 還在 host 上。
+# 要退回去就 `docker compose down`，再點原本的兩支 .bat。
+#
+# 刻意沿用 8080 / 8081：app 預設打 127.0.0.1:8080 和 :8081、ops/ 的 Prometheus 抓 host.docker.internal
+# 的這兩個埠，模型換成在容器裡跑，這兩邊一個字都不用改。代價是：跟原生的 llama-server 搶同樣的埠，
+# 起這個之前要先把原生那兩支（C:\llm 底下兩個 .bat 開的視窗）關掉。
+
+name: eat-deploy
+
+# 兩個服務共用同一個自己 build 的映像檔（Dockerfile 在 llama-server/，為什麼自己 build 寫在那裡）。
+# image 給一個自己的名字：build 完就存成這個名字，之後上雲端就是把它推到 registry。
+# tag 把兩個關鍵版本都寫進去，看名字就知道裡面是哪個 llama.cpp、哪個 CUDA。
+x-llama-server: &llama-server
+  image: eat/llama-server:b10964-cuda13.0.1
+  build:
+    context: ./llama-server
+
+# x- 開頭的頂層欄位 Compose 會直接忽略，專門拿來放「要重複用的片段」。
+# &gpu 是 YAML 錨點，下面用 *gpu 引用——兩個服務要的 GPU 設定一模一樣，寫一次就好。
+x-gpu: &gpu
+  resources:
+    reservations:
+      devices:
+        # 跟 Docker 要 GPU。沒這段，容器裡看不到顯卡，-ngl 99 會靜靜退回 CPU 跑（慢十倍以上）。
+        # 雲端 k8s 上對應的是 resources.limits: nvidia.com/gpu: 1。
+        #
+        # 注意本機跟雲端的差異：Docker Desktop 不切分 GPU，兩個容器都看得到整張卡、共用 12GB VRAM
+        # （跟原生跑兩個程序一樣）。但 k8s 的 nvidia.com/gpu: 1 是「獨佔一整張」，兩個 Pod 就要兩張卡。
+        # 上雲端時要另外決定：兩個容器塞同一個 Pod 共用一張卡，或把 embedding 改跑 CPU。
+        - driver: nvidia
+          count: 1
+          capabilities: [gpu]
+
+services:
+  # ── 模型播種：把模型從 Windows 資料夾複製進 volume（只跑一次就結束）──────────
+  # 為什麼不讓模型服務直接掛 C:/llm/models：實測 Windows → WSL2 的檔案通道只有約 20 MB/s，
+  # 而 llama.cpp 預設用 mmap 零碎讀取更慢——Qwen 5GB 載了 5 分鐘還卡在 275MB。
+  # volume 放在 WSL2 自己的 Linux 檔案系統上，讀取快得多。慢的通道只在「第一次複製」時走一遍。
+  #
+  # 對照雲端：這就是 k8s 的 initContainer —— 主程式啟動前，先把模型從物件儲存（S3/GCS）
+  # 拉到本機磁碟（PVC），主程式只讀本機磁碟。這裡的「物件儲存」由 C:\llm\models 扮演。
+  model-seed:
+    <<: *llama-server               # 借用同一個映像檔（有 bash、sha256sum），不用多拉一個 image
+    container_name: eat-model-seed
+    # volume 剛建好時擁有者是 root，映像檔預設的 ubuntu 使用者寫不進去，播種這一步用 root。
+    # 只有這個跑完就結束的容器是 root，長駐的模型服務還是一般使用者。
+    user: root
+    entrypoint: ["bash", "-c"]
+    # $$ 是 compose 的跳脫：單一個 $ 會被 compose 當成它自己的變數替換。
+    command:
+      - |
+        set -euo pipefail
+        for src in /seed/*.gguf; do
+          name=$$(basename "$$src")
+          dst=/models/$$name
+          # 已經有、而且大小一樣，就跳過——這讓播種可以每次啟動都跑，只有第一次真的複製
+          if [ -f "$$dst" ] && [ "$$(stat -c%s "$$src")" = "$$(stat -c%s "$$dst")" ]; then
+            echo "skip  $$name (already in volume)"
+            continue
+          fi
+          echo "copy  $$name ..."
+          # 先寫暫存檔再改名：複製到一半被中斷，也不會留下一個「大小不對但名字對」的壞檔
+          cp "$$src" "/models/.$$name.tmp"
+          # SHA256SUMS 裡有這個檔，就驗證複製出來的內容；沒有的就只能相信來源
+          if grep -q " $$name$$" /seed/SHA256SUMS 2>/dev/null; then
+            echo "$$(grep " $$name$$" /seed/SHA256SUMS | cut -d' ' -f1)  /models/.$$name.tmp" | sha256sum -c -
+          fi
+          mv "/models/.$$name.tmp" "$$dst"
+        done
+        chmod a+r /models/*.gguf
+        ls -la /models
+    volumes:
+      - C:/llm/models:/seed:ro      # 來源：唯讀，播種絕不會動到你原本的模型檔
+      - models:/models
+    restart: "no"                   # 跑完就結束是正常的，不要重啟它
+
+  # ── 生成模型：Qwen3-8B ─────────────────────────────────────────
+  llm-chat:
+    <<: *llama-server
+    container_name: eat-llm-chat
+
+    # 參數照抄正在跑的 .bat（那才是實際在用的；.claude/launch.json 那份已經跟它分岔了）。
+    # 從此這裡是唯一真相：雲端上跑的就是這幾行。
+    command:
+      - -m
+      - /models/Qwen3-8B-Q4_K_M.gguf
+      # 容器裡一定要聽 0.0.0.0：.bat 的 127.0.0.1 在容器裡指的是「容器自己」，
+      # Docker 轉進來的流量會進不去。要不要對外開，改由下面 ports 那行控制。
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - -ngl
+      - "99"                # 全部層放 GPU。VRAM 不夠會在啟動 log 看到 fallback 到 CPU
+      - -c
+      - "8192"
+      - --jinja
+      - --reasoning
+      - "off"
+      - --temp
+      - "0.7"
+      - --top-k
+      - "20"
+      - --top-p
+      - "0.8"
+      - --min-p
+      - "0"
+      - --metrics           # Prometheus 抓 /metrics 靠這個
+      # 刻意不帶 --log-file / --log-prompts-dir：容器的慣例是 log 一律寫 stdout，
+      # 由平台（docker logs、雲端的 log 收集器）去收。寫進容器內的檔案，容器一刪就沒了。
+
+    ports:
+      # 只綁 127.0.0.1：跟原本 .bat 的 --host 127.0.0.1 一樣，只給本機連，區網的人連不到。
+      - "127.0.0.1:8080:8080"
+
+    volumes:
+      - models:/models:ro           # 讀 model-seed 播好的 volume；唯讀，模型服務沒理由改模型檔
+
+    depends_on:
+      model-seed:
+        # 等播種「成功跑完」才啟動。播種失敗（例如 SHA256 對不上）模型服務就不會起來，
+        # 不會拿一個壞掉的模型檔去服務請求。
+        condition: service_completed_successfully
+
+    deploy: *gpu
+
+    healthcheck:
+      # llama-server 的 /health：模型還在載入時回 503，載好才回 200。
+      # 這就是雲端的 readiness probe——「程序活著」不等於「能接請求」，載 5GB 模型要一段時間。
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      # 載入期間失敗不算數。從 volume 讀很快，但留 2 分鐘寬限給冷啟動（第一次讀、快取還沒熱）。
+      start_period: 120s
+
+    restart: unless-stopped
+
+  # ── 嵌入模型：bge-m3 ──────────────────────────────────────────
+  llm-embedding:
+    # 跟 llm-chat 同一個映像檔：llama-server 本身就能當 embedding server，差別只在啟動參數。
+    # 所以不用多 build 一個 image，本機磁碟、雲端的 image cache 都只存一份。
+    <<: *llama-server
+    container_name: eat-llm-embedding
+
+    # 參數照抄正在跑的 bge-m3-Q8server.bat。
+    command:
+      - -m
+      - /models/bge-m3-Q8_0.gguf
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8081"
+      - -ngl
+      - "99"
+      - -c
+      - "8192"
+      # -ub（micro-batch）要 >= 單次要嵌入的 token 數：embedding 是一次把整段文字吃進去，
+      # 不像生成可以分批。-ub 小於輸入長度，server 會直接回錯，不會幫你切。
+      - -ub
+      - "8192"
+      - --embedding         # 開 /v1/embeddings，關掉生成
+      # bge-m3 是用 [CLS] 那個位置的向量當整句的代表，pooling 要跟模型訓練時一樣，
+      # 選錯（例如 mean）照樣吐得出向量，但相似度會悄悄變爛——檢索門檻就是對 cls 量出來的。
+      - --pooling
+      - cls
+      - --metrics
+
+    ports:
+      - "127.0.0.1:8081:8081"
+
+    volumes:
+      - models:/models:ro
+
+    depends_on:
+      model-seed:
+        condition: service_completed_successfully
+
+    deploy: *gpu
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      # 600MB 的模型，比 Qwen 小快十倍，寬限期不用那麼長。
+      start_period: 30s
+
+    restart: unless-stopped
+
+volumes:
+  # 具名 volume：存在 WSL2 的 Linux 檔案系統上，讀取速度遠快於掛載 Windows 資料夾。
+  # `docker compose down` 不會刪它（模型不必重新複製）；`down -v` 才會清掉，下次啟動重新播種。
+  # 對照雲端：PersistentVolumeClaim。
+  models:
