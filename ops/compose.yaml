@@ -1,5 +1,8 @@
-# 這個 stack 只做一件事：把「觀測環境」用 Docker 一次拉起來，跟 Java app 完全分離。
-# app 還是照常 ./gradlew bootRun 跑在你自己機器上（host），這裡的容器只負責「收資料 + 畫圖」。
+# 這個 stack 只做一件事：把「觀測環境」用 Docker 一次拉起來，跟被觀測的服務（deploy/ 那組）分開管。
+# 被觀測的 app、兩顆模型都在 deploy/ 的容器裡，這裡的容器只負責「收資料 + 畫圖」。
+#
+# 啟動順序：先 `cd deploy && docker compose up -d`，再起這組。
+# Prometheus 要加入 deploy/ 的網路，那個網路由 deploy/ 建立，不存在時這組會起不來。
 #
 # 三個角色，各司其職（詳見 README）：
 #   prometheus —— 存指標(metrics)。每隔幾秒去抓 app 吐出來的數字，存成時間序列。
@@ -28,10 +31,12 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       # 具名 volume：抓到的資料存這，容器重建後資料還在
       - prometheus-data:/prometheus
-    extra_hosts:
-      # Linux 容器預設沒有 host.docker.internal 這個名字。明寫這行後，容器裡就能用它指回
-      # 「你自己這台機器」——這樣 Prometheus 才抓得到跑在 host 上的 Spring app。跨平台都一致。
-      - "host.docker.internal:host-gateway"
+    networks:
+      # default：這組自己的網路，Grafana 靠它用 prometheus:9090 找到 Prometheus。
+      # eat-deploy：deploy/ 那組的網路。接上後就能直接用服務名稱抓 app:8090、llm-chat:8080，
+      #   不繞主機、不看 ports 發佈成幾號——跟 deploy/ 裡 app 找模型是同一套規則。
+      - default
+      - eat-deploy
     restart: unless-stopped           # 當掉/開機自動拉回來，但你手動 down 掉就別雞婆重啟
 
   # ── 日誌資料庫 ────────────────────────────────────────────────
@@ -96,6 +101,13 @@ services:
     depends_on:
       - loki
     restart: unless-stopped
+
+networks:
+  eat-deploy:
+    # external：這個網路不歸這組管，`docker compose down` 不會刪它。
+    # deploy/compose.yaml 沒自訂網路，Compose 預設幫它建「<專案名>_default」，專案名是 eat-deploy。
+    external: true
+    name: eat-deploy_default
 
 # 具名 volume：資料交給 Docker 管，不落在專案資料夾裡（所以不必動 .gitignore）。
 # 要整組資料清掉重來：docker compose down -v

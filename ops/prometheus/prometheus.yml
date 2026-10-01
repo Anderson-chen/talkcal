@@ -1,5 +1,8 @@
 # Prometheus 的工作：照 scrape_configs 列的對象，每隔 scrape_interval 去抓一次數字存起來。
-# 這個檔現在有兩個抓取對象，其中 app 那個「還沒東西可抓」—— 先把設定擺好，等 app 開了端點就通。
+# 抓的是 deploy/ 那組容器。Prometheus 已加入它們的網路（見 ops/compose.yaml 的 networks），
+# 所以 target 直接寫「服務名:容器內的埠」，跟 deploy/ 裡 app 打 http://llm-chat:8080 是同一套規則。
+# 好處：不依賴主機發佈了幾號埠（app 對外是 18090，這裡照樣寫 8090），
+#       也不會因為本機剛好有個 bootRun 佔著 8090 就抓錯對象。
 
 global:
   scrape_interval: 15s      # 每 15 秒抓一輪。學習用夠了；要更即時可縮短，但資料量會變大
@@ -11,35 +14,26 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
-  # (2) 我們的 Spring app —— app 已是 HTTP 入口(port 8090)，但還沒開 metrics 端點。
-  #     目前 build.gradle 只有 spring-boot-starter-web，還沒加 actuator / micrometer，
-  #     所以 /actuator/prometheus 還不存在，這個 target 會是紅的(DOWN)，這是正常的。
-  #     下一步替 app 加上 spring-boot-starter-actuator + micrometer-registry-prometheus，
-  #     並在 application.properties 把 prometheus 端點露出來，這裡就會自動變綠、不必再改。
-  #
-  #     埠是 8090 不是 8080：8080 讓給常駐的 llama-server，app 的 HTTP 入口挪到 8090
-  #     （見 src/main/resources/application.properties 的 server.port）。
-  #     host.docker.internal = 容器眼中的「你這台機器」。app 用 ./gradlew bootRun 跑在 host 上，
-  #     Prometheus 要透過這個名字才找得到它（compose.yaml 已把這名字接到 host-gateway）。
+  # (2) 我們的 Spring app —— deploy/ 的 app 服務。8090 是容器「裡面」的埠，
+  #     主機上看到的 18090 只是 ports 發佈出去給瀏覽器用的，容器之間用不到。
+  #     本機 bootRun 的 app 不在 Docker 網路裡，不會被抓；要看它的指標直接開 localhost:8090/actuator/prometheus。
   - job_name: eat-app
     metrics_path: /actuator/prometheus   # Spring Boot 吐 Prometheus 指標的預設路徑
     static_configs:
-      - targets: ["host.docker.internal:8090"]
+      - targets: ["app:8090"]
 
-  # (3) llama.cpp 的 llama-server —— LLM 那顆本體。加了 --metrics 就在 8080/metrics 吐指標
-  #     （launch.json 的 runtimeArgs 已補上 --metrics；沒帶這旗標的話這個 target 會是紅的）。
+  # (3) llama.cpp 的 llama-server —— LLM 那顆本體（deploy/ 的 llm-chat）。帶了 --metrics 就在 /metrics 吐指標。
   #     不必寫 metrics_path：llama-server 用的就是 Prometheus 預設的 /metrics，不像上面 app 要改成
-  #     /actuator/prometheus。埠 8080 是 llama-server 常駐的埠（app 讓到 8090 就是為了它）。
+  #     /actuator/prometheus。
   #     看得到的指標：predicted_tokens_seconds（生成速度 t/s）、prompt_tokens_seconds（prompt t/s）、
   #     requests_processing（處理中）、requests_deferred（排隊中，併發塞車看它）、
   #     tokens_predicted_total / prompt_tokens_total（累計 counter）。
   #     實際清單以 `curl localhost:8080/metrics` 這個 build 吐出來的為準（此 build 沒有 kv_cache 相關指標）。
   - job_name: llama-cpp
     static_configs:
-      - targets: ["host.docker.internal:8080"]
+      - targets: ["llm-chat:8080"]
 
-  # (4) llama.cpp 的「嵌入」伺服器 —— 同一支 llama-server.exe，但載的是 bge-m3、開 --embedding，
-  #     常駐在 8081（見 .claude/launch.json 的 llama-embedding-server）。它也帶了 --metrics。
+  # (4) llama.cpp 的「嵌入」伺服器 —— 同一支 llama-server，但載的是 bge-m3、開 --embedding（deploy/ 的 llm-embedding）。
   #
   #     為什麼要獨立一個 job_name 而不是併進上面的 llama-cpp：
   #     兩台吐出來的 metric「名字完全一樣」（都是 llamacpp:xxx），只能靠 label 分辨來源。
@@ -52,4 +46,4 @@ scrape_configs:
   #     真正有意義的是 prompt_tokens_seconds（嵌入吞吐）與 requests_processing/deferred（塞不塞）。
   - job_name: llama-embedding
     static_configs:
-      - targets: ["host.docker.internal:8081"]
+      - targets: ["llm-embedding:8081"]

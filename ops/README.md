@@ -30,11 +30,13 @@ docker compose down -v      # 關掉並清空資料，整組重來
 
 | job | 位址 | 是誰 |
 |-----|------|------|
-| `eat-app` | `host.docker.internal:8090` | **本機開發**的 app（bootRun） |
-| `llama-cpp` | `host.docker.internal:8080` | Qwen3-8B（原生 .bat 或 deploy/ 的容器，埠一樣） |
-| `llama-embedding` | `host.docker.internal:8081` | bge-m3（同上） |
+| `eat-app` | `app:8090` | deploy/ 的 app 容器 |
+| `llama-cpp` | `llm-chat:8080` | Qwen3-8B（deploy/ 的 llm-chat） |
+| `llama-embedding` | `llm-embedding:8081` | bge-m3（deploy/ 的 llm-embedding） |
 
-容器裡的 app（18090）目前**沒有**被抓，見「下一步」。
+Prometheus 加入了 deploy/ 的網路（`eat-deploy_default`），所以用服務名稱直接抓，不繞主機。
+代價是**要先起 deploy/ 再起 ops/**，網路不存在時 Prometheus 起不來。
+本機 bootRun 的 app 不在這個網路裡，不會被抓。
 
 ## 日誌：Loki 收什麼
 
@@ -72,10 +74,7 @@ sum by (service) (count_over_time({env="docker"} | json | log_level=~"WARN|ERROR
 
 ## 下一步（一次一件）
 
-1. **抓容器 app 的指標**：在 `prometheus.yml` 加 `host.docker.internal:18090`。
-   要先決定怎麼跟本機開發的 8090 分開——現在 `eat-app.json` 的查詢沒有過濾 job/instance，
-   兩個一起抓的話數字會混在一起。
-2. **app 記錄每次提問**：目前 app 每個請求不寫 log，Loki 裡只看得到模型那兩台的請求紀錄。
+1. **app 記錄每次提問**：目前 app 每個請求不寫 log，Loki 裡只看得到模型那兩台的請求紀錄。
    補上之後（送出的 prompt、檢索到哪幾段）就能在 Loki 串起一個請求的完整經過，
    也補回原生 `.bat` 的 `--log-prompts-dir` 拿掉後少掉的 prompt 紀錄。
 
