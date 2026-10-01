@@ -71,9 +71,36 @@ services:
       - loki
     restart: unless-stopped
 
+  # ── 日誌收集器 ───────────────────────────────────────────────
+  # 讀 deploy/ 那組容器的 stdout，加上標籤後送進 Loki。管線怎麼接見 alloy/config.alloy。
+  alloy:
+    image: grafana/alloy:v1.11.0
+    container_name: eat-alloy
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      # 預設只聽 127.0.0.1，容器外連不到它的除錯頁。改聽 0.0.0.0，再由下面 ports 控制只開給本機
+      - --server.http.listen-addr=0.0.0.0:12345
+      # 記住「每個容器讀到哪」的位置檔放這裡，配上 volume：Alloy 重啟後接著讀，不會重送或漏送
+      - --storage.path=/var/lib/alloy/data
+    ports:
+      # http://localhost:12345 是 Alloy 的除錯頁：看得到管線圖、每個元件收到幾個容器
+      - "127.0.0.1:12345:12345"
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # 讀 Docker 的 API 才能找到容器、讀它們的 log。
+      # 注意：docker.sock 等同主機上 Docker 的完整控制權（:ro 只擋寫檔，擋不住 API 呼叫）。
+      # 本機學習可接受；雲端上不這樣做，而是每台機器跑一個 Alloy 直接讀節點上的 log 檔（k8s DaemonSet）。
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    depends_on:
+      - loki
+    restart: unless-stopped
+
 # 具名 volume：資料交給 Docker 管，不落在專案資料夾裡（所以不必動 .gitignore）。
 # 要整組資料清掉重來：docker compose down -v
 volumes:
   prometheus-data:
   loki-data:
   grafana-data:
+  alloy-data:

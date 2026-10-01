@@ -108,4 +108,5 @@ docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新
 1. ~~Qwen 生成模型、bge-m3 embedding 進容器~~ ✅
 2. ~~模型檔改成 volume + 播種~~ ✅（bind mount 實測太慢，提前做了）
 3. ~~app 也進容器，分環境，容器間用服務名稱溝通~~ ✅
-4. 換成本機 k8s（kind）跑同一套——到時要決定 embedding 跟 chat 塞同一個 Pod 共用 GPU，還是改跑 CPU
+4. ~~三個服務的 log 接進 Loki~~ ✅（見 `ops/README.md`）
+5. 換成本機 k8s（kind）跑同一套——到時要決定 embedding 跟 chat 塞同一個 Pod 共用 GPU，還是改跑 CPU

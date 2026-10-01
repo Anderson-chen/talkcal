@@ -1,0 +1,63 @@
+// Grafana Alloy：把容器的 log 收進 Loki。
+//
+// 為什麼不是 Promtail：Promtail 是 Loki 舊的收集器，官方已停止開發，新專案都用 Alloy。
+// Alloy 的設定是一條管線：每個區塊是一個元件，用「元件.名字.輸出」把上一個的輸出接到下一個的輸入。
+//
+//   discovery.docker  ──找出要收哪些容器──▶  loki.source.docker  ──讀它們的 stdout──▶  loki.write  ──▶  Loki
+//                                              ▲ 套用 discovery.relabel 的規則，決定每筆 log 帶什麼標籤
+
+// ── 1. 找容器 ───────────────────────────────────────────────────────
+// 透過 Docker 的 API（docker.sock）列出容器。新容器起來會自動被發現，不必改這份設定。
+discovery.docker "deploy" {
+  host = "unix:///var/run/docker.sock"
+
+  // 只收 deploy/ 那組（compose 專案名 eat-deploy）：app、llm-chat、llm-embedding、model-seed。
+  // 不加這個會連這台機器上別的專案、還有 ops 自己（Loki、Grafana…）的 log 一起收進來。
+  filter {
+    name   = "label"
+    values = ["com.docker.compose.project=eat-deploy"]
+  }
+}
+
+// ── 2. 決定標籤 ─────────────────────────────────────────────────────
+// Loki 只替「標籤」建索引，內容不建索引——所以查詢時先靠標籤縮小範圍，再掃內容。
+// 標籤要少而穩定：容器名、服務名這種「值只有幾個」的才適合；
+// 把 request id、使用者這種每筆都不同的值放進標籤，索引會爆掉（high cardinality）。
+discovery.relabel "deploy" {
+  // targets 留空：這裡只是定義規則，由下面 loki.source.docker 拿去套用
+  targets = []
+
+  // Docker 給的容器名前面多一個斜線（/eat-app），去掉
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+  // compose 的服務名（app、llm-chat…）：容器重建、改名都不變，查詢用這個最穩
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+  // 標上環境。這組全是 docker 環境；之後本機開發或雲端的 log 也送進來時，用這個分開
+  rule {
+    target_label = "env"
+    replacement  = "docker"
+  }
+}
+
+// ── 3. 讀 log ──────────────────────────────────────────────────────
+// 讀的是 Docker 收下來的 stdout/stderr——這就是為什麼容器裡的 log 一律寫 stdout、不寫檔。
+loki.source.docker "deploy" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.deploy.targets
+  relabel_rules = discovery.relabel.deploy.rules
+  forward_to    = [loki.write.local.receiver]
+}
+
+// ── 4. 送進 Loki ───────────────────────────────────────────────────
+// 跟 Loki 在同一個 compose 網路上，用服務名稱 loki 找它
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
