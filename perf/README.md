@@ -86,6 +86,22 @@ $env:SLOTS="2"; k6 run perf/load.js
 跑的時候開著 Grafana 的 **llama.cpp — LLM server** 與 **eat — Spring app** 兩張 dashboard，
 `above` 那段會看到「排隊中」離開 0、p95 往上跳。
 
+### concurrent：兩個請求同一刻打進去
+
+預設打 **docker 那台 app**（`deploy/compose.yaml` 的 `18090`）。用 `http.batch` 讓兩個請求同一瞬間送出，
+每輪跟一次「單獨問」交錯，收工比 `http_req_duration{phase:solo}` 與 `{phase:pair}` 兩個 p95：
+
+```bash
+k6 run perf/concurrent.js
+```
+
+```powershell
+$env:ROUNDS="3"; k6 run perf/concurrent.js                          # 少跑幾輪
+$env:BASE_URL="http://localhost:8090"; k6 run perf/concurrent.js    # 改打本機 bootRun
+```
+
+`pair ≈ solo` 代表真的平行；`pair ≈ solo×2` 代表其實在排隊。
+
 ## 怎麼讀結果
 
 k6 收工時印一張表，看三個地方就夠：
@@ -161,7 +177,9 @@ k6 收工時印一張表，看三個地方就夠：
 ```
 perf/
 ├── lib/
-│   └── chat.js     # 共用：位址、請求參數、正常回覆的檢查
+│   ├── chat.js           # 共用：位址、請求參數、正常回覆的檢查
+│   └── docker-target.js  # 讓腳本預設打 docker 的 app（18090）
 ├── smoke.js        # 最小規模的契約 + 連通性驗證
-└── load.js         # 三段平台找併發上限
+├── load.js         # 三段平台找併發上限
+└── concurrent.js   # 兩個請求同時送出 vs 單獨問
 ```
