@@ -45,23 +45,13 @@ export function jsonParams(extra) {
 
 // 問一題正常問題，並檢查契約「正常的那一半」：回 200，而且 reply 要有東西。
 // 這會真的叫模型生一次字，是整條路上最慢的部分。
-export function ask(question, extra) {
-  const res = http.post(CHAT_URL, JSON.stringify({ question }), jsonParams(extra));
-  checkReply(res);
-  return res;
-}
-
-// 同一個請求的 http.batch 版本 —— 要「同一刻」送出好幾題時用（見 concurrent.js）。
-// 跟 ask 共用位址與參數，只是不立刻送，交給 batch 一起發。
-export function askRequest(question, extra) {
-  return ['POST', CHAT_URL, JSON.stringify({ question }), jsonParams(extra)];
-}
-
-export function checkReply(res) {
-  return check(res, {
+export function ask(question) {
+  const res = http.post(CHAT_URL, JSON.stringify({ question }), jsonParams());
+  check(res, {
     '正常問題回 200': (r) => r.status === 200,
     'reply 非空白': (r) => replyText(r).length > 0,
   });
+  return res;
 }
 
 // 把 reply 安全地挖出來：body 不是預期的 JSON（例如 502 回了錯誤物件）時不要讓腳本自己炸，

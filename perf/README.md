@@ -86,21 +86,47 @@ $env:SLOTS="2"; k6 run perf/load.js
 跑的時候開著 Grafana 的 **llama.cpp — LLM server** 與 **eat — Spring app** 兩張 dashboard，
 `above` 那段會看到「排隊中」離開 0、p95 往上跳。
 
-### concurrent：兩個請求同一刻打進去
+### concurrent 與 knee：預設打 docker 那台 app
 
-預設打 **docker 那台 app**（`deploy/compose.yaml` 的 `18090`）。用 `http.batch` 讓兩個請求同一瞬間送出，
-每輪跟一次「單獨問」交錯，收工比 `http_req_duration{phase:solo}` 與 `{phase:pair}` 兩個 p95：
+這兩支預設打 **docker 那台 app**（`deploy/compose.yaml` 的 `18090`，見 `lib/docker-target.js`）。
+要打本機 bootRun 就覆蓋 `BASE_URL`：
+
+```powershell
+$env:BASE_URL="http://localhost:8090"; k6 run perf/knee.js
+```
+
+#### concurrent：一波人在短時間內湧進來
+
+`USERS` 個人在 `WINDOW_S` 秒內陸續進來，每人只問一次就走——像活動開始、大家同時打開網頁的尖峰。
+用 `constant-arrival-rate`：k6 照固定節奏開始新請求，不管前面的回來了沒。預設 1000 人 / 100 秒。
 
 ```bash
 k6 run perf/concurrent.js
 ```
 
 ```powershell
-$env:ROUNDS="3"; k6 run perf/concurrent.js                          # 少跑幾輪
-$env:BASE_URL="http://localhost:8090"; k6 run perf/concurrent.js    # 改打本機 bootRun
+$env:USERS="50"; $env:WINDOW_S="5"; k6 run perf/concurrent.js     # 小一點的尖峰
 ```
 
-`pair ≈ solo` 代表真的平行；`pair ≈ solo×2` 代表其實在排隊。
+看 `http_req_duration` 的 min 與 max 差多少（越晚來的人前面排越多），
+有 `dropped_iterations` 就代表 k6 沒送到設定的人數，數字不能信。
+
+#### knee：同時數一階一階往上加，找臨界值
+
+每一階固定 N 個人持續問（問完立刻再問），收工印一張表：同時數、中位延遲、p95、吞吐量。
+臨界值就是**吞吐量不再增加、延遲開始往上衝**的那一列。預設階數 `1,2,3,4,5,6,8,12,16`，每階 5 秒。
+
+```bash
+k6 run perf/knee.js
+```
+
+```powershell
+$env:HOLD_S="20"; k6 run perf/knee.js                 # 每階拉長，中位數比較穩
+$env:STEPS="1,4,8,16,32"; k6 run perf/knee.js         # 自訂要量哪幾階
+```
+
+跟 `load.js` 的差別：load 只量三段（1、SLOTS、SLOTS×2），knee 每一階都量，看得到臨界值落在哪。
+跟 `concurrent.js` 的差別：concurrent 量「一瞬間湧進 N 個」，knee 量「持續有 N 個在用」的穩定狀態。
 
 ## 怎麼讀結果
 
@@ -145,8 +171,9 @@ k6 收工時印一張表，看三個地方就夠：
 為什麼不用一路往上加（ramping）？那樣所有併發數的數字全混在一個 p95 裡，比不出「從哪裡開始變慢」。
 分段的另一個好處：k6 收工報表**只印有設門檻的子指標**，所以分段門檻同時也是「讓報表分段印」的開關。
 
-`slot 數` 怎麼查：`GET http://localhost:8080/props` 的 `total_slots`。launch.json 沒帶 `-np`，
-所以目前是 llama.cpp 自己決定的預設值（4）。
+`slot 數` 怎麼查：`GET http://localhost:8080/props` 的 `total_slots`。
+launch.json 的原生 llama-server 沒帶 `-np`，是 llama.cpp 的預設值（4）；
+`deploy/compose.yaml` 的 llm-chat 帶了 `-np 8`，打 docker 那台時用 `$env:SLOTS="8"` 對上。
 
 ## 現在做到哪
 
@@ -154,8 +181,11 @@ k6 收工時印一張表，看三個地方就夠：
   這是負載測試的地基：先確定路是通的，才有資格談「多少併發下會垮」。
   故意送錯的那個請求有標成「預期回 400」，所以 `http_req_failed` 是真的失敗率（應為 0%）。
 - **`load.js`** —— 三段平台找併發上限，暖身不算數。
-- **`lib/chat.js`** —— 兩支腳本共用的位址、請求參數、正常回覆的檢查。
+- **`concurrent.js`** —— 一波人在短時間內各問一次，看尖峰時最後來的人等多久。
+- **`knee.js`** —— 同時數逐階往上加，印出每階的延遲與吞吐量，找臨界值。
+- **`lib/chat.js`** —— 各腳本共用的位址、請求參數、正常回覆的檢查。
   load 是第二個使用者，這時才抽出來（只有 smoke 時抽是過早抽象）。
+- **`lib/docker-target.js`** —— 把預設位址改成 docker 那台 app，有給 `BASE_URL` 就尊重它。
 
 ## 下一步（之後才做，一次一件）
 
@@ -181,5 +211,6 @@ perf/
 │   └── docker-target.js  # 讓腳本預設打 docker 的 app（18090）
 ├── smoke.js        # 最小規模的契約 + 連通性驗證
 ├── load.js         # 三段平台找併發上限
-└── concurrent.js   # 兩個請求同時送出 vs 單獨問
+├── concurrent.js   # 一波人在短時間內各問一次（尖峰）
+└── knee.js         # 同時數逐階往上加，找臨界值
 ```

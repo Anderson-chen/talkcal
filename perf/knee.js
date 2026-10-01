@@ -27,7 +27,8 @@ import { ask } from './lib/chat.js';
 // 預設挑一題回覆長度中等的。同一題會命中 llama.cpp 的 prompt 快取，但 prefill 只占十幾毫秒，可以忽略。
 const QUESTION = __ENV.QUESTION || '用一句話介紹你自己。';
 const STEPS = (__ENV.STEPS || '1,2,3,4,5,6,8,12,16').split(',').map(Number);
-// 每階維持多久。一個請求幾百毫秒，20 秒每階至少有幾十筆，中位數才穩
+// 每階維持多久。預設 5 秒，跑一輪比較快；1 人那階一個請求幾百毫秒，只有十筆上下，
+// 中位數會抖。要更穩的數字就拉長：$env:HOLD_S="20"
 const HOLD_S = Number(__ENV.HOLD_S || 5);
 // 階與階之間的空檔：上一階還在排隊的請求會在 gracefulStop 內跑完，不留空檔就會混進下一階
 const GAP_S = Number(__ENV.GAP_S || 4);
