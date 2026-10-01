@@ -129,3 +129,27 @@ tasks.named('check') {
 application {
     mainClass = 'eat.Application'
 }
+
+// 一鍵部署 app 到本機 Docker：./gradlew deployApp
+// 趕時間跳過測試用 Gradle 內建的 -x：./gradlew deployApp -x test
+//
+// 為什麼要先跑測試：Dockerfile 刻意只打包、不跑測試，部署前「先驗過」這件事還沒有 CI 做，
+// 先掛在這裡。測試沒改過的話 Gradle 會判定 up-to-date 直接跳過，不會白跑。
+// 只動 app：兩顆模型重 build 要十分鐘，不該跟著每次部署；還沒起的話 depends_on 會先把它們拉起來。
+tasks.register('deployApp', Exec) {
+    group = 'deployment'
+    description = '跑測試、build app 映像檔、換掉 deploy/ 的 app 容器，等它 healthy'
+    dependsOn tasks.named('test')
+
+    // 用專案目錄推出 deploy/，不寫死絕對路徑：換一台機器、換一個 clone 位置都能跑
+    workingDir = layout.projectDirectory.dir('deploy')
+
+    // 等 healthy 的上限（秒）。預設 300，模型第一次載入太慢時：./gradlew deployApp -PdeployWaitTimeout=600
+    def waitTimeout = providers.gradleProperty('deployWaitTimeout').orElse('300').get()
+
+    // --build：映像檔有變就重 build；容器的映像檔換了才會被替換，沒變就什麼都不做。
+    // --wait：等到 compose 裡的 healthcheck 通過（/actuator/health 回 200）才結束。
+    //   沒有它的話，Spring 還在啟動、甚至啟動失敗，這個 task 都會顯示成功。
+    //   也因為交給 healthcheck 判斷，這裡不必再寫死主機埠去打一次。
+    commandLine 'docker', 'compose', 'up', '-d', '--build', '--wait', '--wait-timeout', waitTimeout, 'app'
+}

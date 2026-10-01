@@ -14,6 +14,18 @@
 本機開發的 app（`./gradlew bootRun`，8090）可以同時開著：它打主機上發佈出來的 8080/8081，
 用的是同一對模型容器。兩個 app 埠不同，可以並排比對。
 
+## 一鍵部署 app
+
+改了程式碼，要把新版放進容器：
+
+```bash
+./gradlew deployApp                              # 測試 → build 映像檔 → 換掉舊容器 → 等 healthy
+./gradlew deployApp -x test                      # 跳過測試
+./gradlew deployApp -PdeployWaitTimeout=600      # 模型第一次載入比較慢時，拉長等待（預設 300 秒）
+```
+
+只動 app，不重 build 模型。定義在 `build.gradle` 最後的 `deployApp`，每一步為什麼這樣做見那裡的註解。
+
 ## 兩種環境怎麼分
 
 同一份程式，靠 Spring profile 分環境。`application.properties` 是本機開發的預設值，
