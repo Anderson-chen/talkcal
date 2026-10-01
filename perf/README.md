@@ -98,7 +98,7 @@ $env:BASE_URL="http://localhost:8090"; k6 run perf/knee.js
 #### concurrent：一波人在短時間內湧進來
 
 `USERS` 個人在 `WINDOW_S` 秒內陸續進來，每人只問一次就走——像活動開始、大家同時打開網頁的尖峰。
-用 `constant-arrival-rate`：k6 照固定節奏開始新請求，不管前面的回來了沒。預設 1000 人 / 100 秒。
+用 `constant-arrival-rate`：k6 照固定節奏開始新請求，不管前面的回來了沒。預設 1000 人 / 60 秒。
 
 ```bash
 k6 run perf/concurrent.js
@@ -173,7 +173,7 @@ k6 收工時印一張表，看三個地方就夠：
 
 `slot 數` 怎麼查：`GET http://localhost:8080/props` 的 `total_slots`。
 launch.json 的原生 llama-server 沒帶 `-np`，是 llama.cpp 的預設值（4）；
-`deploy/compose.yaml` 的 llm-chat 帶了 `-np 8`，打 docker 那台時用 `$env:SLOTS="8"` 對上。
+`deploy/compose.yaml` 的 llm-chat 帶了 `-np 200`，打 docker 那台時用 `$env:SLOTS="200"` 對上。
 
 ## 現在做到哪
 

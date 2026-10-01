@@ -100,12 +100,12 @@ services:
       - -ngl
       - "99"                # 全部層放 GPU。VRAM 不夠會在啟動 log 看到 fallback 到 CPU
       - -c
-      - "8192"
+      - "32768"
       # 同時處理幾個請求（slot 數）。不帶時 llama.cpp 預設 4；超過的請求在 server 裡排隊，不會被拒。
       - -np
-      - "8"
-      # 讓所有 slot 共用上面那 8192 的 context。不帶 -np 時 llama.cpp 自動打開它；
-      # 一旦明確給了 -np 就變成關，8192 被均分成每個 slot 1024，知識庫片段一長就會被截斷。
+      - "200"
+      # 讓所有 slot 共用上面那 32768 的 context。不帶 -np 時 llama.cpp 自動打開它；
+      # 一旦明確給了 -np 就變成關，32768 被均分成每個 slot 約 163，知識庫片段一長就會被截斷。
       - --kv-unified
       - --jinja
       - --reasoning

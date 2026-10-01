@@ -6,7 +6,7 @@
 // 所以只打這一支，兩台模型伺服器就都被壓到了。
 //
 // 用 constant-arrival-rate：k6 照固定節奏「開始」新的請求，不管前面的回來了沒。
-// 預設 1000 人 / 100 秒 = 每秒來 10 個人，平均分散在 100 秒內，不是第 0 秒一次全進來。
+// 預設 1000 人 / 60 秒 ≈ 每秒來 16.7 個人，平均分散在 60 秒內，不是第 0 秒一次全進來。
 // 每一輪只送一個請求，所以「輪數」=「人數」= 請求數。
 //
 // 怎麼看結果：
@@ -24,7 +24,7 @@ import './lib/docker-target.js';
 import { QUESTIONS, ask } from './lib/chat.js';
 
 const USERS = Number(__ENV.USERS || 1000);
-const WINDOW_S = Number(__ENV.WINDOW_S || 100);
+const WINDOW_S = Number(__ENV.WINDOW_S || 60);
 
 export const options = {
   scenarios: {
