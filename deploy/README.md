@@ -9,13 +9,42 @@
 |------|--------|----|
 | Qwen3-8B 生成模型 | **容器**（`llm-chat`） | 8080 |
 | bge-m3 embedding | **容器**（`llm-embedding`） | 8081 |
-| eat app | 原生（`./gradlew bootRun`） | 8090 |
+| eat app | **容器**（`app`） | 18090 |
 
-埠刻意跟原生一樣，所以 app 和 `ops/` 的 Prometheus 都不用改設定。
+本機開發的 app（`./gradlew bootRun`，8090）可以同時開著：它打主機上發佈出來的 8080/8081，
+用的是同一對模型容器。兩個 app 埠不同，可以並排比對。
+
+## 兩種環境怎麼分
+
+同一份程式，靠 Spring profile 分環境。`application.properties` 是本機開發的預設值，
+`application-docker.properties` 只覆蓋容器裡不一樣的那幾行（compose 用 `SPRING_PROFILES_ACTIVE=docker` 打開）：
+
+| | 本機開發（預設） | 容器（`docker` profile） |
+|---|---|---|
+| 怎麼跑 | `./gradlew bootRun` | `docker compose up -d` |
+| app 埠 | 8090 | 主機 18090 → 容器內 8090 |
+| 模型位址 | `127.0.0.1:8080` / `:8081` | `llm-chat:8080` / `llm-embedding:8081` |
+| log 格式 | 給人看的彩色文字 | 一行一個 JSON（ECS），方便 Loki 拆欄位 |
+
+臨時要指到別的模型位址，不必改檔案：`-Dllamacpp.baseUri=...` 或環境變數 `LLAMACPP_BASEURI` 都比設定檔優先。
+
+## 容器之間怎麼溝通
+
+同一個 compose 的服務自動在同一個網路（`eat-deploy_default`）上，Docker 內建 DNS 把服務名稱解析成容器 IP：
+
+```bash
+docker exec eat-app getent hosts llm-chat     # → 172.22.0.x  llm-chat
+```
+
+IP 每次重建容器都可能變，服務名稱不會——所以設定檔只寫名字。容器間走的是**容器內部的埠**，
+跟 `ports:` 發佈到主機成幾號無關；`ports:` 只是給容器外面（你的瀏覽器、本機 bootRun、Prometheus）用的。
 
 ## 映像檔從哪來
 
-兩個模型共用一個**自己 build** 的映像檔 `eat/llama-server:b10964-cuda13.0.1`（`llama-server/Dockerfile`）。
+**app**：repo 根目錄的 `Dockerfile`，build 用 Docker Hub 的 `gradle:9.2.1-jdk25`，執行用 `eclipse-temurin:25-jre`。
+不用 `./gradlew`：Gradle 本體的下載點轉到 GitHub，本機實測 0.17 MB/s。第一次 build 約 1.5 分鐘，映像檔約 500MB。
+
+**模型**：兩個模型共用一個**自己 build** 的映像檔 `eat/llama-server:b10964-cuda13.0.1`（`llama-server/Dockerfile`）。
 
 為什麼不能直接拿 `C:\llm\llama.cpp` 用：容器裡是 Linux，`.exe` 和 `.dll` 是 Windows 格式，跑不了。
 要的是 Linux 版 llama-server + Linux 版 CUDA 函式庫。模型檔（`.gguf`）是純資料，不用重新下載（見下一節）。
@@ -25,6 +54,7 @@ Docker Hub 10 MB/s——從 Docker Hub 拉 CUDA 當底、自己編 llama.cpp 反
 
 ```bash
 docker compose build        # 第一次或改了 Dockerfile 才需要；compose up 發現沒有 image 也會自動 build
+docker compose build app    # 改了 app 的程式碼後，只重 build app
 ```
 
 實測：拉 CUDA 底 ~6 分鐘 + 編譯 3.5 分鐘（只編 sm_89），共約 10 分鐘。映像檔 4.3GB。
@@ -46,6 +76,7 @@ llama.cpp 預設的 mmap 零碎讀更慢——Qwen 5GB 載了 5 分鐘還卡在 
 
 ```bash
 # 原生 → 容器：先關掉 C:\llm 底下兩個 .bat 的視窗（搶同樣的 8080/8081，VRAM 也不夠放兩份）
+# 本機的 bootRun 不用關：容器 app 在 18090，不會撞
 cd deploy
 docker compose up -d
 docker compose ps           # STATUS 要等到 (healthy) 才能接請求；(health: starting) 代表模型還在載
@@ -68,11 +99,13 @@ docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新
 | `start_period: 120s` | startupProbe / `initialDelaySeconds` |
 | log 寫 stdout、不寫檔 | 平台的 log 收集器負責收 |
 | `model-seed` 跑完才啟動模型服務 | initContainer（從 S3/GCS 拉模型） |
+| 服務名稱 `llm-chat` 互相找 | k8s Service 的 DNS 名稱 |
+| `SPRING_PROFILES_ACTIVE=docker` | Deployment 的 env，或 ConfigMap |
 | 具名 volume `models` | PersistentVolumeClaim |
 
 ## 下一步（一次一件）
 
 1. ~~Qwen 生成模型、bge-m3 embedding 進容器~~ ✅
 2. ~~模型檔改成 volume + 播種~~ ✅（bind mount 實測太慢，提前做了）
-3. app 也進容器，所有位址改由環境變數給
+3. ~~app 也進容器，分環境，容器間用服務名稱溝通~~ ✅
 4. 換成本機 k8s（kind）跑同一套——到時要決定 embedding 跟 chat 塞同一個 Pod 共用 GPU，還是改跑 CPU
