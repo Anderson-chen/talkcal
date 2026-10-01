@@ -68,14 +68,24 @@ Alloy 透過 Docker 的 API（`docker.sock`）自動發現 `deploy/` 那組容�
 # app 的 log 是 JSON（docker profile 開的），| json 把欄位拆開，就能照等級篩
 {service="app"} | json | log_level=~"WARN|ERROR"
 
+# app 的 access log：每個請求一行，帶方法、路徑、請求與回應的 body、狀態碼、耗時（AccessLogFilter 寫的）
+{service="app"} | json | log_logger="access"
+
+# 只看失敗的提問，連同當時問了什麼、回了什麼
+{service="app"} | json | log_logger="access" | http_response_status_code >= 400
+
+# 超過 5 秒的慢請求（event_duration 是奈秒）
+{service="app"} | json | log_logger="access" | event_duration > 5000000000
+
 # 每 5 分鐘有幾筆 WARN/ERROR——從 log 算出數字，可以畫成圖
 sum by (service) (count_over_time({env="docker"} | json | log_level=~"WARN|ERROR" [5m]))
 ```
 
 ## 下一步（一次一件）
 
-1. **app 記錄每次提問**：目前 app 每個請求不寫 log，Loki 裡只看得到模型那兩台的請求紀錄。
-   補上之後（送出的 prompt、檢索到哪幾段）就能在 Loki 串起一個請求的完整經過，
+1. **app 記錄送給模型的完整 prompt**：access log 已經記了使用者問了什麼（請求 body），
+   但還看不到檢索到哪幾段、最後組出來送給 llm-chat 的 prompt 長什麼樣。
+   補上之後就能在 Loki 串起一個請求的完整經過，
    也補回原生 `.bat` 的 `--log-prompts-dir` 拿掉後少掉的 prompt 紀錄。
 
 ## 檔案結構

@@ -9,6 +9,8 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -44,6 +46,10 @@ import java.util.Objects;
 // OpenAPI 的註解只准出現在 adapter 這一圈（ArchitectureTest 守著），它們描述的是 HTTP 長相，不是業務規則
 @Tag(name = "chat", description = "跟模型對話：先從知識庫檢索相關片段，再交給模型生成回覆")
 public final class ChatController {
+
+    // log 寫在 adapter 這圈：「收到一個 HTTP 請求、回了什麼碼」是入口的事，domain 不必知道有人在看。
+    // docker profile 下會印成 ECS JSON，Alloy 收進 Loki 後用 {service="app"} | json 就查得到。
+    private static final Logger log = LoggerFactory.getLogger(ChatController.class);
 
     private final AskQuestionUseCase askQuestion;
 
@@ -83,6 +89,8 @@ public final class ChatController {
      */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Failure> onInvalidQuestion(IllegalArgumentException e) {
+        // WARN 不是 ERROR：呼叫端送錯是預期中的事，伺服器沒壞
+        log.warn("提問不合規，回 400：{}", e.getMessage());
         return ResponseEntity.badRequest().body(new Failure(e.getMessage()));
     }
 
@@ -100,6 +108,8 @@ public final class ChatController {
      */
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<Failure> onModelFailure(IllegalStateException e) {
+        // ERROR 並附上例外：上游真的出事了，要看得到 stack trace 才查得到是連不上還是逾時
+        log.error("模型或檢索服務失敗，回 502", e);
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(new Failure(e.getMessage()));
     }
 
