@@ -20,6 +20,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
+import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -78,7 +80,13 @@ class RetrievalQualityTest {
     }
 
     private LlamaCppRetrievePassagesAdapter retrieval() {
-        return new LlamaCppRetrievePassagesAdapter(RestClient.builder().baseUrl(BASE_URI.toString()).build(), MarkdownKnowledgeBase.passages());
+        // 逾時跟 application.properties 的 llamacpp.connectTimeout / embeddingReadTimeout 一致
+        RestClient llamaCpp = RestClient.builder()
+                .baseUrl(BASE_URI.toString())
+                .requestFactory(ClientHttpRequestFactoryBuilder.jdk().build(
+                        HttpClientSettings.defaults().withTimeouts(Duration.ofSeconds(5), Duration.ofSeconds(30))))
+                .build();
+        return new LlamaCppRetrievePassagesAdapter(llamaCpp, MarkdownKnowledgeBase.passages());
     }
 
     @ParameterizedTest(name = "{0} → {1}")

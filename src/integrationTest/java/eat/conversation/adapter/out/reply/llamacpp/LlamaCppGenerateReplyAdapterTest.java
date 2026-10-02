@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
+import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
@@ -74,7 +76,14 @@ class LlamaCppGenerateReplyAdapterTest {
     }
 
     private static LlamaCppGenerateReplyAdapter adapter() {
-        return new LlamaCppGenerateReplyAdapter(RestClient.builder().baseUrl(BASE_URI.toString()).build());
+        // 逾時跟 application.properties 的 llamacpp.connectTimeout / readTimeout 一致。
+        // 正式環境由組裝根設，這裡自己建 client 就得自己設，不然生成卡住時測試會無限等
+        RestClient llamaCpp = RestClient.builder()
+                .baseUrl(BASE_URI.toString())
+                .requestFactory(ClientHttpRequestFactoryBuilder.jdk().build(
+                        HttpClientSettings.defaults().withTimeouts(Duration.ofSeconds(5), Duration.ofMinutes(2))))
+                .build();
+        return new LlamaCppGenerateReplyAdapter(llamaCpp);
     }
 
     private static List<Conversation.Message> question(String text) {
