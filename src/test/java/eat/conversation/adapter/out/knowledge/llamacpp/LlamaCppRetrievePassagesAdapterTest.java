@@ -14,13 +14,13 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.RestClient;
 
 /**
  * 兩種測試，各守各的，沒有一種需要假物件：
@@ -180,7 +180,7 @@ class LlamaCppRetrievePassagesAdapterTest {
         @Test
         @DisplayName("建構時一行網路都不打：應用照樣啟動得了")
         void doesNotConnectAtConstruction() throws IOException {
-            URI nobodyListening = uriOf(freePort());
+            RestClient nobodyListening = clientFor(freePort());
 
             // 建構子若偷偷先把知識庫索引起來，這裡就會丟出「呼叫 llama.cpp embedding 失敗」。
             // 守的是兩個 outbound adapter 的啟動契約一致：LlamaCppGenerateReplyAdapter 也不在建構時連線，
@@ -193,7 +193,7 @@ class LlamaCppRetrievePassagesAdapterTest {
         void recoversOnceServerComesUp() throws IOException {
             int port = freePort();
             LlamaCppRetrievePassagesAdapter adapter =
-                    new LlamaCppRetrievePassagesAdapter(uriOf(port), KNOWLEDGE_BASE);
+                    new LlamaCppRetrievePassagesAdapter(clientFor(port), KNOWLEDGE_BASE);
 
             assertThrows(IllegalStateException.class, () -> adapter.retrievePassages(ANY_QUESTION));
 
@@ -215,8 +215,10 @@ class LlamaCppRetrievePassagesAdapterTest {
             }
         }
 
-        private static URI uriOf(int port) {
-            return URI.create("http://127.0.0.1:" + port);
+        // 正式環境的 client 由組裝根從 Spring Boot 的 Builder 建（帶觀測、逾時）；
+        // 這裡只需要「指到那個埠」，用最陽春的 RestClient 就夠
+        private static RestClient clientFor(int port) {
+            return RestClient.builder().baseUrl("http://127.0.0.1:" + port).build();
         }
 
         /**

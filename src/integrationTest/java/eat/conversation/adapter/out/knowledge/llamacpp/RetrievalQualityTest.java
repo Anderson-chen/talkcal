@@ -20,6 +20,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.web.client.RestClient;
 
 /**
  * 檢索品質：對真的 embedding server、真的知識庫、正式用的地板與相對門檻。
@@ -77,7 +78,7 @@ class RetrievalQualityTest {
     }
 
     private LlamaCppRetrievePassagesAdapter retrieval() {
-        return new LlamaCppRetrievePassagesAdapter(BASE_URI, MarkdownKnowledgeBase.passages());
+        return new LlamaCppRetrievePassagesAdapter(RestClient.builder().baseUrl(BASE_URI.toString()).build(), MarkdownKnowledgeBase.passages());
     }
 
     @ParameterizedTest(name = "{0} → {1}")

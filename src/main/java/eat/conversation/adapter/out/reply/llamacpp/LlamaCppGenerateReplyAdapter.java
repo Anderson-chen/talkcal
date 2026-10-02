@@ -4,13 +4,12 @@ import eat.conversation.application.domain.model.Conversation;
 import eat.conversation.application.domain.model.Reply;
 import eat.conversation.application.port.out.GenerateReplyPort;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
+
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -24,79 +23,73 @@ import java.util.Optional;
  *
  * 兩塊翻譯零件（ChatRequest、ChatResponse）都是 package-private，
  * 在這裡被組合起來，然後從外面完全看不到。
+ *
+ * HTTP 這一段分兩半，各有各的主人：
+ * - 「連到哪、等多久、要不要被觀測」—— 部署決定，由組裝根建好 RestClient 交進來
+ *   （從 Spring Boot 的 Builder 建的，所以每次呼叫自動有 HTTP span、指標、traceparent 標頭）
+ * - 「打哪個路徑、送什麼、錯誤怎麼翻」—— 協定知識，留在這裡
  */
 public final class LlamaCppGenerateReplyAdapter implements GenerateReplyPort {
 
-    // 路徑是這個 Adapter 的知識，不是呼叫端的 —— 建構子只收 base URI
+    // 路徑是這個 Adapter 的知識，不是呼叫端的 —— 組裝根只給 base URL
     private static final String CHAT_COMPLETIONS_PATH = "/v1/chat/completions";
 
-    // 連不上要快速失敗：server 沒開的話，等五秒就夠判斷了
-    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
-    // 但產生回覆可以很慢：Qwen3 的 thinking 會先燒掉幾百個看不見的 token，
-    // 給兩分鐘是為了不讓正常的慢被誤判成故障
-    private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofMinutes(2);
+    // charset 明寫出來：雖然 JSON 本來就規定是 UTF-8，
+    // 但寫了才不用賭對方（和 Spring 的字串轉換器）的預設值跟我們一樣
+    private static final MediaType JSON_UTF8 = new MediaType(MediaType.APPLICATION_JSON, StandardCharsets.UTF_8);
 
-    private final URI endpoint;
-    private final Duration requestTimeout;
-    // HttpClient 是執行緒安全的，而且內含連線池，所以當欄位重用而不是每次 new
-    private final HttpClient httpClient;
+    private final RestClient llamaCpp;
 
-    public LlamaCppGenerateReplyAdapter(URI baseUri) {
-        this(baseUri, DEFAULT_REQUEST_TIMEOUT);
-    }
-
-    public LlamaCppGenerateReplyAdapter(URI baseUri, Duration requestTimeout) {
-        Objects.requireNonNull(baseUri, "baseUri 不可為 null");
-        this.endpoint = baseUri.resolve(CHAT_COMPLETIONS_PATH);
-        this.requestTimeout = Objects.requireNonNull(requestTimeout, "requestTimeout 不可為 null");
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(CONNECT_TIMEOUT)
-                .build();
+    /**
+     * llamaCpp：已經指到 llama-server（base URL）、設好逾時的 client。
+     * 生成可以很慢（Qwen3 的 thinking 會先燒掉幾百個看不見的 token），讀取逾時要給得寬，
+     * 數字在 application.properties 的 llamacpp.readTimeout。
+     *
+     * 建構子不連線：server 沒開時應用照樣啟動，等有人提問才失敗、回 502。
+     */
+    public LlamaCppGenerateReplyAdapter(RestClient llamaCpp) {
+        this.llamaCpp = Objects.requireNonNull(llamaCpp, "llamaCpp 不可為 null");
     }
 
     @Override
     public Reply generateReply(Optional<String> instruction, List<Conversation.Message> messages) {
         String requestBody = ChatRequest.body(instruction, messages);
-        HttpResponse<String> response = send(requestBody);
-
-        if (response.statusCode() / 100 != 2) {
-            // llama.cpp 出錯時會在 body 裡放 error 物件，那段訊息比狀態碼有用得多，
-            // 所以兩個都帶上。body 可能很長（404 會回整頁 HTML），只取前面一段
-            throw new IllegalStateException(
-                    "llama.cpp 回應 HTTP " + response.statusCode() + "：" + preview(response.body()));
-        }
-
-        return new Reply(ChatResponse.text(response.body()));
+        return new Reply(ChatResponse.text(send(requestBody)));
     }
 
-    private HttpResponse<String> send(String requestBody) {
-        HttpRequest request = HttpRequest.newBuilder(endpoint)
-                .timeout(requestTimeout)
-                // charset 明寫出來：雖然 JSON 本來就規定是 UTF-8，
-                // 但寫了才不用賭對方的預設值跟我們一樣
-                .header("Content-Type", "application/json; charset=utf-8")
-                // 送出時一定要指定 UTF-8。不指定就會用平台預設編碼，
-                // 在 Windows 上是 cp950，中文送出去會變成伺服器眼中的亂碼
-                .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
-                .build();
-
+    private String send(String requestBody) {
         try {
-            // 讀回來同樣明確指定 UTF-8，理由跟送出時一樣
-            return httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            // port 契約要求失敗時丟非受檢例外，所以受檢的 IOException 在這裡就包掉。
-            // 保留 cause，不然「連線被拒」會變成一句看不出原因的訊息
-            throw new IllegalStateException("呼叫 llama.cpp 失敗：" + endpoint, e);
-        } catch (InterruptedException e) {
-            // send() 被中斷時會吃掉執行緒的中斷旗標，必須自己補回去，
-            // 否則上層（例如執行緒池）永遠不知道有人要求停止
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("呼叫 llama.cpp 時被中斷：" + endpoint, e);
+            byte[] responseBody = llamaCpp.post()
+                    .uri(CHAT_COMPLETIONS_PATH)
+                    .contentType(JSON_UTF8)
+                    // 送 byte 而不是字串：編碼由我們決定（UTF-8），不交給轉換器猜。
+                    // 不指定的話，在 Windows 上可能用 cp950 編碼，中文到了伺服器那頭就是亂碼
+                    .body(requestBody.getBytes(StandardCharsets.UTF_8))
+                    .retrieve()
+                    // llama.cpp 出錯時會在 body 裡放 error 物件，那段訊息比狀態碼有用得多，所以兩個都帶上。
+                    // 不攔的話 RestClient 會丟它自己的 HttpServerErrorException，port 的契約卻是 IllegalStateException
+                    .onStatus(HttpStatusCode::isError, (request, response) -> {
+                        throw new IllegalStateException("llama.cpp 回應 HTTP " + response.getStatusCode().value()
+                                + "：" + preview(readUtf8(response.getBody().readAllBytes())));
+                    })
+                    .body(byte[].class);
+            // 讀回來同樣明確用 UTF-8 解，理由跟送出時一樣
+            return readUtf8(responseBody);
+        } catch (RestClientException e) {
+            // 連不上、逾時（RestClient 包成 ResourceAccessException）都在這裡。
+            // port 契約要求失敗時丟 IllegalStateException；保留 cause，
+            // 它的訊息裡有完整網址和原因（例如 Connection refused），不然會變成一句看不出原因的話
+            throw new IllegalStateException("呼叫 llama.cpp 失敗（" + CHAT_COMPLETIONS_PATH + "）：" + e.getMessage(), e);
         }
+    }
+
+    // 沒有 body 時 RestClient 給 null，當成空字串：後面的剖析會把它當成壞掉的回應處理
+    private static String readUtf8(byte[] body) {
+        return body == null ? "" : new String(body, StandardCharsets.UTF_8);
     }
 
     private static String preview(String body) {
-        if (body == null) {
+        if (body.isEmpty()) {
             return "(沒有內容)";
         }
         return body.length() <= 200 ? body : body.substring(0, 200) + "...(已截斷)";

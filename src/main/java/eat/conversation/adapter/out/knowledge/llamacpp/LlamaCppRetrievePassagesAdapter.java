@@ -3,13 +3,12 @@ package eat.conversation.adapter.out.knowledge.llamacpp;
 import eat.conversation.application.domain.model.Passage;
 import eat.conversation.application.port.out.RetrievePassagesPort;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
+
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -34,14 +33,14 @@ import java.util.Objects;
  * 少了 --embedding 那個旗標，/v1/embeddings 不會開，這裡會收到 HTTP 錯誤。
  *
  * core 那一側對這一切一無所知 —— 它只知道有個 RetrievePassagesPort。
+ *
+ * HTTP 的分工跟 LlamaCppGenerateReplyAdapter 一樣：連到哪、等多久、要不要被觀測由組裝根決定，
+ * 打哪個路徑、送什麼、錯誤怎麼翻留在這裡。
  */
 public final class LlamaCppRetrievePassagesAdapter implements RetrievePassagesPort {
 
     private static final String EMBEDDINGS_PATH = "/v1/embeddings";
-    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
-    // 比 chat 那邊的兩分鐘短得多：embedding 只跑一次 encoder，不像生成要逐 token 吐，
-    // 正常是幾十毫秒的事。拖到 30 秒還沒回，那不是慢，是壞了
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+    private static final MediaType JSON_UTF8 = new MediaType(MediaType.APPLICATION_JSON, StandardCharsets.UTF_8);
 
     private static final int TOP_K = 3;
 
@@ -71,25 +70,25 @@ public final class LlamaCppRetrievePassagesAdapter implements RetrievePassagesPo
     // 知識庫長大、真的有好幾段同樣相關時，0.9 會太緊，要放寬。
     private static final double RELATIVE_THRESHOLD = 0.9;
 
-    private final URI endpoint;
-    private final HttpClient httpClient;
+    private final RestClient llamaCpp;
     private final List<Passage> knowledgeBase;
 
     // 索引出來的向量。null 代表「還沒索引」—— 只在 index() 的 synchronized 區塊裡讀寫，
     // 所以不需要 volatile。
     private List<Indexed> index;
 
-    public LlamaCppRetrievePassagesAdapter(URI baseUri, List<Passage> knowledgeBase) {
-        Objects.requireNonNull(baseUri, "baseUri 不可為 null");
-        this.endpoint = baseUri.resolve(EMBEDDINGS_PATH);
+    /**
+     * llamaCpp：已經指到 embedding server（base URL）、設好逾時的 client。
+     * 逾時比生成那邊短得多（application.properties 的 llamacpp.embeddingReadTimeout）：
+     * embedding 只跑一次 encoder，正常是幾十毫秒的事，拖太久那不是慢，是壞了。
+     */
+    public LlamaCppRetrievePassagesAdapter(RestClient llamaCpp, List<Passage> knowledgeBase) {
+        this.llamaCpp = Objects.requireNonNull(llamaCpp, "llamaCpp 不可為 null");
         this.knowledgeBase = List.copyOf(Objects.requireNonNull(knowledgeBase, "knowledgeBase 不可為 null"));
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(CONNECT_TIMEOUT)
-                .build();
         // 建構子刻意不打任何一行網路。
         //
         // 這是為了讓兩個 outbound adapter 的啟動契約一致：LlamaCppGenerateReplyAdapter 的
-        // 建構子也只組 URI、建 HttpClient，不連線。於是 embedding server 沒開跟 chat server
+        // 建構子也只收下 client，不連線。於是 embedding server 沒開跟 chat server
         // 沒開是同一種情況 —— 應用照樣啟動，等到有人提問才失敗、回 502，而不是一邊安靜啟動、
         // 另一邊連起都起不來。
     }
@@ -156,33 +155,33 @@ public final class LlamaCppRetrievePassagesAdapter implements RetrievePassagesPo
     }
 
     private float[] embed(String text) {
-        HttpResponse<String> response = send(EmbeddingRequest.body(text));
-        if (response.statusCode() / 100 != 2) {
-            throw new IllegalStateException(
-                    "llama.cpp 回應 HTTP " + response.statusCode() + "：" + preview(response.body()));
+        try {
+            byte[] responseBody = llamaCpp.post()
+                    .uri(EMBEDDINGS_PATH)
+                    .contentType(JSON_UTF8)
+                    // 送 byte：編碼由我們決定（UTF-8），不交給轉換器猜
+                    .body(EmbeddingRequest.body(text).getBytes(StandardCharsets.UTF_8))
+                    .retrieve()
+                    // 不攔的話 RestClient 會丟它自己的例外，port 的契約卻是 IllegalStateException
+                    .onStatus(HttpStatusCode::isError, (request, response) -> {
+                        throw new IllegalStateException("llama.cpp 回應 HTTP " + response.getStatusCode().value()
+                                + "：" + preview(readUtf8(response.getBody().readAllBytes())));
+                    })
+                    .body(byte[].class);
+            return EmbeddingResponse.vector(readUtf8(responseBody));
+        } catch (RestClientException e) {
+            // 連不上、逾時都在這裡。保留 cause：它的訊息裡有完整網址和原因
+            throw new IllegalStateException("呼叫 llama.cpp embedding 失敗（" + EMBEDDINGS_PATH + "）：" + e.getMessage(), e);
         }
-        return EmbeddingResponse.vector(response.body());
     }
 
-    private HttpResponse<String> send(String requestBody) {
-        HttpRequest request = HttpRequest.newBuilder(endpoint)
-                .timeout(REQUEST_TIMEOUT)
-                .header("Content-Type", "application/json; charset=utf-8")
-                .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
-                .build();
-        try {
-            return httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            throw new IllegalStateException("呼叫 llama.cpp embedding 失敗：" + endpoint, e);
-        } catch (InterruptedException e) {
-            // 把中斷旗標補回去再丟，不然上層再也看不出這個執行緒被要求停下來
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("呼叫 llama.cpp embedding 時被中斷：" + endpoint, e);
-        }
+    // 沒有 body 時 RestClient 給 null，當成空字串：後面的剖析會把它當成壞掉的回應處理
+    private static String readUtf8(byte[] body) {
+        return body == null ? "" : new String(body, StandardCharsets.UTF_8);
     }
 
     private static String preview(String body) {
-        if (body == null) {
+        if (body.isEmpty()) {
             return "(沒有內容)";
         }
         return body.length() <= 200 ? body : body.substring(0, 200) + "...(已截斷)";

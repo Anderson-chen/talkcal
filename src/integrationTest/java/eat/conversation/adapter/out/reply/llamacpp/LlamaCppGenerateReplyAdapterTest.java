@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
 import java.net.URI;
@@ -73,7 +74,7 @@ class LlamaCppGenerateReplyAdapterTest {
     }
 
     private static LlamaCppGenerateReplyAdapter adapter() {
-        return new LlamaCppGenerateReplyAdapter(BASE_URI);
+        return new LlamaCppGenerateReplyAdapter(RestClient.builder().baseUrl(BASE_URI.toString()).build());
     }
 
     private static List<Conversation.Message> question(String text) {

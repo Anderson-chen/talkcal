@@ -106,8 +106,9 @@ Alloy 加入了 deploy/ 的網路（`eat-deploy_default`）：用服務名稱抓
 curl 'localhost:9009/prometheus/api/v1/query?query=up'
 ```
 
-app 現在多了一組 `eat_port_out_seconds`：core 每次往外呼叫 port 的次數與耗時，`port`、`method`、`adapter` 標籤
-分得出檢索（`RetrievePassagesPort`）和生成（`GenerateReplyPort`），以及是哪個實作。
+app 現在多了一組 `http_client_requests_seconds`：app 打給兩台模型的次數與耗時，`uri` 標籤分得出
+`/v1/embeddings`（檢索）和 `/v1/chat/completions`（生成），`status` 標籤分得出成功和失敗。
+這組是 RestClient 自動產生的，見下面「追蹤」一節。
 
 ## 日誌：Loki 收什麼
 
@@ -160,21 +161,24 @@ app 對每個請求開一個 trace（`management.tracing.sampling.probability=1.
 用 OTLP 推給 Alloy 的 4318，Alloy 再轉給 Tempo。一次 `/api/chat` 長這樣：
 
 ```
-eat: http post /api/chat     174 ms   ← 請求進來（Spring 自動加的 ServerHttpObservationFilter 量）
-├── retrievePassages          7 ms   ← RetrievePassagesPort：檢索（問題轉向量、挑片段）
-└── generateReply           164 ms   ← GenerateReplyPort：生成（qwen3 回答）
+eat: http post /api/chat                   ← 請求進來（Spring 自動加的 ServerHttpObservationFilter 量）
+├── http post /v1/embeddings       200     ← 檢索：問題轉向量（第一次提問會多好幾次：先替知識庫建索引）
+└── http post /v1/chat/completions 200     ← 生成：qwen3 回答
 ```
 
-兩種 span 是不同的東西量的：
+兩種 span 是不同的東西量的，兩邊都沒寫任何觀測程式碼：
 
 | span | 誰量的 | 為什麼是它 |
 |------|--------|------------|
 | 根 span（進來的請求） | Spring Boot 自動註冊的 filter | 進來的 HTTP 由 Spring MVC 處理，它管得到，不必寫任何設定 |
-| port span（往外的呼叫） | `ObservationConfiguration` 的 aspect，切在所有 outbound port 外面 | adapter 用的是 JDK 的 HttpClient，Spring 管不到；與其改 adapter，不如在 Clean Architecture 的邊界（port）統一量 |
+| 往外的 HTTP 呼叫 | adapter 用的 `RestClient`：組裝根從 Spring Boot 的 Builder 建，Boot 已經在 Builder 上掛好觀測 | 狀態碼、一次提問發了幾次請求都看得到；請求也自動帶 `traceparent` 標頭 |
 
-用 AOP 量 port 的好處：觀測規則集中在一個檔案，adapter 和 `ConversationConfiguration` 一行都沒為了觀測而改；
-之後新增 Claude / OpenAI 的 adapter 也自動被量。代價是看不到 HTTP 層的細節（狀態碼、連線時間），
-也不會在往外的請求帶 `traceparent` 標頭（llama.cpp 不讀它，目前沒影響）。
+adapter 只管協定（路徑、JSON、錯誤怎麼翻），`ConversationConfiguration` 只決定每個 adapter 連到哪、等多久。
+
+曾經用 AOP 在 outbound port 外面多包一層 span（名稱是 `retrievePassages`、`generateReply`），
+後來拿掉：HTTP span 已經看得出慢在哪，多一層主要只換到業務名稱和「把多次 HTTP 歸成一件事」，
+卻要多一個 aspectj 依賴，還得把整個 app 的 AOP 改成介面代理（adapter 是 final class）。
+之後如果某個 adapter 用的是不走 RestClient 的官方 SDK（不會自動產生 span），再回頭考慮。
 llama.cpp 本身不產生 span，所以樹只到 app 呼叫出去的那一層。
 
 在 Grafana 看 trace 有兩個地方：

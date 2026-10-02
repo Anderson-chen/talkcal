@@ -79,7 +79,7 @@
       "id": 2,
       "type": "timeseries",
       "title": "時間花在哪一段 (p95)",
-      "description": "{name=\"http post /api/chat\" || span.port != nil} | quantile_over_time(duration, .95) by (name) —— 整個請求（http post /api/chat），以及 core 往外呼叫的兩個 port：retrievePassages（檢索：問題轉向量、挑片段）、generateReply（生成）。這是 trace 才答得出來的問題 —— 指標只知道整個請求多慢，trace 知道慢在哪一段。port 的 span 由 ObservationConfiguration 的 aspect 產生，每個都帶 span.port 屬性，所以用「有沒有 span.port」挑出來。注意 TraceQL 的分位數是用 2 的次方分桶估的（0.5s、1s、2s…），只適合看量級和趨勢，要精準數字看 eat-app 儀表板。寫成一條查詢、用 by (name) 分線，而不是一段一條查詢：這版 Grafana 的 Tempo 資料源在同一個 panel 裡只會送出第一條 TraceQL metrics 查詢。",
+      "description": "{name=\"http post /api/chat\" || kind=client} | quantile_over_time(duration, .95) by (span.uri) —— 整個請求（/api/chat），以及 app 打給兩台模型的 HTTP 呼叫：/v1/embeddings（檢索：問題轉向量）、/v1/chat/completions（生成）。這是 trace 才答得出來的問題 —— 指標只知道整個請求多慢，trace 知道慢在哪一段。往外的 HTTP span 由 adapter 的 RestClient 自動產生（kind=client），所以用 kind 挑出來、用 uri 分線。注意 TraceQL 的分位數是用 2 的次方分桶估的（0.5s、1s、2s…），只適合看量級和趨勢，要精準數字看 eat-app 儀表板。寫成一條查詢、用 by 分線，而不是一段一條查詢：這版 Grafana 的 Tempo 資料源在同一個 panel 裡只會送出第一條 TraceQL metrics 查詢。",
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -99,7 +99,7 @@
           },
           "queryType": "traceql",
           "metricsQueryType": "range",
-          "query": "{name=\"http post /api/chat\" || span.port != nil} | quantile_over_time(duration, .95) by (name)"
+          "query": "{name=\"http post /api/chat\" || kind=client} | quantile_over_time(duration, .95) by (span.uri)"
         }
       ],
       "fieldConfig": {
@@ -112,7 +112,7 @@
             "fillOpacity": 0,
             "showPoints": "always"
           },
-          "displayName": "${__field.labels.name}"
+          "displayName": "${__field.labels[\"span.uri\"]}"
         },
         "overrides": []
       },
@@ -131,7 +131,7 @@
       "id": 3,
       "type": "timeseries",
       "title": "沒成功的 span 數",
-      "description": "{resource.service.name=\"eat\" && (span.outcome != \"SUCCESS\" || status = error)} | count_over_time() by (name) —— 兩種失敗一起數：請求本身沒成功（outcome 是 Spring 標的 CLIENT_ERROR、SERVER_ERROR，例如空白問題回 400），以及某個 port 呼叫丟了例外（span 狀態 error，例如 llama.cpp 沒開）。依 span 名稱分開，看得出是哪一段出事。平常沒資料是正常的。",
+      "description": "{resource.service.name=\"eat\" && (span.outcome != \"SUCCESS\" || status = error)} | count_over_time() by (name) —— 兩種失敗一起數：請求本身沒成功（/api/chat 回 400、502），以及打給模型的 HTTP 呼叫沒成功（outcome 是 Spring 標的 CLIENT_ERROR、SERVER_ERROR，連不上時 span 狀態是 error）。平常沒資料是正常的。",
       "gridPos": {
         "h": 8,
         "w": 8,

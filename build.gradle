@@ -37,6 +37,12 @@ dependencies {
     // 它取代（並涵蓋）了原本的 spring-boot-starter，所以不必兩個都寫。
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 
+    // 往外打 HTTP 的那一側：Spring 的 RestClient，以及它的自動設定（注入用的 RestClient.Builder）。
+    // Boot 4 把它從 web starter 拆出來，要自己加。用它而不是 JDK 的 HttpClient，是因為從 Boot 給的
+    // Builder 建出來的 client 自動被觀測：每次呼叫一個 HTTP span、http.client.requests 指標、
+    // 請求帶上 traceparent 標頭 —— 一行觀測程式碼都不用寫。
+    implementation 'org.springframework.boot:spring-boot-starter-restclient'
+
     // 打開 /actuator/*：健康檢查、指標等維運用的入口。它自動 instrument 出 HTTP 延遲、
     // JVM、執行緒池等「通用指標」，一行採集程式都不用寫 —— 業務指標才要自己用 Micrometer 埋。
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
@@ -56,10 +62,6 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-micrometer-tracing-opentelemetry'
     runtimeOnly 'io.micrometer:micrometer-tracing-bridge-otel'
     runtimeOnly 'io.opentelemetry:opentelemetry-exporter-otlp'
-    // AOP：讓 ObservationConfiguration 用一個 aspect 替所有 outbound port 的呼叫開 span，
-    // adapter 和 ConversationConfiguration 一行都不用為了觀測而改（觀測是橫切關注點，不該散在業務程式碼裡）。
-    // 它帶進 aspectjweaver，Spring Boot 看到它就自動打開 @Aspect 的支援。
-    implementation 'org.springframework.boot:spring-boot-starter-aspectj'
 
     // Swagger UI + OpenAPI 文件：啟動時掃 @RestController，自動產出 /v3/api-docs（機器讀的 JSON）
     // 與 /swagger-ui.html（人點的頁面）。文件是「從程式長出來」的，路由改了文件跟著改，不會過期。

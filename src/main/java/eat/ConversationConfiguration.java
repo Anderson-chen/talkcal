@@ -9,10 +9,14 @@ import eat.conversation.application.port.out.GenerateReplyPort;
 import eat.conversation.application.port.out.RetrievePassagesPort;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
+import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestClient;
 
 import java.net.URI;
+import java.time.Duration;
 
 /**
  * conversation 模組的接線：整個專案唯一同時認識 adapter 和 application 的地方。
@@ -57,9 +61,21 @@ class ConversationConfiguration {
     // 和環境變數 LLAMACPP_BASEURI 都照樣能蓋掉設定檔，優先序由 Spring 管，這裡不必知道值從哪來。
     // 屬性名稱沿用原本的 llamacpp.baseUri，不改成 base-uri：整合測試用同一組名字檢查 server 在不在。
 
+    //
+    // 每台模型伺服器各給一個 RestClient：連到哪（base URL）、等多久（逾時）是部署決定，在這裡定；
+    // 打哪個路徑、送什麼、錯誤怎麼翻是協定知識，留在 adapter。
+    // 這裡沒有一行觀測程式碼：RestClient 從 Spring Boot 注入的 Builder 建，Boot 已經在 Builder 上
+    // 掛好觀測，每次呼叫自動有 HTTP span、http.client.requests 指標、請求帶 traceparent 標頭。
+    // 自己 RestClient.create() 的話這些全都沒有。
+
     @Bean
-    GenerateReplyPort generateReplyPort(@Value("${llamacpp.baseUri}") URI baseUri) {
-        return new LlamaCppGenerateReplyAdapter(baseUri);
+    GenerateReplyPort generateReplyPort(RestClient.Builder restClientBuilder,
+                                        ClientHttpRequestFactoryBuilder<?> requestFactoryBuilder,
+                                        @Value("${llamacpp.baseUri}") URI baseUri,
+                                        @Value("${llamacpp.connectTimeout}") Duration connectTimeout,
+                                        @Value("${llamacpp.readTimeout}") Duration readTimeout) {
+        return new LlamaCppGenerateReplyAdapter(
+                llamaCppClient(restClientBuilder, requestFactoryBuilder, baseUri, connectTimeout, readTimeout));
     }
 
     // 要換成別種檢索（全文搜尋、hybrid、加 rerank），動的就只有這個 Bean 這一行 ——
@@ -73,8 +89,30 @@ class ConversationConfiguration {
     // 生成用的 qwen3:8b 不能兼差：它沒被訓練成「向量距離 = 語意相似度」，
     // 而且為了一個向量跑一次 8B 推論貴得離譜。
     @Bean
-    RetrievePassagesPort retrievePassagesPort(@Value("${llamacpp.embeddingBaseUri}") URI embeddingBaseUri) {
-        return new LlamaCppRetrievePassagesAdapter(embeddingBaseUri, MarkdownKnowledgeBase.passages());
+    RetrievePassagesPort retrievePassagesPort(RestClient.Builder restClientBuilder,
+                                              ClientHttpRequestFactoryBuilder<?> requestFactoryBuilder,
+                                              @Value("${llamacpp.embeddingBaseUri}") URI embeddingBaseUri,
+                                              @Value("${llamacpp.connectTimeout}") Duration connectTimeout,
+                                              @Value("${llamacpp.embeddingReadTimeout}") Duration readTimeout) {
+        return new LlamaCppRetrievePassagesAdapter(
+                llamaCppClient(restClientBuilder, requestFactoryBuilder, embeddingBaseUri, connectTimeout, readTimeout),
+                MarkdownKnowledgeBase.passages());
+    }
+
+    // 兩台用同一個做法建，只差位址和逾時。
+    //
+    // RestClient.Builder 每次注入都是一個新的（Boot 把它設成 prototype），所以兩個 Bean 方法各拿各的，
+    // 設了 baseUrl 不會互相污染。
+    // requestFactoryBuilder 也用 Boot 給的：底層用哪個 HTTP 函式庫（預設是 JDK 的 HttpClient）
+    // 由 spring.http.clients.imperative.factory 統一決定，這裡只疊上這台自己的逾時。
+    private static RestClient llamaCppClient(RestClient.Builder restClientBuilder,
+                                             ClientHttpRequestFactoryBuilder<?> requestFactoryBuilder,
+                                             URI baseUri, Duration connectTimeout, Duration readTimeout) {
+        return restClientBuilder
+                .baseUrl(baseUri.toString())
+                .requestFactory(requestFactoryBuilder.build(
+                        HttpClientSettings.defaults().withTimeouts(connectTimeout, readTimeout)))
+                .build();
     }
 
     @Bean
