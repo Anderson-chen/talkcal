@@ -59,11 +59,12 @@ class ArchitectureTest {
                     .because("inbound 只該透過 port 使喚 core，core 才決定要不要呼叫 outbound");
 
     /**
-     * 只有組裝根可以認識具體的實作。下面兩條是同一句話套在 adapter.out 的兩個子樹上。
+     * 只有組裝根可以認識具體的實作。下面三條是同一句話套在 adapter.out 的三個子樹上。
      *
      * adapter.out 底下每個 package 就是「某一個 outbound port 的實作們」：
-     * reply 放 GenerateReplyPort 的、knowledge 放 RetrievePassagesPort 的，
-     * 供應商一律再往下一層（reply.llamacpp、knowledge.llamacpp）。
+     * reply 放 GenerateReplyPort 的、knowledge 放 RetrievePassagesPort 的、
+     * persistence 放 Load / SaveConversationPort 的，
+     * 供應商一律再往下一層（reply.llamacpp、knowledge.llamacpp、persistence.postgres）。
      *
      * 守住的是「換一行 new 就能換掉實作」這個承諾 —— 一旦有第二個地方 import 它，那個承諾就破了。
      * 順帶也擋掉了 reply 與 knowledge 互相依賴：兩邊都在對方的允許清單之外。
@@ -80,6 +81,13 @@ class ArchitectureTest {
                     .should().dependOnClassesThat().resideInAPackage("..adapter.out.knowledge..")
                     .because("檢索方式遲早會換（全文搜尋、hybrid、加 rerank）；"
                             + "讓實作漏進 core 或別的 adapter，那一換就會牽一髮動全身");
+
+    @ArchTest
+    static final ArchRule onlyTheCompositionRootMayKnowThePersistenceAdapters =
+            noClasses().that().resideOutsideOfPackages("eat", "..adapter.out.persistence..")
+                    .should().dependOnClassesThat().resideInAPackage("..adapter.out.persistence..")
+                    .because("存在哪（PostgreSQL、別的資料庫、記憶體）是組裝時的決定；"
+                            + "SQL 和表的長相只該出現在 persistence 這一包");
 
     /**
      * Adapter 這個字尾是有意義的，不是隨手加的裝飾。

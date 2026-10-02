@@ -21,8 +21,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * 系統測試：把整個應用啟起來，用真的 HTTP 打真的端點，對真的模型。
@@ -37,6 +41,10 @@ import org.springframework.http.ResponseEntity;
  * 哪天換掉檢索或生成的 @Bean，同一題自動跟著測新的接法，這個檔案一個字都不用改。
  * 連接線本身有沒有接錯，也一起驗到了。
  *
+ * 資料庫用 Testcontainers 起一個乾淨的 PostgreSQL：@ServiceConnection 讓 Spring Boot 直接拿它的連線資訊，
+ * 蓋掉 application.properties 裡的 127.0.0.1:5432，所以不會寫進你本機 deploy/ 那個資料庫。
+ * 啟動時 Flyway 照常建表，跟正式環境同一條路。
+ *
  * 放在根 package eat：它測的是整個應用，不屬於任何一個模組 —— 跟 ArchitectureTest 同一個理由。
  * 名字留了 System 是因為同一個端點已經有一個 ChatControllerTest，兩者必須分得開；
  * 「需要外部環境」這件事由它所在的 src/integrationTest 表達，預設的 ./gradlew test 不會跑到。
@@ -44,6 +52,7 @@ import org.springframework.http.ResponseEntity;
  * RANDOM_PORT 而不是固定 8090：那個埠常常已經被你自己跑著的應用佔住了。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Testcontainers
 // Boot 4 起 TestRestTemplate 不再自動出現在 @SpringBootTest 的容器裡，要明說才會建一個指向隨機埠的
 @AutoConfigureTestRestTemplate
 @DisplayName("Chat API（整個應用 + 真模型）")
@@ -54,6 +63,10 @@ class ChatApiSystemTest {
             URI.create(System.getProperty("llamacpp.baseUri", "http://127.0.0.1:8080"));
     private static final URI EMBEDDING_BASE_URI =
             URI.create(System.getProperty("llamacpp.embeddingBaseUri", "http://127.0.0.1:8081"));
+
+    @Container
+    @ServiceConnection
+    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.6-alpine");
 
     @Autowired
     TestRestTemplate restTemplate;
@@ -73,10 +86,14 @@ class ChatApiSystemTest {
     }
 
     private ResponseEntity<ChatController.Response> ask(String question) {
+        return ask(question, null);
+    }
+
+    private ResponseEntity<ChatController.Response> ask(String question, String conversationId) {
         // 用 controller 自己的 record 當請求/回應型別：JSON 的形狀由它定義，
         // 測試就不必再手寫一份可能跟它不同步的 JSON 字串
         return restTemplate.postForEntity("/api/chat",
-                new ChatController.Request(question), ChatController.Response.class);
+                new ChatController.Request(question, conversationId), ChatController.Response.class);
     }
 
     @Test
@@ -108,13 +125,28 @@ class ChatApiSystemTest {
     }
 
     @Test
+    @DisplayName("帶著上一題的 conversationId 問下一題：模型記得前一輪（歷史從資料庫讀回來）")
+    void continuesConversationAcrossRequests() {
+        ResponseEntity<ChatController.Response> first = ask("我的房號是 7777。");
+        assertEquals(HttpStatus.OK, first.getStatusCode());
+        String conversationId = first.getBody().conversationId();
+
+        // 第二個 HTTP 請求只帶 ID，不帶任何歷史：答得出 7777，就證明歷史是從資料庫讀回來、送給模型的
+        ResponseEntity<ChatController.Response> second = ask("我的房號是多少？", conversationId);
+
+        assertEquals(HttpStatus.OK, second.getStatusCode());
+        assertEquals(conversationId, second.getBody().conversationId());
+        assertTrue(second.getBody().reply().contains("7777"), "模型沒記住前一輪：" + second.getBody().reply());
+    }
+
+    @Test
     @DisplayName("空白提問回 400，而且根本不必驚動模型")
     void rejectsBlankQuestion() {
         // 這題在 ChatControllerTest 也有，但那是切片測試裡用假 use case 演出來的。
         // 這裡驗的是真的接起來之後，那條規則還在原位 ——
         // 提問在 Question 就被擋下，檢索和模型都不會被驚動，所以這題秒回
         ResponseEntity<String> response =
-                restTemplate.postForEntity("/api/chat", new ChatController.Request("  "), String.class);
+                restTemplate.postForEntity("/api/chat", new ChatController.Request("  ", null), String.class);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
     }

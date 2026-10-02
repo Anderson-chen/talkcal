@@ -2,17 +2,23 @@ package eat;
 
 import eat.conversation.adapter.out.knowledge.MarkdownKnowledgeBase;
 import eat.conversation.adapter.out.knowledge.llamacpp.LlamaCppRetrievePassagesAdapter;
+import eat.conversation.adapter.out.persistence.postgres.JdbcConversationAdapter;
 import eat.conversation.adapter.out.reply.llamacpp.LlamaCppGenerateReplyAdapter;
 import eat.conversation.application.domain.service.AskQuestionService;
 import eat.conversation.application.port.in.AskQuestionUseCase;
 import eat.conversation.application.port.out.GenerateReplyPort;
+import eat.conversation.application.port.out.LoadConversationPort;
 import eat.conversation.application.port.out.RetrievePassagesPort;
+import eat.conversation.application.port.out.SaveConversationPort;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 
 import java.net.URI;
@@ -28,8 +34,8 @@ import java.time.Duration;
  * 才可以認識 ..adapter.out.reply.llamacpp.. 與 ..adapter.out.knowledge..。
  *
  * 這裡負責的只有一件事：決定「哪個介面用哪個實作」。
- * 目前有兩個決定要下 —— GenerateReplyPort 用 llama.cpp 那個實作、
- * RetrievePassagesPort 用向量檢索那個實作。
+ * 目前有三個決定要下 —— GenerateReplyPort 用 llama.cpp 那個實作、
+ * RetrievePassagesPort 用向量檢索那個實作、對話紀錄（Load / SaveConversationPort）存 PostgreSQL。
  *
  * 跟 Application 拆開，是因為兩者回答的是不同問題：
  * 那邊回答「怎麼啟動」，這邊回答「誰接誰」。
@@ -115,9 +121,21 @@ class ConversationConfiguration {
                 .build();
     }
 
+    // 對話紀錄存 PostgreSQL。一個實作同時當 LoadConversationPort 和 SaveConversationPort：
+    // 回傳型別只能寫一個，所以這個 Bean 的型別是實作本身（其他 Bean 都回傳介面，這裡是唯一的例外）；
+    // 下面 askQuestion 照樣用兩個 port 介面收它，Spring 看型別就知道同一個物件兩邊都適用。
+    // 連線（DataSource）、JdbcClient、交易管理器都是 Spring Boot 依 spring.datasource.* 自動建好的。
     @Bean
-    AskQuestionUseCase askQuestion(RetrievePassagesPort retrievePassagesPort,
-                                   GenerateReplyPort generateReplyPort) {
-        return new AskQuestionService(retrievePassagesPort, generateReplyPort);
+    JdbcConversationAdapter conversationStore(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
+        return new JdbcConversationAdapter(jdbcClient, new TransactionTemplate(transactionManager));
+    }
+
+    @Bean
+    AskQuestionUseCase askQuestion(LoadConversationPort loadConversationPort,
+                                   RetrievePassagesPort retrievePassagesPort,
+                                   GenerateReplyPort generateReplyPort,
+                                   SaveConversationPort saveConversationPort) {
+        return new AskQuestionService(loadConversationPort, retrievePassagesPort, generateReplyPort,
+                saveConversationPort);
     }
 }

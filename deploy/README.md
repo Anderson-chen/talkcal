@@ -10,6 +10,7 @@
 | Qwen3-8B 生成模型 | **容器**（`llm-chat`） | 8080 |
 | bge-m3 embedding | **容器**（`llm-embedding`） | 8081 |
 | eat app | **容器**（`app`） | 18090 |
+| PostgreSQL（對話紀錄） | **容器**（`postgres`） | 5432（只綁 127.0.0.1） |
 
 本機開發的 app（`./gradlew bootRun`，8090）可以同時開著：它打主機上發佈出來的 8080/8081，
 用的是同一對模型容器。兩個 app 埠不同，可以並排比對。
@@ -36,6 +37,7 @@
 | 怎麼跑 | `./gradlew bootRun` | `docker compose up -d` |
 | app 埠 | 8090 | 主機 18090 → 容器內 8090 |
 | 模型位址 | `127.0.0.1:8080` / `:8081` | `llm-chat:8080` / `llm-embedding:8081` |
+| 資料庫位址 | `127.0.0.1:5432`（用 deploy/ 這個 postgres） | `postgres:5432` |
 | log 格式 | 給人看的彩色文字 | 一行一個 JSON（ECS），方便 Loki 拆欄位 |
 
 臨時要指到別的模型位址，不必改檔案：`-Dllamacpp.baseUri=...` 或環境變數 `LLAMACPP_BASEURI` 都比設定檔優先。
@@ -115,6 +117,8 @@ docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新
 | 服務名稱 `llm-chat` 互相找 | k8s Service 的 DNS 名稱 |
 | `SPRING_PROFILES_ACTIVE=docker` | Deployment 的 env，或 ConfigMap |
 | 具名 volume `models` | PersistentVolumeClaim |
+| `postgres` 容器 + `postgres-data` volume | 雲端託管的資料庫（RDS、Cloud SQL），不自己在 k8s 裡跑 |
+| `POSTGRES_PASSWORD: eat` 寫在 compose | Secret，app 用環境變數 `SPRING_DATASOURCE_PASSWORD` 拿 |
 
 ## 下一步（一次一件）
 
@@ -123,3 +127,23 @@ docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新
 3. ~~app 也進容器，分環境，容器間用服務名稱溝通~~ ✅
 4. ~~三個服務的 log 接進 Loki~~ ✅（見 `ops/README.md`）
 5. 換成本機 k8s（kind）跑同一套——到時要決定 embedding 跟 chat 塞同一個 Pod 共用 GPU，還是改跑 CPU
+
+## 對話紀錄（PostgreSQL）
+
+app 把每段對話存進 `postgres` 容器，資料表由 Flyway 在 app 啟動時自動建（`src/main/resources/db/migration`）。
+本機 bootRun 的 app 也連同一個資料庫（`127.0.0.1:5432`），所以要先 `docker compose up -d postgres`。
+
+直接看資料：
+
+```bash
+docker exec -it eat-postgres psql -U eat -d eat
+```
+
+```sql
+-- 最近的對話和它們的訊息
+SELECT c.id, c.version, m.position, m.role, left(m.text, 40)
+FROM conversation c JOIN conversation_message m ON m.conversation_id = c.id
+ORDER BY c.updated_at DESC, m.position;
+```
+
+`docker compose down` 不會刪資料；`down -v` 會連 `postgres-data` 一起清掉（模型的 volume 也會清，下次要重新播種）。

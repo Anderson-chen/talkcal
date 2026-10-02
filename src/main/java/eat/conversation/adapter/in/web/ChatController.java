@@ -1,8 +1,10 @@
 package eat.conversation.adapter.in.web;
 
-import eat.conversation.application.domain.model.Conversation;
-import eat.conversation.application.domain.model.Reply;
+import eat.conversation.application.domain.model.ConversationChangedException;
+import eat.conversation.application.domain.model.ConversationId;
+import eat.conversation.application.port.in.Answer;
 import eat.conversation.application.port.in.AskQuestionUseCase;
+import eat.conversation.application.port.in.ConversationNotFoundException;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 用 HTTP 跟模型對話（inbound adapter）。
@@ -36,10 +39,9 @@ import java.util.Objects;
  * 「用哪個 GenerateReplyPort 實作」的決定權還是牢牢握在組裝根手上；
  * 這裡完全不知道回覆是 llama.cpp 生的還是 OpenAI 生的，換供應商跟它無關。
  *
- * 目前刻意做成「無狀態單輪」：每個請求各自開一段全新的 Conversation、問一題、回一題。
- * 因為 Conversation 是記憶體內的物件、沒有 ID 也沒有持久化，要跨請求記住對話
- * 得先決定歷史放哪（伺服器存 session，還是由前端每次帶完整歷史回來）——
- * 那是獨立的下一步，這步先把「第二個入口能通」這件事單獨做完、單獨驗證。
+ * 多輪對話靠 conversationId：第一題不帶，回應裡會拿到一個；之後每題帶著它，就是接續同一段對話。
+ * 歷史存在伺服器（PostgreSQL），呼叫端不必每次把整段歷史送回來 ——
+ * 送回來的歷史呼叫端想改就能改，「歷史只能追加」這條規則就守不住了。
  */
 @RestController
 @RequestMapping("/api/chat")
@@ -68,19 +70,40 @@ public final class ChatController {
      */
     @PostMapping
     @Operation(summary = "問一題，拿一題的回覆",
-            description = "無狀態單輪：每個請求各自開一段新對話，不記得上一題問了什麼。")
+            description = "不帶 conversationId 就開一段新對話；帶著上一題回應裡的 conversationId，模型就看得到之前的問答。")
     // 三個碼就是這個端點的契約。springdoc 看不到 controller 自己的 @ExceptionHandler，
     // 不寫的話文件只剩 200，看起來像永遠不會失敗；而一旦手寫了任何一個，200 也得自己列。
     // description 是寫給呼叫端的：遇到這個碼該怎麼辦，而不是伺服器內部發生了什麼。
     @ApiResponse(responseCode = "200", description = "拿到模型的回覆")
     @ApiResponse(responseCode = "400", description = "提問是 null 或空白，改好再送",
             content = @Content(schema = @Schema(implementation = Failure.class)))
-    @ApiResponse(responseCode = "502", description = "模型或檢索服務沒回應或出錯，不是呼叫端的問題，稍後重試",
+    @ApiResponse(responseCode = "404", description = "conversationId 指定的對話不存在；要開新對話就別帶 conversationId",
+            content = @Content(schema = @Schema(implementation = Failure.class)))
+    @ApiResponse(responseCode = "409", description = "同一段對話同時被問了兩題，這一題晚到、沒有存下來；重新整理後再問一次",
+            content = @Content(schema = @Schema(implementation = Failure.class)))
+    @ApiResponse(responseCode = "502", description = "模型、檢索或資料庫沒回應或出錯，不是呼叫端的問題，稍後重試",
             content = @Content(schema = @Schema(implementation = Failure.class)))
     public Response ask(@RequestBody Request request) {
-        Conversation conversation = Conversation.start();
-        Reply reply = askQuestion.askQuestion(conversation, request.question());
-        return new Response(reply.text());
+        // 沒帶就是開新對話；帶了但格式不對，ConversationId.of 會丟 IllegalArgumentException → 400
+        Optional<ConversationId> conversationId = Optional.ofNullable(request.conversationId()).map(ConversationId::of);
+        Answer answer = askQuestion.askQuestion(conversationId, request.question());
+        return new Response(answer.conversationId().toString(), answer.reply().text());
+    }
+
+    @ExceptionHandler(ConversationNotFoundException.class)
+    public ResponseEntity<Failure> onConversationNotFound(ConversationNotFoundException e) {
+        log.warn("對話不存在，回 404：{}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new Failure(e.getMessage()));
+    }
+
+    /**
+     * 同一段對話被同時問了兩題，晚存的那題被版本號擋下。不是伺服器壞了，也不是呼叫端格式錯，
+     * 是「你手上的對話已經不是最新的」—— 對應 409 Conflict。
+     */
+    @ExceptionHandler(ConversationChangedException.class)
+    public ResponseEntity<Failure> onConversationChanged(ConversationChangedException e) {
+        log.warn("對話被同時更新，回 409：{}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new Failure(e.getMessage()));
     }
 
     /**
@@ -118,10 +141,14 @@ public final class ChatController {
     // @Schema 寫在這裡而不是 Question / Reply 上：文件描述的是線路格式，domain 不該替 HTTP 打扮。
     public record Request(
             @Schema(description = "要問模型的問題，不可空白", example = "雞胸肉一百克有多少蛋白質？")
-            String question) {
+            String question,
+            @Schema(description = "要接續的對話；不帶就開一段新對話", example = "3f1c8a2e-6b0d-4d7e-9a51-2c4e8f7b9d10",
+                    nullable = true)
+            String conversationId) {
     }
 
     public record Response(
+            @Schema(description = "這段對話的 ID，下一題帶著它就是接續同一段對話") String conversationId,
             @Schema(description = "模型的回覆") String reply) {
     }
 

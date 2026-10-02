@@ -1,18 +1,21 @@
 package eat.conversation.adapter.in.web;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import eat.conversation.application.domain.model.Conversation;
+import eat.conversation.application.domain.model.ConversationChangedException;
+import eat.conversation.application.domain.model.ConversationId;
 import eat.conversation.application.domain.model.Reply;
+import eat.conversation.application.port.in.Answer;
 import eat.conversation.application.port.in.AskQuestionUseCase;
+import eat.conversation.application.port.in.ConversationNotFoundException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.BiFunction;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -67,32 +70,38 @@ class ChatControllerTest {
     class Success {
 
         @Test
-        @DisplayName("把 JSON 裡的問題交給 use case，再把回覆包成 JSON")
+        @DisplayName("把 JSON 裡的問題交給 use case，再把回覆和對話 ID 包成 JSON")
         void returnsReplyAsJson() throws Exception {
             mockMvc.perform(post(CHAT)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"question\":\"中午吃什麼\"}"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.reply").value("牛肉麵"));
+                    .andExpect(jsonPath("$.reply").value("牛肉麵"))
+                    .andExpect(jsonPath("$.conversationId").value(StubAskQuestion.CONVERSATION.toString()));
 
             assertEquals(List.of("中午吃什麼"), askQuestion.questions);
         }
 
         @Test
-        @DisplayName("每個請求都開一段全新的對話：目前刻意是無狀態單輪")
-        void startsAFreshConversationPerRequest() throws Exception {
-            for (int i = 0; i < 2; i++) {
-                mockMvc.perform(post(CHAT)
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content("{\"question\":\"中午吃什麼\"}"))
-                        .andExpect(status().isOk());
-            }
+        @DisplayName("沒帶 conversationId：交給 use case 的是「沒有」，由它開新對話")
+        void noConversationIdMeansNewConversation() throws Exception {
+            mockMvc.perform(post(CHAT)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"question\":\"中午吃什麼\"}"))
+                    .andExpect(status().isOk());
 
-            assertEquals(2, askQuestion.conversations.size());
-            assertNotSame(askQuestion.conversations.get(0), askQuestion.conversations.get(1),
-                    "兩個請求共用了同一段對話");
-            assertTrue(askQuestion.conversations.get(1).messages().isEmpty(),
-                    "第二個請求拿到的對話不是全新的");
+            assertEquals(List.of(Optional.empty()), askQuestion.conversationIds);
+        }
+
+        @Test
+        @DisplayName("帶了 conversationId：原封交給 use case 接續那一段")
+        void passesConversationIdThrough() throws Exception {
+            mockMvc.perform(post(CHAT)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"question\":\"熱量多少\",\"conversationId\":\"" + StubAskQuestion.CONVERSATION + "\"}"))
+                    .andExpect(status().isOk());
+
+            assertEquals(List.of(Optional.of(StubAskQuestion.CONVERSATION)), askQuestion.conversationIds);
         }
     }
 
@@ -120,9 +129,46 @@ class ChatControllerTest {
         }
 
         @Test
+        @DisplayName("conversationId 格式不對是呼叫端送錯：400，而且不驚動 use case")
+        void malformedConversationIdIsBadRequest() throws Exception {
+            mockMvc.perform(post(CHAT)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"question\":\"熱量多少\",\"conversationId\":\"不是-uuid\"}"))
+                    .andExpect(status().isBadRequest());
+
+            assertTrue(askQuestion.questions.isEmpty(), "ID 都讀不懂就不該呼叫 core");
+        }
+
+        @Test
+        @DisplayName("指定的對話不存在：404")
+        void unknownConversationIsNotFound() throws Exception {
+            askQuestion.behaviour = (conversationId, question) -> {
+                throw new ConversationNotFoundException(conversationId.orElseThrow());
+            };
+
+            mockMvc.perform(post(CHAT)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"question\":\"熱量多少\",\"conversationId\":\"" + StubAskQuestion.CONVERSATION + "\"}"))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("同一段對話同時被問兩題、這題晚存：409，不是 502")
+        void concurrentUpdateIsConflict() throws Exception {
+            askQuestion.behaviour = (conversationId, question) -> {
+                throw new ConversationChangedException(StubAskQuestion.CONVERSATION);
+            };
+
+            mockMvc.perform(post(CHAT)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"question\":\"熱量多少\",\"conversationId\":\"" + StubAskQuestion.CONVERSATION + "\"}"))
+                    .andExpect(status().isConflict());
+        }
+
+        @Test
         @DisplayName("上游模型出事不是呼叫端的錯：502 而不是籠統的 500")
         void modelFailureIsBadGateway() throws Exception {
-            askQuestion.behaviour = (conversation, question) -> {
+            askQuestion.behaviour = (conversationId, question) -> {
                 throw new IllegalStateException("呼叫 llama.cpp 失敗");
             };
 
@@ -168,31 +214,33 @@ class ChatControllerTest {
      */
     static final class StubAskQuestion implements AskQuestionUseCase {
 
-        // 預設行為照著核心真正的規則走：空白提問由 Conversation 以 IllegalArgumentException 擋下。
+        static final ConversationId CONVERSATION = ConversationId.of("3f1c8a2e-6b0d-4d7e-9a51-2c4e8f7b9d10");
+
+        // 預設行為照著核心真正的規則走：空白提問由 model 以 IllegalArgumentException 擋下。
         // 真正的判斷不在這裡（controller 只負責把例外翻成 HTTP），
         // 但假物件照著同一條規則演，測試才不會描述一個現實中不存在的情境
-        private static final BiFunction<Conversation, String, Reply> DEFAULT =
-                (conversation, question) -> {
+        private static final BiFunction<Optional<ConversationId>, String, Answer> DEFAULT =
+                (conversationId, question) -> {
                     if (question == null || question.isBlank()) {
                         throw new IllegalArgumentException("文字不可為 null 或空白");
                     }
-                    return new Reply("牛肉麵");
+                    return new Answer(conversationId.orElse(CONVERSATION), new Reply("牛肉麵"));
                 };
 
-        BiFunction<Conversation, String, Reply> behaviour = DEFAULT;
-        final List<Conversation> conversations = new ArrayList<>();
+        BiFunction<Optional<ConversationId>, String, Answer> behaviour = DEFAULT;
+        final List<Optional<ConversationId>> conversationIds = new ArrayList<>();
         final List<String> questions = new ArrayList<>();
 
         @Override
-        public Reply askQuestion(Conversation conversation, String question) {
-            conversations.add(conversation);
+        public Answer askQuestion(Optional<ConversationId> conversationId, String question) {
+            conversationIds.add(conversationId);
             questions.add(question);
-            return behaviour.apply(conversation, question);
+            return behaviour.apply(conversationId, question);
         }
 
         void reset() {
             behaviour = DEFAULT;
-            conversations.clear();
+            conversationIds.clear();
             questions.clear();
         }
     }

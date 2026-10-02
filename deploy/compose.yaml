@@ -203,6 +203,30 @@ services:
     restart: unless-stopped
 
   # ── eat app ────────────────────────────────────────────────────
+  # ── 對話紀錄 ─────────────────────────────────────────────────
+  postgres:
+    image: postgres:18.6-alpine       # 釘死版本；alpine 版比較小
+    container_name: eat-postgres
+    environment:
+      # 本機學習用的帳密，跟 application.properties 的預設值一致。
+      # 正式環境不這樣寫：密碼放 secret，app 那邊用環境變數 SPRING_DATASOURCE_PASSWORD 蓋掉。
+      POSTGRES_DB: eat
+      POSTGRES_USER: eat
+      POSTGRES_PASSWORD: eat
+    ports:
+      # 給本機 bootRun 的 app 和你自己用 psql / IDE 連。只綁 127.0.0.1，不對區網開放。
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # 資料放具名 volume：容器重建、docker compose down 都不會掉；down -v 才會清掉
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      # pg_isready：資料庫真的能接連線才算 healthy，app 要等它
+      test: ["CMD-SHELL", "pg_isready -U eat -d eat"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   app:
     # Dockerfile 在 repo 根目錄（要看得到 src/ 和 gradle wrapper），所以 context 是上一層
     image: eat/app:local
@@ -226,6 +250,9 @@ services:
         condition: service_healthy
       llm-embedding:
         condition: service_healthy
+      # 資料庫要先能連：app 啟動時 Flyway 就會連上去建表，連不上 app 起不來
+      postgres:
+        condition: service_healthy
 
     healthcheck:
       # actuator 的 health：Spring 容器起好、能接請求才回 200（對應雲端的 readiness probe）
@@ -242,3 +269,5 @@ volumes:
   # `docker compose down` 不會刪它（模型不必重新複製）；`down -v` 才會清掉，下次啟動重新播種。
   # 對照雲端：PersistentVolumeClaim。
   models:
+  # 對話紀錄。跟模型那個 volume 一樣，down 不刪、down -v 才清
+  postgres-data:

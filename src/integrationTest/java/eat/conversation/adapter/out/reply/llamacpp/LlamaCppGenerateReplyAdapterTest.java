@@ -2,9 +2,6 @@ package eat.conversation.adapter.out.reply.llamacpp;
 
 import eat.conversation.application.domain.model.Conversation;
 import eat.conversation.application.domain.model.Reply;
-import eat.conversation.application.domain.service.AskQuestionService;
-import eat.conversation.application.port.in.AskQuestionUseCase;
-import eat.conversation.application.port.out.RetrievePassagesPort;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -22,6 +19,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
+import static eat.conversation.application.domain.model.Conversation.Role.ASSISTANT;
 import static eat.conversation.application.domain.model.Conversation.Role.USER;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -127,25 +125,20 @@ class LlamaCppGenerateReplyAdapterTest {
     @Test
     @DisplayName("對話歷史真的有送出去，模型記得前一輪")
     void carriesConversationHistory() {
-        // 走完整條鏈：UseCase -> Service -> Port -> Adapter -> 真的 server。
-        // 第二輪不重複提那個數字，模型還答得出來，就證明歷史確實被攤平送出
-        // 這題驗的是對話歷史有沒有送出去，跟檢索無關，所以給一個什麼都找不到的知識庫 ——
-        // 沒有片段時送出的就是原始提問，等同於還沒導入 RAG 之前的行為。
-        RetrievePassagesPort nothingFound = question -> List.of();
-        AskQuestionUseCase useCase = new AskQuestionService(nothingFound, adapter());
-        Conversation conversation = Conversation.start("你是簡潔的助理，用繁體中文回答");
-
+        // 第二輪不重複提那個數字，模型還答得出來，就證明歷史確實被攤平送出。
+        // 歷史直接手寫餵給 adapter：要驗的是「adapter 有沒有把整串訊息送出去」，
+        // 跟 use case、資料庫無關（多輪對話整條線另外由 ChatApiSystemTest 驗）。
+        //
         // 用陳述句而不是「請記住」：後者會觸發模型「我沒有記憶」的自我認知反射，
         // 就算歷史確實在 context 裡它也會拒答（實測三次中會失敗一次）。
-        // 這題要驗的是歷史有沒有送出去，不是模型對自己的理解，所以繞開那個詞
-        useCase.askQuestion(conversation, "我的房號是 7777。");
-        Reply second = useCase.askQuestion(conversation, "我的房號是多少？");
+        Reply second = adapter().generateReply(
+                Optional.of("你是簡潔的助理，用繁體中文回答"),
+                List.of(new Conversation.Message(USER, "我的房號是 7777。"),
+                        new Conversation.Message(ASSISTANT, "好的，你的房號是 7777。"),
+                        new Conversation.Message(USER, "我的房號是多少？")));
 
         assertTrue(second.text().contains("7777"),
                 "模型沒有記住前一輪的數字，歷史可能沒送出去：" + second.text());
-        // 順便確認 Conversation 的狀態：兩問兩答，而且沒有懸著的提問
-        assertTrue(conversation.messages().size() == 4, "應該有兩問兩答");
-        assertFalse(conversation.awaitingReply(), "不該還有待回覆的提問");
     }
 
     private static boolean containsChinese(String text) {

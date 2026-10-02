@@ -18,11 +18,13 @@ import org.springframework.test.web.servlet.MockMvc;
  * springdoc 的自動設定不在 web 切片裡，切片測試根本看不到 /v3/api-docs。
  * 起整個容器也不必連任何 server —— 兩個 llama.cpp adapter 建構時只記下位址，
  * 檢索的索引也是第一次提問才建，這裡一題都不問。
+ * 資料庫也一樣：連線池要等第一次查詢才真的連，只有 Flyway 會在啟動時就連上去建表，
+ * 所以把 Flyway 關掉（spring.flyway.enabled=false），這個測試就不需要 PostgreSQL。
  *
  * 只驗「文件有沒有描述到契約」：路徑、欄位、各種狀態碼。
  * 版面長怎樣是 Swagger UI 的事，不值得測。
  */
-@SpringBootTest
+@SpringBootTest(properties = "spring.flyway.enabled=false")
 @AutoConfigureMockMvc
 @DisplayName("OpenAPI 文件")
 class OpenApiDocumentationTest {
@@ -40,13 +42,16 @@ class OpenApiDocumentationTest {
     }
 
     @Test
-    @DisplayName("列出成功、呼叫端送錯、上游出事三種回應")
+    @DisplayName("列出成功、呼叫端送錯、對話不存在、對話被同時更新、上游出事五種回應")
     void documentsEveryOutcome() throws Exception {
-        // 這三個碼就是 ChatController 的契約：200 正常、400 呼叫端送錯、502 模型那頭出事。
+        // 這五個碼就是 ChatController 的契約：200 正常、400 呼叫端送錯、404 對話不存在、
+        // 409 同一段對話被同時問了兩題、502 模型（或檢索、資料庫）那頭出事。
         // 少列一個，看文件的人就會以為那種情況不會發生。
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(jsonPath("$.paths['/api/chat'].post.responses['200']").exists())
                 .andExpect(jsonPath("$.paths['/api/chat'].post.responses['400']").exists())
+                .andExpect(jsonPath("$.paths['/api/chat'].post.responses['404']").exists())
+                .andExpect(jsonPath("$.paths['/api/chat'].post.responses['409']").exists())
                 .andExpect(jsonPath("$.paths['/api/chat'].post.responses['502']").exists());
     }
 

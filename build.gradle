@@ -43,6 +43,17 @@ dependencies {
     // 請求帶上 traceparent 標頭 —— 一行觀測程式碼都不用寫。
     implementation 'org.springframework.boot:spring-boot-starter-restclient'
 
+    // 對話紀錄存 PostgreSQL。用 JDBC（JdbcClient）而不是 JPA：
+    // 存的只有一個 aggregate、兩張表，SQL 自己寫一眼看得懂；JPA 要在 domain 物件上加 @Entity，
+    // 或另外維護一套 entity 再對映，對這個大小是多出來的一層。交易用 TransactionTemplate（也在這包裡）。
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    runtimeOnly 'org.postgresql:postgresql'
+    // 資料表的版本控管：src/main/resources/db/migration 底下的 SQL 依檔名順序執行，跑過的會記下來不再跑。
+    // app 啟動時自動把資料庫升到最新，換一台機器、清空資料庫重來都不必手動建表。
+    // Flyway 對每種資料庫的支援拆成獨立模組，PostgreSQL 要另外加。
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
+    runtimeOnly 'org.flywaydb:flyway-database-postgresql'
+
     // 打開 /actuator/*：健康檢查、指標等維運用的入口。它自動 instrument 出 HTTP 延遲、
     // JVM、執行緒池等「通用指標」，一行採集程式都不用寫 —— 業務指標才要自己用 Micrometer 埋。
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
@@ -121,6 +132,12 @@ testing {
                 // Boot 4 把 TestRestTemplate 搬成獨立模組；只有 ChatApiSystemTest（真的走 HTTP）用得到，
                 // 所以只加在這個 suite，不污染單元測試的 classpath
                 implementation 'org.springframework.boot:spring-boot-resttestclient'
+                // 整合測試要真的 PostgreSQL：Testcontainers 每次測試起一個乾淨的容器，測完丟掉。
+                // 不用 H2 這類記憶體資料庫：SQL 方言不同（例如 ON CONFLICT），在 H2 綠燈不代表在 PostgreSQL 會過。
+                // spring-boot-testcontainers 讓 @ServiceConnection 自動把容器的連線資訊接進 Spring，不必手寫 URL。
+                implementation 'org.springframework.boot:spring-boot-testcontainers'
+                implementation 'org.testcontainers:testcontainers-postgresql'
+                implementation 'org.testcontainers:testcontainers-junit-jupiter'
             }
             targets.configureEach {
                 testTask.configure {

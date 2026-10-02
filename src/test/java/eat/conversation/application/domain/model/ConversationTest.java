@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -264,6 +265,72 @@ class ConversationTest {
         void messageValidatesItself() {
             assertThrows(IllegalArgumentException.class, () -> new Conversation.Message(null, "中午吃什麼"));
             assertThrows(IllegalArgumentException.class, () -> user("  "));
+        }
+    }
+
+    @Nested
+    @DisplayName("送給模型的歷史：只換掉待回覆的那一題")
+    class PendingQuestionSubstitution {
+
+        @Test
+        @DisplayName("最後一題換成指定文字，前面的輪次原封不動，歷史本身也不變")
+        void replacesOnlyThePendingQuestion() {
+            Conversation conversation = Conversation.start();
+            conversation.ask("中午吃什麼");
+            conversation.recordReply("牛肉麵");
+            conversation.ask("熱量多少");
+
+            List<Conversation.Message> sent = conversation.messagesWithPendingQuestionAs("（帶參考資料的版本）熱量多少");
+
+            assertEquals(List.of(user("中午吃什麼"), assistant("牛肉麵"), user("（帶參考資料的版本）熱量多少")), sent);
+            assertEquals(List.of(user("中午吃什麼"), assistant("牛肉麵"), user("熱量多少")), conversation.messages());
+        }
+
+        @Test
+        @DisplayName("沒有待回覆的提問時拒絕：沒有東西可以換")
+        void rejectsWhenNothingPending() {
+            Conversation conversation = Conversation.start();
+
+            assertThrows(IllegalStateException.class, () -> conversation.messagesWithPendingQuestionAs("問題"));
+        }
+    }
+
+    @Nested
+    @DisplayName("從存檔還原")
+    class Restore {
+
+        @Test
+        @DisplayName("ID、系統指令、訊息、版本號都原樣帶回來")
+        void restoresEverything() {
+            ConversationId id = ConversationId.newId();
+
+            Conversation restored = Conversation.restore(id, "你是營養師",
+                    List.of(user("中午吃什麼"), assistant("牛肉麵")), 3);
+
+            assertEquals(id, restored.id());
+            assertEquals(Optional.of("你是營養師"), restored.instruction());
+            assertEquals(List.of(user("中午吃什麼"), assistant("牛肉麵")), restored.messages());
+            assertEquals(3, restored.version());
+        }
+
+        @Test
+        @DisplayName("存檔裡的歷史也要守規則 1：兩則提問連著，還原時就被擋下")
+        void rejectsBrokenAlternation() {
+            assertThrows(IllegalStateException.class, () -> Conversation.restore(ConversationId.newId(), null,
+                    List.of(user("中午吃什麼"), user("熱量多少")), 1));
+        }
+
+        @Test
+        @DisplayName("新開的對話版本號是 0（還沒存過）")
+        void newConversationStartsAtVersionZero() {
+            assertEquals(0, Conversation.start().version());
+        }
+
+        @Test
+        @DisplayName("版本號不可為負數")
+        void rejectsNegativeVersion() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> Conversation.restore(ConversationId.newId(), null, List.of(), -1));
         }
     }
 }
