@@ -1,24 +1,74 @@
 # Grafana 的「資料源自動接線」：容器一啟動就照這個檔把資料源建好，
 # 不必每次開 UI 手動加。改了這個檔 → 重啟 grafana 容器就生效。
+#
+# 三個資料源對應三種訊號，而且互相連起來 —— 觀測真正好用的地方不是三張各看各的圖，而是能跳來跳去：
+#
+#   Mimir 圖上的慢點（exemplar）──點──▶ Tempo 看那個請求的 trace
+#   Loki 的一行 log（含 trace id）──點──▶ Tempo 看那個請求的 trace
+#   Tempo 的 trace ──點──▶ Loki 看那個請求印了哪些 log
+#
+# 每個資料源都釘死 uid：沒指定的話 Grafana 會隨機產一個，
+# 那 dashboard JSON 和上面那些互相跳轉的設定就對不到它。
+# 檔案裡的 $ 要寫成 $$：Grafana 讀這個檔時會把 $XXX 當環境變數展開，$$ 才是字面上的 $。
 
 apiVersion: 1
 
-datasources:
-  # 指標來源：指到 prometheus 容器。用服務名 "prometheus" 是因為同一個 compose 網路裡，
-  # 容器之間可直接用服務名互相找到（Docker 內建 DNS），不必寫 IP。
+# 以前存指標的是 Prometheus（已換成 Mimir）。provisioning 只會新增/更新，不會自動刪掉檔案裡消失的資料源，
+# 所以明寫要刪；不然 grafana-data volume 裡會一直留著一個連不上的 Prometheus。
+deleteDatasources:
   - name: Prometheus
-    type: prometheus
-    access: proxy               # 由 Grafana 後端去打 Prometheus，不是叫你的瀏覽器去打
-    url: http://prometheus:9090
-    isDefault: true             # 沒特別指定時就用這個資料源
-    # 釘死一個固定 uid：沒指定的話 Grafana 會隨機產一個，
-    # 那 provision 進來的 dashboard 就對不到這個資料源、panel 全空。
-    # 寫死 uid，dashboard JSON 才能穩穩用 "uid": "prometheus" 指到它。
-    uid: prometheus
+    orgId: 1
 
-  # 日誌來源：指到 loki 容器。現在還沒有人往 Loki 送 log，所以查不到內容是正常的，
-  # 但資料源本身會是通的（綠燈）。等之後加了 log 收集器就有東西可查。
+datasources:
+  # 指標：指到 mimir 容器。type 仍然是 prometheus —— Mimir 講的就是 Prometheus 的查詢 API（PromQL），
+  # 對 Grafana 來說它就是「一台很大的 Prometheus」，所以儀表板的查詢一個字都不用改。
+  # 用服務名 "mimir" 是因為同一個 compose 網路裡，容器之間可直接用服務名互相找到（Docker 內建 DNS）。
+  - name: Mimir
+    type: prometheus
+    uid: mimir
+    access: proxy               # 由 Grafana 後端去打 Mimir，不是叫你的瀏覽器去打
+    url: http://mimir:9009/prometheus   # Mimir 把 Prometheus 相容的 API 放在 /prometheus 底下
+    isDefault: true             # 沒特別指定時就用這個資料源
+    jsonData:
+      prometheusType: Mimir     # 讓 Grafana 知道對面是 Mimir，開放它多支援的功能
+      # exemplar：指標點上附帶的 trace id。Micrometer 把它放在 trace_id 這個標籤，
+      # 點了就用那個值去 Tempo 查。
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo
+
+  # 日誌：指到 loki 容器。
   - name: Loki
     type: loki
+    uid: loki
     access: proxy
     url: http://loki:3100
+    jsonData:
+      # derived field：從 log 內容裡認出 trace id，做成一顆「到 Tempo 看」的按鈕。
+      # trace id 不放成 Loki 的標籤（每個請求都不同，會讓索引爆掉），所以只能從內容抓。
+      # app 的 log 是 ECS JSON（docker profile 開的，見 application-docker.properties），
+      # Micrometer Tracing 把 trace id 放進 MDC 的 traceId，Spring Boot 原樣印成 "traceId" 這個欄位。
+      derivedFields:
+        - name: TraceID
+          matcherRegex: '"traceId":"(\w+)"'
+          datasourceUid: tempo
+          url: '$${__value.raw}'
+          urlDisplayLabel: 到 Tempo 看這個請求
+
+  # 追蹤：指到 tempo 容器的查詢埠。
+  - name: Tempo
+    type: tempo
+    uid: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      # trace → log：在 trace 上點一下，就去 Loki 找「內容含這個 trace id」的 log。
+      # 用自訂查詢而不是 Grafana 預設的「拿 span 的屬性對 Loki 標籤」：
+      # trace 上的服務叫 eat（spring.application.name），Loki 標籤上叫 app（compose 服務名），兩邊對不起來；
+      # trace id 兩邊都有，用它最準。前後各多抓一分鐘，避免時鐘或延遲讓 log 落在 span 的時間範圍外。
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: -1m
+        spanEndTimeShift: 1m
+        customQuery: true
+        query: '{service="app"} |= "$${__trace.traceId}"'

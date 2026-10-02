@@ -1,42 +1,113 @@
 # ops —— 觀測環境（Observability）
 
-用 Docker 一次拉起 **Grafana + Prometheus + Loki + Alloy**，跟被觀測的服務分開。
+用 Docker 一次拉起 **Alloy + Mimir + Loki + Tempo + Grafana**，跟被觀測的服務分開。
 被觀測的是 `deploy/` 那組容器（app、兩顆模型），以及本機開發時用 `./gradlew bootRun` 跑的 app。
 
-## 四個角色
+## 整條流程
+
+每種訊號都走「產生 → 收集 → 儲存 → 查詢/畫圖」四段。收集器只有一個，資料庫一種訊號一個：
+
+```
+              產生                          收集             儲存          查詢/畫圖
+指標 metrics  Micrometer → /actuator/prometheus ◀─抓(15s)─┐
+              llama-server --metrics → /metrics ◀─抓──────┤
+                                                          ├ Alloy ─▶ Mimir ─┐
+日誌 logs     SLF4J/Logback → stdout(ECS JSON) ◀─讀───────┤       ─▶ Loki  ─┼─▶ Grafana
+                                                          │       ─▶ Tempo ─┘
+追蹤 traces   Micrometer Tracing → OTLP ──────推──────────┘
+```
+
+| 訊號 | 一筆資料長什麼樣 | 回答的問題 | 收集方式 | 存在 | 查詢語言 |
+|------|------------------|------------|----------|------|----------|
+| 指標 | 標籤 + 一個數字 | 有沒有問題、多嚴重（p95 變慢了） | Alloy **拉** | Mimir | PromQL |
+| 日誌 | 一行文字（JSON） | 發生了什麼事（那個請求問了什麼） | Alloy **讀** stdout | Loki | LogQL |
+| 追蹤 | 一棵 span 樹 | 時間花在哪一段（檢索還是生成） | app **推**給 Alloy | Tempo | TraceQL |
+
+## 五個角色
 
 | 服務 | 做什麼 | 對外埠 | 看它 |
 |------|--------|--------|------|
-| **Grafana** | 畫圖前台，自己不存資料，去跟 Prometheus、Loki 要資料 | 3000 | <http://localhost:3000> |
-| **Prometheus** | 存**指標(metrics)**：每隔 15 秒去抓各服務吐的數字 | 9090 | <http://localhost:9090> |
-| **Loki** | 存**日誌(logs)**：集中放 log，在 Grafana 同一介面查 | 3100 | （沒有 UI，靠 Grafana 查）|
-| **Alloy** | 收集器：讀容器的 stdout，加上標籤送進 Loki | 12345 | <http://localhost:12345>（管線除錯頁）|
+| **Alloy** | 唯一的收集器：抓指標、讀容器 log、接 app 推來的 trace，分送給下面三個 | 12345、4318 | <http://localhost:12345>（管線圖）|
+| **Mimir** | 存**指標**，講 Prometheus 的查詢 API（PromQL） | 9009（只開本機） | 靠 Grafana 查 |
+| **Loki** | 存**日誌**，只替標籤建索引 | 3100 | 靠 Grafana 查 |
+| **Tempo** | 存**追蹤**，靠 trace id 找 | 不對外 | 靠 Grafana 查 |
+| **Grafana** | 畫圖前台，自己不存資料；三種訊號互相跳轉 | 3000 | <http://localhost:3000> |
 
-Grafana 一啟動就自動接好 Prometheus、Loki 兩個資料源（見 `grafana/provisioning/`），
+Grafana 一啟動就自動接好 Mimir、Loki、Tempo 三個資料源和它們之間的跳轉（見 `grafana/provisioning/`），
 開網頁不必登入，直接是 Admin（純本機學習用，刻意關掉登入）。
+
+## 選型理由
+
+### 為什麼收集器只有 Alloy 一個
+
+- **找來源、加標籤、送出去是同一種工作**：三種訊號用同一套標籤（`service`、`env`），換儲存只改 Alloy 的出口，
+  app 和被抓的服務都不用動。
+- **不用 Promtail**：Loki 舊的 log 收集器，官方已停止開發。
+- **不讓 app 直接送 Tempo**：app 只認得 OTLP 這個標準協定、只知道 Alloy 在哪。之後 Tempo 換別家，app 不必重新部署。
+- **代價：Alloy 是單點**。但兩種訊號斷掉的後果不同——
+  - log 只會**延遲**：Docker 照樣把 stdout 寫進自己的 log 檔，Alloy 回來後依位置檔接著讀。
+  - 指標會**缺一段**：拉取只拿得到「當下」的值，Alloy 停了的那段時間補不回來。
+  - 單機上多起幾台 Alloy 也救不了「整台機器掛掉」，所以目前只靠 `restart: unless-stopped` 自動拉回來。
+    正式環境的做法見下面「下一步」。
+
+### 為什麼存指標用 Mimir 而不是 Prometheus
+
+Prometheus 其實是「抓 + 存」兩份工作。抓的工作交給 Alloy 之後，剩下的只有「存」。
+Mimir 存的就是 Prometheus 格式的資料、查詢也用 PromQL——對 Grafana 來說它就是「一台很大的 Prometheus」，
+所以儀表板的查詢一個字都沒改，資料源 type 也仍然是 `prometheus`。
+
+選 Mimir 不是因為現在的量需要它，而是為了學正式環境的形狀：
+
+| 需求 | Prometheus | Mimir |
+|------|-----------|-------|
+| 保存好幾年 | 硬碟會撐爆 | 放物件儲存（S3），便宜又不用管容量 |
+| 一台掛掉 | 那段資料沒了 | 預設寫 3 份，掛一台不掉 |
+| 很多團隊共用 | 每團隊各架一台 | 一套系統用租戶隔開 |
+| 兩台收集器互為備援 | 收到兩份就存兩份 | HA tracker 去重，只留一份 |
+
+**為什麼比較重**：Mimir 是給上面那些需求設計的分散式系統，拆成 distributor、ingester、querier、
+store-gateway、compactor 等元件。單機用 `-target=all` 把它們塞進同一個程序，
+`mimir/mimir.yaml` 大半都在把分散式功能關掉（多租戶、複製、物件儲存）——跟 `loki/loki-config.yaml` 是同一個思路，
+因為 Mimir、Loki、Tempo 是 Grafana 用同一套骨架做出來的。
+
+### 為什麼 trace 要另外一個資料庫（Tempo）
+
+trace 是一棵 span 樹，每個 span 有自己的 id 和父 span，靠 trace id 串成一個請求。
+Mimir 只放得下「標籤 + 一個數字」，Loki 放的是一行一行文字，都裝不下這種樹。
 
 ## 怎麼跑
 
 ```bash
-cd ops
-docker compose up -d        # 背景拉起四個容器
-docker compose ps           # 看狀態
-docker compose logs -f      # 追 log（Ctrl+C 離開，不會關容器）
-docker compose down         # 關掉（資料留著）
-docker compose down -v      # 關掉並清空資料，整組重來
+cd deploy && docker compose up -d   # 先起被觀測的那組：它會建立 Alloy 要加入的網路
+cd ops && docker compose up -d      # 再起這組
+docker compose ps                   # 看狀態
+docker compose logs -f              # 追 log（Ctrl+C 離開，不會關容器）
+docker compose down                 # 關掉（資料留著）
+docker compose down -v              # 關掉並清空資料，整組重來
 ```
 
-## 指標：Prometheus 抓誰
+Alloy 加入了 deploy/ 的網路（`eat-deploy_default`）：用服務名稱抓指標，app 也用 `alloy:4318` 送 trace。
+代價是**要先起 deploy/ 再起 ops/**，網路不存在時 Alloy 起不來。
+
+## 指標：Alloy 抓誰、送去哪
 
 | job | 位址 | 是誰 |
 |-----|------|------|
-| `eat-app` | `app:8090` | deploy/ 的 app 容器 |
-| `llama-cpp` | `llm-chat:8080` | Qwen3-8B（deploy/ 的 llm-chat） |
-| `llama-embedding` | `llm-embedding:8081` | bge-m3（deploy/ 的 llm-embedding） |
+| `eat-app` | `app:8090/actuator/prometheus` | deploy/ 的 app 容器 |
+| `llama-cpp` | `llm-chat:8080/metrics` | Qwen3-8B（deploy/ 的 llm-chat） |
+| `llama-embedding` | `llm-embedding:8081/metrics` | bge-m3（deploy/ 的 llm-embedding） |
 
-Prometheus 加入了 deploy/ 的網路（`eat-deploy_default`），所以用服務名稱直接抓，不繞主機。
-代價是**要先起 deploy/ 再起 ops/**，網路不存在時 Prometheus 起不來。
-本機 bootRun 的 app 不在這個網路裡，不會被抓。
+每 15 秒抓一次，用 `remote_write` 推進 Mimir。本機 bootRun 的 app 不在 deploy/ 的網路裡，不會被抓。
+
+抓不抓得到，看 <http://localhost:12345> 的 `prometheus.scrape.*` 元件，或在 Grafana 查 `up`（1 = 抓得到）。
+想不透過 Grafana 直接查：
+
+```bash
+curl 'localhost:9009/prometheus/api/v1/query?query=up'
+```
+
+app 現在多了一組 `eat_port_out_seconds`：core 每次往外呼叫 port 的次數與耗時，`port`、`method`、`adapter` 標籤
+分得出檢索（`RetrievePassagesPort`）和生成（`GenerateReplyPort`），以及是哪個實作。
 
 ## 日誌：Loki 收什麼
 
@@ -51,6 +122,8 @@ Alloy 透過 Docker 的 API（`docker.sock`）自動發現 `deploy/` 那組容�
 | `service` | `app`、`llm-chat`、`llm-embedding` | compose 服務名，最穩，查詢主要靠它 |
 | `container` | `eat-app` | 容器名 |
 | `env` | `docker` | 環境。之後別的環境的 log 也送進來時用它分開 |
+
+trace id **不是**標籤（每個請求都不同，放進標籤會讓索引爆掉），它在 log 內容的 `traceId` 欄位裡。
 
 本機開發的 bootRun 是跑在 Windows 上的程序、不在 Docker 裡，它的 log **不會**進 Loki，照常看終端機。
 
@@ -68,7 +141,7 @@ Alloy 透過 Docker 的 API（`docker.sock`）自動發現 `deploy/` 那組容�
 # app 的 log 是 JSON（docker profile 開的），| json 把欄位拆開，就能照等級篩
 {service="app"} | json | log_level=~"WARN|ERROR"
 
-# app 的 access log：每個請求一行，帶方法、路徑、請求與回應的 body、狀態碼、耗時（AccessLogFilter 寫的）
+# app 的 access log：每個請求一行，帶方法、路徑、請求與回應的 body、狀態碼、耗時、traceId（AccessLogFilter 寫的）
 {service="app"} | json | log_logger="access"
 
 # 只看失敗的提問，連同當時問了什麼、回了什麼
@@ -81,22 +154,71 @@ Alloy 透過 Docker 的 API（`docker.sock`）自動發現 `deploy/` 那組容�
 sum by (service) (count_over_time({env="docker"} | json | log_level=~"WARN|ERROR" [5m]))
 ```
 
+## 追蹤：一個請求的時間花在哪
+
+app 對每個請求開一個 trace（`management.tracing.sampling.probability=1.0`，學習環境全記），
+用 OTLP 推給 Alloy 的 4318，Alloy 再轉給 Tempo。一次 `/api/chat` 長這樣：
+
+```
+eat: http post /api/chat     174 ms   ← 請求進來（Spring 自動加的 ServerHttpObservationFilter 量）
+├── retrievePassages          7 ms   ← RetrievePassagesPort：檢索（問題轉向量、挑片段）
+└── generateReply           164 ms   ← GenerateReplyPort：生成（qwen3 回答）
+```
+
+兩種 span 是不同的東西量的：
+
+| span | 誰量的 | 為什麼是它 |
+|------|--------|------------|
+| 根 span（進來的請求） | Spring Boot 自動註冊的 filter | 進來的 HTTP 由 Spring MVC 處理，它管得到，不必寫任何設定 |
+| port span（往外的呼叫） | `ObservationConfiguration` 的 aspect，切在所有 outbound port 外面 | adapter 用的是 JDK 的 HttpClient，Spring 管不到；與其改 adapter，不如在 Clean Architecture 的邊界（port）統一量 |
+
+用 AOP 量 port 的好處：觀測規則集中在一個檔案，adapter 和 `ConversationConfiguration` 一行都沒為了觀測而改；
+之後新增 Claude / OpenAI 的 adapter 也自動被量。代價是看不到 HTTP 層的細節（狀態碼、連線時間），
+也不會在往外的請求帶 `traceparent` 標頭（llama.cpp 不讀它，目前沒影響）。
+llama.cpp 本身不產生 span，所以樹只到 app 呼叫出去的那一層。
+
+在 Grafana 看 trace 有兩個地方：
+
+- **儀表板 `eat — Traces (Tempo)`**：全部用 TraceQL 查 Tempo。上排是從 trace 算出來的數字（提問速率、
+  檢索／生成各段的 p95、沒成功的 span 數），下排是請求清單（最近的、超過 5 秒的、沒成功的），點 Trace ID 就打開瀑布圖。
+  查詢只挑 `/api/chat`，只看提問本身。（actuator 的抓取與健康檢查在 app 端就不產生 trace 了，見 `ObservationConfiguration`。）
+- **Explore** → 資料源選 **Tempo** → **Search** 分頁，Service Name 選 `eat`：自己下條件找。
+
+儀表板上排用的是 **TraceQL metrics**（`| rate()`、`| quantile_over_time()`）：Tempo 直接從存下來的 span 算出時間序列，
+不必另外開 metrics-generator 把數字寫進 Mimir。代價是分位數用 2 的次方分桶估（0.5s、1s、2s…），
+只適合看「慢在哪一段」的量級，精準的 p95 看 eat-app 儀表板（指標那條線）。
+
+本機 bootRun 的 app 也會送 trace（走主機的 `127.0.0.1:4318`），只要 ops/ 有起來。
+ops/ 沒起時 trace 送不出去，app 只會在 log 印 warning，請求照常處理。
+
+## 三種訊號之間怎麼跳
+
+| 從 | 到 | 怎麼點 | 靠什麼接起來 |
+|----|----|--------|--------------|
+| 指標（eat-app 儀表板的 p95 圖） | trace | 圖上的小菱形（exemplar）→ 點 trace_id | app 吐指標時在 histogram 的點上附 trace id，Mimir 存下來（`max_global_exemplars_per_user`） |
+| log（Loki 的 access log） | trace | 展開一行 → **到 Tempo 看這個請求** | Loki 資料源的 derived field 從內容抓出 `traceId` |
+| trace（Tempo） | log | span 旁的 **Logs for this span** | Tempo 資料源用 trace id 去 Loki 搜內容 |
+
 ## 下一步（一次一件）
 
 1. **app 記錄送給模型的完整 prompt**：access log 已經記了使用者問了什麼（請求 body），
    但還看不到檢索到哪幾段、最後組出來送給 llm-chat 的 prompt 長什麼樣。
-   補上之後就能在 Loki 串起一個請求的完整經過，
+   補上之後（帶著 traceId）就能從 trace 一路點到那次的 prompt，
    也補回原生 `.bat` 的 `--log-prompts-dir` 拿掉後少掉的 prompt 紀錄。
+2. **收集器備援練習**：起兩台 Alloy 抓同一批 target（HA pair），各帶 `__replica__` 標籤，
+   開 Mimir 的 HA tracker，親眼看「兩台送一樣的資料、Mimir 只留一份、關掉一台自動切換」。
+   這個練習只有 Mimir 做得出來（Prometheus 收到兩份就存兩份）。
 
 ## 檔案結構
 
 ```
 ops/
-├── compose.yaml                              # 四個服務的定義
-├── prometheus/prometheus.yml                 # 抓誰、多久抓一次
-├── loki/loki-config.yaml                     # 單機最小設定
-├── alloy/config.alloy                        # 收哪些容器的 log、帶什麼標籤
+├── compose.yaml                              # 五個服務的定義
+├── alloy/config.alloy                        # 三條管線：抓誰的指標、收哪些容器的 log、trace 轉給誰
+├── mimir/mimir.yaml                          # 指標：單機最小設定（關掉多租戶、複製、物件儲存）
+├── loki/loki-config.yaml                     # 日誌：單機最小設定
+├── tempo/tempo.yaml                          # 追蹤：單機最小設定
 └── grafana/provisioning/
-    ├── datasources/datasources.yaml          # 自動接好 Prometheus + Loki
-    └── dashboards/                           # eat-app、llama-cpp、llama-embedding 三份儀表板
+    ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
+    └── dashboards/                           # eat-app、llama-cpp、llama-embedding（指標）、eat-traces（trace）
 ```

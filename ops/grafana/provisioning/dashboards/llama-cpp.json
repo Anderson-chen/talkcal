@@ -17,11 +17,11 @@
       "title": "生成速度 (tokens/s)",
       "description": "llamacpp:predicted_tokens_seconds —— 最近一次生成的平均吞吐。這是最直覺的『快不快』：併發一上去、它掉下來，就是模型被塞住了。你單發時實測約 60~70 t/s。",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": { "type": "prometheus", "uid": "mimir" },
           "expr": "llamacpp:predicted_tokens_seconds{job=\"llama-cpp\"}",
           "legendFormat": "生成 t/s"
         }
@@ -44,17 +44,17 @@
       "title": "請求：處理中 vs 排隊中",
       "description": "llamacpp:requests_processing（正在跑）與 requests_deferred（排隊等）。壓測時重點看這裡：deferred 一旦離開 0 往上爬，就是併發超過 llama-server 能同時處理的量、開始塞車了 —— 這通常就是延遲爆掉的源頭。",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": { "type": "prometheus", "uid": "mimir" },
           "expr": "llamacpp:requests_processing{job=\"llama-cpp\"}",
           "legendFormat": "處理中"
         },
         {
           "refId": "B",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": { "type": "prometheus", "uid": "mimir" },
           "expr": "llamacpp:requests_deferred{job=\"llama-cpp\"}",
           "legendFormat": "排隊中"
         }
@@ -78,11 +78,11 @@
       "title": "Prompt 處理速度 (tokens/s)",
       "description": "llamacpp:prompt_tokens_seconds —— 讀進『你送的問題+歷史』有多快（prefill/預填）。跟生成速度分開看：長 prompt 會讓這條變重，但它跟『生成』是兩個不同階段。",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": { "type": "prometheus", "uid": "mimir" },
           "expr": "llamacpp:prompt_tokens_seconds{job=\"llama-cpp\"}",
           "legendFormat": "prompt t/s"
         }
@@ -105,17 +105,17 @@
       "title": "累計 tokens（生成 vs prompt）",
       "description": "counter：tokens_predicted_total（總共生成幾個 token）與 prompt_tokens_total（總共讀進幾個）。只增不減，看的是『這台自啟動以來做了多少工』。要看『每秒生成率』就把 query 改成 rate(llamacpp:tokens_predicted_total[1m])。",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": { "type": "prometheus", "uid": "mimir" },
           "expr": "llamacpp:tokens_predicted_total{job=\"llama-cpp\"}",
           "legendFormat": "生成累計"
         },
         {
           "refId": "B",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": { "type": "prometheus", "uid": "mimir" },
           "expr": "llamacpp:prompt_tokens_total{job=\"llama-cpp\"}",
           "legendFormat": "prompt 累計"
         }

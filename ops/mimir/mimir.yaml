@@ -1,0 +1,63 @@
+# Mimir 的工作：存指標（時間序列），並提供 PromQL 查詢 API 給 Grafana。
+# 它自己不抓任何東西 —— 指標由 Alloy 抓完，用 remote_write 推進來（見 alloy/config.alloy）。
+#
+# 為什麼用 Mimir 而不是 Prometheus：見 ops/README.md 的「選型理由」。
+#
+# 這是「單機 / 學習」用的最小設定，跟 loki/loki-config.yaml 是同一個思路 ——
+# Mimir 和 Loki 是 Grafana 用同一套分散式骨架做的，所以這份設定大半也在「把分散式關掉」：
+# 所有元件（distributor、ingester、querier、compactor…）跑在同一個程序裡（-target=all，預設值），
+# 資料寫本機檔案，不接 S3 那類物件儲存。正式環境會拆元件、各自擴充、接物件儲存。
+
+# 關掉多租戶：開著的話每個寫入、查詢都要帶 X-Scope-OrgID 表明是哪個團隊的資料。
+# 單機自己用不需要，關掉後所有資料歸到一個叫 anonymous 的租戶。
+multitenancy_enabled: false
+
+server:
+  http_listen_port: 9009     # 寫入（/api/v1/push）和查詢（/prometheus/api/v1/...）都走這個埠
+  log_level: warn            # 預設 info 會一直印 ring、compactor 的例行訊息，學習時只想看到出事
+
+# 資料放哪。正式環境這裡是 s3 / gcs，「保存好幾年也不怕硬碟爆」就是靠它；單機寫本機檔案。
+common:
+  storage:
+    backend: filesystem
+    filesystem:
+      dir: /data/blocks      # 打包好的區塊（ingester 每 2 小時打包一次上傳到這）
+
+blocks_storage:
+  tsdb:
+    dir: /data/tsdb          # ingester 手上「最近 2 小時、還沒打包」的資料（含 WAL，重啟不掉）
+  bucket_store:
+    sync_dir: /data/tsdb-sync  # store-gateway 從 blocks 讀舊資料時的本機快取
+
+compactor:
+  data_dir: /data/compactor  # compactor 合併小區塊時的工作目錄
+
+ruler_storage:
+  backend: filesystem
+  filesystem:
+    dir: /data/rules         # 告警 / 錄製規則（目前沒有，但 ruler 元件啟動時要有地方放）
+
+# 複製份數：預設每筆資料寫進 3 個 ingester，掛一台不掉資料。單機只有一個 ingester，只能寫 1 份。
+# 想體驗「掛一台不掉資料」得真的起 3 個 Mimir，那是之後的練習。
+ingester:
+  ring:
+    replication_factor: 1
+    instance_addr: 127.0.0.1  # 單機：ring 裡只有自己，用 loopback 就好，不必猜容器 IP
+
+store_gateway:
+  sharding_ring:
+    replication_factor: 1
+
+distributor:
+  ring:
+    instance_addr: 127.0.0.1
+
+# exemplar：指標點上附帶的 trace id（例如「p99 那個慢點是哪一個請求」）。
+# Mimir 預設是 0 = 不收，要開才存得下；Grafana 圖上才會出現可以點進 Tempo 的小點。
+# 數字是「整個租戶最多同時記住幾個 exemplar」，學習環境的量很小，給一個寬鬆的上限就好。
+limits:
+  max_global_exemplars_per_user: 100000
+
+# Mimir 本身也會回報用量給 Grafana Labs，跟 Loki、Grafana 那邊同個理由關掉
+usage_stats:
+  enabled: false

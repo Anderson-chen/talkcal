@@ -1,0 +1,38 @@
+# Tempo 的工作：存 trace（一個請求經過每一段的耗時樹），並提供查詢 API 給 Grafana。
+# 它自己不收集 —— app 把 span 用 OTLP 推給 Alloy，Alloy 再轉送進來（見 alloy/config.alloy）。
+#
+# 跟 Loki、Mimir 一樣是 Grafana 那套分散式骨架，這裡也是單機最小設定：
+# 所有元件跑在同一個程序、資料寫本機檔案、不接物件儲存。
+#
+# 為什麼 trace 要獨立一個資料庫：trace 是一棵「span 樹」，每個 span 有自己的 id 和父 span，
+# 靠 trace id 串成一個請求。Mimir 只放得下「標籤 + 一個數字」，Loki 放的是一行一行文字，
+# 都裝不下這種樹。Tempo 也跟 Loki 一樣省：主要靠 trace id 找資料，不替每個欄位建索引。
+
+server:
+  http_listen_port: 3200     # 查詢 API，Grafana 從這裡讀
+
+# 接收端：只開 OTLP（OpenTelemetry 的標準協定）。
+# 只開 gRPC 4317 給 Alloy 轉送，不對主機開放 —— app 不直接送進來，一律經過 Alloy。
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+storage:
+  trace:
+    backend: local           # 單機寫本機檔案；正式環境換 s3 / gcs
+    wal:
+      path: /var/tempo/wal   # 剛收到、還沒打包的 span（重啟不掉）
+    local:
+      path: /var/tempo/blocks
+
+# 學習環境留 3 天就好，不讓 volume 一直長。
+# Tempo 3 拿掉了 compactor 元件，合併區塊、刪過期資料改由 backend-worker 做，所以保存期限寫在這。
+backend_worker:
+  compaction:
+    block_retention: 72h
+
+usage_report:
+  reporting_enabled: false

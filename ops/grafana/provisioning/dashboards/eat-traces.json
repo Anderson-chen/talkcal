@@ -1,0 +1,290 @@
+{
+  "uid": "eat-traces",
+  "title": "eat — Traces (Tempo)",
+  "description": "資料全部來自 Tempo，用 TraceQL 查。上排是從 trace 算出來的數字（TraceQL metrics），下排是一筆一筆的請求清單，點 Trace ID 就打開那個請求的瀑布圖。只挑 /api/chat，只看提問本身（actuator 的抓取與健康檢查在 app 端就不產生 trace，見 ObservationConfiguration）。",
+  "tags": [
+    "eat",
+    "traces",
+    "tempo"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "提問速率 (req/s)",
+      "description": "{name=\"http post /api/chat\"} | rate() —— 直接從 trace 數出來的每秒提問數。跟 eat-app 儀表板從指標算的那張應該對得起來：同一批請求，一份記成數字、一份記成 trace。用 span 名稱篩而不是 span.uri：根 span 用 uri 屬性篩在 Tempo 3 上查不到東西。",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "metricsQueryType": "range",
+          "query": "{name=\"http post /api/chat\"} | rate()"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "displayName": "/api/chat",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "always"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "時間花在哪一段 (p95)",
+      "description": "{name=\"http post /api/chat\" || span.port != nil} | quantile_over_time(duration, .95) by (name) —— 整個請求（http post /api/chat），以及 core 往外呼叫的兩個 port：retrievePassages（檢索：問題轉向量、挑片段）、generateReply（生成）。這是 trace 才答得出來的問題 —— 指標只知道整個請求多慢，trace 知道慢在哪一段。port 的 span 由 ObservationConfiguration 的 aspect 產生，每個都帶 span.port 屬性，所以用「有沒有 span.port」挑出來。注意 TraceQL 的分位數是用 2 的次方分桶估的（0.5s、1s、2s…），只適合看量級和趨勢，要精準數字看 eat-app 儀表板。寫成一條查詢、用 by (name) 分線，而不是一段一條查詢：這版 Grafana 的 Tempo 資料源在同一個 panel 裡只會送出第一條 TraceQL metrics 查詢。",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "metricsQueryType": "range",
+          "query": "{name=\"http post /api/chat\" || span.port != nil} | quantile_over_time(duration, .95) by (name)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always"
+          },
+          "displayName": "${__field.labels.name}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "沒成功的 span 數",
+      "description": "{resource.service.name=\"eat\" && (span.outcome != \"SUCCESS\" || status = error)} | count_over_time() by (name) —— 兩種失敗一起數：請求本身沒成功（outcome 是 Spring 標的 CLIENT_ERROR、SERVER_ERROR，例如空白問題回 400），以及某個 port 呼叫丟了例外（span 狀態 error，例如 llama.cpp 沒開）。依 span 名稱分開，看得出是哪一段出事。平常沒資料是正常的。",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "metricsQueryType": "range",
+          "query": "{resource.service.name=\"eat\" && (span.outcome != \"SUCCESS\" || status = error)} | count_over_time() by (name)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "always"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "最近的提問",
+      "description": "最近 20 筆 /api/chat。點 Trace ID 打開瀑布圖，看這一次檢索、生成各花多久；瀑布圖上再點「Logs for this span」就跳到 Loki 看它的 access log（問了什麼、回了什麼）。",
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "{name=\"http post /api/chat\"}",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "慢的提問 (> 5 秒)",
+      "description": "{name=\"http post /api/chat\" && duration > 5s} —— 長尾在這裡。通常是 Qwen3 的 thinking 生太多 token，點開看是不是幾乎整段都在 /v1/chat/completions。門檻 5 秒跟 Loki 那條慢請求查詢一致。",
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "{name=\"http post /api/chat\" && duration > 5s}",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "沒成功的請求",
+      "description": "上面那張「沒成功的 span 數」的明細：一筆一筆列出來，點開看是哪一段出事。",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "{resource.service.name=\"eat\" && (span.outcome != \"SUCCESS\" || status = error)}",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    }
+  ]
+}

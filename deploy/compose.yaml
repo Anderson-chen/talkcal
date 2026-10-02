@@ -8,7 +8,8 @@
 # 用服務名稱互相找——app 打 http://llm-chat:8080，不經過主機、不看 ports 發佈成幾號。
 #
 # 發佈到主機的埠（ports）是給「容器外面」的人用的：
-#   8080 / 8081 —— 模型。沿用原生的埠，這樣本機開發的 ./gradlew bootRun 和 ops/ 的 Prometheus 照樣打得到。
+#   8080 / 8081 —— 模型。沿用原生的埠，這樣本機開發的 ./gradlew bootRun 照樣打得到。
+#                  （ops/ 的 Alloy 不靠這兩個埠：它加入了這組的網路，直接用服務名稱抓。）
 #                  代價：跟原生 .bat 搶同樣的埠，起這個之前要先關掉那兩個視窗。
 #   18090       —— 容器裡的 app。刻意不用 8090：8090 留給本機開發的 bootRun，兩個可以同時開著比對。
 
@@ -118,7 +119,7 @@ services:
       - "0.8"
       - --min-p
       - "0"
-      - --metrics           # Prometheus 抓 /metrics 靠這個
+      - --metrics           # ops/ 的 Alloy 抓 /metrics 靠這個
       # 刻意不帶 --log-file / --log-prompts-dir：容器的慣例是 log 一律寫 stdout，
       # 由平台（docker logs、雲端的 log 收集器）去收。寫進容器內的檔案，容器一刪就沒了。
 

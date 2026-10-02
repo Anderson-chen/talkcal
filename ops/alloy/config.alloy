@@ -1,10 +1,90 @@
-// Grafana Alloy：把容器的 log 收進 Loki。
+// Grafana Alloy：整套觀測唯一的收集器。三種訊號都經過它，再分送到各自的資料庫：
+//
+//   指標 metrics ── Alloy 去「抓」/metrics ────────────────────▶ Mimir
+//   日誌 logs    ── Alloy 讀容器 stdout ──────────────────────▶ Loki
+//   追蹤 traces  ── app 用 OTLP「推」給 Alloy ─────────────────▶ Tempo
+//
+// 為什麼收集器只有一個、資料庫卻有三個：三種資料長得完全不一樣（數字 / 一行文字 / 一棵 span 樹），
+// 存法和查法各自最佳化，所以資料庫要分開；但「找到來源、加標籤、送出去」是同一種工作，
+// 一個收集器包辦就好，標籤（service、env）也能三邊一致。
 //
 // 為什麼不是 Promtail：Promtail 是 Loki 舊的收集器，官方已停止開發，新專案都用 Alloy。
-// Alloy 的設定是一條管線：每個區塊是一個元件，用「元件.名字.輸出」把上一個的輸出接到下一個的輸入。
+// 為什麼不讓 Mimir、Tempo 直接收：它們只管存。抓誰、多久抓一次、怎麼加標籤，集中在這份檔案，
+// 之後換儲存（例如 Tempo 換別家）只改這裡的出口，app 和被抓的服務都不必動。
+//
+// Alloy 的設定是一條條管線：每個區塊是一個元件，用「元件.名字.輸出」把上一個的輸出接到下一個的輸入。
+// 管線畫成圖看：http://localhost:12345
+
+
+// ═══ 指標 ═══════════════════════════════════════════════════════════
+//
+//   prometheus.scrape（每 15 秒去拉） ──▶ prometheus.remote_write ──▶ Mimir
+//
+// 指標用「拉」：數字隨時讀都是當下的值，由收集端決定抓誰、多久抓一次；抓不到本身就是訊號（up = 0）。
+// 代價：Alloy 停了的那段時間指標就是空白，補不回來（log 不會，見下面）。
+//
+// target 直接寫「服務名:容器內的埠」：Alloy 加入了 deploy/ 的網路（見 compose.yaml），
+// 跟 deploy/ 裡 app 打 http://llm-chat:8080 是同一套規則，不看主機發佈成幾號埠。
+// 本機 bootRun 的 app 不在這個網路裡，不會被抓；要看它的指標直接開 localhost:8090/actuator/prometheus。
+//
+// job_name 寫明：不寫的話 job 標籤會變成元件名（prometheus.scrape.eat_app），儀表板的查詢就對不上了。
+// scrape_interval 寫明：Alloy 預設 60 秒，比 Prometheus 慣用的 15 秒粗很多。
+
+// (1) 我們的 Spring app —— deploy/ 的 app 服務。8090 是容器「裡面」的埠，
+//     主機上看到的 18090 只是 ports 發佈出去給瀏覽器用的，容器之間用不到。
+prometheus.scrape "eat_app" {
+  job_name        = "eat-app"
+  targets         = [{"__address__" = "app:8090"}]
+  metrics_path    = "/actuator/prometheus"   // Spring Boot 吐 Prometheus 指標的預設路徑
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+}
+
+// (2) llama.cpp 的 llama-server —— LLM 那顆本體（deploy/ 的 llm-chat）。帶了 --metrics 就在 /metrics 吐指標。
+//     看得到的指標：predicted_tokens_seconds（生成速度 t/s）、prompt_tokens_seconds（prompt t/s）、
+//     requests_processing（處理中）、requests_deferred（排隊中，併發塞車看它）、
+//     tokens_predicted_total / prompt_tokens_total（累計 counter）。
+//     實際清單以 `curl localhost:8080/metrics` 這個 build 吐出來的為準（此 build 沒有 kv_cache 相關指標）。
+prometheus.scrape "llama_cpp" {
+  job_name        = "llama-cpp"
+  targets         = [{"__address__" = "llm-chat:8080"}]
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+}
+
+// (3) llama.cpp 的「嵌入」伺服器 —— 同一支 llama-server，但載的是 bge-m3、開 --embedding（deploy/ 的 llm-embedding）。
+//
+//     為什麼要獨立一個 job 而不是併進上面的 llama-cpp：
+//     兩台吐出來的 metric「名字完全一樣」（都是 llamacpp:xxx），只能靠 label 分辨來源。
+//     拆成兩個 job，就多了 job="llama-cpp" / job="llama-embedding" 這個天然的分界，
+//     查詢時寫 llamacpp:prompt_tokens_seconds{job="llama-embedding"} 就只會拿到這台的。
+//
+//     嵌入伺服器「不生成 token」，所以 predicted_* 那組永遠是 0 —— 它只做 prompt 的前向計算。
+//     真正有意義的是 prompt_tokens_seconds（嵌入吞吐）與 requests_processing/deferred（塞不塞）。
+prometheus.scrape "llama_embedding" {
+  job_name        = "llama-embedding"
+  targets         = [{"__address__" = "llm-embedding:8081"}]
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+}
+
+// 抓到的指標推進 Mimir。remote_write 是 Prometheus 生態「把指標送去別處存」的標準協定，
+// 送 Mimir、送雲端服務都是同一個元件，只差 url。
+// 附帶的 exemplar（某個指標點上掛的 trace id）也會一起送，Grafana 圖上才點得進那次請求的 trace。
+prometheus.remote_write "mimir" {
+  endpoint {
+    url = "http://mimir:9009/api/v1/push"
+  }
+}
+
+
+// ═══ 日誌 ═══════════════════════════════════════════════════════════
 //
 //   discovery.docker  ──找出要收哪些容器──▶  loki.source.docker  ──讀它們的 stdout──▶  loki.write  ──▶  Loki
 //                                              ▲ 套用 discovery.relabel 的規則，決定每筆 log 帶什麼標籤
+//
+// log 用「推」：事件發生了就要送走，沒辦法等人來拉。
+// Alloy 停一陣子不會掉 log：Docker 照樣把 stdout 寫在自己的 log 檔，Alloy 回來後依位置檔接著讀（只是延遲）。
 
 // ── 1. 找容器 ───────────────────────────────────────────────────────
 // 透過 Docker 的 API（docker.sock）列出容器。新容器起來會自動被發現，不必改這份設定。
@@ -22,7 +102,8 @@ discovery.docker "deploy" {
 // ── 2. 決定標籤 ─────────────────────────────────────────────────────
 // Loki 只替「標籤」建索引，內容不建索引——所以查詢時先靠標籤縮小範圍，再掃內容。
 // 標籤要少而穩定：容器名、服務名這種「值只有幾個」的才適合；
-// 把 request id、使用者這種每筆都不同的值放進標籤，索引會爆掉（high cardinality）。
+// 把 request id、trace id、使用者這種每筆都不同的值放進標籤，索引會爆掉（high cardinality）。
+// trace id 因此留在 log 內容裡，Grafana 再從內容把它認出來、做成跳到 Tempo 的連結（見 datasources.yaml）。
 discovery.relabel "deploy" {
   // targets 留空：這裡只是定義規則，由下面 loki.source.docker 拿去套用
   targets = []
@@ -59,5 +140,43 @@ loki.source.docker "deploy" {
 loki.write "local" {
   endpoint {
     url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+
+// ═══ 追蹤 ═══════════════════════════════════════════════════════════
+//
+//   app ──OTLP/HTTP──▶ otelcol.receiver.otlp ──▶ otelcol.processor.batch ──▶ otelcol.exporter.otlp ──▶ Tempo
+//
+// trace 也是「推」：span 在請求結束時才完整，只能由 app 主動送出來。
+// OTLP 是 OpenTelemetry 的標準協定，app 那頭只認得它，不知道後面接的是 Tempo。
+// otelcol.* 這組元件就是 OpenTelemetry Collector 的元件，Alloy 把它們內建進來。
+
+// 收：開 OTLP 的 HTTP 入口（4318 是 OTLP/HTTP 的慣用埠）。
+// app 在容器裡用 http://alloy:4318 找到這裡；本機 bootRun 走 compose 發佈到主機的 127.0.0.1:4318。
+otelcol.receiver.otlp "default" {
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+// 攢一批再送：一個 span 送一次太浪費連線，湊一批（或等一小段時間）再一次送出
+otelcol.processor.batch "default" {
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+// 送進 Tempo：OTLP/gRPC，Tempo 只在 compose 內部網路開 4317。
+// insecure：同一台機器的內部網路，不走 TLS。跨機器、上雲端時要拿掉，改用憑證。
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure = true
+    }
   }
 }

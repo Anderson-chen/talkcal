@@ -49,7 +49,8 @@ docker exec eat-app getent hosts llm-chat     # → 172.22.0.x  llm-chat
 ```
 
 IP 每次重建容器都可能變，服務名稱不會——所以設定檔只寫名字。容器間走的是**容器內部的埠**，
-跟 `ports:` 發佈到主機成幾號無關；`ports:` 只是給容器外面（你的瀏覽器、本機 bootRun、Prometheus）用的。
+跟 `ports:` 發佈到主機成幾號無關；`ports:` 只是給容器外面（你的瀏覽器、本機 bootRun）用的。
+ops/ 的 Alloy 也不靠它：Alloy 加入了這組的網路，跟 app 一樣用服務名稱找人；app 送 trace 也是直接找 `alloy:4318`。
 
 ## 映像檔從哪來
 

@@ -191,16 +191,15 @@ launch.json 的原生 llama-server 沒帶 `-np`，是 llama.cpp 的預設值（4
 
 1. **換 slot 數看膝蓋移動。** launch.json 加 `-np 2` 或 `-np 8` 重啟 llama-server，配 `SLOTS` 再跑一次，
    驗證「膝蓋 = slot 數」這個假設。注意 slot 多了每個請求分到的 GPU 算力會變少，單一請求可能反而變慢。
-2. **把 k6 指標接進既有的 Grafana。** k6 能把指標 remote-write 進 Prometheus，
-   壓測曲線就能跟 app 的指標（`ops/` 那套）疊在同一張 Grafana 圖上看。要做的是：
-   - `ops/compose.yaml` 的 prometheus `command:` 加一行 `--web.enable-remote-write-receiver`
-     （打開接收端；預設是關的）。
+2. **把 k6 指標接進既有的 Grafana。** k6 能把指標 remote-write 進 `ops/` 的 Mimir，
+   壓測曲線就能跟 app 的指標疊在同一張 Grafana 圖上看。Mimir 本來就只收 remote-write
+   （Alloy 抓到的指標也是這樣送進去的），所以 ops/ 那邊不必改設定，只要：
    - 跑壓測時輸出改成：
      ```bash
      k6 run -o experimental-prometheus-rw perf/load.js
      ```
-     （用 `K6_PROMETHEUS_RW_SERVER_URL` 指到 `http://localhost:9090/api/v1/write`。）
-   - app 那邊的指標已經在吐（`eat-app` target 是綠的），接上後就能三層疊圖。
+     （用 `K6_PROMETHEUS_RW_SERVER_URL` 指到 `http://localhost:9009/api/v1/push`。）
+   - app 那邊的指標已經在吐（Grafana 查 `up{job="eat-app"}` 是 1），接上後就能三層疊圖。
 
 ## 檔案結構
 

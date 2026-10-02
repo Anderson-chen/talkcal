@@ -1,13 +1,15 @@
 # 這個 stack 只做一件事：把「觀測環境」用 Docker 一次拉起來，跟被觀測的服務（deploy/ 那組）分開管。
-# 被觀測的 app、兩顆模型都在 deploy/ 的容器裡，這裡的容器只負責「收資料 + 畫圖」。
+# 被觀測的 app、兩顆模型都在 deploy/ 的容器裡，這裡的容器只負責「收資料 + 存 + 畫圖」。
 #
 # 啟動順序：先 `cd deploy && docker compose up -d`，再起這組。
-# Prometheus 要加入 deploy/ 的網路，那個網路由 deploy/ 建立，不存在時這組會起不來。
+# Alloy 要加入 deploy/ 的網路，那個網路由 deploy/ 建立，不存在時這組會起不來。
 #
-# 三個角色，各司其職（詳見 README）：
-#   prometheus —— 存指標(metrics)。每隔幾秒去抓 app 吐出來的數字，存成時間序列。
-#   loki       —— 存日誌(logs)。集中放 log，之後可以在 Grafana 用同一個介面查。
-#   grafana    —— 畫圖。它自己不存資料，只去跟上面兩個要資料來畫。
+# 五個角色，各司其職（詳見 README）：
+#   alloy   —— 收集。三種訊號都經過它：去抓指標、讀容器 log、接 app 推來的 trace，再分送給下面三個。
+#   mimir   —— 存指標(metrics)。時間序列，查詢用 PromQL。
+#   loki    —— 存日誌(logs)。一行一行的文字，只替標籤建索引。
+#   tempo   —— 存追蹤(traces)。一個請求經過每一段的耗時樹，靠 trace id 找。
+#   grafana —— 畫圖。它自己不存資料，只去跟三個資料庫要資料來畫，並在三者之間互相跳轉。
 #
 # 刻意不寫 version: 欄位 —— Compose v2 已經不看它了，寫了反而跳 warning。
 
@@ -16,27 +18,22 @@ name: eat-observability
 
 services:
   # ── 指標資料庫 ────────────────────────────────────────────────
-  prometheus:
-    image: prom/prometheus:v3.1.0     # 釘死版本，換機器也拉到同一版（跟 build.gradle 釘 JDK 版本同個道理）
-    container_name: eat-prometheus
+  # 只存不抓：指標由 Alloy 抓完用 remote_write 推進來。為什麼不用 Prometheus 見 README 的「選型理由」。
+  mimir:
+    image: grafana/mimir:3.2.1        # 釘死版本，換機器也拉到同一版（跟 build.gradle 釘 JDK 版本同個道理）
+    container_name: eat-mimir
     command:
-      # 預設就會讀這個檔，明寫是為了「一眼看到它讀哪個設定」
-      - --config.file=/etc/prometheus/prometheus.yml
-      # 打開熱重載 API：改了 scrape 設定後 `curl -X POST localhost:9090/-/reload` 就生效，不必重啟容器
-      - --web.enable-lifecycle
+      - -config.file=/etc/mimir/mimir.yaml
     ports:
-      - "9090:9090"                   # 開 http://localhost:9090 可看 Prometheus 自己的介面
+      # 9009：寫入（/api/v1/push）和查詢（/prometheus/api/v1/...）都走這裡。
+      # 只開給本機：想直接 curl 查 PromQL 時用，例如
+      #   curl 'localhost:9009/prometheus/api/v1/query?query=up'
+      - "127.0.0.1:9009:9009"
     volumes:
       # :ro = 唯讀。設定檔由版控管，不讓容器改它
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      # 具名 volume：抓到的資料存這，容器重建後資料還在
-      - prometheus-data:/prometheus
-    networks:
-      # default：這組自己的網路，Grafana 靠它用 prometheus:9090 找到 Prometheus。
-      # eat-deploy：deploy/ 那組的網路。接上後就能直接用服務名稱抓 app:8090、llm-chat:8080，
-      #   不繞主機、不看 ports 發佈成幾號——跟 deploy/ 裡 app 找模型是同一套規則。
-      - default
-      - eat-deploy
+      - ./mimir/mimir.yaml:/etc/mimir/mimir.yaml:ro
+      # 具名 volume：資料存這，容器重建後資料還在
+      - mimir-data:/data
     restart: unless-stopped           # 當掉/開機自動拉回來，但你手動 down 掉就別雞婆重啟
 
   # ── 日誌資料庫 ────────────────────────────────────────────────
@@ -45,10 +42,23 @@ services:
     container_name: eat-loki
     command: -config.file=/etc/loki/loki-config.yaml
     ports:
-      - "3100:3100"                   # Loki 的 API 埠。之後 log 收集器(Promtail/Alloy)往這裡送
+      - "3100:3100"                   # Loki 的 API 埠。Alloy 往這裡送、Grafana 從這裡查
     volumes:
       - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
       - loki-data:/loki
+    restart: unless-stopped
+
+  # ── 追蹤資料庫 ────────────────────────────────────────────────
+  tempo:
+    image: grafana/tempo:3.1.0
+    container_name: eat-tempo
+    command:
+      - -config.file=/etc/tempo/tempo.yaml
+    # 不對主機開任何埠：寫入（4317）只有 Alloy 會來、查詢（3200）只有 Grafana 會來，都在 compose 網路裡。
+    # app 的 trace 一律經過 Alloy，不直接送進 Tempo。
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
     restart: unless-stopped
 
   # ── 畫圖前台 ─────────────────────────────────────────────────
@@ -66,18 +76,20 @@ services:
       # 少一個「要不要回報使用狀況」的背景行為
       - GF_ANALYTICS_REPORTING_ENABLED=false
     volumes:
-      # provisioning：讓 Grafana 一啟動就自動把 Prometheus / Loki 兩個資料源接好，
+      # provisioning：讓 Grafana 一啟動就自動把 Mimir / Loki / Tempo 三個資料源接好，
       # 不必每次開 UI 手動加。設定用版控管，環境重建也一致。
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana-data:/var/lib/grafana
     depends_on:
       # 只保證「先啟動」順序，不保證對方已 ready；Grafana 的資料源健康檢查本來就會自己重試，夠用。
-      - prometheus
+      - mimir
       - loki
+      - tempo
     restart: unless-stopped
 
-  # ── 日誌收集器 ───────────────────────────────────────────────
-  # 讀 deploy/ 那組容器的 stdout，加上標籤後送進 Loki。管線怎麼接見 alloy/config.alloy。
+  # ── 收集器 ───────────────────────────────────────────────────
+  # 三種訊號的唯一入口：抓 deploy/ 那組的指標 → Mimir、讀它們的 stdout → Loki、接 app 推來的 trace → Tempo。
+  # 管線怎麼接見 alloy/config.alloy。
   alloy:
     image: grafana/alloy:v1.11.0
     container_name: eat-alloy
@@ -89,8 +101,11 @@ services:
       # 記住「每個容器讀到哪」的位置檔放這裡，配上 volume：Alloy 重啟後接著讀，不會重送或漏送
       - --storage.path=/var/lib/alloy/data
     ports:
-      # http://localhost:12345 是 Alloy 的除錯頁：看得到管線圖、每個元件收到幾個容器
+      # http://localhost:12345 是 Alloy 的除錯頁：看得到管線圖、每個元件收到幾個容器、抓了哪些 target
       - "127.0.0.1:12345:12345"
+      # OTLP/HTTP 的 trace 入口。只開給本機：給在 Windows 上 bootRun 的 app 送 trace 用。
+      # 容器裡的 app 不走這裡，它在 deploy/ 的網路上直接找 alloy:4318。
+      - "127.0.0.1:4318:4318"
     volumes:
       - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
       # 讀 Docker 的 API 才能找到容器、讀它們的 log。
@@ -98,8 +113,17 @@ services:
       # 本機學習可接受；雲端上不這樣做，而是每台機器跑一個 Alloy 直接讀節點上的 log 檔（k8s DaemonSet）。
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - alloy-data:/var/lib/alloy/data
+    networks:
+      # default：這組自己的網路，用服務名稱找 mimir、loki、tempo。
+      # eat-deploy：deploy/ 那組的網路。接上後就能直接用服務名稱抓 app:8090、llm-chat:8080，
+      #   不繞主機、不看 ports 發佈成幾號——跟 deploy/ 裡 app 找模型是同一套規則。
+      #   反方向也通：deploy/ 的 app 用 http://alloy:4318 把 trace 送過來。
+      - default
+      - eat-deploy
     depends_on:
+      - mimir
       - loki
+      - tempo
     restart: unless-stopped
 
 networks:
@@ -112,7 +136,8 @@ networks:
 # 具名 volume：資料交給 Docker 管，不落在專案資料夾裡（所以不必動 .gitignore）。
 # 要整組資料清掉重來：docker compose down -v
 volumes:
-  prometheus-data:
+  mimir-data:
   loki-data:
+  tempo-data:
   grafana-data:
   alloy-data:
