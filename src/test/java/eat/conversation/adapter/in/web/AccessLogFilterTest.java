@@ -76,7 +76,7 @@ class AccessLogFilterTest {
     }
 
     @Test
-    @DisplayName("actuator 的請求不記，免得被 Prometheus 的抓取淹掉")
+    @DisplayName("actuator 的請求不記，免得被 Alloy 的指標抓取淹掉")
     void skipsActuator(CapturedOutput output) throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/actuator/prometheus");
 

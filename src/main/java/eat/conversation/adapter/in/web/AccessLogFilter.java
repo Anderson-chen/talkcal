@@ -6,7 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.Ordered;
+import org.springframework.boot.servlet.filter.OrderedFilter;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -31,9 +31,17 @@ import java.util.concurrent.TimeUnit;
  * 在 Loki 查一筆就看得完整，不必再拿時間去對另一行 log。
  */
 @Component
-// 排在最前面：耗時才會涵蓋後面所有 filter（含 Spring 自己量 http.server.requests 的那個），
-// 跟 Prometheus 上看到的延遲是同一段，兩邊對得起來。
-@Order(Ordered.HIGHEST_PRECEDENCE)
+// 排序照 Spring Boot 官方文件對「會包裝 request 的 filter」的規定：order 不可大於 REQUEST_WRAPPER_FILTER_MAX_ORDER（0），
+// 我們用 ContentCachingRequestWrapper 包了 request，所以就站在這條線上。這個位置同時滿足另外兩件事：
+// - 在 characterEncodingFilter（HIGHEST_PRECEDENCE）裡面：官方也明講會讀 body 的 filter 別放在 HIGHEST_PRECEDENCE，
+//   會跟編碼設定打架。
+// - 在 Spring 開 trace 的 ServerHttpObservationFilter 裡面：它排在最外層附近，trace id 只在它的範圍內放進 MDC。
+//   排在它外面的話，這行 access log 印出來時 trace 已經結束，ECS JSON 裡就沒有 traceId，
+//   Loki 上那顆「到 Tempo 看這個請求」的按鈕也就不會出現。AccessLogTraceIdTest 守著這件事。
+// 不寫成 HIGHEST_PRECEDENCE + 2 這種「緊貼在它後面」的數字：那得知道 Spring 把它排在 +1，Spring 一改就悄悄失效。
+// 代價：耗時少算了 formContentFilter、requestContextFilter 這兩層（微秒級），跟 http.server.requests 指標差距可忽略。
+// 之後加了 Spring Security（-100）要重新想：它會排在這裡外面，被它擋下的 401 就不會出現在 access log。
+@Order(OrderedFilter.REQUEST_WRAPPER_FILTER_MAX_ORDER)
 final class AccessLogFilter extends OncePerRequestFilter {
 
     // logger 名字固定成 "access"，不用類別全名：查詢時好篩（Loki 裡 log_logger="access"），
@@ -97,9 +105,9 @@ final class AccessLogFilter extends OncePerRequestFilter {
     }
 
     /**
-     * actuator 不記：Prometheus 每 15 秒來抓一次 /actuator/prometheus，
+     * actuator 不記：Alloy 每 15 秒來抓一次 /actuator/prometheus，
      * 全記下來的話 access log 大半是它，真正的提問反而被淹掉。
-     * 健康檢查、指標本身就有 Prometheus 盯著，不缺這份紀錄。
+     * 健康檢查、指標本身就有 Alloy + Mimir 盯著，不缺這份紀錄。
      */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {

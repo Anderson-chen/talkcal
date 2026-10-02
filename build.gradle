@@ -41,9 +41,25 @@ dependencies {
     // JVM、執行緒池等「通用指標」，一行採集程式都不用寫 —— 業務指標才要自己用 Micrometer 埋。
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     // 把 Micrometer 收集的指標翻成 Prometheus 文字格式，才會有 /actuator/prometheus 這頁
-    // 讓 ops/ 的 Prometheus 來抓。runtimeOnly：程式碼不 import 它，只在執行期被 actuator 撿去用
+    // 讓 ops/ 的 Alloy 來抓。runtimeOnly：程式碼不 import 它，只在執行期被 actuator 撿去用
     // （版本由上面的 Boot BOM 管，不必寫版號）。
     runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+
+    // trace：每個請求一個 trace id，記下 app → embedding → llm-chat 每一段花多久，用 OTLP 推給 ops/ 的 Alloy。
+    // 三塊各管一段（跟指標那邊「Micrometer 埋 → registry 翻格式」同一個分工）：
+    //   spring-boot-micrometer-tracing-opentelemetry —— Boot 的自動設定：建 tracer、接上 actuator、讀 management.* 屬性
+    //   micrometer-tracing-bridge-otel —— 把 Micrometer 的 Observation（Spring 已經替每個 HTTP 請求開好的）
+    //       翻成 OpenTelemetry 的 span。程式碼只認 Micrometer，不綁死 OpenTelemetry
+    //   opentelemetry-exporter-otlp —— 把 span 用 OTLP 協定送出去
+    // 不用 spring-boot-starter-opentelemetry：它還會帶 micrometer-registry-otlp，讓 app 另外「推」一份指標，
+    // 跟 Alloy 來「抓」的那份重複。指標維持抓取模式，這裡只要 trace。
+    implementation 'org.springframework.boot:spring-boot-micrometer-tracing-opentelemetry'
+    runtimeOnly 'io.micrometer:micrometer-tracing-bridge-otel'
+    runtimeOnly 'io.opentelemetry:opentelemetry-exporter-otlp'
+    // AOP：讓 ObservationConfiguration 用一個 aspect 替所有 outbound port 的呼叫開 span，
+    // adapter 和 ConversationConfiguration 一行都不用為了觀測而改（觀測是橫切關注點，不該散在業務程式碼裡）。
+    // 它帶進 aspectjweaver，Spring Boot 看到它就自動打開 @Aspect 的支援。
+    implementation 'org.springframework.boot:spring-boot-starter-aspectj'
 
     // Swagger UI + OpenAPI 文件：啟動時掃 @RestController，自動產出 /v3/api-docs（機器讀的 JSON）
     // 與 /swagger-ui.html（人點的頁面）。文件是「從程式長出來」的，路由改了文件跟著改，不會過期。
@@ -71,6 +87,9 @@ dependencies {
     // Boot 4 把測試切片拆進各自的模組：@WebMvcTest、@AutoConfigureMockMvc 不再附在 starter-test 裡，
     // 用到哪一層的切片就引哪一層的 test starter，對應 main 的 starter-webmvc。
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    // 測試裡照樣產生 trace id、但不往外匯出：沒有它的話，起整個容器的測試會一直嘗試送 span 到 localhost:4318。
+    // AccessLogTraceIdTest 靠它在不開 ops/ 的情況下驗「access log 帶著 traceId」。
+    testImplementation 'org.springframework.boot:spring-boot-micrometer-tracing-test'
 }
 
 // 程式與註解都有中文，編碼一定要明寫。
