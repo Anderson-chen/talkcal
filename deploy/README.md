@@ -26,6 +26,12 @@ app 的 18090 仍然開著，給 k6 和 curl 直接打，不多經過一層 ngin
 ./gradlew deployWeb                              # 只部署前端（型別檢查在映像檔 build 裡做）
 ```
 
+模型另外部署，**不在 `deploy` 裡**——很少改、換一次又貴（重 build 約十分鐘，換的期間所有請求都會失敗）：
+
+```bash
+./gradlew deployModels                           # 升級 llama.cpp、改了 compose 裡的模型參數之後用（預設等 600 秒）
+```
+
 `deployWeb` 帶 `--no-deps`：不直接用 `docker compose up -d --build web`，是因為 `--build` 會沿著
 `depends_on` 把 app 也重 build、換掉，繞過 `deployApp` 先跑測試那道關。
 

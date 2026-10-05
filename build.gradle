@@ -212,6 +212,28 @@ tasks.register('deployWeb', Exec) {
     commandLine 'docker', 'compose', 'up', '-d', '--build', '--no-deps', '--wait', '--wait-timeout', waitTimeout, 'web'
 }
 
+// 只換兩顆模型：./gradlew deployModels
+// 升級 llama.cpp 版本、調 compose 裡的模型參數（-np、--temp…）之後用。
+//
+// 刻意不放進 deploy：模型很少改，換一次卻很貴——映像檔重 build 約十分鐘，
+// 換的期間所有請求都會失敗，直到模型重新載好。部署該是「改了什麼換什麼」，改程式碼不該順便付這個代價。
+//
+// --no-deps：model-seed 是 depends_on，不帶會跟著重跑一次播種。播種本身會跳過已經在 volume 裡的檔案，
+// 但沒理由多跑；模型檔要更新時（換 gguf），先單獨跑 docker compose up model-seed。
+tasks.register('deployModels', Exec) {
+    group = 'deployment'
+    description = '重 build llama-server 映像檔、換掉 deploy/ 的兩個模型容器，等它們載好模型（healthy）'
+
+    workingDir = layout.projectDirectory.dir('deploy')
+
+    // 載 5GB 的 Qwen 要時間，預設 600 秒；比 compose 裡 llm-chat 的 start_period（120s）寬鬆得多，
+    // 因為這裡還包含映像檔重 build 的時間
+    def waitTimeout = providers.gradleProperty('deployWaitTimeout').orElse('600').get()
+
+    commandLine 'docker', 'compose', 'up', '-d', '--build', '--no-deps', '--wait', '--wait-timeout', waitTimeout,
+            'llm-chat', 'llm-embedding'
+}
+
 // 前後端一起部署：./gradlew deploy
 // 順序靠 mustRunAfter 而不是 dependsOn：先換 app 再換 web，但單獨跑 deployWeb 時不會被迫連 app 一起部署
 tasks.register('deploy') {
