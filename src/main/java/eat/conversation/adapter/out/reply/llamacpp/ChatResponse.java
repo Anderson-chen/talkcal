@@ -89,10 +89,11 @@ final class ChatResponse {
         try {
             return JSON.readTree(json);
         } catch (JacksonException e) {
-            // 讀不懂的 JSON 算「給進來的東西本身不對」，用 IllegalArgumentException；
-            // 跟下面那些「讀得懂但內容不能用」的 IllegalStateException 分開，
-            // 這樣呼叫端光看例外型別就能分辨是格式壞了還是內容不對
-            throw new IllegalArgumentException("回應不是合法的 JSON", e);
+            // 讀不懂的 JSON 也丟 IllegalStateException，跟下面「讀得懂但內容不能用」同一種。
+            // 原本這裡丟 IllegalArgumentException，想讓呼叫端分得出「格式壞了」和「內容不對」，
+            // 但例外型別在這個專案裡另有意義：ChatController 把 IllegalArgumentException 翻成 400（呼叫端送錯）。
+            // 這份 JSON 是 llama.cpp 給的，壞了是上游的錯，該是 502。要分辨格式還是內容，看訊息和 cause 就夠了
+            throw new IllegalStateException("回應不是合法的 JSON", e);
         }
     }
 

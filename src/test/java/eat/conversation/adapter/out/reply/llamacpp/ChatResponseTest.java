@@ -118,9 +118,9 @@ class ChatResponseTest {
         }
 
         @Test
-        @DisplayName("被截斷的 JSON 在剖析階段就炸")
+        @DisplayName("被截斷的 JSON 在剖析階段就炸，而且算上游的錯（IllegalStateException → 502），不是呼叫端的錯（400）")
         void rejectsTruncatedJson() {
-            assertThrows(IllegalArgumentException.class,
+            assertThrows(IllegalStateException.class,
                     () -> ChatResponse.text("{\"choices\":[{\"message\":{\"content\":\"半"));
         }
     }

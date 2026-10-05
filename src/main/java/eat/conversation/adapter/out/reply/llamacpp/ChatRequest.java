@@ -1,5 +1,6 @@
 package eat.conversation.adapter.out.reply.llamacpp;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
@@ -24,6 +25,12 @@ import java.util.Optional;
  */
 final class ChatRequest {
 
+    // 一次回覆最多生成幾個 token。不是取樣參數（不影響回答的內容），是失控保險：
+    // 壓測時一題暴走生了 6,240 tokens，佔住一個 slot 兩分鐘，直到逾時才被取消。
+    // thinking 關掉之後，營養問答正常幾百個 token 就答完，2048 很寬；超過就是模型停不下來了。
+    // 截斷的回覆照樣回傳（ChatResponse 刻意不看 finish_reason）：聊天截斷了還讀得懂，比整題失敗好
+    static final int MAX_TOKENS = 2048;
+
     // ObjectMapper 設定好之後就是執行緒安全的，所以當常數重用；它不便宜，不該每次呼叫都 new
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -38,6 +45,8 @@ final class ChatRequest {
      *
      * 也刻意不帶 temperature、top_p 等取樣參數：server 啟動時已經設好（Qwen3 建議值），
      * adapter 沒有理由越權覆蓋。哪天真的要調，那是設定該做的事，不是寫死在這裡。
+     * max_tokens 不屬於這一類：它不改變回答的樣子，只決定「這種請求最多需要多少」，
+     * 那是對這個用途的了解，所以放在 adapter（行事曆的抽取請求也是自己帶 1024）。
      */
     static String body(Optional<String> instruction, List<Conversation.Message> messages) {
         Objects.requireNonNull(instruction, "instruction 不可為 null");
@@ -57,7 +66,7 @@ final class ChatRequest {
             items.add(new Message(protocolRole(message.role()), message.text()));
         }
 
-        return write(new Body(items, false));
+        return write(new Body(items, false, MAX_TOKENS));
     }
 
     private static String write(Body body) {
@@ -87,13 +96,13 @@ final class ChatRequest {
      * 協定上的 request 形狀，也就是真正會被送出去的那份 JSON。
      *
      * 寫成 record 而不是手工串字串，最大的好處是「這個 adapter 送出什麼」一眼看得完：
-     * 只有 messages 和 stream 兩個欄位 —— 沒有 model、沒有 temperature，不是漏寫，是刻意不送。
+     * 只有 messages、stream、max_tokens 三個欄位 —— 沒有 model、沒有 temperature，不是漏寫，是刻意不送。
      * record 的元件順序就是 JSON 的欄位順序，Jackson 照宣告順序輸出。
      *
      * stream 明寫成 false：server 預設值本來就是 false，
      * 但寫出來讓「這個 adapter 不做串流」變成 body 上看得見的事實，而不是依賴預設。
      */
-    record Body(List<Message> messages, boolean stream) {
+    record Body(List<Message> messages, boolean stream, @JsonProperty("max_tokens") int maxTokens) {
     }
 
     record Message(String role, String content) {

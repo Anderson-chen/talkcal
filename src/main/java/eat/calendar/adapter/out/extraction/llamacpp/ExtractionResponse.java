@@ -26,7 +26,7 @@ import java.util.Objects;
  *
  * 所有失敗一律丟 IllegalStateException，連「讀不懂的 JSON」也是。
  * 這裡讀的每一個 byte 都是模型產生的，壞了是上游的錯（502），不是使用者送錯（400）——
- * conversation 的 ChatResponse 在這點上丟 IllegalArgumentException，是個已知、待修的錯位，這邊不跟著錯。
+ * （conversation 的 ChatResponse 原本在這點上丟 IllegalArgumentException，後來也改成一樣了。）
  */
 final class ExtractionResponse {
 

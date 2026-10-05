@@ -34,7 +34,7 @@ class ChatRequestTest {
         void singleQuestion() {
             String body = ChatRequest.body(Optional.empty(), List.of(user("hi")));
 
-            assertEquals("{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":false}", body);
+            assertEquals("{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":false,\"max_tokens\":2048}", body);
         }
 
         @Test
@@ -45,7 +45,7 @@ class ChatRequestTest {
             assertEquals("{\"messages\":["
                     + "{\"role\":\"system\",\"content\":\"你是助理\"},"
                     + "{\"role\":\"user\",\"content\":\"hi\"}"
-                    + "],\"stream\":false}", body);
+                    + "],\"stream\":false,\"max_tokens\":2048}", body);
         }
 
         @Test
@@ -67,7 +67,7 @@ class ChatRequestTest {
                     + "{\"role\":\"user\",\"content\":\"一\"},"
                     + "{\"role\":\"assistant\",\"content\":\"二\"},"
                     + "{\"role\":\"user\",\"content\":\"三\"}"
-                    + "],\"stream\":false}", body);
+                    + "],\"stream\":false,\"max_tokens\":2048}", body);
         }
 
         @Test
@@ -77,7 +77,7 @@ class ChatRequestTest {
 
             assertEquals("{\"messages\":["
                     + "{\"role\":\"user\",\"content\":\"say \\\"hi\\\"\\n\"}"
-                    + "],\"stream\":false}", body);
+                    + "],\"stream\":false,\"max_tokens\":2048}", body);
         }
 
         @Test
