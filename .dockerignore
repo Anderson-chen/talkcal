@@ -11,6 +11,8 @@ out/
 deploy/
 ops/
 perf/
+# 前端有自己的 Dockerfile（web/Dockerfile）。不排除的話，光 web/node_modules 就會整包送進 app 的 build context
+web/
 
 # 版控與 IDE
 .git/

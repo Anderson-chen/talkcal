@@ -191,3 +191,32 @@ tasks.register('deployApp', Exec) {
     //   也因為交給 healthcheck 判斷，這裡不必再寫死主機埠去打一次。
     commandLine 'docker', 'compose', 'up', '-d', '--build', '--wait', '--wait-timeout', waitTimeout, 'app'
 }
+
+// 一鍵部署前端到本機 Docker：./gradlew deployWeb
+//
+// 為什麼不像 deployApp 那樣 dependsOn 什麼：前端的檢查（vue-tsc 型別檢查）寫在 web/Dockerfile 的 npm run build 裡，
+// 型別錯映像檔就 build 不出來。Gradle 這邊不必裝 Node、也不必知道 npm 的存在，只負責叫 Docker。
+//
+// --no-deps：只動 web。不加的話 --build 會沿著 depends_on 把 app 也重 build、換掉——
+// 而且是沒跑過測試的 app，繞過了 deployApp 守的那道關。app 沒在跑也照樣部署得上去，
+// 只是頁面問問題會拿到 502，先 ./gradlew deployApp 就好。
+tasks.register('deployWeb', Exec) {
+    group = 'deployment'
+    description = 'build 前端映像檔（含型別檢查）、換掉 deploy/ 的 web 容器，等它 healthy'
+
+    workingDir = layout.projectDirectory.dir('deploy')
+
+    // nginx 幾秒就起好，不像 app 要等模型，預設 60 秒就夠
+    def waitTimeout = providers.gradleProperty('deployWaitTimeout').orElse('60').get()
+
+    commandLine 'docker', 'compose', 'up', '-d', '--build', '--no-deps', '--wait', '--wait-timeout', waitTimeout, 'web'
+}
+
+// 前後端一起部署：./gradlew deploy
+// 順序靠 mustRunAfter 而不是 dependsOn：先換 app 再換 web，但單獨跑 deployWeb 時不會被迫連 app 一起部署
+tasks.register('deploy') {
+    group = 'deployment'
+    description = '依序部署 app 和前端'
+    dependsOn 'deployApp', 'deployWeb'
+}
+tasks.named('deployWeb') { mustRunAfter 'deployApp' }

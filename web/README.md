@@ -8,6 +8,9 @@ npm run dev      # http://localhost:5173，/api 轉給 bootRun 的 8090
 npm run build    # 先 vue-tsc 型別檢查，再輸出 dist/
 ```
 
+部署：repo 根目錄 `./gradlew deployWeb`，開 http://localhost:18080。
+映像檔是 `Dockerfile` 兩段式（Node build → nginx），nginx 的設定在 `nginx.conf`。
+
 ## 為什麼這樣選
 
 - **放在 repo 裡、跟 `src/` 平行，不塞進 `src/main/resources/static`**：前後端的建置工具、生命週期都不同。

@@ -1,0 +1,3 @@
+# 容器裡會自己 npm ci、自己 build，本機的產物帶進去只會讓 context 變大、快取失效
+node_modules/
+dist/

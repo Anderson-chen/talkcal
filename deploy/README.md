@@ -11,9 +11,23 @@
 | bge-m3 embedding | **容器**（`llm-embedding`） | 8081 |
 | eat app | **容器**（`app`） | 18090 |
 | PostgreSQL（對話紀錄） | **容器**（`postgres`） | 5432（只綁 127.0.0.1） |
+| 前端（nginx + Vue） | **容器**（`web`） | 18080 —— 用瀏覽器開這個 |
 
 本機開發的 app（`./gradlew bootRun`，8090）可以同時開著：它打主機上發佈出來的 8080/8081，
 用的是同一對模型容器。兩個 app 埠不同，可以並排比對。
+
+瀏覽器開 http://localhost:18080：nginx 送前端的靜態檔，`/api` 轉給 `app:8090`（設定在 `web/nginx.conf`）。
+app 的 18090 仍然開著，給 k6 和 curl 直接打，不多經過一層 nginx。
+
+## 一鍵部署
+
+```bash
+./gradlew deploy                                 # 前後端都部署：先 deployApp，再 deployWeb
+./gradlew deployWeb                              # 只部署前端（型別檢查在映像檔 build 裡做）
+```
+
+`deployWeb` 帶 `--no-deps`：不直接用 `docker compose up -d --build web`，是因為 `--build` 會沿著
+`depends_on` 把 app 也重 build、換掉，繞過 `deployApp` 先跑測試那道關。
 
 ## 一鍵部署 app
 

@@ -1,7 +1,7 @@
 # 這個 stack 是「在本機模擬雲端部署」：把原本用 .bat 跑在 Windows 上的服務，一個一個搬進容器。
 # 跟 ops/ 分開：ops/ 是觀測（看別人），這裡是被部署的服務本身（被看的那些）。
 #
-# 三個服務都在容器裡：Qwen3-8B 生成、bge-m3 embedding、eat app。
+# 都在容器裡：Qwen3-8B 生成、bge-m3 embedding、PostgreSQL、eat app，以及前面擋一層的 nginx（web）。
 # 要退回去就 `docker compose down`，再點原本的兩支 .bat、./gradlew bootRun。
 #
 # 容器之間怎麼溝通：同一個 compose 的服務自動在同一個網路（eat-deploy_default）上，
@@ -12,6 +12,7 @@
 #                  （ops/ 的 Alloy 不靠這兩個埠：它加入了這組的網路，直接用服務名稱抓。）
 #                  代價：跟原生 .bat 搶同樣的埠，起這個之前要先關掉那兩個視窗。
 #   18090       —— 容器裡的 app。刻意不用 8090：8090 留給本機開發的 bootRun，兩個可以同時開著比對。
+#   18080       —— 容器裡的前端（nginx）。瀏覽器開這個，/api 由 nginx 轉給 app。
 
 name: eat-deploy
 
@@ -261,6 +262,34 @@ services:
       timeout: 3s
       retries: 3
       start_period: 30s
+
+    restart: unless-stopped
+
+  # ── 前端：nginx 送 Vue 靜態檔，並把 /api 轉給 app ──────────────────
+  # 瀏覽器只連這一個入口，看到的是同一個來源，app 不必開 CORS。對照雲端：Ingress / CDN 那一層。
+  web:
+    image: eat/web:local
+    build:
+      context: ../web             # Dockerfile、nginx.conf 都在 web/ 裡，前端自己的東西放一起
+    container_name: eat-web
+
+    ports:
+      # 18080：跟 app 的 18090 一樣用 1 開頭標示「容器版」。只綁 127.0.0.1，不對區網開放。
+      # app 的 18090 仍然留著：perf/ 的 k6 直接打 app，不想多經過一層 nginx 影響量測。
+      - "127.0.0.1:18080:80"
+
+    depends_on:
+      # app healthy 才起：nginx 本身不在乎（proxy_pass 等請求來了才連），
+      # 但 app 還沒好時打開頁面問一題只會拿到 502，等它好了再開比較不混淆。
+      app:
+        condition: service_healthy
+
+    healthcheck:
+      # 只確認 nginx 本身活著、送得出 index.html；不打 /api，app 的健康由 app 自己的 healthcheck 管
+      test: ["CMD", "curl", "-fsS", "http://localhost/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
     restart: unless-stopped
 
