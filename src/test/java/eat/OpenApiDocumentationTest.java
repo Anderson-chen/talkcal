@@ -65,4 +65,25 @@ class OpenApiDocumentationTest {
                 .andExpect(jsonPath(responses + "['400']" + schema).value("#/components/schemas/Failure"))
                 .andExpect(jsonPath(responses + "['502']" + schema).value("#/components/schemas/Failure"));
     }
+
+    @Test
+    @DisplayName("描述了行事曆的三個端點，以及各自的成功碼（新增是 201）")
+    void describesCalendarEndpoints() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths['/api/calendar/parse'].post.responses['200']").exists())
+                .andExpect(jsonPath("$.paths['/api/calendar/events'].post.responses['201']").exists())
+                .andExpect(jsonPath("$.paths['/api/calendar/events'].get.responses['200']").exists())
+                .andExpect(jsonPath("$.paths['/api/calendar/events'].get.parameters[?(@.name == 'from')]").exists());
+    }
+
+    @Test
+    @DisplayName("兩個 controller 的錯誤 body 各有各的 schema，沒有因為撞名互相蓋掉")
+    void calendarFailureDoesNotOverwriteChatFailure() throws Exception {
+        String schema = ".content['*/*'].schema['$ref']";
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths['/api/chat'].post.responses['400']" + schema)
+                        .value("#/components/schemas/Failure"))
+                .andExpect(jsonPath("$.paths['/api/calendar/parse'].post.responses['400']" + schema)
+                        .value("#/components/schemas/CalendarFailure"));
+    }
 }

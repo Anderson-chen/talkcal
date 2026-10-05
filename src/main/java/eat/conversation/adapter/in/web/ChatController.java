@@ -27,7 +27,7 @@ import java.util.Optional;
 /**
  * 用 HTTP 跟模型對話（inbound adapter）。
  *
- * 這是目前唯一的入口：外面的世界只能透過它使喚核心。
+ * 這是 conversation 模組唯一的入口：外面的世界只能透過它使喚這個模組的核心。
  * 它認得的只有自己那套協定 —— HTTP 與 JSON；業務規則半條都不在這裡。
  *
  * 將來要再加別的入口（另一種協定、排程、訊息佇列），都是各自新增一個 adapter、

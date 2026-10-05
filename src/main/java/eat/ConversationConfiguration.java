@@ -25,7 +25,7 @@ import java.net.URI;
 import java.time.Duration;
 
 /**
- * conversation 模組的接線：整個專案唯一同時認識 adapter 和 application 的地方。
+ * conversation 模組的接線：這個模組唯一同時認識 adapter 和 application 的地方（calendar 那邊是 CalendarConfiguration）。
  *
  * 看一眼 import 就知道為什麼這種檔案只能待在 eat 這個 package：
  * 上面同時出現了 adapter.out 和 application 的 port ——

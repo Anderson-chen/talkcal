@@ -50,7 +50,7 @@ class ArchitectureTest {
 
     /**
      * 兩側的 adapter 互不認識。
-     * 入口那側（目前是 HTTP 的 ChatController）換成別的、llama.cpp 換成 OpenAI，都不該牽動另一側。
+     * 入口那側（目前是 HTTP 的 ChatController、CalendarController）換成別的、llama.cpp 換成 OpenAI，都不該牽動另一側。
      */
     @ArchTest
     static final ArchRule inboundAdaptersMustNotDependOnOutboundAdapters =
@@ -88,6 +88,14 @@ class ArchitectureTest {
                     .should().dependOnClassesThat().resideInAPackage("..adapter.out.persistence..")
                     .because("存在哪（PostgreSQL、別的資料庫、記憶體）是組裝時的決定；"
                             + "SQL 和表的長相只該出現在 persistence 這一包");
+
+    // calendar 模組的第一個 outbound 子樹：ExtractEventsPort 的實作們（目前只有 llama.cpp 那個）
+    @ArchTest
+    static final ArchRule onlyTheCompositionRootMayKnowTheExtractionAdapters =
+            noClasses().that().resideOutsideOfPackages("eat", "..adapter.out.extraction..")
+                    .should().dependOnClassesThat().resideInAPackage("..adapter.out.extraction..")
+                    .because("用哪個模型解析行程是組裝時的決定；日期表、JSON Schema 這些只對某顆模型有效的手法，"
+                            + "只該出現在 extraction 這一包");
 
     /**
      * Adapter 這個字尾是有意義的，不是隨手加的裝飾。
@@ -162,12 +170,30 @@ class ArchitectureTest {
                     .because("API 文件描述的是線路格式，屬於 inbound adapter，不該滲進業務規則");
 
     /**
+     * 模組之間互不認識：conversation（營養問答）和 calendar（行事曆）是兩門不同的業務。
+     *
+     * eat.(*).. 把 eat 底下第一層的 package 各切成一片（一個模組一片）；
+     * 根 package eat 本身（Application、各模組的 Configuration）不在任何一片裡，
+     * 所以組裝根照樣可以同時認識兩個模組 —— 那正是它的工作。
+     *
+     * 哪天行事曆真的需要問答的能力（或反過來），該做的是在自己模組裡定義一個 outbound port，
+     * 由組裝根接上另一個模組的 use case，而不是直接 import 對方的類別。
+     */
+    @ArchTest
+    static final ArchRule modulesMustNotDependOnEachOther =
+            slices().matching("eat.(*)..")
+                    .should().notDependOnEachOther()
+                    .because("模組直接互相 import，就再也沒辦法單獨改動、單獨拆出去其中一個");
+
+    /**
      * package 之間不可以繞成環。
      * 循環依賴是「這兩包其實分不開」的訊號，而且會讓任何一邊都無法單獨測試。
      */
     @ArchTest
     static final ArchRule packagesMustBeFreeOfCycles =
-            slices().matching("eat.conversation.(**)")
+            // eat.(*).(**)：每個模組裡的每個 package 各切一片（原本只寫了 eat.conversation，calendar 進來後改成通用的）。
+            // 模組之間的依賴由上面的 modulesMustNotDependOnEachOther 管，這條只看模組內部
+            slices().matching("eat.(*).(**)")
                     .should().beFreeOfCycles()
                     .because("繞成環的兩個 package 實際上是同一個，拆開只是假象");
 }
