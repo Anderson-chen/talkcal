@@ -53,6 +53,12 @@
         "bootRun"
       ],
       "port": 8090
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "web", "run", "dev"],
+      "port": 5173
     }
   ]
 }

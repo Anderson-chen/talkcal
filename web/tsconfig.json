@@ -1,0 +1,5 @@
+{
+  // 沿用 Vue 官方的設定（strict、ESNext、bundler 解析），只補上要檢查哪些檔
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "include": ["src/**/*.ts", "src/**/*.vue"]
+}
