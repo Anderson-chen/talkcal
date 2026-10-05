@@ -191,16 +191,60 @@ class JdbcCalendarEventAdapterTest {
         @Test
         @DisplayName("資料庫裡有 domain 不接受的資料：讀出來時被擋下，丟 IllegalStateException（502，不是 400）")
         void corruptRowBecomesUpstreamFailure() {
-            // V2 的 CHECK 用 btrim，它只去掉空格、不去掉換行，所以只有換行的標題進得了資料庫，
-            // 但 domain（String.isBlank）不接受 —— 剛好拿來模擬「資料庫比 domain 寬鬆」的情況
+            // V4 之後，資料庫的 CHECK 跟 domain 一樣嚴，正常的 INSERT 已經塞不進空白標題了。
+            // 要模擬「資料庫裡有壞資料」（例如規則變嚴之前就存在的舊資料、有人手動改過），
+            // 就在一個交易裡暫時拆掉 CHECK、塞一筆、讀讀看，最後 rollback。
+            // PostgreSQL 的 DDL 也在交易裡，所以 rollback 連拆掉的 CHECK 都會裝回去，不影響其他測試。
+            // adapter 用的是同一個 DataSource，交易裡它拿到的就是這條連線，看得到那筆還沒 commit 的壞資料
+            transaction.executeWithoutResult(status -> {
+                jdbc.sql("ALTER TABLE calendar_event DROP CONSTRAINT calendar_event_title_not_blank").update();
+                jdbc.sql("""
+                                INSERT INTO calendar_event (id, title, start_at, end_at)
+                                VALUES (:id, E'\n', '2026-10-06 15:00', '2026-10-06 16:00')
+                                """)
+                        .param("id", UUID.randomUUID())
+                        .update();
+
+                assertThrows(IllegalStateException.class, () -> adapter.load(OCT_06));
+                status.setRollbackOnly();
+            });
+
+            assertEquals(0, count(), "rollback 之後壞資料應該不見了");
+        }
+    }
+
+    @Nested
+    @DisplayName("資料庫自己的 CHECK（萬一有人繞過 domain 直接寫 SQL）")
+    class DatabaseChecks {
+
+        /**
+         * V2 的 btrim 只去掉半形空格，這三種都放得進來；V4 改成 title ~ '\S' 之後跟 domain 的 isBlank 一致。
+         */
+        @Test
+        @DisplayName("空白標題一律擋下：半形空格、換行、tab、全形空白")
+        void rejectsBlankTitles() {
+            for (String blank : List.of("   ", "\n", "\t", " \n ", "\u3000")) {
+                assertThrows(Exception.class, () -> jdbc.sql("""
+                                INSERT INTO calendar_event (id, title, start_at, end_at)
+                                VALUES (:id, :title, '2026-10-06 15:00', '2026-10-06 16:00')
+                                """)
+                        .param("id", UUID.randomUUID())
+                        .param("title", blank)
+                        .update(), () -> "應該擋下標題 [" + blank.codePoints().mapToObj(Integer::toHexString).toList() + "]");
+            }
+            assertEquals(0, count());
+        }
+
+        @Test
+        @DisplayName("前後有空白但中間有字的標題照樣收")
+        void acceptsTitleWithSurroundingSpaces() {
             jdbc.sql("""
                             INSERT INTO calendar_event (id, title, start_at, end_at)
-                            VALUES (:id, E'\\n', '2026-10-06 15:00', '2026-10-06 16:00')
+                            VALUES (:id, ' 吃飯 ', '2026-10-06 15:00', '2026-10-06 16:00')
                             """)
                     .param("id", UUID.randomUUID())
                     .update();
-
-            assertThrows(IllegalStateException.class, () -> adapter.load(OCT_06));
+            assertEquals(1, count());
         }
     }
 
