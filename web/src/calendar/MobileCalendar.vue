@@ -8,6 +8,7 @@ import { computed, ref } from 'vue'
 import type { Category, SavedEvent } from '../calendar'
 import { dayLabel, monthDayLabel, timeOf, weekdayName, weekOf } from '../monthGrid'
 import AssistantChat from './AssistantChat.vue'
+import ClearChatButton from './ClearChatButton.vue'
 import EventDetail from './EventDetail.vue'
 import EventForm from './EventForm.vue'
 import Icon from './Icon.vue'
@@ -179,8 +180,9 @@ const dotColor = (category: Category) => theme.colors.value[category].color
           <span class="ai-logo"><Icon name="sparkle" :size="22" /></span>
           <div class="ai-title">
             <h2 id="m-ai-title">AI 助理</h2>
-            <div class="ai-sub">用一句話新增行程</div>
+            <div class="ai-sub">用一句話新增、查詢或找空檔</div>
           </div>
+          <ClearChatButton />
           <button type="button" class="icon" aria-label="關閉" @click="aiOpen = false"><Icon name="close" /></button>
         </div>
         <AssistantChat input-id="m-ai-input" large />

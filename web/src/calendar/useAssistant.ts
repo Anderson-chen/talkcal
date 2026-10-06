@@ -1,12 +1,15 @@
-// AI 助理：一句話 → 後端 /parse 解析成行程草稿 → 卡片給使用者確認 → /events 存起來。
+// AI 助理：跟後端的 agent（POST /api/calendar/assistant）對話。
 //
-// 這就是「先預覽再確認」流程換上對話的外觀：解析不存檔，按了「加入行事曆」才存。
-// 一句話可以解析出好幾筆，每筆一張卡片；可以先「修改」（帶到新增表單）或「移除」某一筆，再一次全部加入。
+// 助理自己決定要做什麼：時間不確定就反問、查行程、找空檔，或提議行程。
+// 提議的行程顯示成卡片 —— 還是「先預覽再確認」：按了「加入行事曆」才送 /events 存起來。
+// 一句話可以提議好幾筆，每筆一張卡片；可以先「修改」（帶到新增表單）或「移除」某一筆，再一次全部加入。
 //
-// 對話紀錄只放在記憶體：重新整理就清空。它只是操作的過程，真正的結果（行程）已經存在資料庫裡了。
+// 對話的記憶在後端，這裡只記 conversationId（存在 localStorage）和畫面上的訊息。
+// 重新整理之後，用 conversationId 向後端讀回那段對話的文字接著聊；按「清空」就連後端那段一起刪掉、從頭開始。
+// 讀回來的舊訊息不帶卡片：卡片當時是加入還是取消，後端沒有記，顯示可能已過時的卡片不如不顯示。
 
 import { inject, ref, type InjectionKey } from 'vue'
-import { parseEvents, type EventFields } from '../calendar'
+import { assistantHistory, forgetConversation, talkToAssistant, type EventFields } from '../calendar'
 import { message, type CalendarState } from './useCalendar'
 
 export type ProposalStatus = 'pending' | 'added' | 'removed'
@@ -25,20 +28,82 @@ export interface ChatMessage {
   error: string | null
 }
 
-// 建議的說法只放「新增」：查詢行程、找空檔這一輪沒做，放了只會讓人按了失望
-export const SUGGESTIONS = ['明天下午3點和 Amy 開會', '週五晚上7點在拉麵店聚餐', '下週三早上9點到10點半看牙醫']
+// 三種能做的事各舉一個例子：新增、查詢、找空檔
+export const SUGGESTIONS = ['明天下午3點和 Amy 開會', '明天有什麼行程？', '這週哪天下午有空？']
+
+const GREETING = '嗨！我是你的行事曆助理。可以幫你新增行程、查某天的安排，或找出空檔。要新增的話，我會整理好讓你確認後再加入。'
+
+// conversationId 存在這台瀏覽器：跟主題一樣是個人的東西，不必存到後端。
+// 私密視窗、被封鎖的網站資料都可能讓 localStorage 丟例外，一律吞掉 —— 最壞就是重新整理後開新對話
+const STORAGE_KEY = 'eat.calendar.assistant.conversation'
+
+function loadConversationId(): string | undefined {
+  try {
+    return localStorage.getItem(STORAGE_KEY) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+function saveConversationId(id: string | undefined) {
+  try {
+    if (id) localStorage.setItem(STORAGE_KEY, id)
+    else localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    // 存不了就算了，這次的對話在記憶體裡照樣接得上
+  }
+}
 
 export function useAssistant(calendar: CalendarState) {
   let nextId = 1
   const say = (role: ChatMessage['role'], text: string, proposals: Proposal[] = []): ChatMessage =>
     ({ id: nextId++, role, text, proposals, error: null })
 
-  const messages = ref<ChatMessage[]>([
-    say('ai', '嗨！我是你的行事曆助理。用一句話告訴我要排什麼，例如「明天下午3點和 Amy 開會」，我整理好讓你確認後再加入。'),
-  ])
+  const messages = ref<ChatMessage[]>([say('ai', GREETING)])
   const input = ref('')
   const typing = ref(false)
   const saving = ref(false)
+  const clearing = ref(false)
+  // 後端那段對話的身分：第一句之後才有，之後每句都帶著；重新整理後從 localStorage 拿回來
+  let conversationId = loadConversationId()
+
+  // 重新整理之後，把上次那段對話讀回來。讀的時候 typing 亮著，避免使用者在舊訊息回來前就開始打字、順序亂掉
+  async function restore() {
+    if (!conversationId) return
+    typing.value = true
+    try {
+      const history = await assistantHistory(conversationId)
+      if (history.messages.length === 0) {
+        // 後端已經沒有這段了（被清空、資料庫重建）：當成新對話
+        conversationId = undefined
+        saveConversationId(undefined)
+        return
+      }
+      messages.value = [say('ai', GREETING), ...history.messages.map((m) => say(m.role === 'user' ? 'me' : 'ai', m.text))]
+    } catch (e) {
+      messages.value.push(say('ai', `讀不回上次的對話：${message(e)}。可以直接開始新的對話。`))
+    } finally {
+      typing.value = false
+    }
+  }
+  restore()
+
+  /** 清空：後端那段一起刪掉、從頭開始。刪不掉（後端出事）就留著，讓使用者知道沒清成。 */
+  async function clear() {
+    if (clearing.value || typing.value) return
+    clearing.value = true
+    try {
+      if (conversationId) await forgetConversation(conversationId)
+      conversationId = undefined
+      saveConversationId(undefined)
+      messages.value = [say('ai', GREETING)]
+      input.value = ''
+    } catch (e) {
+      messages.value.push(say('ai', `清空失敗：${message(e)}。可以稍後再試一次。`))
+    } finally {
+      clearing.value = false
+    }
+  }
 
   async function send(text = input.value) {
     const said = text.trim()
@@ -47,15 +112,12 @@ export function useAssistant(calendar: CalendarState) {
     input.value = ''
     typing.value = true
     try {
-      const drafts = await parseEvents(said)
-      if (drafts.length === 0) {
-        messages.value.push(say('ai', '這句話裡我沒看出行程。可以說得更具體一點，例如「週五晚上7點聚餐」「下週二早上10點面試」。'))
-      } else {
-        const lead = drafts.length === 1 ? '幫你整理好了，確認後就會加入行事曆：' : `我看出 ${drafts.length} 個行程，確認後一起加入行事曆：`
-        messages.value.push(say('ai', lead, drafts.map((draft) => ({ draft, status: 'pending' }))))
-      }
+      const answer = await talkToAssistant(said, conversationId)
+      conversationId = answer.conversationId
+      saveConversationId(conversationId)
+      messages.value.push(say('ai', answer.reply, answer.proposals.map((draft) => ({ draft, status: 'pending' }))))
     } catch (e) {
-      messages.value.push(say('ai', `解析失敗：${message(e)}。可以稍後再試一次。`))
+      messages.value.push(say('ai', `助理暫時沒辦法回應：${message(e)}。可以稍後再試一次。`))
     } finally {
       typing.value = false
     }
@@ -92,7 +154,7 @@ export function useAssistant(calendar: CalendarState) {
     })
   }
 
-  return { messages, input, typing, saving, send, confirm, cancel, drop, edit }
+  return { messages, input, typing, saving, clearing, send, confirm, cancel, drop, edit, clear }
 }
 
 export type AssistantState = ReturnType<typeof useAssistant>

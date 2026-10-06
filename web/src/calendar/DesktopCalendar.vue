@@ -5,6 +5,7 @@ import { computed, ref } from 'vue'
 import { CATEGORIES } from '../calendar'
 import { monthDayLabel, weekdayName, weekOf } from '../monthGrid'
 import AssistantChat from './AssistantChat.vue'
+import ClearChatButton from './ClearChatButton.vue'
 import EventDetail from './EventDetail.vue'
 import EventForm from './EventForm.vue'
 import Icon from './Icon.vue'
@@ -121,8 +122,9 @@ const noEventsToday = computed(() => calendar.view.value === 'day' && calendar.e
         <span class="ai-logo"><Icon name="sparkle" /></span>
         <div class="ai-title">
           <h2 id="d-ai-title">AI 助理</h2>
-          <div class="ai-sub">用一句話新增行程</div>
+          <div class="ai-sub">用一句話新增、查詢或找空檔</div>
         </div>
+        <ClearChatButton />
         <button type="button" class="icon" aria-label="收合 AI 助理" @click="aiOpen = false"><Icon name="chevronRight" /></button>
       </div>
       <AssistantChat input-id="d-ai-input" />

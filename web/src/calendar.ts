@@ -30,10 +30,38 @@ interface Failure {
   error: string
 }
 
-/** 一句話 → 行程草稿（不存）。一筆都沒解析出來會回空陣列，不是錯誤。 */
-export async function parseEvents(text: string): Promise<EventFields[]> {
-  const res = await send('/api/calendar/parse', { method: 'POST', body: JSON.stringify({ text }) })
-  return ((await res.json()) as { events: EventFields[] }).events.map(normalize)
+/** AI 助理一輪的回覆：助理說的話，以及這一輪提議的行程（確認後送 addEvents 才存）。 */
+export interface AssistantReply {
+  conversationId: string
+  reply: string
+  proposals: EventFields[]
+}
+
+/**
+ * 跟 AI 助理說一句話。助理可能反問、查行程、找空檔，或提議行程。
+ * conversationId 不帶就是新對話；之後每句帶著回應裡的那一個，助理才記得前面說過什麼。
+ */
+export async function talkToAssistant(message: string, conversationId?: string): Promise<AssistantReply> {
+  const res = await send('/api/calendar/assistant', { method: 'POST', body: JSON.stringify({ message, conversationId }) })
+  const body = (await res.json()) as AssistantReply
+  return { ...body, proposals: body.proposals.map(normalize) }
+}
+
+/** 一段對話給人看的部分（工具呼叫、提議過的卡片不在裡面）。 */
+export interface AssistantHistory {
+  conversationId: string
+  messages: { role: 'user' | 'assistant'; text: string }[]
+}
+
+/** 讀回一段對話。沒有這段（從來沒有、或已經清空）就是空陣列。 */
+export async function assistantHistory(conversationId: string): Promise<AssistantHistory> {
+  const res = await send(`/api/calendar/assistant/${encodeURIComponent(conversationId)}`, { method: 'GET' })
+  return (await res.json()) as AssistantHistory
+}
+
+/** 清空一段對話。本來就沒有也算成功。 */
+export async function forgetConversation(conversationId: string): Promise<void> {
+  await send(`/api/calendar/assistant/${encodeURIComponent(conversationId)}`, { method: 'DELETE' })
 }
 
 /** 把確認過的草稿（或手動表單）存起來。全部存或全部不存；有一筆不合規就整批 400。 */

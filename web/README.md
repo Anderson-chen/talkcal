@@ -9,7 +9,7 @@ eat 的前端：Vue 3 + TypeScript + Vite。只是後端 API 的另一個呼叫�
 | 分頁 | 元件 | 打的 API | 契約 |
 |---|---|---|---|
 | 聊天（目前沒放在畫面上） | `src/ChatView.vue` | `POST /api/chat` | `src/chat.ts` ↔ `ChatController` |
-| 行事曆 | `src/calendar/CalendarView.vue` | `POST /api/calendar/parse`（AI 助理解析）、`POST /api/calendar/events`（確認、手動新增）、`GET /api/calendar/events`（一頁）、`DELETE /api/calendar/events/{id}` | `src/calendar.ts` ↔ `CalendarController` |
+| 行事曆 | `src/calendar/CalendarView.vue` | `POST /api/calendar/assistant`（AI 助理對話）、`POST /api/calendar/events`（確認、手動新增）、`GET /api/calendar/events`（一頁）、`DELETE /api/calendar/events/{id}` | `src/calendar.ts` ↔ `CalendarController`、`CalendarAssistantController` |
 
 `src/App.vue` 只放行事曆；月曆格子的日期運算在 `src/monthGrid.ts`（純函式，不碰畫面）。
 
