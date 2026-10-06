@@ -262,5 +262,30 @@ class CalendarAssistantTest {
 
         assertEquals(2, prompts.size());
     }
-}
 
+    @Test
+    @DisplayName("查過行事曆才說「已加入」不算說謊（使用者真的按了加入）：不提醒、照實回")
+    void claimAfterCheckingCalendarIsFine() {
+        AssistantMessage listsEvents = AssistantMessage.builder().content("")
+                .toolCalls(List.of(new AssistantMessage.ToolCall("call-list", "function", "list_events",
+                        "{\"from\":\"2026-10-07\",\"to\":\"2026-10-08\"}")))
+                .build();
+
+        CalendarAssistant.Reply reply = assistant(scripted(listsEvents, says("已加入，明天 19:00 吃飯在行事曆上。")))
+                .reply(ID, "剛剛那個有加進去嗎？");
+
+        assertEquals("已加入，明天 19:00 吃飯在行事曆上。", reply.text());
+        assertEquals(2, prompts.size());
+    }
+
+    @Test
+    @DisplayName("「是否已加入」「還沒加入」是問句和否定，不是宣稱：不提醒")
+    void questionsAndNegationsAreNotClaims() {
+        for (String text : List.of("我無法確認是否已加入。", "這個行程還沒加入。", "要我幫你查有沒有已加入的行程嗎？")) {
+            prompts.clear();
+            assistant(scripted(says(text))).reply(ID, "嗨");
+
+            assertEquals(1, prompts.size(), text);
+        }
+    }
+}

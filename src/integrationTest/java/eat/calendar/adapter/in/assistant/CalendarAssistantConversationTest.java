@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
@@ -60,6 +61,8 @@ class CalendarAssistantConversationTest {
 
     private CalendarAssistant assistant;
     private String conversation;
+    // 這段對話裡 list_events / find_free_slots 讀了幾次行事曆：用來確認模型真的去查了，不是憑記憶回答
+    private final AtomicInteger calendarReads = new AtomicInteger();
 
     @BeforeAll
     static void requireRunningServer() {
@@ -93,7 +96,10 @@ class CalendarAssistantConversationTest {
                 .build();
         assistant = new CalendarAssistant(chatModel, new InMemoryChatMemoryRepository(),
                 new ParseEventsService(new SpringAiExtractEventsAdapter(chatModel), TUE),
-                new ListEventsService(CALENDAR), new FindFreeSlotsService(CALENDAR, TUE), TUE);
+                new ListEventsService(range -> {
+                    calendarReads.incrementAndGet();
+                    return CALENDAR.load(range);
+                }), new FindFreeSlotsService(CALENDAR, TUE), TUE);
         conversation = UUID.randomUUID().toString();
     }
 
@@ -202,5 +208,28 @@ class CalendarAssistantConversationTest {
         newConversation();
         assertEquals(LocalDateTime.of(2026, 10, 7, 23, 0), say("明天十一點吃宵夜").proposals().getFirst().start());
     }
-}
 
+    @Test
+    @DisplayName("提議過但使用者取消了（行事曆上沒有）：問有沒有加入時先查行事曆，回答還沒有")
+    void cancelledProposalIsCheckedInCalendar() {
+        assertEquals(1, say("明天下午3點和 Amy 開會").proposals().size());
+        calendarReads.set(0);
+
+        CalendarAssistant.Reply reply = say("剛剛那個有加進行事曆嗎？");
+
+        assertTrue(calendarReads.get() > 0, "應該先用 list_events 查，而不是憑記憶回答：" + reply.text());
+        assertTrue(reply.text().contains("沒有") || reply.text().contains("還沒"), reply.text());
+    }
+
+    @Test
+    @DisplayName("提議過而且使用者加入了（行事曆上有）：先查行事曆，回答已經在上面")
+    void addedProposalIsCheckedInCalendar() {
+        assertEquals(1, say("明天早上九點產品週會").proposals().size());
+        calendarReads.set(0);
+
+        CalendarAssistant.Reply reply = say("剛剛那個有加進行事曆嗎？");
+
+        assertTrue(calendarReads.get() > 0, "應該先用 list_events 查，而不是憑記憶回答：" + reply.text());
+        assertTrue(!reply.text().contains("沒有") && !reply.text().contains("還沒"), reply.text());
+    }
+}

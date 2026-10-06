@@ -41,6 +41,7 @@ public final class CalendarTools {
     private final FindFreeSlotsUseCase findFreeSlots;
     private final String userSaid;
     private final List<CalendarEvent> proposals = new ArrayList<>();
+    private boolean checkedCalendar;
 
     // 使用者講過的話裡，表示時段的寫法：早上、上午、中午、下午、晚上、傍晚、清晨、凌晨、半夜、宵夜、早餐、晚餐、晨跑……
     // 都至少有其中一個字；或是 AM/PM；或是 13～23 點的 24 小時制（「19點」「19:00」）
@@ -90,6 +91,14 @@ public final class CalendarTools {
     }
 
     /**
+     * 這一輪有沒有成功查過行事曆（list_events）。查過之後說「已經加入了」可能是真的（提議過的卡片使用者按了加入），
+     * 所以 CalendarAssistant 的說謊檢查要知道這件事。
+     */
+    public boolean checkedCalendar() {
+        return checkedCalendar;
+    }
+
+    /**
      * 這個行程是 7～11 點或 19～23 點（早上晚上都可能），而使用者從頭到尾沒講過任何時段的字？那就不該替他決定。
      *
      * 為什麼由程式擋、不靠 prompt：prompt 已經寫明「吃飯、見面、開會看不出早晚，一定要問」，
@@ -112,6 +121,7 @@ public final class CalendarTools {
             @ToolParam(description = "結束日期（不含），格式 yyyy-MM-dd；只查一天就填隔天") String to) {
         try {
             List<ScheduledEvent> events = listEvents.listEvents(LocalDate.parse(from), LocalDate.parse(to));
+            checkedCalendar = true;
             if (events.isEmpty()) {
                 return from + " 到 " + to + "（不含）之間沒有行程。";
             }

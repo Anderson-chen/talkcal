@@ -56,8 +56,11 @@ public final class CalendarAssistant {
     /**
      * 回覆裡在說「有卡片」或「已經加入」。這一輪明明沒有提議任何行程，卻這樣說，就是在說謊：
      * 實際發生過 ——「隨便」→「已顯示卡片」（沒呼叫工具）、「是」→「已加入這週三寫日記的行程」（助理根本不能加入）。
+     *
+     * 前面是「是否、有沒有、還沒、尚未、未、不」的不算：「我無法確認是否已加入」是在問、不是在宣稱（實際被誤擋過）。
      */
-    private static final Pattern CLAIMS_ACTION = Pattern.compile("卡片|已加入|已新增|已安排|已經(加入|新增|安排)|幫你(加入|新增)了");
+    private static final Pattern CLAIMS_ACTION = Pattern.compile(
+            "卡片|(?<!是否|有沒有|沒有|還沒|尚未|未|不)(已加入|已新增|已安排|已經(加入|新增|安排))|幫你(加入|新增)了");
 
     // 抓到說謊時，暫時跟模型說的話：只放在這一次的請求裡，不存進記憶
     static final String CORRECTION = "（系統提醒，不是使用者說的）你剛才的回覆提到了卡片或已加入，但這一輪你沒有呼叫 propose_events："
@@ -181,7 +184,8 @@ public final class CalendarAssistant {
                         // 不存：空白的回覆留在記憶裡，下一輪模型會照著學
                         throw new IllegalStateException("AI 助理沒有回任何話");
                     }
-                    if (tools.proposals().isEmpty() && CLAIMS_ACTION.matcher(text).find()) {
+                    // 這一輪查過行事曆就不檢查：使用者問「剛剛那個加了嗎」，查到了照實說「已加入」是對的
+                    if (tools.proposals().isEmpty() && !tools.checkedCalendar() && CLAIMS_ACTION.matcher(text).find()) {
                         if (correction.isEmpty()) {
                             log.warn("AI 助理沒呼叫工具卻說有卡片或已加入，提醒它重來：conversation={} reply={}", conversationId, text);
                             correction = List.of(answer, new UserMessage(CORRECTION));
@@ -265,6 +269,12 @@ public final class CalendarAssistant {
      * - 「包括改時間」：使用者說「其實是早上」也是要新增（一張新的卡片），不是聊天
      * - 「你沒辦法加入行事曆」「沒呼叫就不要說已顯示卡片」：實際發生過它沒呼叫工具卻說「已顯示卡片」「已加入」。
      *   這句只是提醒，真正擋住說謊的是 reply 裡的 CLAIMS_ACTION 檢查
+     * - 「提議過的行程可能加入了也可能取消了，先用 list_events 查」：按「加入行事曆」走的是 POST /events，
+     *   按「取消」只改前端的畫面，兩個都不經過助理，所以助理永遠不知道卡片後來怎麼了。
+     *   不另外記卡片的狀態：行事曆本身就是事實來源 —— 加入的查得到、取消的查不到。
+     *   只有規則時，同一句「剛剛那個有加進去嗎？」有時會查、有時回「我無法確認」，加了範例才會穩定地查
+     * - 範例裡的日期是真的日期（每天代入）：範例寫「from = 這週三」時，模型會照抄，把「這週三」當參數傳給工具
+     *   （log 裡看得到），範例一多就抄得更兇，連找空檔都壞了
      * - 「只有帶著時段的字才不用問」：原本寫成「從要做的事看得出來就不用問」，模型把「七點吃飯」也當成看得出來、
      *   直接提議 19:00 —— 但早上七點吃飯也很常見。界線改成看字：早餐、晚餐、晨跑這種字本身帶著時段，其他一律問
      */
@@ -278,6 +288,7 @@ public final class CalendarAssistant {
                 - 使用者要新增行程（包括改時間，例如「其實是早上」）：用 propose_events，把行程整理成一句完整的話傳進去（你不用算日期和時間，行事曆會解析）。畫面會顯示卡片讓使用者確認。你沒辦法把行程加入行事曆，只有使用者按卡片上的「加入行事曆」才會加入，所以不要說「已加入」；沒呼叫 propose_events 就不要說「已顯示卡片」。
                   使用者講了要做的事和時間，就是要新增行程：一定要呼叫 propose_events，不要只用文字把那句話複述一遍（時間不確定時才先問）。
                 - 使用者問某天或某段時間有什麼行程：用 list_events 查，再用一兩句話回答。
+                  之前提議過的行程，使用者可能加入了、也可能取消了，你不知道是哪一個：問到它有沒有加入、或要根據它回答時，先用 list_events 查，行事曆上查得到才算已加入。
                 - 使用者問什麼時候有空：用 find_free_slots 查，再回答。
                 時間不確定時先問，不要猜：沒講上午下午的 7～11 點，就問「早上還是晚上？」。
                 只有要做的事本身就帶著時段的字才不用問：早餐、午餐、晚餐、宵夜、晨跑、夜跑、夜唱（「七點吃晚餐」是晚上、「七點晨跑」是早上）。
@@ -290,8 +301,13 @@ public final class CalendarAssistant {
                 使用者：晚上
                 助理：呼叫 propose_events，description =「明天晚上七點和 Amy 見面」
                 —
-                使用者：這週三、四哪個下午有空？
-                助理：呼叫 find_free_slots，from = 這週三，to = 這週五（to 不含，所以要多一天），period = AFTERNOON""".formatted(
-                now.format(NOW_FORMAT), DateTable.of(now.toLocalDate()));
+                使用者：剛剛那個有加進去嗎？（剛剛提議的是明天的行程）
+                助理：呼叫 list_events，from = %s，to = %s。查得到就說已經在行事曆上，查不到就說還沒有、要的話按卡片上的「加入行事曆」
+                —
+                使用者：明天、後天哪個下午有空？
+                助理：呼叫 find_free_slots，from = %s，to = %s（to 不含，所以要多一天），period = AFTERNOON""".formatted(
+                now.format(NOW_FORMAT), DateTable.of(now.toLocalDate()),
+                now.toLocalDate().plusDays(1), now.toLocalDate().plusDays(2),
+                now.toLocalDate().plusDays(1), now.toLocalDate().plusDays(3));
     }
 }
