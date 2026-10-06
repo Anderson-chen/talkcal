@@ -1,0 +1,3 @@
+# 從設計畫布匯出的打包檔（9MB，內含執行環境與字型），要跟匯出時一個 byte 都不差：
+# 當成二進位檔，git 不做換行轉換（這台機器 core.autocrlf=true，不設的話取出時會變成 CRLF）、也不嘗試算文字 diff。
+docs/design/calendar/prototype.html -text -diff
