@@ -16,6 +16,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -91,6 +94,32 @@ public final class JdbcAssistantMemoryRepository implements ChatMemoryRepository
     @Override
     public void deleteByConversationId(String conversationId) {
         jdbc.sql("DELETE FROM calendar_assistant_message WHERE conversation_id = :id").param("id", uuid(conversationId)).update();
+    }
+
+    /**
+     * 刪掉 cutoff 之前就沒再說過話的對話，回傳刪了幾段。不在 ChatMemoryRepository 裡，是這張表自己的維護工作。
+     *
+     * 「最後說話的時間」= 那段對話最新一列的 created_at：saveAll 每一輪都整段刪掉重插，
+     * 所以一段對話的每一列其實都是最後那一輪的時間。用 max 而不是隨便一列，是不想依賴這個巧合 ——
+     * 哪天改成只插新的那幾則，這裡照樣對。整段一起刪，不會留下只剩後半截、開頭被砍掉的對話。
+     */
+    public int deleteInactiveSince(Instant cutoff) {
+        Objects.requireNonNull(cutoff, "cutoff 不可為 null");
+        return jdbc.sql("""
+                        WITH inactive AS (
+                            SELECT conversation_id FROM calendar_assistant_message
+                            GROUP BY conversation_id
+                            HAVING max(created_at) < :cutoff
+                        )
+                        DELETE FROM calendar_assistant_message m
+                        USING inactive
+                        WHERE m.conversation_id = inactive.conversation_id
+                        RETURNING m.conversation_id
+                        """)
+                .param("cutoff", OffsetDateTime.ofInstant(cutoff, ZoneOffset.UTC))
+                .query((rs, rowNum) -> rs.getObject(1, UUID.class))
+                .set()
+                .size();
     }
 
     private void insert(UUID id, int position, Message message) {

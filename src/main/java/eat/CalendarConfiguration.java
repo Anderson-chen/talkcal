@@ -23,11 +23,13 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.ZoneId;
 
 /**
@@ -42,8 +44,10 @@ import java.time.ZoneId;
  * - ExtractEventsPort 用 Spring AI 的 ChatModel（跟聊天共用同一個，自動組裝的那一個）
  * - 行程存 PostgreSQL（一個實作同時當 Save / Load / DeleteEventPort）
  * - 「現在」用哪個時區的時鐘
+ * - AI 助理的舊對話留多久（AssistantMemoryCleanup 每天清一次，所以要開排程）
  */
 @Configuration(proxyBeanMethods = false)
+@EnableScheduling
 class CalendarConfiguration {
 
     // ChatModel 是 Spring AI 依 spring.ai.openai.chat.* 自動建好的，跟聊天的 ChatClient 背後是同一個。
@@ -87,8 +91,20 @@ class CalendarConfiguration {
     CalendarAssistant calendarAssistant(ChatModel chatModel, JdbcClient jdbcClient, PlatformTransactionManager transactionManager,
                                         ParseEventsUseCase parseEvents, ListEventsUseCase listEvents,
                                         FindFreeSlotsUseCase findFreeSlots, @Value("${calendar.zone}") ZoneId zone) {
-        JdbcAssistantMemoryRepository memory = new JdbcAssistantMemoryRepository(jdbcClient, new TransactionTemplate(transactionManager));
-        return new CalendarAssistant(chatModel, memory, parseEvents, listEvents, findFreeSlots, Clock.system(zone));
+        return new CalendarAssistant(chatModel, assistantMemory(jdbcClient, transactionManager),
+                parseEvents, listEvents, findFreeSlots, Clock.system(zone));
+    }
+
+    @Bean
+    AssistantMemoryCleanup assistantMemoryCleanup(JdbcClient jdbcClient, PlatformTransactionManager transactionManager,
+                                                  @Value("${calendar.assistant.retention}") Duration retention) {
+        return new AssistantMemoryCleanup(assistantMemory(jdbcClient, transactionManager), retention, Clock.systemUTC());
+    }
+
+    // 助理和清理工作各 new 一個（它沒有狀態，兩個跟一個一樣）。刻意不註冊成 bean：
+    // 它的型別是 ChatMemoryRepository，一進容器，聊天那邊自動組裝的 ChatMemory 就會撞見兩個、不知道用哪個
+    private static JdbcAssistantMemoryRepository assistantMemory(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
+        return new JdbcAssistantMemoryRepository(jdbcClient, new TransactionTemplate(transactionManager));
     }
 
     @Bean

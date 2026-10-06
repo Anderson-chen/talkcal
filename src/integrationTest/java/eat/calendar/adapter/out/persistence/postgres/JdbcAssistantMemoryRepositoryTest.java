@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -118,6 +120,33 @@ class JdbcAssistantMemoryRepositoryTest {
 
         assertTrue(memory.findByConversationId(id).isEmpty());
         assertEquals(1, memory.findByConversationId(other).size());
+    }
+
+    @Test
+    @DisplayName("清舊對話：最後一次說話早於期限的整段刪掉，最近還在聊的留著")
+    void deletesInactiveConversations() {
+        String old = UUID.randomUUID().toString();
+        memory.saveAll(old, oneTurnWithTool());
+        memory.saveAll(id, List.of(new UserMessage("嗨"), new AssistantMessage("嗨！")));
+        jdbc.sql("UPDATE calendar_assistant_message SET created_at = now() - interval '31 days' WHERE conversation_id = :id")
+                .param("id", UUID.fromString(old)).update();
+
+        int deleted = memory.deleteInactiveSince(Instant.now().minus(Duration.ofDays(30)));
+
+        assertEquals(1, deleted);
+        assertTrue(memory.findByConversationId(old).isEmpty());
+        assertEquals(2, memory.findByConversationId(id).size());
+    }
+
+    @Test
+    @DisplayName("清舊對話看的是最後一次說話：開頭很舊、最後一則是最近的，整段留著")
+    void keepsConversationWithRecentMessage() {
+        memory.saveAll(id, oneTurnWithTool());
+        jdbc.sql("UPDATE calendar_assistant_message SET created_at = now() - interval '31 days' WHERE conversation_id = :id AND position < 3")
+                .param("id", UUID.fromString(id)).update();
+
+        assertEquals(0, memory.deleteInactiveSince(Instant.now().minus(Duration.ofDays(30))));
+        assertEquals(4, memory.findByConversationId(id).size());
     }
 
     @Test
