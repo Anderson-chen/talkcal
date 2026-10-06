@@ -2,18 +2,28 @@
 
 eat 的前端：Vue 3 + TypeScript + Vite。只是後端 API 的另一個呼叫端（跟 k6、curl 地位一樣），後端不知道它存在。
 
-兩個分頁，各對應後端一個模組：
+畫面上目前只有行事曆。聊天分頁先從畫面拿掉了（`src/App.vue`），但 `ChatView.vue`、`chat.ts` 和後端的 `/api/chat` 都還在，要放回來只改 `App.vue`。
+
+兩個畫面各對應後端一個模組：
 
 | 分頁 | 元件 | 打的 API | 契約 |
 |---|---|---|---|
-| 聊天 | `src/ChatView.vue` | `POST /api/chat` | `src/chat.ts` ↔ `ChatController` |
-| 行事曆 | `src/CalendarView.vue` | `POST /api/calendar/parse`（預覽）、`POST /api/calendar/events`（確認）、`GET /api/calendar/events`（月曆一頁） | `src/calendar.ts` ↔ `CalendarController` |
+| 聊天（目前沒放在畫面上） | `src/ChatView.vue` | `POST /api/chat` | `src/chat.ts` ↔ `ChatController` |
+| 行事曆 | `src/calendar/CalendarView.vue` | `POST /api/calendar/parse`（AI 助理解析）、`POST /api/calendar/events`（確認、手動新增）、`GET /api/calendar/events`（一頁）、`DELETE /api/calendar/events/{id}` | `src/calendar.ts` ↔ `CalendarController` |
 
-`src/App.vue` 只管切換分頁；月曆格子的日期運算在 `src/monthGrid.ts`（純函式，不碰畫面）。
+`src/App.vue` 只放行事曆；月曆格子的日期運算在 `src/monthGrid.ts`（純函式，不碰畫面）。
+
+行事曆照設計稿（Design 畫布「行事曆 Prototype」）做，`src/calendar/` 底下：
+
+- `useCalendar.ts`、`useAssistant.ts`、`useTheme.ts`：狀態與動作，`CalendarView` 建一份 provide 下去。
+  桌面版和手機版共用，視窗拉窄換版面時，選的日期、AI 對話都還在
+- `DesktopCalendar.vue`（側欄 + 月/週/日 + AI 助理側欄）、`MobileCalendar.vue`（760px 以下）
+- 共用零件：`MonthGrid`、`TimeGrid`（週、日時間軸）、`MiniMonth`、`AssistantChat`、`EventDetail`、`EventForm`、`ThemePicker`
+- `timeline.ts`（跨夜行程切段、重疊並排）、`theme.ts`（4 種主題、分類顏色）：純資料與純函式
 
 ```
 npm install
-npm run dev      # http://localhost:5173，/api 轉給 bootRun 的 8090
+npm run dev      # http://localhost:5173，/api 轉給 bootRun 的 8090（設 EAT_API 可以改轉到別台）
 npm run build    # 先 vue-tsc 型別檢查，再輸出 dist/
 ```
 
@@ -29,8 +39,8 @@ npm run build    # 先 vue-tsc 型別檢查，再輸出 dist/
 - **TypeScript 釘在 5.9**：TS 7 是 Go 重寫的版本，沒有舊的 JS API，vue-tsc 3 還接不上
   （會噴 `Package subpath './lib/tsc' is not defined`）。等 vue-tsc 支援再升。
 - **非串流**：`/api/chat` 一次回完整回覆；要逐字顯示得先改後端的 port / adapter。
-- **分頁不用 vue-router**：只有兩個畫面、不需要網址；加 router 要多一個依賴，nginx 還得加 `try_files`
-  （不然在 `/calendar` 按重新整理會 404）。`<KeepAlive>` 讓切分頁不丟聊天內容，行事曆也是第一次點進去才載入。
+- **不用 vue-router**：畫面少、不需要網址；加 router 要多一個依賴，nginx 還得加 `try_files`
+  （不然在 `/calendar` 按重新整理會 404）。聊天分頁放回來時，用 `<KeepAlive>` 切換，切分頁才不會丟掉聊天內容。
 - **月曆手刻、不用 FullCalendar**：一個 7×6 的 CSS grid 就夠，每一行都看得懂；套件帶來的是週檢視、拖曳這些現在用不到的東西。
 - **時間一律當字串、不轉 `Date`**：後端存的是不帶時區的台北牆上時間，`Date` 會被瀏覽器套上時區。
   需要算日期時只用本地時間的建構子和 getter，**不用 `toISOString()`**（它先換成 UTC，台灣早上八點前會變成前一天）。

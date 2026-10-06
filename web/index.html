@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>eat</title>
+    <!-- 行事曆設計稿用的字型：Manrope（數字、時間）＋ Noto Sans TC（中文） -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
+    <style>
+      /* 整頁固定成視窗高度：分頁列在上、畫面填滿其餘（App.vue） */
+      html, body, #app { height: 100%; margin: 0; }
+      #app { display: flex; flex-direction: column; }
+    </style>
   </head>
   <body>
     <div id="app"></div>

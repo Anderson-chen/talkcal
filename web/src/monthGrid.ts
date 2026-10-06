@@ -21,7 +21,7 @@ function fromIsoDate(iso: string): Date {
   return new Date(y, m - 1, d)
 }
 
-function addDays(iso: string, days: number): string {
+export function addDays(iso: string, days: number): string {
   const date = fromIsoDate(iso)
   date.setDate(date.getDate() + days)
   return toIsoDate(date)
@@ -62,3 +62,32 @@ export function daysCovered(start: string, end: string): string[] {
   }
   return days
 }
+
+const WEEKDAY_NAMES = ['一', '二', '三', '四', '五', '六', '日']
+
+/** 星期幾的中文（「一」…「日」）。一週從星期一開始，跟 monthGrid 一致。 */
+export function weekdayName(iso: string): string {
+  return WEEKDAY_NAMES[(fromIsoDate(iso).getDay() + 6) % 7]
+}
+
+/** 這一天所在那一週的七天（星期一到星期日）。 */
+export function weekOf(iso: string): string[] {
+  const offset = (fromIsoDate(iso).getDay() + 6) % 7
+  return Array.from({ length: 7 }, (_, i) => addDays(iso, i - offset))
+}
+
+/** 「10月6日」 */
+export function monthDayLabel(iso: string): string {
+  return `${Number(iso.slice(5, 7))}月${Number(iso.slice(8, 10))}日`
+}
+
+/** 「10月6日（週二）」：AI 卡片、詳情這種一行講完的地方用 */
+export function dayLabel(iso: string): string {
+  return `${monthDayLabel(iso)}（週${weekdayName(iso)}）`
+}
+
+/** 'YYYY-MM-DDTHH:mm[:ss]' → 'HH:mm' */
+export function timeOf(dateTime: string): string {
+  return dateTime.slice(11, 16)
+}
+
