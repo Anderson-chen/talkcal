@@ -8,19 +8,20 @@
 |---|---|
 | 畫布 | Design 畫布「行事曆 Prototype」：https://claude.ai/artifact/4GheYbFYRSdSzUEJYfBEWN |
 | 版本 | `1791254791-fefd`（2026-10-06 存進來） |
-| 檔案 | 原樣複製，沒有改過一個字 |
+| 檔案 | `prototype.html`：從畫布匯出（Share › Export）的單一檔案，原樣存進來 |
 
-| 檔案 | 畫板 | 對應的實作 |
-|---|---|---|
-| `Main.dc.html` | 手機 App（390×844） | `MobileCalendar.vue` |
-| `MobileAI.dc.html` | 手機 App · AI 助理開啟（只是把 Main 以「AI 面板打開」的狀態再放一次） | `MobileCalendar.vue` 的 AI 底部面板 |
-| `Desktop.dc.html` | 桌面 Web（1440 寬） | `DesktopCalendar.vue` |
-| `canvas.json` | 畫布的索引：有哪些畫板、位置大小 | — |
+**要看畫面：直接用瀏覽器打開 `prototype.html`**（雙擊就行，不用起伺服器、不用網路）。
+三個畫板並排、每個都可以點著操作；執行環境和字型都打包在裡面，所以有 9MB。
 
-`.dc.html` 不能直接用瀏覽器打開：它們要靠畫布的執行環境（`support.js`）才畫得出來。
-要看畫面請開上面的畫布連結；這裡的檔案是給「對照原始數值」用的（顏色、間距、字級、互動邏輯都在裡面）。
+| 畫板 | 對應的實作 |
+|---|---|
+| 手機 App（390×844） | `MobileCalendar.vue` |
+| 手機 App · AI 助理開啟（同一個手機畫板，AI 面板打開的狀態） | `MobileCalendar.vue` 的 AI 底部面板 |
+| 桌面 Web（1440 寬） | `DesktopCalendar.vue` |
 
-設計稿改版時：重新從畫布匯出、覆蓋這裡的檔案、更新上面的版本號，再對照下面的表看實作要不要跟。
+要查某個顏色、間距的原始數值：在畫布上點選元素看屬性，或用瀏覽器開發者工具檢查 `prototype.html`。
+
+設計稿改版時：從畫布重新匯出、覆蓋 `prototype.html`、更新上面的版本號，再對照下面的表看實作要不要跟。
 
 ## 跟設計稿不一樣的地方
 
