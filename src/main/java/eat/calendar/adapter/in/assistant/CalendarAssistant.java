@@ -6,6 +6,8 @@ import eat.calendar.application.port.in.FindFreeSlotsUseCase;
 import eat.calendar.application.port.in.ListEventsUseCase;
 import eat.calendar.application.port.in.ParseEventsUseCase;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -26,6 +28,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * 行事曆的 AI 助理：一段對話，模型自己決定要查行程、找空檔、提議新增，還是先反問使用者。
@@ -35,6 +39,8 @@ import java.util.Objects;
  * - 模型不擅長的不交給它：時間怎麼解析（propose_events 只收一句話，交給既有的抽取流程）、
  *   空檔怎麼算（FreeSlots）、「下午」是幾點到幾點（DayPeriod）、存不存檔（使用者按確認）
  *
+ * 模型的話不全信：沒呼叫工具卻說「已顯示卡片」「已加入」時，提醒它重來一次，還是一樣就換成老實的固定回覆（見 reply）。
+ *
  * agent loop 寫在這裡（reply），不交給 Spring AI 的 ChatClient + advisor：
  * 記憶裡一定要留著工具呼叫和工具結果。只留「使用者的話」和「助理最後那句」時，
  * 下一輪模型看到的是「助理說了『已顯示卡片』就完成了」，於是改時間時只說不做、畫面上沒有卡片（使用者實際遇到的 bug）。
@@ -42,6 +48,24 @@ import java.util.Objects;
  * 自己跑迴圈，每一則訊息都在手上，存什麼、截到哪都看得見。
  */
 public final class CalendarAssistant {
+
+    // agent 內部做了什麼（叫了哪個工具、帶什麼參數、有沒有說謊被擋下）。access log 只看得到「HTTP 200、回了一段話」，
+    // 模型只說不做時從外面看不出來 —— 使用者回報「說已加入卻沒有卡片」時，log 裡什麼都沒有
+    private static final Logger log = LoggerFactory.getLogger(CalendarAssistant.class);
+
+    /**
+     * 回覆裡在說「有卡片」或「已經加入」。這一輪明明沒有提議任何行程，卻這樣說，就是在說謊：
+     * 實際發生過 ——「隨便」→「已顯示卡片」（沒呼叫工具）、「是」→「已加入這週三寫日記的行程」（助理根本不能加入）。
+     */
+    private static final Pattern CLAIMS_ACTION = Pattern.compile("卡片|已加入|已新增|已安排|已經(加入|新增|安排)|幫你(加入|新增)了");
+
+    // 抓到說謊時，暫時跟模型說的話：只放在這一次的請求裡，不存進記憶
+    static final String CORRECTION = "（系統提醒，不是使用者說的）你剛才的回覆提到了卡片或已加入，但這一輪你沒有呼叫 propose_events："
+            + "畫面上沒有任何新卡片，行程也沒有被加入 —— 你沒辦法加入行事曆，只有使用者按卡片上的「加入行事曆」才會加入。"
+            + "要新增行程就呼叫 propose_events；資訊不夠就問使用者；不然就照實回答，不要提卡片。";
+
+    // 提醒過還是一樣：不再讓模型說話，改成老實的固定回覆。存進記憶的也是這句，不是那句假話
+    static final String HONEST_FALLBACK = "抱歉，我剛剛沒有真的建立卡片。請把要新增的行程再說一次（日期、時間、要做的事），我會整理成卡片讓你確認。";
 
     // 溫度 0：同一段對話每次走同一條路，壞了重現得出來。實測 0 之下該問的會問、工具也選得對
     private static final double TEMPERATURE = 0;
@@ -145,8 +169,10 @@ public final class CalendarAssistant {
                     .toolCallbacks(ToolCallbacks.from(tools))
                     .build();
 
+            // 抓到說謊時暫時加進請求的兩則（那句假話 + 提醒）；不存進記憶，也不留在之後的對話裡
+            List<Message> correction = List.of();
             for (int step = 0; step < MAX_STEPS; step++) {
-                Prompt prompt = new Prompt(withSystem(system, conversation), options);
+                Prompt prompt = new Prompt(withSystem(system, concat(conversation, correction)), options);
                 ChatResponse response = chatModel.call(prompt);
                 if (!response.hasToolCalls()) {
                     AssistantMessage answer = response.getResult().getOutput();
@@ -155,13 +181,30 @@ public final class CalendarAssistant {
                         // 不存：空白的回覆留在記憶裡，下一輪模型會照著學
                         throw new IllegalStateException("AI 助理沒有回任何話");
                     }
+                    if (tools.proposals().isEmpty() && CLAIMS_ACTION.matcher(text).find()) {
+                        if (correction.isEmpty()) {
+                            log.warn("AI 助理沒呼叫工具卻說有卡片或已加入，提醒它重來：conversation={} reply={}", conversationId, text);
+                            correction = List.of(answer, new UserMessage(CORRECTION));
+                            continue;
+                        }
+                        log.warn("AI 助理提醒過還是說有卡片或已加入，改成固定回覆：conversation={} reply={}", conversationId, text);
+                        answer = new AssistantMessage(HONEST_FALLBACK);
+                        text = HONEST_FALLBACK;
+                    }
                     conversation.add(answer);
                     memory.saveAll(conversationId, recentTurns(conversation));
+                    log.info("AI 助理回覆：conversation={} steps={} proposals={} reply={}",
+                            conversationId, step + 1, tools.proposals().size(), text);
                     return new Reply(text.strip(), tools.proposals());
                 }
-                // 執行工具；回來的歷史 = 這次送出的訊息 + 助理的工具呼叫 + 工具結果（system 也在裡面，拿掉）
+                for (AssistantMessage.ToolCall call : response.getResult().getOutput().getToolCalls()) {
+                    log.info("AI 助理呼叫工具：conversation={} tool={} arguments={}", conversationId, call.name(), call.arguments());
+                }
+                // 執行工具；回來的歷史 = 這次送出的訊息 + 助理的工具呼叫 + 工具結果。
+                // system 和提醒那兩則都拿掉：提醒只對這一次有用，留在記憶裡會讓下一輪的模型看到一句假話
                 ToolExecutionResult result = toolCallingManager.executeToolCalls(prompt, response);
-                conversation = withoutSystem(result.conversationHistory());
+                conversation = withoutSystem(result.conversationHistory(), correction);
+                correction = List.of();
             }
             throw new IllegalStateException("AI 助理呼叫工具超過 " + MAX_STEPS + " 次還沒回話");
         } catch (IllegalStateException e) {
@@ -195,8 +238,19 @@ public final class CalendarAssistant {
         return messages;
     }
 
-    private static List<Message> withoutSystem(List<Message> messages) {
-        return new ArrayList<>(messages.stream().filter(m -> m.getMessageType() != MessageType.SYSTEM).toList());
+    // 拿掉 system，以及這一次暫時加進去的提醒（用同一個物件比對：ToolCallingManager 回來的歷史裡就是我們放進去的那幾個）
+    private static List<Message> withoutSystem(List<Message> messages, List<Message> temporary) {
+        Set<Message> skip = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        skip.addAll(temporary);
+        return new ArrayList<>(messages.stream()
+                .filter(m -> m.getMessageType() != MessageType.SYSTEM && !skip.contains(m))
+                .toList());
+    }
+
+    private static List<Message> concat(List<Message> first, List<Message> second) {
+        List<Message> all = new ArrayList<>(first);
+        all.addAll(second);
+        return all;
     }
 
     /**
@@ -209,6 +263,8 @@ public final class CalendarAssistant {
      * - 「一定要呼叫 propose_events，不要只用文字複述」：經過 Spring AI 之後，「明天七點吃晚餐」它只回了
      *   「明天晚上七點吃晚餐。」—— 判斷對了（晚上），卻沒有提議，畫面上就沒有卡片可以確認
      * - 「包括改時間」：使用者說「其實是早上」也是要新增（一張新的卡片），不是聊天
+     * - 「你沒辦法加入行事曆」「沒呼叫就不要說已顯示卡片」：實際發生過它沒呼叫工具卻說「已顯示卡片」「已加入」。
+     *   這句只是提醒，真正擋住說謊的是 reply 裡的 CLAIMS_ACTION 檢查
      * - 「只有帶著時段的字才不用問」：原本寫成「從要做的事看得出來就不用問」，模型把「七點吃飯」也當成看得出來、
      *   直接提議 19:00 —— 但早上七點吃飯也很常見。界線改成看字：早餐、晚餐、晨跑這種字本身帶著時段，其他一律問
      */
@@ -219,7 +275,7 @@ public final class CalendarAssistant {
                 %s
 
                 你能做的事：
-                - 使用者要新增行程（包括改時間，例如「其實是早上」）：用 propose_events，把行程整理成一句完整的話傳進去（你不用算日期和時間，行事曆會解析）。畫面會顯示卡片讓使用者確認，你不能自己存，也不要說「已加入」。
+                - 使用者要新增行程（包括改時間，例如「其實是早上」）：用 propose_events，把行程整理成一句完整的話傳進去（你不用算日期和時間，行事曆會解析）。畫面會顯示卡片讓使用者確認。你沒辦法把行程加入行事曆，只有使用者按卡片上的「加入行事曆」才會加入，所以不要說「已加入」；沒呼叫 propose_events 就不要說「已顯示卡片」。
                   使用者講了要做的事和時間，就是要新增行程：一定要呼叫 propose_events，不要只用文字把那句話複述一遍（時間不確定時才先問）。
                 - 使用者問某天或某段時間有什麼行程：用 list_events 查，再用一兩句話回答。
                 - 使用者問什麼時候有空：用 find_free_slots 查，再回答。

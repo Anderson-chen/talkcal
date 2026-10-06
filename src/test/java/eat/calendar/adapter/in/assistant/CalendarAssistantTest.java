@@ -225,5 +225,42 @@ class CalendarAssistantTest {
         // 清空後的第一句：送給模型的只有 system 和這一句
         assertEquals(2, prompts.getLast().getInstructions().size());
     }
+
+    @Test
+    @DisplayName("使用者回報：沒呼叫工具卻說「已顯示卡片」→ 提醒它重來；它這次真的呼叫了，就照常出卡片。那句假話和提醒都不進記憶")
+    void falseClaimIsCorrected() {
+        CalendarAssistant.Reply reply = assistant(scripted(says("已顯示卡片，請確認。"), proposes("這週三中午寫日記"), says("請確認卡片。")))
+                // 句子裡要有時段的字：假的解析固定回 19:00，沒講早晚的話會被「先問早晚」那條擋下
+                .reply(ID, "晚上隨便");
+
+        assertEquals(1, reply.proposals().size());
+        assertEquals("請確認卡片。", reply.text());
+        // 第二次呼叫模型時，帶著那句假話和提醒
+        assertTrue(prompts.get(1).getInstructions().stream().anyMatch(m -> CalendarAssistant.CORRECTION.equals(m.getText())));
+        // 記憶裡：使用者的話 → 工具呼叫 → 工具結果 → 回覆，沒有假話也沒有提醒
+        List<Message> stored = memory.findByConversationId(ID);
+        assertEquals(List.of(MessageType.USER, MessageType.ASSISTANT, MessageType.TOOL, MessageType.ASSISTANT),
+                stored.stream().map(Message::getMessageType).toList());
+        assertTrue(stored.stream().noneMatch(m -> "已顯示卡片，請確認。".equals(m.getText()) || CalendarAssistant.CORRECTION.equals(m.getText())));
+    }
+
+    @Test
+    @DisplayName("提醒過還是說「已加入」：換成老實的固定回覆，記憶裡存的也是這句")
+    void repeatedFalseClaimFallsBackToHonestReply() {
+        CalendarAssistant.Reply reply = assistant(scripted(says("已加入這週三寫日記的行程！"))).reply(ID, "是");
+
+        assertEquals(CalendarAssistant.HONEST_FALLBACK, reply.text());
+        assertTrue(reply.proposals().isEmpty());
+        assertEquals(2, prompts.size(), "只提醒一次");
+        assertEquals(CalendarAssistant.HONEST_FALLBACK, memory.findByConversationId(ID).getLast().getText());
+    }
+
+    @Test
+    @DisplayName("真的有提議時說「請確認卡片」不算說謊：不提醒、只呼叫兩次模型")
+    void claimWithRealProposalIsFine() {
+        assistant(scripted(proposes("明天晚上七點吃飯"), says("已顯示卡片，請確認。"))).reply(ID, "晚上");
+
+        assertEquals(2, prompts.size());
+    }
 }
 
