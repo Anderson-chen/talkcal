@@ -120,9 +120,21 @@ class LlamaCppExtractEventsAdapterTest {
         CalendarEvent yoga = extract("晚上七點在健身房上瑜珈課").getFirst();
         CalendarEvent movie = extract("週六晚上去看電影").getFirst();
 
+
         assertEquals(Optional.of("3F會議室A"), meeting.location());
         assertTrue(meeting.title().contains("客戶"), meeting.title());
         assertEquals(Optional.of("健身房"), yoga.location());
         assertEquals(Optional.empty(), movie.location());
+    }
+
+    @Test
+    @DisplayName("回報的 bug：「明天下午3點和 Amy 開會」沒講結束時間 → 15:00–16:00，不是 502、也不是模型編的時間")
+    void unstatedEndFallsBackToDefault() {
+        for (String said : List.of("明天下午3點和 Amy 開會", "明天下午3點跟小明吃飯")) {
+            CalendarEvent event = extract(said).getFirst();
+
+            assertEquals(LocalDateTime.of(2026, 10, 6, 15, 0), event.start(), said);
+            assertEquals(LocalDateTime.of(2026, 10, 6, 16, 0), event.end(), said);
+        }
     }
 }

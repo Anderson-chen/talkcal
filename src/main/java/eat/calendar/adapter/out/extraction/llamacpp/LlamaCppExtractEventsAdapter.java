@@ -41,7 +41,7 @@ public final class LlamaCppExtractEventsAdapter implements ExtractEventsPort {
 
     @Override
     public List<CalendarEvent> extractEvents(EventDescription description, LocalDateTime now) {
-        return ExtractionResponse.events(send(ExtractionRequest.body(description, now)));
+        return ExtractionResponse.events(send(ExtractionRequest.body(description, now)), description);
     }
 
     private String send(String requestBody) {
