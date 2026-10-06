@@ -57,9 +57,9 @@ final class ExtractionRequest {
      * category 用 enum 鎖死四個值：模型「只能」從裡面挑，不會發明出「會議」「其他」這種第五類。
      * location 跟 end 一樣可以是 null（沒講地點）。備註不交給模型 —— 那是使用者自己補的東西。
      *
-     * endSaid 是模型「引用」的原話：使用者講結束時間的那幾個字。模型給的 end 不一定可信
-     * （沒講結束時間時，它會給跟開始一樣的時間、或自己編一個），ExtractionResponse 會拿這段引用
-     * 回原句裡核對，對得上才採用 end。原因和規則寫在 ExtractionResponse.endIsGrounded。
+     * startSaid、endSaid 是模型「引用」的原話：使用者講開始、結束時間的那幾個字。
+     * 模型給的 start / end 不一定可信（沒講結束時間會自己編、沒講上下午會照字面當凌晨），
+     * ExtractionResponse 拿這些引用回原句核對、套規則。規則和原因寫在 SaidTimes。
      *
      * 透過 OpenAI 協定的 response_format（json_schema）送過去，llama.cpp 把它轉成文法（GBNF）在解碼時強制執行 ——
      * 不合 schema 的 token 根本選不到，比在 prompt 裡拜託模型「請回 JSON」可靠得多。
@@ -80,11 +80,12 @@ final class ExtractionRequest {
                       "title": { "type": "string", "minLength": 1 },
                       "start": { "type": "string", "pattern": "%1$s" },
                       "end":   { "anyOf": [ { "type": "string", "pattern": "%1$s" }, { "type": "null" } ] },
+                      "startSaid": { "type": "string", "minLength": 1 },
                       "endSaid": { "anyOf": [ { "type": "string", "minLength": 1 }, { "type": "null" } ] },
                       "category": { "type": "string", "enum": ["work", "personal", "health", "social"] },
                       "location": { "anyOf": [ { "type": "string", "minLength": 1 }, { "type": "null" } ] }
                     },
-                    "required": ["title", "start", "end", "endSaid", "category", "location"],
+                    "required": ["title", "start", "end", "startSaid", "endSaid", "category", "location"],
                     "additionalProperties": false
                   }
                 }
@@ -141,6 +142,7 @@ final class ExtractionRequest {
                 日期一律從下表找對應的那一列，不要自己推算：
                 %s
                 時間格式用 yyyy-MM-ddTHH:mm。
+                startSaid：使用者原話裡講開始時間的那幾個字，連同前面的「早上」「下午」這類字一字不改照抄（例如「明天下午三點開會」→「下午三點」、「明天三點開會」→「三點」）。
                 endSaid：使用者原話裡講結束時間的那幾個字，一字不改照抄（例如「九點到十點半看牙醫」→「十點半」）；原話沒講結束時間就給 null。
                 有講結束時間就一定要填 end，跨過午夜的結束時間要用隔天的日期；沒講結束時間 end 給 null。
                 title 寫要做的事，有講跟誰就保留（例如「跟小明吃飯」「跟客戶開會」），但不要包含日期、時間和地點。

@@ -141,4 +141,27 @@ class SpringAiExtractEventsAdapterTest {
             assertEquals(LocalDateTime.of(2026, 10, 6, 16, 0), event.end(), said);
         }
     }
+
+    @Test
+    @DisplayName("沒講上下午的 1～6 點當成下午；有講的照講的")
+    void ambiguousHoursMeanAfternoon() {
+        CalendarEvent meeting = extract("明天三點開會到五點").getFirst();
+        CalendarEvent doctor = extract("明天兩點看醫生").getFirst();
+        CalendarEvent stars = extract("明天早上三點起床看流星").getFirst();
+
+        assertEquals(LocalDateTime.of(2026, 10, 6, 15, 0), meeting.start());
+        assertEquals(LocalDateTime.of(2026, 10, 6, 17, 0), meeting.end());
+        assertEquals(LocalDateTime.of(2026, 10, 6, 14, 0), doctor.start());
+        assertEquals(LocalDateTime.of(2026, 10, 6, 3, 0), stars.start());
+    }
+
+    @Test
+    @DisplayName("一句兩筆：第一筆沒講結束時間，不會拿到第二筆的「十點半」")
+    void doesNotBorrowEndFromAnotherEvent() {
+        List<CalendarEvent> events = extract("明天三點跟小明吃飯，下週三早上九點到十點半看牙醫");
+
+        assertEquals(LocalDateTime.of(2026, 10, 6, 15, 0), events.get(0).start());
+        assertEquals(LocalDateTime.of(2026, 10, 6, 16, 0), events.get(0).end());
+        assertEquals(LocalDateTime.of(2026, 10, 14, 10, 30), events.get(1).end());
+    }
 }

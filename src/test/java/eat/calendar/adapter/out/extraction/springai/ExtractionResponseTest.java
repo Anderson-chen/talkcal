@@ -223,25 +223,50 @@ class ExtractionResponseTest {
                 () -> extract(oneEvent("2026-10-07T14:00", "兩點"), "明天下午三點到兩點開會"));
     }
 
-    @Test
-    @DisplayName("endIsGrounded：引用要在原句裡，而且緊接在 到／至／~／- 後面")
-    void grounding() {
-        assertTrue(ExtractionResponse.endIsGrounded("十點半", "下週三早上九點到十點半看牙醫"));
-        assertTrue(ExtractionResponse.endIsGrounded("凌晨一點", "晚上十點到凌晨一點唱歌"));
-        assertTrue(ExtractionResponse.endIsGrounded("三點半", "週四下午兩點至三點半交報告"));
-        assertTrue(ExtractionResponse.endIsGrounded("16:00", "週六 14:00-16:00 打球"));
-        assertTrue(ExtractionResponse.endIsGrounded("五點", "明天三點開會到五點"));
-        // 模型連「到」一起抄也認得
-        assertTrue(ExtractionResponse.endIsGrounded("到十點半", "九點到十點半看牙醫"));
 
-        // 抄成開始時間：前面是「明天」不是「到」
-        assertFalse(ExtractionResponse.endIsGrounded("下午3點", "明天下午3點和 Amy 開會"));
-        // 原句根本沒有這幾個字
-        assertFalse(ExtractionResponse.endIsGrounded("十點", "晚上七點在健身房上瑜珈課"));
-        assertFalse(ExtractionResponse.endIsGrounded(null, "明天下午3點開會"));
-        assertFalse(ExtractionResponse.endIsGrounded("  ", "明天下午3點開會"));
-        assertFalse(ExtractionResponse.endIsGrounded("到", "明天下午3點到公司開會"));
-        // 引用裡的特殊字元不會被當成正規表示式
-        assertFalse(ExtractionResponse.endIsGrounded(".*", "明天三點到五點"));
+    // ── 沒講上下午的 1～6 點當成下午（使用者定的規則；規則本身的細節測在 SaidTimesTest） ─────────
+
+    private static ChatResponse timed(String start, String end, String startSaid, String endSaid) {
+        String endJson = end == null ? "null" : "\"" + end + "\"";
+        String endSaidJson = endSaid == null ? "null" : "\"" + endSaid + "\"";
+        return response("{\"events\":[{\"title\":\"開會\",\"start\":\"" + start + "\",\"end\":" + endJson
+                + ",\"startSaid\":\"" + startSaid + "\",\"endSaid\":" + endSaidJson + ",\"category\":\"work\",\"location\":null}]}");
+    }
+
+    @Test
+    @DisplayName("「明天三點開會到五點」：模型給 03:00–05:00 → 15:00–17:00")
+    void ambiguousRangeBecomesAfternoon() {
+        CalendarEvent event = extract(timed("2026-10-07T03:00", "2026-10-07T05:00", "三點", "五點"), "明天三點開會到五點").getFirst();
+
+        assertEquals(LocalDateTime.of(2026, 10, 7, 15, 0), event.start());
+        assertEquals(LocalDateTime.of(2026, 10, 7, 17, 0), event.end());
+    }
+
+    @Test
+    @DisplayName("「明天兩點看醫生」：沒講結束 → 14:00–15:00")
+    void ambiguousStartBecomesAfternoon() {
+        CalendarEvent event = extract(timed("2026-10-07T02:00", null, "兩點", null), "明天兩點看醫生").getFirst();
+
+        assertEquals(LocalDateTime.of(2026, 10, 7, 14, 0), event.start());
+        assertEquals(LocalDateTime.of(2026, 10, 7, 15, 0), event.end());
+    }
+
+    @Test
+    @DisplayName("有講時段的不動：「凌晨兩點」「早上三點」照模型給的")
+    void statedPeriodIsKept() {
+        assertEquals(LocalDateTime.of(2026, 10, 7, 2, 0),
+                extract(timed("2026-10-07T02:00", null, "凌晨兩點", null), "明天凌晨兩點看球賽").getFirst().start());
+        assertEquals(LocalDateTime.of(2026, 10, 7, 3, 0),
+                extract(timed("2026-10-07T03:00", null, "早上三點", null), "明天早上三點起床看流星").getFirst().start());
+    }
+
+    @Test
+    @DisplayName("一句兩筆：第一筆拿了第二筆的結束時間（隔著逗號）→ 不採用，第一筆用預設一小時")
+    void endQuotedFromAnotherEventIsIgnored() {
+        CalendarEvent first = extract(timed("2026-10-06T15:00", "2026-10-06T10:30", "三點", "十點半"),
+                "明天三點跟小明吃飯，下週三早上九點到十點半看牙醫").getFirst();
+
+        assertEquals(LocalDateTime.of(2026, 10, 6, 15, 0), first.start());
+        assertEquals(LocalDateTime.of(2026, 10, 6, 16, 0), first.end());
     }
 }

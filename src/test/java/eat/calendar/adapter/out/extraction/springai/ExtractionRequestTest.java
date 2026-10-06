@@ -116,7 +116,7 @@ class ExtractionRequestTest {
         @DisplayName("欄位全部 required，end 可以是 null")
         void requiresEveryField() {
             JsonNode item = schema.at("/properties/events/items");
-            assertEquals(List.of("title", "start", "end", "endSaid", "category", "location"),
+            assertEquals(List.of("title", "start", "end", "startSaid", "endSaid", "category", "location"),
                     item.get("required").valueStream().map(JsonNode::asString).toList());
             assertEquals("null", item.at("/properties/end/anyOf/1/type").asString());
             assertEquals("null", item.at("/properties/location/anyOf/1/type").asString());
