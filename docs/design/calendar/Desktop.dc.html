@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>行事曆 桌面版</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&amp;family=Noto+Sans+TC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#2F5BEA}a:hover{color:#1E3FA8}
+button{font-family:inherit;cursor:pointer}
+input,textarea{font-family:inherit}
+</style>
+</helmet>
+<div style="min-height: 900px; position: relative; background: {{t.panel}}; color: {{t.ink}}; font-family: 'Noto Sans TC', Manrope, sans-serif; display: flex; flex-wrap: wrap; align-items: stretch">
+
+  <aside style="flex: 1 1 260px; max-width: 100%; box-sizing: border-box; padding: 24px 20px; background: {{t.card}}; border-right: 1px solid {{t.line}}; display: flex; flex-direction: column; gap: 24px">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <span style="width: 36px; height: 36px; border-radius: 10px; background: {{t.accent}}; color: {{t.onAccent}}; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="2"></rect><path d="M4 10h16M9 3v4M15 3v4"></path></svg></span>
+      <span style="font-size: 19px; font-weight: 700">行事曆</span>
+    </div>
+    <button onClick="{{openNewSel}}" style="height: 48px; border: 0; border-radius: 12px; background: {{t.accent}}; color: {{t.onAccent}}; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>新增行程</button>
+
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; align-items: center; justify-content: space-between">
+        <span style="font-size: 14px; font-weight: 700">{{titleMonth}}</span>
+        <div style="display: flex">
+          <button aria-label="上個月" onClick="{{prevMonth}}" style="{{smallIcon}}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></button>
+          <button aria-label="下個月" onClick="{{nextMonth}}" style="{{smallIcon}}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg></button>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px">
+        <sc-for list="{{weekdays}}" as="w" hint-placeholder-count="7">
+          <span style="text-align: center; font-size: 11px; color: {{t.muted}}; padding: 2px 0">{{w.label}}</span>
+        </sc-for>
+        <sc-for list="{{mini}}" as="c" hint-placeholder-count="35">
+          <button aria-label="{{c.aria}}" onClick="{{c.pick}}" style="{{c.style}}">{{c.day}}</button>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <span style="font-size: 12px; font-weight: 700; color: {{t.muted}}; letter-spacing: 0.06em; margin-bottom: 4px">我的分類</span>
+      <sc-for list="{{filters}}" as="f" hint-placeholder-count="5">
+        <label style="display: flex; align-items: center; gap: 10px; min-height: 36px; font-size: 14px; cursor: pointer">
+          <input type="checkbox" checked="{{f.checked}}" onChange="{{f.toggle}}" style="{{f.boxStyle}}">
+          <span style="flex: 1">{{f.label}}</span>
+          <span style="font-size: 12px; color: {{t.muted}}; font-family: Manrope, sans-serif">{{f.count}}</span>
+        </label>
+      </sc-for>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span style="font-size: 12px; font-weight: 700; color: {{t.muted}}; letter-spacing: 0.06em">主題</span>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+        <sc-for list="{{themeOpts}}" as="o" hint-placeholder-count="4">
+          <button aria-pressed="{{o.pressed}}" onClick="{{o.pick}}" style="{{o.style}}">
+            <span style="{{o.preview}}">
+              <span style="{{o.bar}}"></span>
+              <span style="{{o.chip1}}"></span>
+              <span style="{{o.chip2}}"></span>
+            </span>
+            <span style="display: flex; align-items: baseline; justify-content: space-between; padding: 0 2px">
+              <span style="font-size: 13px; font-weight: 700">{{o.name}}</span>
+              <span style="font-size: 11px; color: {{t.muted}}">{{o.sub}}</span>
+            </span>
+          </button>
+        </sc-for>
+      </div>
+    </div>
+  </aside>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 24px 28px 32px; display: flex; flex-direction: column; gap: 16px">
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+      <button onClick="{{goToday}}" style="height: 40px; padding: 0 16px; border: 1px solid {{t.field}}; border-radius: 10px; background: {{t.card}}; color: {{t.ink}}; font-size: 14px; font-weight: 500">今天</button>
+      <div style="display: flex">
+        <button aria-label="{{prevLabel}}" onClick="{{prev}}" style="{{bigIcon}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></button>
+        <button aria-label="{{nextLabel}}" onClick="{{next}}" style="{{bigIcon}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg></button>
+      </div>
+      <h1 style="margin: 0; font-size: 24px; font-weight: 700; flex: 1; min-width: 200px">{{title}}</h1>
+      <button aria-pressed="{{aiPressed}}" onClick="{{toggleAi}}" style="{{aiBtn}}"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M11 2.5l1.9 5.1 5.1 1.9-5.1 1.9L11 16.5l-1.9-5.1L4 9.5l5.1-1.9z"></path><path d="M18.5 14l.9 2.4 2.4.9-2.4.9-.9 2.4-.9-2.4-2.4-.9 2.4-.9z"></path></svg>AI 助理</button>
+      <div style="padding: 4px; background: {{t.seg}}; border-radius: 10px; display: flex; gap: 4px">
+        <button aria-pressed="{{tabs.m.pressed}}" onClick="{{toMonth}}" style="{{tabs.m.style}}">月</button>
+        <button aria-pressed="{{tabs.w.pressed}}" onClick="{{toWeek}}" style="{{tabs.w.style}}">週</button>
+        <button aria-pressed="{{tabs.d.pressed}}" onClick="{{toDay}}" style="{{tabs.d.style}}">日</button>
+      </div>
+    </div>
+
+    <sc-if value="{{isMonth}}" hint-placeholder-val="{{ true }}">
+      <div style="overflow-x: auto">
+        <div style="min-width: 640px; background: {{t.line}}; border: 1px solid {{t.line}}; border-radius: 14px; overflow: hidden; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px">
+          <sc-for list="{{weekdays}}" as="w" hint-placeholder-count="7">
+            <div style="background: {{t.card}}; padding: 10px 12px; font-size: 12px; font-weight: 600; color: {{t.muted}}">週{{w.label}}</div>
+          </sc-for>
+          <sc-for list="{{cells}}" as="c" hint-placeholder-count="35">
+            <div style="{{c.cellStyle}}">
+              <div style="display: flex; align-items: center; justify-content: space-between">
+                <button aria-label="{{c.aria}}" onClick="{{c.openDay}}" style="{{c.numStyle}}">{{c.day}}</button>
+                <button aria-label="{{c.addAria}}" onClick="{{c.add}}" style="width: 28px; height: 28px; border: 0; border-radius: 8px; background: transparent; color: {{t.faint}}; display: flex; align-items: center; justify-content: center; padding: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button>
+              </div>
+              <sc-for list="{{c.chips}}" as="e" hint-placeholder-count="1">
+                <button onClick="{{e.open}}" style="{{e.style}}"><span style="font-family: Manrope, sans-serif; font-weight: 700; margin-right: 4px">{{e.time}}</span>{{e.title}}</button>
+              </sc-for>
+              <sc-if value="{{c.hasMore}}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{c.openDay}}" style="border: 0; background: transparent; text-align: left; padding: 2px 6px; font-size: 12px; font-weight: 600; color: {{t.muted}}">{{c.more}}</button>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isWeek}}" hint-placeholder-val="{{ false }}">
+      <div style="overflow-x: auto">
+        <div style="min-width: 720px; background: {{t.card}}; border: 1px solid {{t.line}}; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column">
+          <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 8px 8px 8px 72px; border-bottom: 1px solid {{t.line}}">
+            <sc-for list="{{weekCols}}" as="c" hint-placeholder-count="7">
+              <button aria-label="{{c.aria}}" onClick="{{c.openDay}}" style="{{c.headStyle}}">
+                <span style="font-size: 12px; font-weight: 500">週{{c.wd}}</span>
+                <span style="{{c.numStyle}}">{{c.day}}</span>
+              </button>
+            </sc-for>
+          </div>
+          <sc-if value="{{hasWeekAllDay}}" hint-placeholder-val="{{ false }}">
+            <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; padding: 8px 8px 8px 72px; border-bottom: 1px solid {{t.line}}; position: relative">
+              <span style="position: absolute; left: 16px; top: 13px; font-size: 12px; color: {{t.muted}}">整天</span>
+              <sc-for list="{{weekCols}}" as="c" hint-placeholder-count="7">
+                <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                  <sc-for list="{{c.allDay}}" as="e" hint-placeholder-count="0">
+                    <button onClick="{{e.open}}" style="{{e.style}}">{{e.title}}</button>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <div style="position: relative; height: {{weekTimelineH}}; margin: 12px 0">
+            <sc-for list="{{weekHours}}" as="h" hint-placeholder-count="18">
+              <div style="{{h.style}}">
+                <span style="position: absolute; left: 16px; top: -9px; width: 44px; font-size: 12px; color: {{t.muted}}; font-family: Manrope, sans-serif; background: {{t.card}}">{{h.label}}</span>
+              </div>
+            </sc-for>
+            <div style="position: absolute; left: 72px; right: 8px; top: 0; bottom: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr))">
+              <sc-for list="{{weekCols}}" as="c" hint-placeholder-count="7">
+                <div style="{{c.colStyle}}">
+                  <sc-for list="{{c.blocks}}" as="b" hint-placeholder-count="1">
+                    <button onClick="{{b.open}}" aria-label="{{b.aria}}" style="{{b.style}}">
+                      <span style="display: block; font-size: 12px; font-weight: 700; line-height: 1.3; overflow: hidden; text-overflow: ellipsis">{{b.title}}</span>
+                      <span style="display: block; font-size: 11px; font-family: Manrope, sans-serif; opacity: 0.85; white-space: nowrap; overflow: hidden">{{b.time}}</span>
+                    </button>
+                  </sc-for>
+                  <sc-if value="{{c.isToday}}" hint-placeholder-val="{{ false }}">
+                    <sc-if value="{{showNow}}" hint-placeholder-val="{{ false }}">
+                      <div style="{{nowStyleW}}"><span style="position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: {{t.now}}"></span></div>
+                    </sc-if>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isDay}}" hint-placeholder-val="{{ false }}">
+      <div style="background: {{t.card}}; border: 1px solid {{t.line}}; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column">
+        <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-bottom: 1px solid {{t.line}}; padding: 8px">
+          <sc-for list="{{week}}" as="w" hint-placeholder-count="7">
+            <button aria-label="{{w.aria}}" onClick="{{w.pick}}" style="{{w.style}}">
+              <span style="font-size: 12px; font-weight: 500">週{{w.wd}}</span>
+              <span style="font-size: 20px; font-weight: 700; font-family: Manrope, sans-serif">{{w.day}}</span>
+            </button>
+          </sc-for>
+        </div>
+        <sc-if value="{{hasAllDay}}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; gap: 8px; align-items: center; padding: 10px 16px 10px 76px; border-bottom: 1px solid {{t.line}}; position: relative; flex-wrap: wrap">
+            <span style="position: absolute; left: 16px; font-size: 12px; color: {{t.muted}}">整天</span>
+            <sc-for list="{{allDay}}" as="e" hint-placeholder-count="1">
+              <button onClick="{{e.open}}" style="{{e.chipStyle}}">{{e.title}}</button>
+            </sc-for>
+          </div>
+        </sc-if>
+        <div style="position: relative; height: {{timelineH}}; margin: 12px 0">
+          <sc-for list="{{hours}}" as="h" hint-placeholder-count="18">
+            <div style="{{h.style}}">
+              <span style="position: absolute; left: 16px; top: -9px; width: 44px; font-size: 12px; color: {{t.muted}}; font-family: Manrope, sans-serif; background: {{t.card}}">{{h.label}}</span>
+            </div>
+          </sc-for>
+          <div style="position: absolute; left: 76px; right: 16px; top: 0; bottom: 0">
+            <sc-for list="{{blocks}}" as="b" hint-placeholder-count="3">
+              <button onClick="{{b.open}}" aria-label="{{b.aria}}" style="{{b.style}}">
+                <span style="display: block; font-size: 14px; font-weight: 700; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{b.title}}</span>
+                <span style="display: block; font-size: 12px; font-family: Manrope, 'Noto Sans TC', sans-serif; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{b.sub}}</span>
+              </button>
+            </sc-for>
+            <sc-if value="{{showNow}}" hint-placeholder-val="{{ false }}">
+              <sc-if value="{{selIsToday}}" hint-placeholder-val="{{ false }}">
+                <div style="{{nowStyle}}"><span style="position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: {{t.now}}"></span></div>
+              </sc-if>
+            </sc-if>
+          </div>
+        </div>
+        <sc-if value="{{noDayEvents}}" hint-placeholder-val="{{ false }}">
+          <p style="margin: 0; padding: 0 16px 16px 76px; color: {{t.muted}}; font-size: 14px">這天沒有行程，點左側「新增行程」來建立。</p>
+        </sc-if>
+      </div>
+    </sc-if>
+  </main>
+
+  <sc-if value="{{aiOpen}}" hint-placeholder-val="{{ true }}">
+    <aside aria-labelledby="d-ai-title" style="flex: 1 1 340px; max-width: 100%; height: 900px; position: sticky; top: 0; box-sizing: border-box; background: {{t.card}}; border-left: 1px solid {{t.line}}; display: flex; flex-direction: column">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 20px 12px 16px 20px; border-bottom: 1px solid {{t.line}}">
+        <span style="width: 36px; height: 36px; border-radius: 10px; background: {{t.accentSoft}}; color: {{t.accent}}; display: flex; align-items: center; justify-content: center; flex: none"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M11 2.5l1.9 5.1 5.1 1.9-5.1 1.9L11 16.5l-1.9-5.1L4 9.5l5.1-1.9z"></path><path d="M18.5 14l.9 2.4 2.4.9-2.4.9-.9 2.4-.9-2.4-2.4-.9 2.4-.9z"></path></svg></span>
+        <div style="flex: 1; min-width: 0">
+          <h2 id="d-ai-title" style="margin: 0; font-size: 16px; font-weight: 700">AI 助理</h2>
+          <div style="font-size: 12px; color: {{t.muted}}">用一句話新增、查詢或找空檔</div>
+        </div>
+        <button aria-label="收合 AI 助理" onClick="{{closeAi}}" style="{{bigIcon}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg></button>
+      </div>
+      <div style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column-reverse">
+        <div aria-live="polite" style="display: flex; flex-direction: column; gap: 10px; padding: 16px">
+          <sc-for list="{{aiMsgs}}" as="m" hint-placeholder-count="3">
+            <sc-if value="{{m.isMe}}" hint-placeholder-val="{{ false }}">
+              <div style="{{meBubble}}">{{m.text}}</div>
+            </sc-if>
+            <sc-if value="{{m.isAi}}" hint-placeholder-val="{{ true }}">
+              <div style="{{aiBubble}}">
+                <span>{{m.text}}</span>
+                <sc-if value="{{m.hasCard}}" hint-placeholder-val="{{ false }}">
+                  <div style="background: {{t.card}}; border: 1px solid {{t.line}}; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px; white-space: normal">
+                    <span style="{{m.card.catStyle}}">{{m.card.cat}}</span>
+                    <span style="font-size: 15px; font-weight: 700">{{m.card.title}}</span>
+                    <span style="font-size: 13px; color: {{t.muted}}; font-family: Manrope, 'Noto Sans TC', sans-serif">{{m.card.when}}</span>
+                    <sc-if value="{{m.pending}}" hint-placeholder-val="{{ true }}">
+                      <div style="display: flex; gap: 8px; margin-top: 6px">
+                        <button onClick="{{m.confirm}}" style="flex: 1; height: 40px; border: 0; border-radius: 9px; background: {{t.accent}}; color: {{t.onAccent}}; font-size: 13px; font-weight: 700">加入行事曆</button>
+                        <button onClick="{{m.cancel}}" style="height: 40px; padding: 0 12px; border: 1px solid {{t.field}}; border-radius: 9px; background: transparent; color: {{t.ink}}; font-size: 13px">取消</button>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{m.added}}" hint-placeholder-val="{{ false }}">
+                      <span style="font-size: 13px; font-weight: 700; color: {{t.accent}}; margin-top: 4px">已加入行事曆</span>
+                    </sc-if>
+                    <sc-if value="{{m.cancelled}}" hint-placeholder-val="{{ false }}">
+                      <span style="font-size: 13px; color: {{t.muted}}; margin-top: 4px">已取消</span>
+                    </sc-if>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-if>
+          </sc-for>
+          <sc-if value="{{aiTyping}}" hint-placeholder-val="{{ false }}">
+            <div style="align-self: flex-start; padding: 10px 14px; border-radius: 16px 16px 16px 4px; background: {{t.seg}}; color: {{t.muted}}; font-size: 13px">思考中…</div>
+          </sc-if>
+        </div>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px 4px">
+        <sc-for list="{{aiSuggest}}" as="q" hint-placeholder-count="3">
+          <button onClick="{{q.pick}}" style="height: 32px; padding: 0 10px; border: 1px solid {{t.field}}; border-radius: 16px; background: transparent; color: {{t.ink}}; font-size: 12px; white-space: nowrap">{{q.label}}</button>
+        </sc-for>
+      </div>
+      <form onSubmit="{{aiSubmit}}" style="display: flex; gap: 8px; align-items: center; padding: 8px 16px 20px; position: relative">
+        <label for="d-ai-input" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">輸入訊息</label>
+        <input id="d-ai-input" type="text" autocomplete="off" placeholder="例如：下週二早上10點面試" value="{{aiInput}}" onChange="{{setAiInput}}" style="flex: 1; min-width: 0; height: 44px; border: 1px solid {{t.field}}; border-radius: 22px; padding: 0 16px; font-size: 14px; background: {{t.bg}}; color: {{t.ink}}; box-sizing: border-box">
+        <button type="submit" aria-label="送出" style="width: 44px; height: 44px; flex: none; border: 0; border-radius: 22px; background: {{t.accent}}; color: {{t.onAccent}}; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></button>
+      </form>
+    </aside>
+  </sc-if>
+
+  <sc-if value="{{hasDetail}}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; top: 0; right: 0; bottom: 0; width: 380px; max-width: 100%; background: {{t.card}}; border-left: 1px solid {{t.line}}; box-shadow: -12px 0 32px rgba(0, 0, 0, 0.14); display: flex; flex-direction: column; z-index: 5">
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 16px 8px 24px">
+        <span style="{{detail.catStyle}}">{{detail.cat}}</span>
+        <button aria-label="關閉" onClick="{{closeDetail}}" style="{{bigIcon}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+      </div>
+      <div style="padding: 8px 24px; display: flex; flex-direction: column; gap: 20px; flex: 1; overflow-y: auto">
+        <h2 style="margin: 0; font-size: 24px; font-weight: 700; line-height: 1.3">{{detail.title}}</h2>
+        <div style="display: flex; flex-direction: column; border-top: 1px solid {{t.line}}">
+          <div style="display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid {{t.line}}; color: {{t.muted}}">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+            <div style="display: flex; flex-direction: column; gap: 2px">
+              <span style="font-size: 15px; font-weight: 500; color: {{t.ink}}">{{detail.date}}</span>
+              <span style="font-size: 14px; color: {{t.muted}}; font-family: Manrope, 'Noto Sans TC', sans-serif">{{detail.time}}</span>
+            </div>
+          </div>
+          <sc-if value="{{detail.hasLoc}}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid {{t.line}}; color: {{t.muted}}">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0114 0C19 14.8 12 21 12 21z"></path><circle cx="12" cy="9.5" r="2.5"></circle></svg>
+              <span style="font-size: 15px; color: {{t.ink}}">{{detail.loc}}</span>
+            </div>
+          </sc-if>
+          <sc-if value="{{detail.hasNote}}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid {{t.line}}; color: {{t.muted}}">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px"><path d="M5 4h14v16H5z"></path><path d="M9 9h6M9 13h6M9 17h3"></path></svg>
+              <span style="font-size: 15px; line-height: 1.6; white-space: pre-line; color: {{t.ink}}">{{detail.note}}</span>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+      <div style="padding: 16px 24px 24px; display: flex; gap: 10px">
+        <button onClick="{{showDay}}" style="flex: 1; height: 44px; border: 1px solid {{t.field}}; border-radius: 10px; background: transparent; color: {{t.ink}}; font-size: 14px; font-weight: 600">在日視圖查看</button>
+        <button onClick="{{remove}}" style="height: 44px; padding: 0 16px; border: 1px solid {{t.dangerLine}}; border-radius: 10px; background: transparent; color: {{t.danger}}; font-size: 14px; font-weight: 600">刪除</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isNew}}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: {{t.scrim}}; z-index: 10; display: flex; justify-content: center; align-items: flex-start; padding: 72px 16px; box-sizing: border-box">
+      <div role="dialog" aria-modal="true" aria-labelledby="d-new-title" style="width: 520px; max-width: 100%; background: {{t.card}}; border-radius: 18px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28); display: flex; flex-direction: column">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 20px 20px 4px 28px">
+          <h2 id="d-new-title" style="margin: 0; font-size: 20px; font-weight: 700">新增行程</h2>
+          <button aria-label="關閉" onClick="{{closeNew}}" style="{{bigIcon}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+        </div>
+        <div style="padding: 16px 28px; display: flex; flex-direction: column; gap: 16px">
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <label for="d-title" style="font-size: 13px; font-weight: 500; color: {{t.muted}}">標題</label>
+            <input id="d-title" type="text" placeholder="例如：產品週會" value="{{form.title}}" onChange="{{setTitle}}" style="{{fieldStyle}}">
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="d-date" style="font-size: 13px; font-weight: 500; color: {{t.muted}}">日期</label>
+              <input id="d-date" type="date" value="{{form.date}}" onChange="{{setDate}}" style="{{fieldStyle}}">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="d-start" style="font-size: 13px; font-weight: 500; color: {{t.muted}}">開始</label>
+              <input id="d-start" type="time" value="{{form.start}}" onChange="{{setStart}}" style="{{fieldStyle}}">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="d-end" style="font-size: 13px; font-weight: 500; color: {{t.muted}}">結束</label>
+              <input id="d-end" type="time" value="{{form.end}}" onChange="{{setEnd}}" style="{{fieldStyle}}">
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px">
+            <span style="font-size: 13px; font-weight: 500; color: {{t.muted}}">分類</span>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px">
+              <sc-for list="{{catOptions}}" as="o" hint-placeholder-count="4">
+                <button aria-pressed="{{o.pressed}}" onClick="{{o.pick}}" style="{{o.style}}"><span style="{{o.dot}}"></span>{{o.label}}</button>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <label for="d-loc" style="font-size: 13px; font-weight: 500; color: {{t.muted}}">地點</label>
+            <input id="d-loc" type="text" placeholder="選填" value="{{form.loc}}" onChange="{{setLoc}}" style="{{fieldStyle}}">
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <label for="d-note" style="font-size: 13px; font-weight: 500; color: {{t.muted}}">備註</label>
+            <textarea id="d-note" rows="3" placeholder="選填" value="{{form.note}}" onChange="{{setNote}}" style="{{areaStyle}}"></textarea>
+          </div>
+          <sc-if value="{{hasError}}" hint-placeholder-val="{{ false }}">
+            <p role="alert" style="margin: 0; padding: 10px 12px; border-radius: 10px; background: {{t.dangerSoft}}; color: {{t.danger}}; font-size: 14px">{{error}}</p>
+          </sc-if>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px; padding: 8px 28px 24px">
+          <button onClick="{{closeNew}}" style="height: 44px; padding: 0 18px; border: 1px solid {{t.field}}; border-radius: 10px; background: transparent; color: {{t.ink}}; font-size: 14px; font-weight: 600">取消</button>
+          <button onClick="{{save}}" style="height: 44px; padding: 0 22px; border: 0; border-radius: 10px; background: {{t.accent}}; color: {{t.onAccent}}; font-size: 14px; font-weight: 600">儲存行程</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"晴空","options":["晴空","夜幕","森林","暖陽"]},"weekStart":{"editor":"enum","default":"日","options":["日","一"]},"aiPanel":{"editor":"boolean","default":true},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { year: 2026, month: 9, sel: '2026-10-06', view: 'month', detailId: null, newOpen: false, hidden: {}, events: this.seed(), form: this.blankForm('2026-10-06'), error: '', nextId: 100, theme: null, aiOpen: !(props && props.aiPanel === false), aiMsgs: this.aiInit(true), aiInput: '', aiTyping: false, aiSeq: 10 };
+  }
+  aiInit(demo) {
+    const hi = { id: 1, role: 'ai', text: '嗨！我是你的行事曆助理。可以幫你新增行程、查詢某天的安排，或找出這週的空檔。' };
+    if (!demo) return [hi];
+    return [hi, { id: 2, role: 'me', text: '明天下午3點和 Amy 開會' }, { id: 3, role: 'ai', text: '幫你整理好了，確認後就會加入行事曆：', proposal: { title: '和 Amy 開會', date: '2026-10-07', start: '15:00', end: '16:00', cat: 'work', loc: '', note: '' }, status: 'pending' }];
+  }
+  hm(m) { return this.pad(Math.floor(m / 60)) + ':' + this.pad(m % 60); }
+  addDays(k, n) { const p = this.parse(k); const d = new Date(p[0], p[1], p[2] + n); return this.key(d.getFullYear(), d.getMonth(), d.getDate()); }
+  dateLabel(k) { const p = this.parse(k); return (p[1] + 1) + '月' + p[2] + '日（週' + ['日', '一', '二', '三', '四', '五', '六'][new Date(p[0], p[1], p[2]).getDay()] + '）'; }
+  aiParseDate(txt) {
+    const T = this.today(); let m;
+    if ((m = txt.match(/今天|今日/))) return { k: T, raw: m[0] };
+    if ((m = txt.match(/後天/))) return { k: this.addDays(T, 2), raw: m[0] };
+    if ((m = txt.match(/明天|明日/))) return { k: this.addDays(T, 1), raw: m[0] };
+    if ((m = txt.match(/(下)?(?:週|星期|禮拜)([一二三四五六日天])/))) {
+      const map = { '日': 0, '天': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6 };
+      const p = this.parse(T); const dow = new Date(p[0], p[1], p[2]).getDay();
+      let diff = map[m[2]] - dow; if (m[1]) diff += 7; else if (diff < 0) diff += 7;
+      return { k: this.addDays(T, diff), raw: m[0] };
+    }
+    if ((m = txt.match(/(\d{1,2})月(\d{1,2})[日號]?/))) return { k: this.key(2026, +m[1] - 1, +m[2]), raw: m[0] };
+    return null;
+  }
+  aiParseTime(txt) {
+    const cn = { '十二': '12', '十一': '11', '十': '10', '一': '1', '二': '2', '兩': '2', '三': '3', '四': '4', '五': '5', '六': '6', '七': '7', '八': '8', '九': '9' };
+    const s2 = txt.replace(/(十二|十一|十|[一二兩三四五六七八九])(?=點)/g, (x) => cn[x]);
+    const m = s2.match(/(上午|早上|中午|下午|晚上)?\s*(\d{1,2})\s*(?:[:：](\d{2})|點\s*(半|\d{1,2}\s*分?)?)/);
+    if (!m) return null;
+    let h = +m[2]; const mi = m[3] ? +m[3] : m[4] === '半' ? 30 : m[4] ? parseInt(m[4], 10) : 0;
+    if ((m[1] === '下午' || m[1] === '晚上') && h < 12) h += 12;
+    if (m[1] === '中午' && h < 11) h += 12;
+    if (h > 23 || mi > 59) return null;
+    return { start: this.hm(h * 60 + mi), raw: m[0], s2: s2 };
+  }
+  aiFree(k) {
+    const ws = (this.props.weekStart ?? '日') === '一' ? 1 : 0;
+    const p = this.parse(k); const off = (new Date(p[0], p[1], p[2]).getDay() - ws + 7) % 7;
+    const lines = [];
+    for (let i = 0; i < 7; i++) {
+      const dk = this.addDays(k, i - off); const evs = this.eventsOn(dk);
+      if (evs.some((e) => e.allDay)) continue;
+      const busy = evs.map((e) => [this.mins(e.start), this.mins(e.end)]).sort((a, b) => a[0] - b[0]).concat([[1080, 1080]]);
+      let cur = 540; let best = null;
+      busy.forEach((b) => { const st = Math.min(b[0], 1080); if (st - cur >= 60 && (!best || st - cur > best[1] - best[0])) best = [cur, st]; cur = Math.max(cur, Math.min(b[1], 1080)); });
+      if (best) lines.push('• ' + this.dateLabel(dk) + '　' + this.hm(best[0]) + '–' + this.hm(best[1]));
+    }
+    return lines.length ? '這週工作時段（09:00–18:00）每天最長的空檔：\n' + lines.join('\n') : '這週的工作時段都排滿了。';
+  }
+  aiReply(text) {
+    const txt = text.trim(); const d = this.aiParseDate(txt); const tm = this.aiParseTime(txt);
+    if (/空/.test(txt) && !tm) return { text: this.aiFree(d ? d.k : this.state.sel) };
+    if (tm) {
+      const k = d ? d.k : this.state.sel;
+      let title = tm.s2.replace(tm.raw, ''); if (d) title = title.replace(d.raw, '');
+      title = title.replace(/幫我|請|麻煩|新增|安排|加入|建立|提醒我|一個|行程/g, '').replace(/^[\s，,。在]+|[\s，,。？?！!]+$/g, '').trim() || '新行程';
+      const end = this.hm(Math.min(this.mins(tm.start) + 60, 23 * 60 + 59));
+      const cat = /會|簡報|面試|客戶|專案|報告/.test(title) ? 'work' : /吃|飯|聚|派對|約|咖啡/.test(title) ? 'social' : /跑|瑜珈|健身|醫|運動|游泳/.test(title) ? 'health' : 'personal';
+      return { text: '幫你整理好了，確認後就會加入行事曆：', proposal: { title: title, date: k, start: tm.start, end: end, cat: cat, loc: '', note: '' } };
+    }
+    if (/行程|安排|有什麼|要做|忙/.test(txt) || d) {
+      const k = d ? d.k : this.state.sel; const evs = this.eventsOn(k);
+      if (!evs.length) return { text: this.dateLabel(k) + ' 目前沒有行程，要幫你安排點什麼嗎？' };
+      return { text: this.dateLabel(k) + ' 共有 ' + evs.length + ' 個行程：\n' + evs.map((e) => '• ' + this.timeLabel(e) + '　' + e.title).join('\n') };
+    }
+    return { text: '我目前可以幫你：\n• 新增行程，例如「明天下午3點和 Amy 開會」\n• 查詢安排，例如「週五有什麼行程？」\n• 找空檔，例如「這週哪天有空？」' };
+  }
+  aiSend(text) {
+    const txt = String(text ?? this.state.aiInput).trim();
+    if (!txt || this.state.aiTyping) return;
+    const id = this.state.aiSeq;
+    this.setState({ aiMsgs: this.state.aiMsgs.concat([{ id: id, role: 'me', text: txt }]), aiInput: '', aiTyping: true, aiSeq: id + 2 });
+    setTimeout(() => {
+      const r = this.aiReply(txt);
+      this.setState({ aiTyping: false, aiMsgs: this.state.aiMsgs.concat([Object.assign({ id: id + 1, role: 'ai', status: r.proposal ? 'pending' : null }, r)]) });
+    }, 700);
+  }
+  aiConfirm(id) {
+    const m = this.state.aiMsgs.find((x) => x.id === id);
+    if (!m || m.status !== 'pending') return;
+    const ev = Object.assign({}, m.proposal, { id: this.state.nextId }); const p = this.parse(ev.date);
+    const hidden = Object.assign({}, this.state.hidden); delete hidden[ev.cat];
+    this.setState({ events: this.state.events.concat([ev]), nextId: this.state.nextId + 1, sel: ev.date, year: p[0], month: p[1], hidden: hidden, aiMsgs: this.state.aiMsgs.map((x) => (x.id === id ? Object.assign({}, x, { status: 'added' }) : x)) });
+  }
+  aiCancel(id) { this.setState({ aiMsgs: this.state.aiMsgs.map((x) => (x.id === id ? Object.assign({}, x, { status: 'cancelled' }) : x)) }); }
+  aiView(t, C) {
+    return this.state.aiMsgs.map((m) => {
+      const pr = m.proposal; const c = pr ? C[pr.cat] : null;
+      return {
+        isMe: m.role === 'me', isAi: m.role === 'ai', text: m.text, hasCard: !!pr,
+        card: pr ? { title: pr.title, when: this.dateLabel(pr.date) + '　' + pr.start + ' – ' + pr.end, cat: c.label, catStyle: 'align-self: flex-start; display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 11px; font-size: 12px; font-weight: 600; background: ' + c.soft + '; color: ' + c.ink } : { title: '', when: '', cat: '', catStyle: '' },
+        pending: m.status === 'pending', added: m.status === 'added', cancelled: m.status === 'cancelled',
+        confirm: () => this.aiConfirm(m.id), cancel: () => this.aiCancel(m.id)
+      };
+    });
+  }
+  today() { return '2026-10-06'; }
+  themes() {
+    return {
+      sky: { name: '晴空', dark: false, bg: '#FFFFFF', panel: '#F5F6F8', card: '#FFFFFF', ink: '#14171F', muted: '#5B6372', faint: '#9AA1AE', line: '#E5E8EC', field: '#D5D9E0', seg: '#E9ECF0', segOn: '#FFFFFF', accent: '#2F5BEA', accentSoft: '#E6ECFD', onAccent: '#FFFFFF', danger: '#B4232F', dangerLine: '#F0C4CA', dangerSoft: '#FBE3E7', now: '#D92D3F', scrim: 'rgba(20, 23, 31, 0.42)' },
+      night: { name: '夜幕', dark: true, bg: '#12141A', panel: '#12141A', card: '#1C1F27', ink: '#ECEEF2', muted: '#A3AAB8', faint: '#5D6472', line: '#2A2F3A', field: '#3A404C', seg: '#232731', segOn: '#353B48', accent: '#7C9BFF', accentSoft: '#253158', onAccent: '#0D1020', danger: '#F6A3B1', dangerLine: '#5A2832', dangerSoft: '#3D1A22', now: '#FF6B7D', scrim: 'rgba(0, 0, 0, 0.6)' },
+      forest: { name: '森林', dark: false, bg: '#FBFAF6', panel: '#F2F1EA', card: '#FFFFFF', ink: '#1B2420', muted: '#59625C', faint: '#A0A69F', line: '#E4E2D8', field: '#D3D1C5', seg: '#E8E6DC', segOn: '#FFFFFF', accent: '#1F6B4F', accentSoft: '#DCEDE4', onAccent: '#FFFFFF', danger: '#A3262F', dangerLine: '#EBC4C4', dangerSoft: '#F8E3E1', now: '#C6363F', scrim: 'rgba(27, 36, 32, 0.42)' },
+      sunset: { name: '暖陽', dark: false, bg: '#FFFBF7', panel: '#FBF3EC', card: '#FFFFFF', ink: '#23170F', muted: '#6B5A4E', faint: '#B0A196', line: '#F0E4D9', field: '#E0CFC0', seg: '#F4E8DC', segOn: '#FFFFFF', accent: '#B83C0A', accentSoft: '#FDE6D6', onAccent: '#FFFFFF', danger: '#A3262F', dangerLine: '#EBC4C4', dangerSoft: '#F8E3E1', now: '#C6363F', scrim: 'rgba(35, 23, 15, 0.42)' }
+    };
+  }
+  themeKey() {
+    const map = { '晴空': 'sky', '夜幕': 'night', '森林': 'forest', '暖陽': 'sunset' };
+    return this.state.theme || map[this.props.theme] || 'sky';
+  }
+  cats(dark) {
+    if (dark) return {
+      work: { label: '工作', color: '#6F8FFF', soft: '#1E2A4F', ink: '#B4C5FF' },
+      personal: { label: '個人', color: '#F08A3E', soft: '#3A2614', ink: '#F7BE90' },
+      health: { label: '健康', color: '#3BBF86', soft: '#13362A', ink: '#95E0BD' },
+      social: { label: '社交', color: '#A586F5', soft: '#2E2350', ink: '#D2BFFF' },
+      holiday: { label: '假日', color: '#EE6B82', soft: '#3D1A22', ink: '#F7AEBB' }
+    };
+    return {
+      work: { label: '工作', color: '#2F5BEA', soft: '#E6ECFD', ink: '#1E3FA8' },
+      personal: { label: '個人', color: '#D9661F', soft: '#FCEBDD', ink: '#8A3C0E' },
+      health: { label: '健康', color: '#16865A', soft: '#DDF3E8', ink: '#0E5E3F' },
+      social: { label: '社交', color: '#7C4DDB', soft: '#EEE6FC', ink: '#5530A8' },
+      holiday: { label: '假日', color: '#C2334D', soft: '#FBE3E7', ink: '#8F1F33' }
+    };
+  }
+  seed() {
+    return [
+      { id: 1, date: '2026-10-01', start: '09:30', end: '10:30', title: '部門週會', cat: 'work', loc: '3F 會議室 A', note: '' },
+      { id: 2, date: '2026-10-06', start: '09:00', end: '10:00', title: '產品週會', cat: 'work', loc: '3F 會議室 A', note: '帶上 Q4 路線圖草稿' },
+      { id: 3, date: '2026-10-06', start: '12:30', end: '13:30', title: '和小美吃午餐', cat: 'social', loc: '公司附近的拉麵店', note: '' },
+      { id: 4, date: '2026-10-06', start: '14:00', end: '15:30', title: '行事曆設計評審', cat: 'work', loc: '線上會議', note: '確認月視圖與日視圖的互動' },
+      { id: 5, date: '2026-10-06', start: '15:00', end: '16:00', title: '回覆客戶信件', cat: 'work', loc: '', note: '' },
+      { id: 6, date: '2026-10-06', start: '19:00', end: '20:00', title: '瑜珈課', cat: 'health', loc: '健身房 2F', note: '記得帶瑜珈墊' },
+      { id: 7, date: '2026-10-08', start: '07:00', end: '08:00', title: '晨跑', cat: 'health', loc: '河濱公園', note: '' },
+      { id: 8, date: '2026-10-08', start: '10:00', end: '11:30', title: '客戶簡報', cat: 'work', loc: '客戶辦公室', note: '' },
+      { id: 9, date: '2026-10-10', allDay: true, start: '00:00', end: '23:59', title: '國慶日', cat: 'holiday', loc: '', note: '' },
+      { id: 10, date: '2026-10-13', start: '18:30', end: '20:30', title: '讀書會', cat: 'personal', loc: '咖啡廳', note: '' },
+      { id: 11, date: '2026-10-15', start: '15:00', end: '16:00', title: '牙醫回診', cat: 'health', loc: '', note: '' },
+      { id: 12, date: '2026-10-17', allDay: true, start: '00:00', end: '23:59', title: '週末登山', cat: 'personal', loc: '', note: '' },
+      { id: 13, date: '2026-10-21', start: '10:00', end: '12:00', title: 'Sprint 規劃', cat: 'work', loc: '3F 會議室 B', note: '' },
+      { id: 14, date: '2026-10-24', start: '19:00', end: '21:30', title: '生日聚餐', cat: 'social', loc: '[餐廳名稱]', note: '' },
+      { id: 15, date: '2026-10-28', start: '14:00', end: '16:00', title: '季度回顧', cat: 'work', loc: '大會議室', note: '' },
+      { id: 16, date: '2026-10-31', start: '20:00', end: '23:00', title: '萬聖節派對', cat: 'social', loc: '', note: '' }
+    ];
+  }
+  pad(n) { return String(n).padStart(2, '0'); }
+  key(y, m, d) { return y + '-' + this.pad(m + 1) + '-' + this.pad(d); }
+  parse(k) { const p = k.split('-').map(Number); return [p[0], p[1] - 1, p[2]]; }
+  mins(t) { const p = String(t).split(':').map(Number); return p[0] * 60 + (p[1] || 0); }
+  eventsOn(k) {
+    const hid = this.state.hidden;
+    return this.state.events.filter((e) => e.date === k && !hid[e.cat]).sort((a, b) => ((b.allDay ? 1 : 0) - (a.allDay ? 1 : 0)) || (this.mins(a.start) - this.mins(b.start)));
+  }
+  blankForm(d) { return { title: '', date: d, start: '10:00', end: '11:00', cat: 'work', loc: '', note: '' }; }
+  timeLabel(e) { return e.allDay ? '整天' : e.start + ' – ' + e.end; }
+  pickDate(k, extra) { const p = this.parse(k); this.setState(Object.assign({ sel: k, year: p[0], month: p[1] }, extra || {})); }
+  shiftMonth(n) { const d = new Date(this.state.year, this.state.month + n, 1); this.setState({ year: d.getFullYear(), month: d.getMonth() }); }
+  shiftDay(n) { const p = this.parse(this.state.sel); const d = new Date(p[0], p[1], p[2] + n); this.pickDate(this.key(d.getFullYear(), d.getMonth(), d.getDate())); }
+  openNew(d) { this.setState({ form: this.blankForm(d), error: '', newOpen: true, detailId: null }); }
+  setField(f, v) { const form = Object.assign({}, this.state.form); form[f] = v; this.setState({ form: form }); }
+  save() {
+    const f = this.state.form;
+    if (!f.title.trim()) { this.setState({ error: '請輸入行程標題' }); return; }
+    if (!f.date) { this.setState({ error: '請選擇日期' }); return; }
+    if (this.mins(f.end) <= this.mins(f.start)) { this.setState({ error: '結束時間需晚於開始時間' }); return; }
+    const ev = Object.assign({}, f, { id: this.state.nextId, title: f.title.trim() });
+    const p = this.parse(f.date);
+    const hidden = Object.assign({}, this.state.hidden); delete hidden[f.cat];
+    this.setState({ events: this.state.events.concat([ev]), nextId: this.state.nextId + 1, sel: f.date, year: p[0], month: p[1], newOpen: false, error: '', hidden: hidden, detailId: ev.id });
+  }
+  layout(evs) {
+    const out = []; let cluster = []; let end = -1;
+    const flush = () => {
+      const cols = []; const placed = [];
+      cluster.forEach((e) => { let c = 0; while (cols[c] != null && cols[c] > this.mins(e.start)) c++; cols[c] = this.mins(e.end); placed.push({ e: e, col: c }); });
+      placed.forEach((p) => out.push({ e: p.e, col: p.col, n: cols.length }));
+      cluster = []; end = -1;
+    };
+    evs.forEach((e) => { if (cluster.length && this.mins(e.start) >= end) flush(); cluster.push(e); end = Math.max(end, this.mins(e.end)); });
+    if (cluster.length) flush();
+    return out;
+  }
+  makeBlocks(evs, H0, HH, C, compact) {
+    const sel = this.state.detailId;
+    return this.layout(evs.filter((e) => !e.allDay)).map((p) => {
+      const e = p.e; const c = C[e.cat]; const on = e.id === sel;
+      const top = (this.mins(e.start) - H0 * 60) / 60 * HH; const h = Math.max(compact ? 24 : 30, (this.mins(e.end) - this.mins(e.start)) / 60 * HH - 2);
+      const g = compact ? 2 : 3;
+      return { title: e.title, time: e.start + ' – ' + e.end, sub: e.start + ' – ' + e.end + (e.loc ? ' · ' + e.loc : ''), aria: e.title + '，' + e.start + ' 到 ' + e.end, open: () => this.setState({ detailId: e.id }),
+        style: 'position: absolute; top: ' + (top + 1) + 'px; height: ' + h + 'px; left: calc(' + (p.col / p.n * 100) + '% + ' + g + 'px); width: calc(' + (100 / p.n) + '% - ' + (g * 2) + 'px); background: ' + (on ? c.ink : c.soft) + '; color: ' + (on ? c.soft : c.ink) + '; border: 0; border-radius: ' + (compact ? 8 : 10) + 'px; padding: ' + (compact ? '4px 6px' : '7px 10px') + '; box-sizing: border-box; overflow: hidden; text-align: left;' };
+    });
+  }
+  renderVals() {
+    const s = this.state; const TH = this.themes(); const tk = this.themeKey(); const t = TH[tk] || TH.sky;
+    const C = this.cats(t.dark); const T = this.today(); const accent = t.accent;
+    const ws = (this.props.weekStart ?? '日') === '一' ? 1 : 0;
+    const WD = ['日', '一', '二', '三', '四', '五', '六'];
+    const weekdays = [0, 1, 2, 3, 4, 5, 6].map((i) => ({ label: WD[(i + ws) % 7] }));
+    const first = (new Date(s.year, s.month, 1).getDay() - ws + 7) % 7;
+    const dim = new Date(s.year, s.month + 1, 0).getDate();
+    const rows = Math.ceil((first + dim) / 7);
+    const cells = []; const mini = [];
+    for (let i = 0; i < rows * 7; i++) {
+      const dt = new Date(s.year, s.month, 1 - first + i);
+      const k = this.key(dt.getFullYear(), dt.getMonth(), dt.getDate());
+      const evs = this.eventsOn(k);
+      const inM = dt.getMonth() === s.month; const isT = k === T; const isS = k === s.sel;
+      const label = (dt.getMonth() + 1) + '月' + dt.getDate() + '日';
+      let num = 'width: 30px; height: 30px; border: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-family: Manrope, sans-serif; font-weight: 700; padding: 0;';
+      if (isT) num += 'background: ' + accent + '; color: ' + t.onAccent + ';';
+      else if (isS) num += 'background: transparent; box-shadow: inset 0 0 0 2px ' + accent + '; color: ' + accent + ';';
+      else num += 'background: transparent; color: ' + (inM ? t.ink : t.faint) + ';';
+      const chips = evs.slice(0, 3).map((e) => {
+        const c = C[e.cat]; const on = e.id === s.detailId;
+        return { title: e.title, time: e.allDay ? '' : e.start, open: () => this.setState({ detailId: e.id }),
+          style: 'width: 100%; border: 0; border-radius: 6px; padding: 4px 7px; font-size: 12px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: ' + (on ? c.ink : c.soft) + '; color: ' + (on ? c.soft : c.ink) + ';' };
+      });
+      cells.push({
+        day: dt.getDate(), numStyle: num, chips: chips, hasMore: evs.length > 3, more: '+' + (evs.length - 3) + ' 更多',
+        cellStyle: 'background: ' + (inM ? t.card : t.panel) + '; min-height: 124px; padding: 8px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box; min-width: 0',
+        openDay: () => this.pickDate(k, { view: 'day' }), add: () => { this.pickDate(k); this.openNew(k); },
+        aria: label + '，' + (evs.length ? evs.length + ' 個行程' : '沒有行程') + '，開啟日視圖', addAria: '在' + label + '新增行程'
+      });
+      let ms = 'height: 30px; border: 0; border-radius: 8px; font-size: 12px; font-family: Manrope, sans-serif; font-weight: 600; padding: 0;';
+      if (isS) ms += 'background: ' + accent + '; color: ' + t.onAccent + ';';
+      else if (isT) ms += 'background: ' + t.accentSoft + '; color: ' + accent + ';';
+      else ms += 'background: transparent; color: ' + (inM ? t.ink : t.faint) + ';';
+      mini.push({ day: dt.getDate(), style: ms, aria: label, pick: () => this.pickDate(k, { view: s.view === 'month' ? 'day' : s.view }) });
+    }
+    const sp = this.parse(s.sel); const dow = new Date(sp[0], sp[1], sp[2]).getDay();
+    const selEvs = this.eventsOn(s.sel);
+    const offset = (dow - ws + 7) % 7;
+    const weekDates = [0, 1, 2, 3, 4, 5, 6].map((i) => new Date(sp[0], sp[1], sp[2] - offset + i));
+    const week = weekDates.map((d) => {
+      const k = this.key(d.getFullYear(), d.getMonth(), d.getDate());
+      const isS = k === s.sel; const isT = k === T;
+      return { wd: WD[d.getDay()], day: d.getDate(), aria: (d.getMonth() + 1) + '月' + d.getDate() + '日', pick: () => this.pickDate(k),
+        style: 'border: 0; border-radius: 10px; min-height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; ' + (isS ? 'background: ' + accent + '; color: ' + t.onAccent + ';' : 'background: transparent; color: ' + (isT ? accent : t.ink) + ';') };
+    });
+    const H0 = 6; const HH = 64; const HW = 52;
+    const hourRows = (hh) => { const r = []; for (let h = H0; h < 24; h++) r.push({ label: this.pad(h) + ':00', style: 'position: absolute; left: 0; right: 0; top: ' + ((h - H0) * hh) + 'px; height: ' + hh + 'px; border-top: 1px solid ' + t.line + '; box-sizing: border-box' }); return r; };
+    const weekCols = weekDates.map((d) => {
+      const k = this.key(d.getFullYear(), d.getMonth(), d.getDate());
+      const evs = this.eventsOn(k); const isT = k === T; const isS = k === s.sel;
+      let num = 'width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; font-family: Manrope, sans-serif; box-sizing: border-box;';
+      if (isT) num += 'background: ' + accent + '; color: ' + t.onAccent + ';';
+      else if (isS) num += 'box-shadow: inset 0 0 0 2px ' + accent + '; color: ' + accent + ';';
+      else num += 'color: ' + t.ink + ';';
+      return {
+        wd: WD[d.getDay()], day: d.getDate(), numStyle: num, isToday: isT,
+        headStyle: 'border: 0; border-radius: 10px; background: transparent; color: ' + (isT ? accent : t.muted) + '; min-height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px',
+        aria: (d.getMonth() + 1) + '月' + d.getDate() + '日，' + (evs.length ? evs.length + ' 個行程' : '沒有行程') + '，開啟日視圖',
+        openDay: () => this.pickDate(k, { view: 'day' }),
+        colStyle: 'position: relative; border-left: 1px solid ' + t.line + ';' + (isT ? ' background: ' + t.accentSoft + '66;' : ''),
+        allDay: evs.filter((e) => e.allDay).map((e) => ({ title: e.title, open: () => this.setState({ detailId: e.id }), style: 'border: 0; border-radius: 6px; padding: 0 8px; height: 28px; font-size: 12px; font-weight: 700; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: ' + C[e.cat].soft + '; color: ' + C[e.cat].ink })),
+        blocks: this.makeBlocks(evs, H0, HW, C, true)
+      };
+    });
+    const wa = weekDates[0]; const wb = weekDates[6];
+    const weekLabel = wa.getFullYear() + '年' + (wa.getMonth() + 1) + '月' + wa.getDate() + '日 – ' + (wb.getMonth() !== wa.getMonth() ? (wb.getMonth() + 1) + '月' : '') + wb.getDate() + '日';
+    const allDay = selEvs.filter((e) => e.allDay).map((e) => ({ title: e.title, open: () => this.setState({ detailId: e.id }),
+      chipStyle: 'border: 0; border-radius: 8px; padding: 0 12px; height: 32px; font-size: 13px; font-weight: 600; background: ' + C[e.cat].soft + '; color: ' + C[e.cat].ink }));
+    const now = new Date(); const nm = now.getHours() * 60 + now.getMinutes();
+    const ev = s.events.find((e) => e.id === s.detailId && !s.hidden[e.cat]);
+    let detail = { title: '', cat: '', catStyle: '', date: '', time: '', loc: '', note: '', hasLoc: false, hasNote: false };
+    if (ev) {
+      const p = this.parse(ev.date); const c = C[ev.cat];
+      detail = { title: ev.title, cat: c.label, catStyle: 'display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 14px; font-size: 13px; font-weight: 600; background: ' + c.soft + '; color: ' + c.ink, date: p[0] + '年' + (p[1] + 1) + '月' + p[2] + '日 星期' + WD[new Date(p[0], p[1], p[2]).getDay()], time: this.timeLabel(ev), loc: ev.loc, note: ev.note, hasLoc: !!ev.loc, hasNote: !!ev.note };
+    }
+    const monthPrefix = s.year + '-' + this.pad(s.month + 1);
+    const filters = ['work', 'personal', 'health', 'social', 'holiday'].map((k) => {
+      const c = C[k]; const on = !s.hidden[k];
+      return { label: c.label, checked: on, count: s.events.filter((e) => e.cat === k && e.date.indexOf(monthPrefix) === 0).length,
+        boxStyle: 'width: 18px; height: 18px; margin: 0; accent-color: ' + c.color,
+        toggle: () => { const h = Object.assign({}, s.hidden); if (h[k]) delete h[k]; else h[k] = true; this.setState({ hidden: h }); } };
+    });
+    const f = s.form;
+    const catOptions = ['work', 'personal', 'health', 'social'].map((k) => {
+      const on = f.cat === k; const c = C[k];
+      return { label: c.label, pressed: on ? 'true' : 'false', pick: () => this.setField('cat', k),
+        dot: 'width: 8px; height: 8px; border-radius: 50%; background: ' + (on ? c.ink : c.color),
+        style: 'height: 40px; padding: 0 14px; border-radius: 20px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; ' + (on ? 'border: 2px solid ' + c.ink + '; background: ' + c.soft + '; color: ' + c.ink + ';' : 'border: 1px solid ' + t.field + '; background: ' + t.card + '; color: ' + t.ink + ';') };
+    });
+    const themeOpts = Object.keys(TH).map((k) => {
+      const th = TH[k]; const cc = this.cats(th.dark); const on = k === tk;
+      return {
+        name: th.name, sub: th.dark ? '深色' : '淺色', pressed: on ? 'true' : 'false', pick: () => this.setState({ theme: k }),
+        style: 'display: flex; flex-direction: column; gap: 6px; border-radius: 12px; text-align: left; background: ' + t.card + '; color: ' + t.ink + '; ' + (on ? 'padding: 5px; border: 2px solid ' + t.accent + ';' : 'padding: 6px; border: 1px solid ' + t.line + ';'),
+        preview: 'height: 48px; border-radius: 8px; background: ' + th.bg + '; border: 1px solid ' + th.line + '; padding: 7px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box',
+        bar: 'width: 40%; height: 6px; border-radius: 3px; background: ' + th.accent,
+        chip1: 'width: 80%; height: 8px; border-radius: 3px; background: ' + cc.work.soft,
+        chip2: 'width: 60%; height: 8px; border-radius: 3px; background: ' + cc.social.soft
+      };
+    });
+    const view = s.view;
+    const tab = (on) => ({ pressed: on ? 'true' : 'false', style: 'height: 34px; min-width: 56px; padding: 0 14px; border: 0; border-radius: 7px; font-size: 14px; font-weight: 600; ' + (on ? 'background: ' + t.segOn + '; color: ' + t.ink + '; box-shadow: 0 1px 3px rgba(0,0,0,0.14);' : 'background: transparent; color: ' + t.muted + ';') });
+    const field = 'height: 44px; border: 1px solid ' + t.field + '; border-radius: 10px; padding: 0 12px; font-size: 15px; background: ' + t.card + '; color: ' + t.ink + '; box-sizing: border-box; min-width: 0; color-scheme: ' + (t.dark ? 'dark' : 'light');
+    const step = view === 'month' ? 0 : view === 'week' ? 7 : 1;
+    return {
+      aiOpen: s.aiOpen, aiMsgs: this.aiView(t, C), aiTyping: s.aiTyping, aiInput: s.aiInput, aiPressed: s.aiOpen ? 'true' : 'false',
+      aiBtn: 'height: 40px; padding: 0 14px 0 10px; border-radius: 10px; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; ' + (s.aiOpen ? 'border: 1px solid ' + t.accent + '; background: ' + t.accentSoft + '; color: ' + t.accent + ';' : 'border: 1px solid ' + t.field + '; background: ' + t.card + '; color: ' + t.accent + ';'),
+      aiSuggest: ['今天有什麼行程？', '週五晚上7點聚餐', '這週哪天有空？'].map((q) => ({ label: q, pick: () => this.aiSend(q) })),
+      toggleAi: () => this.setState({ aiOpen: !s.aiOpen }), closeAi: () => this.setState({ aiOpen: false }),
+      setAiInput: (e) => this.setState({ aiInput: e.target.value }),
+      aiSubmit: (e) => { if (e && e.preventDefault) e.preventDefault(); this.aiSend(); },
+      meBubble: 'align-self: flex-end; max-width: 82%; padding: 9px 13px; border-radius: 16px 16px 4px 16px; background: ' + t.accent + '; color: ' + t.onAccent + '; font-size: 14px; line-height: 1.5; white-space: pre-line',
+      aiBubble: 'align-self: flex-start; max-width: 90%; padding: 9px 13px; border-radius: 16px 16px 16px 4px; background: ' + t.seg + '; color: ' + t.ink + '; font-size: 14px; line-height: 1.6; white-space: pre-line; display: flex; flex-direction: column; gap: 10px',
+      t: t, isMonth: view === 'month', isWeek: view === 'week', isDay: view === 'day',
+      tabs: { m: tab(view === 'month'), w: tab(view === 'week'), d: tab(view === 'day') },
+      smallIcon: 'width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: ' + t.ink + '; display: flex; align-items: center; justify-content: center; padding: 0',
+      bigIcon: 'width: 40px; height: 40px; border: 0; border-radius: 10px; background: transparent; color: ' + t.ink + '; display: flex; align-items: center; justify-content: center; padding: 0',
+      fieldStyle: field, areaStyle: field.replace('height: 44px', 'resize: vertical').replace('padding: 0 12px', 'padding: 10px 12px'),
+      title: view === 'month' ? s.year + '年' + (s.month + 1) + '月' : view === 'week' ? weekLabel : (sp[1] + 1) + '月' + sp[2] + '日 星期' + WD[dow],
+      titleMonth: s.year + '年' + (s.month + 1) + '月',
+      prevLabel: view === 'month' ? '上個月' : view === 'week' ? '上一週' : '前一天', nextLabel: view === 'month' ? '下個月' : view === 'week' ? '下一週' : '後一天',
+      prev: () => (step ? this.shiftDay(-step) : this.shiftMonth(-1)), next: () => (step ? this.shiftDay(step) : this.shiftMonth(1)),
+      prevMonth: () => this.shiftMonth(-1), nextMonth: () => this.shiftMonth(1),
+      toMonth: () => this.setState({ view: 'month' }), toWeek: () => this.setState({ view: 'week' }), toDay: () => this.setState({ view: 'day' }),
+      goToday: () => this.pickDate(T),
+      weekdays: weekdays, cells: cells, mini: mini, filters: filters, themeOpts: themeOpts,
+      week: week, hours: hourRows(HH), blocks: this.makeBlocks(selEvs, H0, HH, C, false), allDay: allDay, hasAllDay: allDay.length > 0, noDayEvents: selEvs.length === 0,
+      timelineH: ((24 - H0) * HH) + 'px',
+      weekCols: weekCols, weekHours: hourRows(HW), hasWeekAllDay: weekCols.some((c) => c.allDay.length > 0), weekTimelineH: ((24 - H0) * HW) + 'px',
+      showNow: nm >= H0 * 60, selIsToday: s.sel === T,
+      nowStyle: 'position: absolute; left: 0; right: 0; top: ' + ((nm - H0 * 60) / 60 * HH) + 'px; height: 2px; background: ' + t.now + '; z-index: 2',
+      nowStyleW: 'position: absolute; left: 0; right: 0; top: ' + ((nm - H0 * 60) / 60 * HW) + 'px; height: 2px; background: ' + t.now + '; z-index: 2',
+      hasDetail: !!ev && !s.newOpen, detail: detail,
+      closeDetail: () => this.setState({ detailId: null }),
+      showDay: () => { if (ev) this.pickDate(ev.date, { view: 'day' }); },
+      remove: () => this.setState({ events: s.events.filter((e) => e.id !== s.detailId), detailId: null }),
+      isNew: s.newOpen, form: f, catOptions: catOptions, error: s.error, hasError: !!s.error,
+      openNewSel: () => this.openNew(s.sel), closeNew: () => this.setState({ newOpen: false, error: '' }), save: () => this.save(),
+      setTitle: (e) => this.setField('title', e.target.value), setDate: (e) => this.setField('date', e.target.value),
+      setStart: (e) => this.setField('start', e.target.value), setEnd: (e) => this.setField('end', e.target.value),
+      setLoc: (e) => this.setField('loc', e.target.value), setNote: (e) => this.setField('note', e.target.value)
+    };
+  }
+}
+</script>
+</body>
+</html>

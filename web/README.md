@@ -13,7 +13,8 @@ eat 的前端：Vue 3 + TypeScript + Vite。只是後端 API 的另一個呼叫�
 
 `src/App.vue` 只放行事曆；月曆格子的日期運算在 `src/monthGrid.ts`（純函式，不碰畫面）。
 
-行事曆照設計稿（Design 畫布「行事曆 Prototype」）做，`src/calendar/` 底下：
+行事曆照設計稿（Design 畫布「行事曆 Prototype」）做。設計稿原檔、以及實作跟它哪裡不一樣，記在
+[`docs/design/calendar/`](../docs/design/calendar/README.md)。`src/calendar/` 底下：
 
 - `useCalendar.ts`、`useAssistant.ts`、`useTheme.ts`：狀態與動作，`CalendarView` 建一份 provide 下去。
   桌面版和手機版共用，視窗拉窄換版面時，選的日期、AI 對話都還在
