@@ -10,6 +10,7 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @DisplayName("CalendarEvent")
 class CalendarEventTest {
@@ -77,5 +78,47 @@ class CalendarEventTest {
     @DisplayName("只給開始時間但它是 null：丟規則的例外，不是 NullPointerException")
     void startingAtRejectsNullStart() {
         assertThrows(IllegalArgumentException.class, () -> CalendarEvent.startingAt("開會", null));
+    }
+
+    @Test
+    @DisplayName("只給標題和時間：分類是預設（個人），沒有地點和備註")
+    void shortFormUsesDefaults() {
+        CalendarEvent event = new CalendarEvent("開會", THREE_PM, THREE_PM.plusHours(1));
+
+        assertEquals(Category.DEFAULT, event.category());
+        assertEquals(Category.PERSONAL, Category.DEFAULT);
+        assertEquals(Optional.empty(), event.location());
+        assertEquals(Optional.empty(), event.note());
+    }
+
+    @Test
+    @DisplayName("分類是 null 時拒絕：「沒指定」要明說成 Category.DEFAULT")
+    void rejectsNullCategory() {
+        assertThrows(IllegalArgumentException.class, () -> new CalendarEvent("開會", THREE_PM, THREE_PM.plusHours(1),
+                null, Optional.empty(), Optional.empty()));
+    }
+
+    @Test
+    @DisplayName("地點、備註：去掉前後空白；空白（含換行、全形空白）當成沒有")
+    void normalizesOptionalText() {
+        CalendarEvent event = new CalendarEvent("開會", THREE_PM, THREE_PM.plusHours(1), Category.WORK,
+                Optional.of("  3F 會議室  "), Optional.of(" \n\u3000 "));
+
+        assertEquals(Optional.of("3F 會議室"), event.location());
+        assertEquals(Optional.empty(), event.note());
+    }
+
+    @Test
+    @DisplayName("withCategory / withDetails：換掉那幾個欄位，其他不變；null 就是沒有")
+    void withers() {
+        CalendarEvent base = CalendarEvent.startingAt("晨跑", THREE_PM);
+
+        CalendarEvent detailed = base.withCategory(Category.HEALTH).withDetails("河濱公園", null);
+
+        assertEquals(Category.HEALTH, detailed.category());
+        assertEquals(Optional.of("河濱公園"), detailed.location());
+        assertEquals(Optional.empty(), detailed.note());
+        assertEquals(base.start(), detailed.start());
+        assertEquals(base.end(), detailed.end());
     }
 }

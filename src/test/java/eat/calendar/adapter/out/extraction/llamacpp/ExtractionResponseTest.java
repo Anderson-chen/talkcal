@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import eat.calendar.application.domain.model.CalendarEvent;
+import eat.calendar.application.domain.model.Category;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -37,16 +38,17 @@ class ExtractionResponseTest {
         String content = """
                 {
                   "events": [
-                    { "title": "跟小明吃飯", "start": "2026-10-06T15:00", "end": null },
-                    { "title": "看牙醫", "start": "2026-10-14T09:00", "end": "2026-10-14T10:30" }
+                    { "title": "跟小明吃飯", "start": "2026-10-06T15:00", "end": null, "category": "social", "location": null },
+                    { "title": "看牙醫", "start": "2026-10-14T09:00", "end": "2026-10-14T10:30", "category": "health", "location": "仁愛牙醫" }
                   ]
                 }""";
 
         List<CalendarEvent> events = ExtractionResponse.events(response(content));
 
         assertEquals(List.of(
-                CalendarEvent.startingAt("跟小明吃飯", LocalDateTime.of(2026, 10, 6, 15, 0)),
-                new CalendarEvent("看牙醫", LocalDateTime.of(2026, 10, 14, 9, 0), LocalDateTime.of(2026, 10, 14, 10, 30))),
+                CalendarEvent.startingAt("跟小明吃飯", LocalDateTime.of(2026, 10, 6, 15, 0)).withCategory(Category.SOCIAL),
+                new CalendarEvent("看牙醫", LocalDateTime.of(2026, 10, 14, 9, 0), LocalDateTime.of(2026, 10, 14, 10, 30))
+                        .withCategory(Category.HEALTH).withDetails("仁愛牙醫", null)),
                 events);
     }
 
@@ -54,7 +56,7 @@ class ExtractionResponseTest {
     @DisplayName("end 是 null：交給 domain 補預設長度")
     void nullEndUsesDomainDefault() {
         CalendarEvent event = ExtractionResponse.events(
-                response("{\"events\":[{\"title\":\"吃飯\",\"start\":\"2026-10-07T12:00\",\"end\":null}]}")).getFirst();
+                response("{\"events\":[{\"title\":\"吃飯\",\"start\":\"2026-10-07T12:00\",\"end\":null,\"category\":\"social\",\"location\":null}]}")).getFirst();
 
         assertEquals(LocalDateTime.of(2026, 10, 7, 13, 0), event.end());
     }
@@ -100,17 +102,17 @@ class ExtractionResponseTest {
     void rejectsWrongShapes() {
         assertThrows(IllegalStateException.class, () -> ExtractionResponse.events(response("{}")));
         assertThrows(IllegalStateException.class,
-                () -> ExtractionResponse.events(response("{\"events\":[{\"start\":\"2026-10-07T12:00\",\"end\":null}]}")));
+                () -> ExtractionResponse.events(response("{\"events\":[{\"start\":\"2026-10-07T12:00\",\"end\":null,\"category\":\"social\",\"location\":null}]}")));
         assertThrows(IllegalStateException.class,
-                () -> ExtractionResponse.events(response("{\"events\":[{\"title\":\"吃飯\",\"start\":\"明天中午\",\"end\":null}]}")));
+                () -> ExtractionResponse.events(response("{\"events\":[{\"title\":\"吃飯\",\"start\":\"明天中午\",\"end\":null,\"category\":\"social\",\"location\":null}]}")));
         assertThrows(IllegalStateException.class,
-                () -> ExtractionResponse.events(response("{\"events\":[{\"title\":\"吃飯\",\"start\":\"2026-10-07T12:00\",\"end\":3}]}")));
+                () -> ExtractionResponse.events(response("{\"events\":[{\"title\":\"吃飯\",\"start\":\"2026-10-07T12:00\",\"end\":3,\"category\":\"social\",\"location\":null}]}")));
     }
 
     @Test
     @DisplayName("模型給了倒著走的行程：domain 的規則擋下，翻成上游的錯")
     void domainViolationBecomesUpstreamFailure() {
-        String content = "{\"events\":[{\"title\":\"唱歌\",\"start\":\"2026-10-05T22:00\",\"end\":\"2026-10-05T01:00\"}]}";
+        String content = "{\"events\":[{\"title\":\"唱歌\",\"start\":\"2026-10-05T22:00\",\"end\":\"2026-10-05T01:00\",\"category\":\"social\",\"location\":null}]}";
 
         IllegalStateException e = assertThrows(IllegalStateException.class, () -> ExtractionResponse.events(response(content)));
 
@@ -122,6 +124,50 @@ class ExtractionResponseTest {
     @DisplayName("空白標題：文法擋得了空字串、擋不了空白，domain 會擋")
     void blankTitle() {
         assertThrows(IllegalStateException.class, () -> ExtractionResponse.events(
-                response("{\"events\":[{\"title\":\" \",\"start\":\"2026-10-07T12:00\",\"end\":null}]}")));
+                response("{\"events\":[{\"title\":\" \",\"start\":\"2026-10-07T12:00\",\"end\":null,\"category\":\"social\",\"location\":null}]}")));
+    }
+
+    @Test
+    @DisplayName("分類：協定上的小寫字串對到 domain 的四種分類")
+    void mapsEveryCategory() {
+        for (var pair : List.of(
+                List.of("work", Category.WORK), List.of("personal", Category.PERSONAL),
+                List.of("health", Category.HEALTH), List.of("social", Category.SOCIAL))) {
+            String content = "{\"events\":[{\"title\":\"事\",\"start\":\"2026-10-07T12:00\",\"end\":null,"
+                    + "\"category\":\"" + pair.get(0) + "\",\"location\":null}]}";
+
+            assertEquals(pair.get(1), ExtractionResponse.events(response(content)).getFirst().category());
+        }
+    }
+
+    @Test
+    @DisplayName("不認得的分類、缺分類：模型壞了，丟 IllegalStateException，不偷偷改成預設")
+    void rejectsUnknownOrMissingCategory() {
+        assertThrows(IllegalStateException.class, () -> ExtractionResponse.events(response(
+                "{\"events\":[{\"title\":\"事\",\"start\":\"2026-10-07T12:00\",\"end\":null,\"category\":\"holiday\",\"location\":null}]}")));
+        assertThrows(IllegalStateException.class, () -> ExtractionResponse.events(response(
+                "{\"events\":[{\"title\":\"事\",\"start\":\"2026-10-07T12:00\",\"end\":null,\"location\":null}]}")));
+    }
+
+    @Test
+    @DisplayName("地點：有就帶上、null 就沒有；備註永遠沒有（不交給模型）")
+    void locationAndNote() {
+        CalendarEvent withPlace = ExtractionResponse.events(response(
+                "{\"events\":[{\"title\":\"晨跑\",\"start\":\"2026-10-07T07:00\",\"end\":null,\"category\":\"health\",\"location\":\"河濱公園\"}]}"))
+                .getFirst();
+        CalendarEvent withoutPlace = ExtractionResponse.events(response(
+                "{\"events\":[{\"title\":\"晨跑\",\"start\":\"2026-10-07T07:00\",\"end\":null,\"category\":\"health\",\"location\":null}]}"))
+                .getFirst();
+
+        assertEquals(java.util.Optional.of("河濱公園"), withPlace.location());
+        assertTrue(withoutPlace.location().isEmpty());
+        assertTrue(withPlace.note().isEmpty());
+    }
+
+    @Test
+    @DisplayName("地點不是字串也不是 null：擋下")
+    void rejectsNonStringLocation() {
+        assertThrows(IllegalStateException.class, () -> ExtractionResponse.events(response(
+                "{\"events\":[{\"title\":\"事\",\"start\":\"2026-10-07T12:00\",\"end\":null,\"category\":\"work\",\"location\":42}]}")));
     }
 }

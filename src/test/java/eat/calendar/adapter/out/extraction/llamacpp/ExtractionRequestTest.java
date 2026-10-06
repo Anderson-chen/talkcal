@@ -94,9 +94,13 @@ class ExtractionRequestTest {
 
             assertEquals("json_schema", format.get("type").asString());
             JsonNode item = format.at("/json_schema/schema/properties/events/items");
-            assertEquals(List.of("title", "start", "end"),
+            assertEquals(List.of("title", "start", "end", "category", "location"),
                     item.get("required").valueStream().map(JsonNode::asString).toList());
             assertEquals("null", item.at("/properties/end/anyOf/1/type").asString());
+            // 分類用 enum 鎖死四個值：模型只能從裡面挑
+            assertEquals(List.of("work", "personal", "health", "social"),
+                    item.at("/properties/category/enum").valueStream().map(JsonNode::asString).toList());
+            assertEquals("null", item.at("/properties/location/anyOf/1/type").asString());
         }
 
         @Test

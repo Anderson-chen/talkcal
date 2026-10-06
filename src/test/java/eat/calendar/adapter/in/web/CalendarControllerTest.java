@@ -2,24 +2,29 @@ package eat.calendar.adapter.in.web;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import eat.calendar.application.domain.model.CalendarEvent;
+import eat.calendar.application.domain.model.Category;
 import eat.calendar.application.domain.model.DateRange;
 import eat.calendar.application.domain.model.EventDescription;
 import eat.calendar.application.domain.model.EventId;
 import eat.calendar.application.domain.model.ScheduledEvent;
 import eat.calendar.application.port.in.AddEventsUseCase;
+import eat.calendar.application.port.in.EventNotFoundException;
 import eat.calendar.application.port.in.ListEventsUseCase;
 import eat.calendar.application.port.in.ParseEventsUseCase;
+import eat.calendar.application.port.in.RemoveEventUseCase;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -38,7 +43,7 @@ import org.springframework.test.web.servlet.MockMvc;
 /**
  * CalendarController 走一遍真的 Spring MVC（理由同 ChatControllerTest：這個類別幾乎每一行都在跟 Spring 講話）。
  *
- * 三個 use case 由一個手寫的假物件同時扮演。假物件照著核心真正的規則演
+ * 四個 use case 由一個手寫的假物件同時扮演。假物件照著核心真正的規則演
  * （空白描述丟 IllegalArgumentException、期間交給 DateRange 檢查），測試才不會描述一個不存在的情境。
  */
 @WebMvcTest(CalendarController.class)
@@ -58,7 +63,8 @@ class CalendarControllerTest {
     }
 
     private static final CalendarEvent DINNER =
-            CalendarEvent.startingAt("跟小明吃飯", LocalDateTime.of(2026, 10, 6, 15, 0));
+            CalendarEvent.startingAt("跟小明吃飯", LocalDateTime.of(2026, 10, 6, 15, 0))
+                    .withCategory(Category.SOCIAL).withDetails("拉麵店", null);
     private static final EventId DINNER_ID = new EventId(UUID.fromString("3f1c8a2e-6b0d-4d7e-9a51-2c4e8f7b9d10"));
 
     @Nested
@@ -75,6 +81,9 @@ class CalendarControllerTest {
                     .andExpect(jsonPath("$.events[0].title").value("跟小明吃飯"))
                     .andExpect(jsonPath("$.events[0].start").value("2026-10-06T15:00:00"))
                     .andExpect(jsonPath("$.events[0].end").value("2026-10-06T16:00:00"))
+                    .andExpect(jsonPath("$.events[0].category").value("SOCIAL"))
+                    .andExpect(jsonPath("$.events[0].location").value("拉麵店"))
+                    .andExpect(jsonPath("$.events[0].note").doesNotExist())
                     .andExpect(jsonPath("$.events[0].id").doesNotExist());
 
             assertEquals(List.of("明天三點跟小明吃飯"), calendar.descriptions);
@@ -144,9 +153,10 @@ class CalendarControllerTest {
                     .andExpect(jsonPath("$.events[0].id").value(DINNER_ID.toString()))
                     .andExpect(jsonPath("$.events[0].end").value("2026-10-06T17:30:00"));
 
-            // 使用者把結束時間改成 17:30，存進去的就是改過的那個
+            // 使用者把結束時間改成 17:30，存進去的就是改過的那個；沒帶分類就是 domain 的預設
             assertEquals(List.of(new CalendarEvent("跟小明吃飯",
                     LocalDateTime.of(2026, 10, 6, 15, 0), LocalDateTime.of(2026, 10, 6, 17, 30))), calendar.added);
+            assertEquals(Category.DEFAULT, calendar.added.getFirst().category());
         }
 
         @Test
@@ -189,6 +199,78 @@ class CalendarControllerTest {
     }
 
     @Nested
+    @DisplayName("POST /api/calendar/events：分類、地點、備註")
+    class AddWithDetails {
+
+        @Test
+        @DisplayName("分類、地點、備註原樣存進去，空白的備註當成沒有")
+        void savesDetails() throws Exception {
+            mockMvc.perform(post("/api/calendar/events")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"events":[{"title":"晨跑","start":"2026-10-07T07:00","end":"2026-10-07T08:00",
+                                                "category":"HEALTH","location":"河濱公園","note":"  "}]}
+                                    """))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.events[0].category").value("HEALTH"))
+                    .andExpect(jsonPath("$.events[0].location").value("河濱公園"))
+                    .andExpect(jsonPath("$.events[0].note").doesNotExist());
+
+            CalendarEvent saved = calendar.added.getFirst();
+            assertEquals(Category.HEALTH, saved.category());
+            assertEquals(Optional.of("河濱公園"), saved.location());
+            assertEquals(Optional.empty(), saved.note());
+        }
+
+        @Test
+        @DisplayName("不認得的分類（小寫、不存在的類）：400，不偷偷改成預設")
+        void unknownCategoryIsBadRequest() throws Exception {
+            for (String category : List.of("work", "HOLIDAY")) {
+                mockMvc.perform(post("/api/calendar/events")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"events\":[{\"title\":\"開會\",\"start\":\"2026-10-07T10:00\","
+                                        + "\"end\":\"2026-10-07T11:00\",\"category\":\"" + category + "\"}]}"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.error").value(org.hamcrest.Matchers.containsString(category)));
+            }
+            assertTrue(calendar.added.isEmpty());
+        }
+    }
+
+    @Nested
+    @DisplayName("DELETE /api/calendar/events/{id}")
+    class Remove {
+
+        @Test
+        @DisplayName("刪掉了：204，沒有 body")
+        void removes() throws Exception {
+            mockMvc.perform(delete("/api/calendar/events/" + DINNER_ID))
+                    .andExpect(status().isNoContent());
+
+            assertEquals(List.of(DINNER_ID), calendar.removed);
+        }
+
+        @Test
+        @DisplayName("沒有這個行程：404")
+        void notFound() throws Exception {
+            String missing = "00000000-0000-0000-0000-000000000000";
+
+            mockMvc.perform(delete("/api/calendar/events/" + missing))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error").exists());
+        }
+
+        @Test
+        @DisplayName("id 不是 UUID：400，不驚動 use case")
+        void malformedId() throws Exception {
+            mockMvc.perform(delete("/api/calendar/events/not-a-uuid"))
+                    .andExpect(status().isBadRequest());
+
+            assertTrue(calendar.removed.isEmpty());
+        }
+    }
+
+    @Nested
     @DisplayName("GET /api/calendar/events")
     class ListEvents {
 
@@ -198,7 +280,8 @@ class CalendarControllerTest {
             mockMvc.perform(get("/api/calendar/events").param("from", "2026-09-28").param("to", "2026-11-09"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.events[0].id").value(DINNER_ID.toString()))
-                    .andExpect(jsonPath("$.events[0].title").value("跟小明吃飯"));
+                    .andExpect(jsonPath("$.events[0].title").value("跟小明吃飯"))
+                    .andExpect(jsonPath("$.events[0].category").value("SOCIAL"));
 
             assertEquals(List.of(new DateRange(LocalDate.of(2026, 9, 28), LocalDate.of(2026, 11, 9))), calendar.ranges);
         }
@@ -247,7 +330,7 @@ class CalendarControllerTest {
     /**
      * 一個假物件同時扮演三個 use case：記下收到什麼，每題可以換掉行為。
      */
-    static final class StubCalendar implements ParseEventsUseCase, AddEventsUseCase, ListEventsUseCase {
+    static final class StubCalendar implements ParseEventsUseCase, AddEventsUseCase, ListEventsUseCase, RemoveEventUseCase {
 
         // 預設行為照核心的規則演：描述交給 EventDescription 檢查、期間交給 DateRange 檢查
         private static final Function<String, List<CalendarEvent>> DEFAULT_PARSE = description -> {
@@ -262,6 +345,7 @@ class CalendarControllerTest {
         final List<String> descriptions = new ArrayList<>();
         final List<CalendarEvent> added = new ArrayList<>();
         final List<DateRange> ranges = new ArrayList<>();
+        final List<EventId> removed = new ArrayList<>();
 
         @Override
         public List<CalendarEvent> parseEvents(String description) {
@@ -282,12 +366,22 @@ class CalendarControllerTest {
             return list.apply(range);
         }
 
+        // 只有 DINNER_ID 存在；其他 id 照真正的 use case 那樣丟「找不到」
+        @Override
+        public void removeEvent(EventId id) {
+            if (!DINNER_ID.equals(id)) {
+                throw new EventNotFoundException(id);
+            }
+            removed.add(id);
+        }
+
         void reset() {
             parse = DEFAULT_PARSE;
             list = DEFAULT_LIST;
             descriptions.clear();
             added.clear();
             ranges.clear();
+            removed.clear();
         }
     }
 }

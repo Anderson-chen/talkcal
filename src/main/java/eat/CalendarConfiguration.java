@@ -5,9 +5,12 @@ import eat.calendar.adapter.out.persistence.postgres.JdbcCalendarEventAdapter;
 import eat.calendar.application.domain.service.AddEventsService;
 import eat.calendar.application.domain.service.ListEventsService;
 import eat.calendar.application.domain.service.ParseEventsService;
+import eat.calendar.application.domain.service.RemoveEventService;
 import eat.calendar.application.port.in.AddEventsUseCase;
 import eat.calendar.application.port.in.ListEventsUseCase;
 import eat.calendar.application.port.in.ParseEventsUseCase;
+import eat.calendar.application.port.in.RemoveEventUseCase;
+import eat.calendar.application.port.out.DeleteEventPort;
 import eat.calendar.application.port.out.ExtractEventsPort;
 import eat.calendar.application.port.out.LoadEventsPort;
 import eat.calendar.application.port.out.SaveEventsPort;
@@ -37,7 +40,7 @@ import java.time.ZoneId;
  *
  * 這裡要下的決定：
  * - ExtractEventsPort 用 llama.cpp（跟聊天同一台 server，但讀取逾時不同）
- * - 行程存 PostgreSQL（一個實作同時當 Save / LoadEventsPort）
+ * - 行程存 PostgreSQL（一個實作同時當 Save / Load / DeleteEventPort）
  * - 「現在」用哪個時區的時鐘
  */
 @Configuration(proxyBeanMethods = false)
@@ -62,7 +65,7 @@ class CalendarConfiguration {
         return new LlamaCppExtractEventsAdapter(llamaCpp);
     }
 
-    // 跟 conversationStore 同一個理由：一個實作兩個 port，回傳型別只能寫實作本身
+    // 跟 conversationStore 同一個理由：一個實作三個 port，回傳型別只能寫實作本身
     @Bean
     JdbcCalendarEventAdapter calendarEventStore(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
         return new JdbcCalendarEventAdapter(jdbcClient, new TransactionTemplate(transactionManager));
@@ -87,5 +90,10 @@ class CalendarConfiguration {
     @Bean
     ListEventsUseCase listEvents(LoadEventsPort loadEventsPort) {
         return new ListEventsService(loadEventsPort);
+    }
+
+    @Bean
+    RemoveEventUseCase removeEvent(DeleteEventPort deleteEventPort) {
+        return new RemoveEventService(deleteEventPort);
     }
 }

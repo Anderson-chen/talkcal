@@ -1,10 +1,12 @@
 package eat.calendar.adapter.out.persistence.postgres;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import eat.calendar.application.domain.model.CalendarEvent;
+import eat.calendar.application.domain.model.Category;
 import eat.calendar.application.domain.model.DateRange;
 import eat.calendar.application.domain.model.EventId;
 import eat.calendar.application.domain.model.ScheduledEvent;
@@ -135,6 +137,79 @@ class JdbcCalendarEventAdapterTest {
                     .param("id", UUID.randomUUID())
                     .update());
             assertEquals(0, count());
+        }
+    }
+
+    @Nested
+    @DisplayName("分類、地點、備註（V5）")
+    class Details {
+
+        @Test
+        @DisplayName("存了讀得回來；沒有地點、備註的存成 NULL")
+        void roundTrip() {
+            ScheduledEvent detailed = ScheduledEvent.schedule(DINNER.withCategory(Category.SOCIAL).withDetails("拉麵店", "記得訂位"));
+            ScheduledEvent bare = ScheduledEvent.schedule(OVERNIGHT);
+
+            adapter.save(List.of(detailed, bare));
+
+            assertEquals(List.of(bare, detailed), adapter.load(OCT_06));
+            Integer nulls = jdbc.sql("SELECT count(*) FROM calendar_event WHERE location IS NULL AND note IS NULL AND id = :id")
+                    .param("id", bare.id().value())
+                    .query(Integer.class).single();
+            assertEquals(1, nulls);
+        }
+
+        @Test
+        @DisplayName("V5 之前存的資料：分類補成 PERSONAL（跟 Category.DEFAULT 一致）")
+        void columnDefaultMatchesDomainDefault() {
+            jdbc.sql("""
+                            INSERT INTO calendar_event (id, title, start_at, end_at)
+                            VALUES (:id, '舊資料', '2026-10-06 15:00', '2026-10-06 16:00')
+                            """)
+                    .param("id", UUID.randomUUID())
+                    .update();
+
+            assertEquals(Category.DEFAULT, adapter.load(OCT_06).getFirst().event().category());
+        }
+
+        @Test
+        @DisplayName("資料庫的 CHECK：不認得的分類、空白的地點或備註都擋下")
+        void databaseChecks() {
+            for (String sql : List.of(
+                    "INSERT INTO calendar_event (id, title, start_at, end_at, category) VALUES (:id, '事', '2026-10-06 15:00', '2026-10-06 16:00', 'HOLIDAY')",
+                    "INSERT INTO calendar_event (id, title, start_at, end_at, location) VALUES (:id, '事', '2026-10-06 15:00', '2026-10-06 16:00', '  ')",
+                    "INSERT INTO calendar_event (id, title, start_at, end_at, note) VALUES (:id, '事', '2026-10-06 15:00', '2026-10-06 16:00', '')")) {
+                assertThrows(Exception.class, () -> jdbc.sql(sql).param("id", UUID.randomUUID()).update(), sql);
+            }
+            assertEquals(0, count());
+        }
+    }
+
+    @Nested
+    @DisplayName("刪除")
+    class Delete {
+
+        @Test
+        @DisplayName("刪到了回 true，只刪那一筆")
+        void deletesOnlyThatOne() {
+            ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);
+            ScheduledEvent overnight = ScheduledEvent.schedule(OVERNIGHT);
+            adapter.save(List.of(dinner, overnight));
+
+            assertTrue(adapter.delete(dinner.id()));
+
+            assertEquals(List.of(overnight), adapter.load(OCT_06));
+        }
+
+        @Test
+        @DisplayName("沒有這筆（或刪第二次）回 false，不丟例外 —— 算不算錯是 use case 的事")
+        void missingIsFalse() {
+            ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);
+            adapter.save(List.of(dinner));
+            adapter.delete(dinner.id());
+
+            assertFalse(adapter.delete(dinner.id()));
+            assertFalse(adapter.delete(EventId.newId()));
         }
     }
 

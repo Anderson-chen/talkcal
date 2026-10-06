@@ -67,13 +67,15 @@ class OpenApiDocumentationTest {
     }
 
     @Test
-    @DisplayName("描述了行事曆的三個端點，以及各自的成功碼（新增是 201）")
+    @DisplayName("描述了行事曆的四個端點，以及各自的成功碼（新增是 201、刪除是 204）")
     void describesCalendarEndpoints() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(jsonPath("$.paths['/api/calendar/parse'].post.responses['200']").exists())
                 .andExpect(jsonPath("$.paths['/api/calendar/events'].post.responses['201']").exists())
                 .andExpect(jsonPath("$.paths['/api/calendar/events'].get.responses['200']").exists())
-                .andExpect(jsonPath("$.paths['/api/calendar/events'].get.parameters[?(@.name == 'from')]").exists());
+                .andExpect(jsonPath("$.paths['/api/calendar/events'].get.parameters[?(@.name == 'from')]").exists())
+                .andExpect(jsonPath("$.paths['/api/calendar/events/{id}'].delete.responses['204']").exists())
+                .andExpect(jsonPath("$.paths['/api/calendar/events/{id}'].delete.responses['404']").exists());
     }
 
     @Test

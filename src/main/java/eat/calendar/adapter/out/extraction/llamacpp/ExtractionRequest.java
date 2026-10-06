@@ -54,7 +54,9 @@ final class ExtractionRequest {
 
     /**
      * 輸出必須長這樣。end 可以是 null（沒講結束時間），由 ExtractionResponse 交給 domain 補預設長度。
-     * 三個欄位都 required、不准多欄位：形狀固定，剖析那頭才不必猜。
+     * 欄位全部 required、不准多欄位：形狀固定，剖析那頭才不必猜。
+     * category 用 enum 鎖死四個值：模型「只能」從裡面挑，不會發明出「會議」「其他」這種第五類。
+     * location 跟 end 一樣可以是 null（沒講地點）。備註不交給模型 —— 那是使用者自己補的東西。
      *
      * llama.cpp 把它轉成文法（GBNF）在解碼時強制執行 —— 不合 schema 的 token 根本選不到，
      * 比在 prompt 裡拜託模型「請回 JSON」可靠得多。
@@ -71,9 +73,11 @@ final class ExtractionRequest {
                     "properties": {
                       "title": { "type": "string", "minLength": 1 },
                       "start": { "type": "string", "pattern": "%1$s" },
-                      "end":   { "anyOf": [ { "type": "string", "pattern": "%1$s" }, { "type": "null" } ] }
+                      "end":   { "anyOf": [ { "type": "string", "pattern": "%1$s" }, { "type": "null" } ] },
+                      "category": { "type": "string", "enum": ["work", "personal", "health", "social"] },
+                      "location": { "anyOf": [ { "type": "string", "minLength": 1 }, { "type": "null" } ] }
                     },
-                    "required": ["title", "start", "end"],
+                    "required": ["title", "start", "end", "category", "location"],
                     "additionalProperties": false
                   }
                 }
@@ -102,6 +106,9 @@ final class ExtractionRequest {
      * - 「從下表找，不要自己推算」：不 thinking 的 8B 模型心算星期幾不可靠，「下週三」給過星期一、星期二
      * - 「跨過午夜要用隔天的日期」：不講的話「晚上十點到凌晨一點」的結束時間會被丟掉
      * - 「沒有行程就回空陣列」：不講的話閒聊也可能被硬湊出一個行程
+     * - title「有講跟誰就保留」：叫它別把地點寫進標題時，它連「跟小明」都一起刪了，只剩「吃飯」
+     * - location 的例子：只寫「有講地點才填」時，「在3F會議室A」抽得到、「在健身房」卻抽不到
+     * - category 每一類都舉例：只給類名時，模型對「看牙醫」該算 health 還是 personal 會猶豫
      */
     static String instruction(LocalDateTime now) {
         return """
@@ -111,7 +118,9 @@ final class ExtractionRequest {
                 %s
                 時間格式用 yyyy-MM-ddTHH:mm。
                 有講結束時間就一定要填 end，跨過午夜的結束時間要用隔天的日期；沒講結束時間 end 給 null。
-                title 只寫要做的事，不要包含日期和時間。
+                title 寫要做的事，有講跟誰就保留（例如「跟小明吃飯」「跟客戶開會」），但不要包含日期、時間和地點。
+                category 從四類選一個：work（工作、會議、客戶、報告、面試）、health（運動、看醫生、健身、瑜珈）、social（跟朋友或家人吃飯、聚會、約會）、personal（其他私事，例如繳費、讀書、購物）。
+                location：使用者有講在哪裡就填那個地點（例如「在健身房上課」→ 健身房）；沒講就給 null，不要自己編。
                 沒有任何行程就回空陣列。""".formatted(now.format(NOW_FORMAT), dateTable(now.toLocalDate()));
     }
 

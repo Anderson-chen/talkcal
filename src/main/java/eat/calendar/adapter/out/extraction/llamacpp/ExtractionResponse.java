@@ -7,6 +7,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 import eat.calendar.application.domain.model.CalendarEvent;
+import eat.calendar.application.domain.model.Category;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
@@ -81,20 +82,51 @@ final class ExtractionResponse {
         String where = "events[" + index + "]";
         String title = requiredString(node, "title", where);
         LocalDateTime start = dateTime(requiredString(node, "start", where), where + ".start");
+        Category category = category(requiredString(node, "category", where), where);
+        String location = optionalString(node, "location", where);
         JsonNode end = node.get("end");
         try {
             // 沒講結束時間時協定上是 null；預設多長交給 domain 決定，這裡只挑對建構方式
+            CalendarEvent timed;
             if (end == null || end.isNull()) {
-                return CalendarEvent.startingAt(title, start);
-            }
-            if (!end.isString()) {
+                timed = CalendarEvent.startingAt(title, start);
+            } else if (end.isString()) {
+                timed = new CalendarEvent(title, start, dateTime(end.asString(), where + ".end"));
+            } else {
                 throw new IllegalStateException(where + ".end 不是字串也不是 null");
             }
-            return new CalendarEvent(title, start, dateTime(end.asString(), where + ".end"));
+            // 備註不交給模型，永遠是沒有；使用者要在預覽畫面自己補
+            return timed.withCategory(category).withDetails(location, null);
         } catch (IllegalArgumentException e) {
             // domain 的規則擋下了（例如結束早於開始）。使用者的描述沒錯，是模型解析錯了，所以翻成上游的錯
             throw new IllegalStateException("模型解析出的行程不合規則（" + where + "）：" + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 協定上的小寫字串 → domain 的 Category。跟 ChatRequest 的 protocolRole 同一招：
+     * 對照寫成 switch，哪天 schema 多了一類而這裡沒跟上，會丟例外而不是安靜地塞進預設值。
+     */
+    private static Category category(String text, String where) {
+        return switch (text) {
+            case "work" -> Category.WORK;
+            case "personal" -> Category.PERSONAL;
+            case "health" -> Category.HEALTH;
+            case "social" -> Category.SOCIAL;
+            default -> throw new IllegalStateException(where + ".category 不是認得的分類：" + text);
+        };
+    }
+
+    // 可以沒有的字串欄位：沒有這個欄位、或值是 null，都當成沒有；是別的型別就是模型壞了
+    private static String optionalString(JsonNode node, String field, String where) {
+        JsonNode value = node.get(field);
+        if (value == null || value.isNull()) {
+            return null;
+        }
+        if (!value.isString()) {
+            throw new IllegalStateException(where + "." + field + " 不是字串也不是 null");
+        }
+        return value.asString();
     }
 
     private static String requiredString(JsonNode node, String field, String where) {

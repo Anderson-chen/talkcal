@@ -1,6 +1,7 @@
 package eat.calendar.adapter.out.extraction.llamacpp;
 
 import eat.calendar.application.domain.model.CalendarEvent;
+import eat.calendar.application.domain.model.Category;
 import eat.calendar.application.domain.model.EventDescription;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
@@ -18,6 +19,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -100,5 +102,27 @@ class LlamaCppExtractEventsAdapterTest {
     @DisplayName("閒聊沒有行程：空清單")
     void smallTalk() {
         assertTrue(extract("今天天氣真好").isEmpty());
+    }
+
+    @Test
+    @DisplayName("分類由模型判斷：吃飯是社交、看牙醫是健康、跟客戶開會是工作")
+    void classifiesCategories() {
+        List<CalendarEvent> events = extract("明天下午三點跟小明吃飯，下週三早上九點看牙醫，週五早上十點跟客戶開會");
+
+        assertEquals(List.of(Category.SOCIAL, Category.HEALTH, Category.WORK),
+                events.stream().map(CalendarEvent::category).toList());
+    }
+
+    @Test
+    @DisplayName("地點：有講就抽出來、標題裡不留地點但保留「跟誰」；沒講就沒有，不會編一個")
+    void extractsLocationOnlyWhenSaid() {
+        CalendarEvent meeting = extract("週五早上十點在3F會議室A跟客戶開會").getFirst();
+        CalendarEvent yoga = extract("晚上七點在健身房上瑜珈課").getFirst();
+        CalendarEvent movie = extract("週六晚上去看電影").getFirst();
+
+        assertEquals(Optional.of("3F會議室A"), meeting.location());
+        assertTrue(meeting.title().contains("客戶"), meeting.title());
+        assertEquals(Optional.of("健身房"), yoga.location());
+        assertEquals(Optional.empty(), movie.location());
     }
 }
