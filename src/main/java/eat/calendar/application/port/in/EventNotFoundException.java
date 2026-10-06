@@ -3,7 +3,7 @@ package eat.calendar.application.port.in;
 import eat.calendar.application.domain.model.EventId;
 
 /**
- * 指定的行程不存在。跟 conversation 的 ConversationNotFoundException 同一個角色：
+ * 指定的行程不存在：
  * 是 use case 回答呼叫端的一種結果，所以放在 port.in，HTTP 那頭翻成 404。
  *
  * 刪第二次也是這個例外，不是靜悄悄成功：

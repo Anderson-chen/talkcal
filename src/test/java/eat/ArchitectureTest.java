@@ -13,8 +13,8 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
  * 把架構規則寫成會失敗的測試。
  *
  * 為什麼需要這個檔案：Java 的 package 沒有依賴方向的概念。
- * package-private 擋得住「別人看見 ChatRequest 這個 class」，
- * 但擋不住 AskQuestionService 去 import 一個 llama.cpp 的 Adapter ——
+ * package-private 擋得住「別人看見 ExtractionRequest 這個 class」，
+ * 但擋不住 ParseEventsService 去 import 一個 Spring AI 的 Adapter ——
  * 那樣寫編譯器一聲不吭，測試照樣全綠，架構就是這樣一點一點爛掉的。
  *
  * 規則全部寫成 noClasses(...)，也就是「不准出現」的形式。
@@ -39,7 +39,7 @@ class ArchitectureTest {
 
     /**
      * domain model 是最內圈，連自己家的 port 和 service 都不該認識。
-     * Conversation 和 Reply 只該依賴 Java 標準函式庫。
+     * CalendarEvent 這些只該依賴 Java 標準函式庫。
      */
     @ArchTest
     static final ArchRule domainModelMustStayInnermost =
@@ -50,7 +50,7 @@ class ArchitectureTest {
 
     /**
      * 兩側的 adapter 互不認識。
-     * 入口那側（目前是 HTTP 的 ChatController、CalendarController）換成別的、llama.cpp 換成 OpenAI，都不該牽動另一側。
+     * 入口那側（目前是 HTTP 的 ChatController、CalendarController）換成別的、模型換成別家，都不該牽動另一側。
      */
     @ArchTest
     static final ArchRule inboundAdaptersMustNotDependOnOutboundAdapters =
@@ -61,20 +61,13 @@ class ArchitectureTest {
     /**
      * 只有組裝根可以認識具體的實作。下面三條是同一句話套在 adapter.out 的三個子樹上。
      *
-     * adapter.out 底下每個 package 就是「某一個 outbound port 的實作們」：
-     * reply 放 GenerateReplyPort 的、knowledge 放 RetrievePassagesPort 的、
-     * persistence 放 Load / SaveConversationPort 的，
-     * 供應商一律再往下一層（reply.llamacpp、knowledge.llamacpp、persistence.postgres）。
+     * adapter.out 底下每個 package 就是「某一種往外的實作們」：
+     * knowledge 放 conversation 的知識庫（給 Spring AI 的 RAG 用）、
+     * persistence 放 calendar 的 Save / Load / DeleteEventPort 的、extraction 放 calendar 的 ExtractEventsPort 的，
+     * 供應商一律再往下一層（persistence.postgres、extraction.springai）。
      *
      * 守住的是「換一行 new 就能換掉實作」這個承諾 —— 一旦有第二個地方 import 它，那個承諾就破了。
-     * 順帶也擋掉了 reply 與 knowledge 互相依賴：兩邊都在對方的允許清單之外。
      */
-    @ArchTest
-    static final ArchRule onlyTheCompositionRootMayKnowTheReplyAdapters =
-            noClasses().that().resideOutsideOfPackages("eat", "..adapter.out.reply..")
-                    .should().dependOnClassesThat().resideInAPackage("..adapter.out.reply..")
-                    .because("挑選實作是組裝時的決定，散到別處就等於把供應商焊死在程式裡");
-
     @ArchTest
     static final ArchRule onlyTheCompositionRootMayKnowTheKnowledgeAdapters =
             noClasses().that().resideOutsideOfPackages("eat", "..adapter.out.knowledge..")
@@ -89,7 +82,7 @@ class ArchitectureTest {
                     .because("存在哪（PostgreSQL、別的資料庫、記憶體）是組裝時的決定；"
                             + "SQL 和表的長相只該出現在 persistence 這一包");
 
-    // calendar 模組的第一個 outbound 子樹：ExtractEventsPort 的實作們（目前只有 llama.cpp 那個）
+    // calendar 模組的 outbound 子樹：ExtractEventsPort 的實作們（目前只有 Spring AI 那個）
     @ArchTest
     static final ArchRule onlyTheCompositionRootMayKnowTheExtractionAdapters =
             noClasses().that().resideOutsideOfPackages("eat", "..adapter.out.extraction..")
@@ -101,7 +94,7 @@ class ArchitectureTest {
      * Adapter 這個字尾是有意義的，不是隨手加的裝飾。
      *
      * adapter 圈裡有兩種類別：一種實作 core 的 outbound port（換掉它 core 無感），
-     * 另一種是 adapter 內部的零件（例如 ChatRequest、EmbeddingResponse 這些協定翻譯）。
+     * 另一種是 adapter 內部的零件（例如 ExtractionRequest、ExtractionResponse 這些協定翻譯）。
      * 兩種都在 adapter.out 底下，從 package 看不出差別 —— 所以用字尾區分，並用這條規則守著。
      */
     @ArchTest
@@ -110,7 +103,7 @@ class ArchitectureTest {
                     .and().haveSimpleNameEndingWith("Adapter")
                     .should().dependOnClassesThat().resideInAPackage("..application.port.out..")
                     .because("Adapter 這個字尾在這個專案裡專指「實作 core 的某個 outbound port」；"
-                            + "adapter 圈內部的零件（例如 ChatRequest、EmbeddingResponse）不叫 Adapter，"
+                            + "adapter 圈內部的零件（例如 ExtractionRequest、ExtractionResponse）不叫 Adapter，"
                             + "不然從名字看不出它站在哪一層");
 
     /**
@@ -129,7 +122,7 @@ class ArchitectureTest {
      *
      * Spring 是組裝時的框架 —— 它負責把 bean 兜起來、把 web 請求接進來，這些都是最外圈的事。
      * 一旦 @Component、@Autowired、@Service 爬進 application/domain，業務規則就跟框架焊死了：
-     * 想單獨用純 JUnit 測一個 Conversation 得先起半個容器，想換框架得改動核心。
+     * 想單獨用純 JUnit 測一個 CalendarEvent 得先起半個容器，想換框架得改動核心。
      * 允許 Spring 待在 adapter 和組裝根（那本來就是它的地盤），但到 core 的門口為止。
      */
     @ArchTest
@@ -144,11 +137,11 @@ class ArchitectureTest {
      * 兩個套件都要擋：Jackson 3 把 core/databind 搬到 tools.jackson，
      * 但註解（@JsonProperty 那些）刻意留在 com.fasterxml.jackson.annotation 沒動。
      *
-     * 這條擋的是最常見的那種滲透：為了讓 Conversation 能直接丟給 Jackson 序列化，
+     * 這條擋的是最常見的那種滲透：為了讓 CalendarEvent 能直接丟給 Jackson 序列化，
      * 在 domain 的欄位上加 @JsonProperty、@JsonIgnore。那看起來只是「加個註解」，
      * 實際上是讓「資料怎麼在線路上呈現」這件事跑進了業務規則裡 ——
      * 從此改一個 JSON 欄位名要動 Entity，而 Entity 的形狀開始被外部格式牽著走。
-     * 要序列化就在 adapter 自己定義一份 wire format（ChatRequest.Body 就是這樣做的）。
+     * 要序列化就在 adapter 自己定義一份 wire format（CalendarController 的 request / response record 就是這樣做的）。
      */
     @ArchTest
     static final ArchRule coreMustNotDependOnJackson =
@@ -160,7 +153,7 @@ class ArchitectureTest {
      * core 不准依賴 OpenAPI 的註解。跟 Jackson 那條同一個道理，只是換成 API 文件。
      *
      * @Schema、@Operation 描述的是「HTTP 上長什麼樣」，那是 ChatController 這個 adapter 的事。
-     * 一旦為了讓文件好看就在 Conversation 或 Reply 上加 @Schema，domain 就開始替某一種協定打扮了。
+     * 一旦為了讓文件好看就在 CalendarEvent 上加 @Schema，domain 就開始替某一種協定打扮了。
      * 要寫文件，就寫在 adapter 自己的 wire format（ChatController.Request/Response）上。
      */
     @ArchTest

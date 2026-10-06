@@ -1,11 +1,12 @@
-package eat.calendar.adapter.out.extraction.llamacpp;
-
-import com.fasterxml.jackson.annotation.JsonProperty;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
+package eat.calendar.adapter.out.extraction.springai;
 
 import eat.calendar.application.domain.model.EventDescription;
+
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.ai.openai.OpenAiChatOptions;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -16,10 +17,10 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 把「一句自然語言 + 現在時間」翻譯成 llama.cpp /v1/chat/completions 的 request body。
+ * 把「一句自然語言 + 現在時間」翻譯成要交給 Spring AI ChatModel 的 Prompt。
  *
- * 跟 conversation 的 ChatRequest 打的是同一個端點，但要的東西不一樣：
- * 那邊要一段自由文字，這邊要一份機器讀得懂的行程清單。差別全在這個 class 裡 ——
+ * 跟聊天用的是同一個 ChatModel，但要的東西不一樣：
+ * 聊天要一段自由文字，這邊要一份機器讀得懂的行程清單。差別全在這個 class 裡 ——
  * system prompt 怎麼寫、附上哪張日期表、用什麼 JSON Schema 約束輸出。
  *
  * 這些都是「怎麼讓這顆模型做對這件事」的知識，所以屬於 adapter，不屬於 domain：
@@ -27,8 +28,6 @@ import java.util.Objects;
  * 但 CalendarEvent 的規則一條都不會變。
  */
 final class ExtractionRequest {
-
-    private static final ObjectMapper JSON = new ObjectMapper();
 
     // 生成上限。文法約束只管形狀不管長度：模型要是一直往 events 陣列裡塞東西，
     // 會像壓測時那題 thinking 暴走一樣佔住一個 slot 直到逾時。
@@ -62,11 +61,14 @@ final class ExtractionRequest {
      * （沒講結束時間時，它會給跟開始一樣的時間、或自己編一個），ExtractionResponse 會拿這段引用
      * 回原句裡核對，對得上才採用 end。原因和規則寫在 ExtractionResponse.endIsGrounded。
      *
-     * llama.cpp 把它轉成文法（GBNF）在解碼時強制執行 —— 不合 schema 的 token 根本選不到，
-     * 比在 prompt 裡拜託模型「請回 JSON」可靠得多。
+     * 透過 OpenAI 協定的 response_format（json_schema）送過去，llama.cpp 把它轉成文法（GBNF）在解碼時強制執行 ——
+     * 不合 schema 的 token 根本選不到，比在 prompt 裡拜託模型「請回 JSON」可靠得多。
      * 但它保證不了語意（日期算錯、結束早於開始），那些還是要靠 domain 的規則擋。
+     *
+     * 是字串不是 JsonNode：Spring AI 收的就是字串。寫壞了（少一個括號）不會在這裡炸，
+     * 會變成每次解析都失敗 —— ExtractionRequestTest 把它讀成 JSON 檢查，守著這件事。
      */
-    private static final JsonNode SCHEMA = parse("""
+    static final String SCHEMA = """
             {
               "type": "object",
               "properties": {
@@ -90,20 +92,37 @@ final class ExtractionRequest {
               "required": ["events"],
               "additionalProperties": false
             }
-            """.formatted(DATE_TIME_PATTERN));
+            """.formatted(DATE_TIME_PATTERN);
 
     private ExtractionRequest() {
     }
 
-    static String body(EventDescription description, LocalDateTime now) {
+    static Prompt prompt(EventDescription description, LocalDateTime now) {
         Objects.requireNonNull(description, "description 不可為 null");
         Objects.requireNonNull(now, "now 不可為 null");
 
-        List<Message> messages = List.of(
-                new Message("system", instruction(now)),
-                new Message("user", description.text()));
-        return write(new Body(messages, false, MAX_TOKENS, TEMPERATURE,
-                new ResponseFormat("json_schema", new JsonSchema("calendar_events", SCHEMA))));
+        return new Prompt(
+                List.of(new SystemMessage(instruction(now)), new UserMessage(description.text())),
+                options());
+    }
+
+    /**
+     * 這個請求自己的選項，蓋過 application.properties 裡替聊天設的預設（spring.ai.openai.chat.options.*）。
+     * 三個都是這件工作專屬的：max_tokens 是失控保險、response_format 是輸出約束、
+     * temperature 是「這個請求要確定性」。聊天沒有理由跟 server 的取樣設定不同，這裡有，而且只屬於這種請求。
+     *
+     * 用的是 OpenAiChatOptions 而不是通用的 ChatOptions：通用的那份沒有 response_format。
+     * 這也是這個 adapter 唯一綁在「OpenAI 協定」上的地方 —— 換成 Claude，要改的就是這個方法。
+     */
+    static OpenAiChatOptions options() {
+        return OpenAiChatOptions.builder()
+                .temperature(TEMPERATURE)
+                .maxTokens(MAX_TOKENS)
+                .responseFormat(OpenAiChatModel.ResponseFormat.builder()
+                        .type(OpenAiChatModel.ResponseFormat.Type.JSON_SCHEMA)
+                        .jsonSchema(SCHEMA)
+                        .build())
+                .build();
     }
 
     /**
@@ -153,46 +172,5 @@ final class ExtractionRequest {
         }
         // 最後一個換行拿掉，讓呼叫端的版面自己決定
         return table.toString().stripTrailing();
-    }
-
-    private static String write(Body body) {
-        try {
-            return JSON.writeValueAsString(body);
-        } catch (JacksonException e) {
-            // 序列化的是自己組好的資料，寫不出來是程式接錯線，當成 bug 往外丟
-            throw new IllegalStateException("組 request body 失敗", e);
-        }
-    }
-
-    private static JsonNode parse(String json) {
-        try {
-            return JSON.readTree(json);
-        } catch (JacksonException e) {
-            // 上面那份 schema 是寫死的常數，讀不懂就是打錯字，類別載入時就該炸
-            throw new IllegalStateException("內建的 JSON Schema 寫壞了", e);
-        }
-    }
-
-    /**
-     * 真正送出去的 JSON。跟 ChatRequest.Body 一樣刻意不送 model（單模型常駐，送了也被忽略）。
-     * 多出來的三個欄位都是這件工作專屬的：max_tokens 是失控保險、response_format 是輸出約束、
-     * temperature 是「這個請求要確定性」—— ChatRequest 不覆蓋取樣參數，是因為聊天沒有理由跟 server 的設定不同；
-     * 這裡有理由，而且是只屬於這種請求的理由，所以寫在這裡而不是去改 server 的啟動參數。
-     * 協定用 snake_case，Java 用 camelCase，用 @JsonProperty 對上 —— 只在 adapter 裡，core 看不到。
-     */
-    record Body(List<Message> messages,
-                boolean stream,
-                @JsonProperty("max_tokens") int maxTokens,
-                double temperature,
-                @JsonProperty("response_format") ResponseFormat responseFormat) {
-    }
-
-    record Message(String role, String content) {
-    }
-
-    record ResponseFormat(String type, @JsonProperty("json_schema") JsonSchema jsonSchema) {
-    }
-
-    record JsonSchema(String name, JsonNode schema) {
     }
 }

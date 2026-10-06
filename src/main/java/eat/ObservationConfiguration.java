@@ -10,7 +10,7 @@ import org.springframework.http.server.observation.ServerRequestObservationConte
  *
  * 要觀測的部分不必寫程式，Spring Boot 都自動做了：
  *   進來的請求  —— Boot 自動加的 ServerHttpObservationFilter
- *   往外的呼叫  —— adapter 用的 RestClient（組裝根從 Boot 的 Builder 建，Builder 上已經掛好觀測）
+ *   往外的呼叫  —— Spring AI 的 ChatClient、ChatModel、EmbeddingModel 自己開的 Observation
  * 這裡只負責把不值得看的擋掉。
  *
  * 跟 ConversationConfiguration 分開：那邊回答「conversation 模組誰接誰」，

@@ -37,11 +37,20 @@ dependencies {
     // 它取代（並涵蓋）了原本的 spring-boot-starter，所以不必兩個都寫。
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 
-    // 往外打 HTTP 的那一側：Spring 的 RestClient，以及它的自動設定（注入用的 RestClient.Builder）。
-    // Boot 4 把它從 web starter 拆出來，要自己加。用它而不是 JDK 的 HttpClient，是因為從 Boot 給的
-    // Builder 建出來的 client 自動被觀測：每次呼叫一個 HTTP span、http.client.requests 指標、
-    // 請求帶上 traceparent 標頭 —— 一行觀測程式碼都不用寫。
-    implementation 'org.springframework.boot:spring-boot-starter-restclient'
+    // 跟模型講話交給 Spring AI。它的 BOM 跟 Boot 的分開：Spring AI 自己發版，2.0.x 是對 Boot 4.1 編的。
+    implementation platform('org.springframework.ai:spring-ai-bom:2.0.1')
+    // OpenAI 相容協定的 ChatModel、EmbeddingModel，由 spring.ai.openai.* 自動組裝。
+    // llama-server 本來就講 OpenAI 的 /v1/chat/completions 與 /v1/embeddings，base-url 指過去就好；
+    // 哪天換成真的 OpenAI，改的是設定檔，不是程式。
+    // 注意底層是官方 openai-java SDK（OkHttp），不走 RestClient：沒有 http.client.requests 指標，
+    // 改由 Spring AI 自己的 gen_ai.* 觀測（每次呼叫一個 span，外加 token 用量指標）。
+    implementation 'org.springframework.ai:spring-ai-starter-model-openai'
+    // 對話紀錄：ChatMemory 存進 PostgreSQL 的 spring_ai_chat_memory（表由 Flyway 建，見 V5）
+    implementation 'org.springframework.ai:spring-ai-starter-model-chat-memory-repository-jdbc'
+    // RAG：RetrievalAugmentationAdvisor 與 VectorStoreDocumentRetriever
+    implementation 'org.springframework.ai:spring-ai-rag'
+    // SimpleVectorStore：向量放記憶體。知識庫只有三份 markdown，用不著向量資料庫
+    implementation 'org.springframework.ai:spring-ai-vector-store'
 
     // 對話紀錄存 PostgreSQL。用 JDBC（JdbcClient）而不是 JPA：
     // 存的只有一個 aggregate、兩張表，SQL 自己寫一眼看得懂；JPA 要在 domain 物件上加 @Entity，

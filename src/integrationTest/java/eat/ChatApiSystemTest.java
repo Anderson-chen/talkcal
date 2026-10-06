@@ -12,6 +12,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
 
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
@@ -24,6 +25,7 @@ import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRe
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -32,11 +34,11 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * 系統測試：把整個應用啟起來，用真的 HTTP 打真的端點，對真的模型。
  *
  * 跟其他測試的分工：
- * - ChatControllerTest 是 web 切片，只載入 controller、use case 用假的 —— 驗協定翻譯。
- * - LlamaCppGenerateReplyAdapterTest、RetrievalQualityTest 各自對一台 server —— 驗某一個 adapter 跟真實世界的往返。
+ * - ChatControllerTest 是 web 切片，只載入 controller、模型用假的 —— 驗協定翻譯。
+ * - RetrievalQualityTest、SpringAiExtractEventsAdapterTest 各自對一台 server —— 驗某一段跟真實世界的往返。
  * - 這裡驗的是「這些東西接起來之後，整個應用到底能不能用」。
  *
- * 關鍵在於這個測試一個具體 adapter 都不認識：它只打 POST /api/chat。
+ * 關鍵在於這個測試一個具體零件都不認識：它只打 POST /api/chat。
  * 接線是 ConversationConfiguration 決定的，所以它測的永遠是「應用現在的樣子」——
  * 哪天換掉檢索或生成的 @Bean，同一題自動跟著測新的接法，這個檔案一個字都不用改。
  * 連接線本身有沒有接錯，也一起驗到了。
@@ -60,9 +62,9 @@ class ChatApiSystemTest {
 
     // 跟正式程式讀同一組系統屬性，才不會一邊指到別台、一邊還在檢查本機那台
     private static final URI LLAMA_CPP_BASE_URI =
-            URI.create(System.getProperty("llamacpp.baseUri", "http://127.0.0.1:8080"));
+            URI.create(System.getProperty("spring.ai.openai.chat.base-url", "http://127.0.0.1:8080/v1"));
     private static final URI EMBEDDING_BASE_URI =
-            URI.create(System.getProperty("llamacpp.embeddingBaseUri", "http://127.0.0.1:8081"));
+            URI.create(System.getProperty("spring.ai.openai.embedding.base-url", "http://127.0.0.1:8081/v1"));
 
     @Container
     @ServiceConnection
@@ -70,6 +72,9 @@ class ChatApiSystemTest {
 
     @Autowired
     TestRestTemplate restTemplate;
+
+    @Autowired
+    JdbcClient jdbcClient;
 
     @BeforeAll
     static void requireRunningServers() {
@@ -106,8 +111,8 @@ class ChatApiSystemTest {
         assertNotNull(response.getBody());
         String reply = response.getBody().reply();
         // 這個斷言只能算弱訊號：模型自己可能也知道雞胸肉的蛋白質含量，
-        // 所以「答對了」不完全等於「檢索有效」。真正證明 grounding 的是下面兩層 ——
-        // GroundedQuestionTest 驗 prompt 組得對，adapter 的整合測試驗檢索撈對片段。
+        // 所以「答對了」不完全等於「檢索有效」。真正證明檢索有效的是
+        // RetrievalQualityTest 驗檢索撈對片段。
         // 這一題的價值在於「整條線接起來會動、不會炸、回得出東西」。
         assertTrue(reply.contains("31"), "回覆裡沒有資料裡的 31 公克：" + reply);
     }
@@ -117,7 +122,7 @@ class ChatApiSystemTest {
     void answersWithoutRetrieval() {
         ResponseEntity<ChatController.Response> response = ask("巴黎鐵塔有多高？");
 
-        // 沒檢索到片段時 GroundedQuestion 送的就是原始提問，模型自由發揮。
+        // 沒檢索到片段時送的就是原始提問（allowEmptyContext），模型自由發揮。
         // 驗的是「這條路不會炸」，不是答案內容
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
@@ -139,12 +144,37 @@ class ChatApiSystemTest {
         assertTrue(second.getBody().reply().contains("7777"), "模型沒記住前一輪：" + second.getBody().reply());
     }
 
+    /**
+     * 歷史裡存的是使用者原本那句話，不是組好參考資料的長提問。
+     *
+     * 這件事靠的是兩個 advisor 的順序（ConversationConfiguration 裡 RAG 的 order 排在記憶後面）。
+     * 順序錯了不會有任何錯誤訊息，模型照樣答得出來，只是每一輪的參考資料都會被存進歷史、
+     * 下一輪再整段送回模型 —— context 一輪比一輪肥。所以直接看資料庫裡存了什麼。
+     */
+    @Test
+    @DisplayName("資料庫裡的歷史存的是原本的提問，參考資料不會一輪一輪疊進去")
+    void storesTheOriginalQuestionNotTheAugmentedOne() {
+        String question = "雞胸肉每 100 公克有多少蛋白質？";
+        ResponseEntity<ChatController.Response> response = ask(question);
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+
+        List<String> stored = jdbcClient.sql("""
+                        SELECT content FROM spring_ai_chat_memory
+                        WHERE conversation_id = ? AND type = 'USER'
+                        """)
+                .param(response.getBody().conversationId())
+                .query(String.class)
+                .list();
+
+        assertEquals(List.of(question), stored);
+    }
+
     @Test
     @DisplayName("空白提問回 400，而且根本不必驚動模型")
     void rejectsBlankQuestion() {
-        // 這題在 ChatControllerTest 也有，但那是切片測試裡用假 use case 演出來的。
+        // 這題在 ChatControllerTest 也有，但那是切片測試裡用假模型演出來的。
         // 這裡驗的是真的接起來之後，那條規則還在原位 ——
-        // 提問在 Question 就被擋下，檢索和模型都不會被驚動，所以這題秒回
+        // 提問在 ChatController 就被擋下，檢索和模型都不會被驚動，所以這題秒回
         ResponseEntity<String> response =
                 restTemplate.postForEntity("/api/chat", new ChatController.Request("  ", null), String.class);
 

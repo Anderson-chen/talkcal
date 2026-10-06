@@ -1,141 +1,113 @@
 package eat;
 
+import eat.conversation.adapter.out.knowledge.KnowledgeBaseRetriever;
 import eat.conversation.adapter.out.knowledge.MarkdownKnowledgeBase;
-import eat.conversation.adapter.out.knowledge.llamacpp.LlamaCppRetrievePassagesAdapter;
-import eat.conversation.adapter.out.persistence.postgres.JdbcConversationAdapter;
-import eat.conversation.adapter.out.reply.llamacpp.LlamaCppGenerateReplyAdapter;
-import eat.conversation.application.domain.service.AskQuestionService;
-import eat.conversation.application.port.in.AskQuestionUseCase;
-import eat.conversation.application.port.out.GenerateReplyPort;
-import eat.conversation.application.port.out.LoadConversationPort;
-import eat.conversation.application.port.out.RetrievePassagesPort;
-import eat.conversation.application.port.out.SaveConversationPort;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
-import org.springframework.boot.http.client.HttpClientSettings;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.client.advisor.api.Advisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
+import org.springframework.ai.rag.generation.augmentation.ContextualQueryAugmenter;
+import org.springframework.ai.rag.retrieval.search.DocumentRetriever;
+import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
+import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
-import org.springframework.web.client.RestClient;
 
-import java.net.URI;
-import java.time.Duration;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
- * conversation 模組的接線：這個模組唯一同時認識 adapter 和 application 的地方（calendar 那邊是 CalendarConfiguration）。
+ * conversation 模組的接線（calendar 那邊是 CalendarConfiguration）。
  *
- * 看一眼 import 就知道為什麼這種檔案只能待在 eat 這個 package：
- * 上面同時出現了 adapter.out 和 application 的 port ——
- * 這種 import 組合出現在其他任何檔案裡，都代表分層漏了。
- * ArchitectureTest 有兩條規則守著這件事：只有 package eat 和 adapter 自己那一包，
- * 才可以認識 ..adapter.out.reply.llamacpp.. 與 ..adapter.out.knowledge..。
+ * conversation 沒有自己的 domain 了：對話紀錄、RAG、跟模型講話全部交給 Spring AI，
+ * 這裡做的事就是把 Spring AI 的零件組成一個 ChatClient，交給 ChatController 用。
  *
- * 這裡負責的只有一件事：決定「哪個介面用哪個實作」。
- * 目前有三個決定要下 —— GenerateReplyPort 用 llama.cpp 那個實作、
- * RetrievePassagesPort 用向量檢索那個實作、對話紀錄（Load / SaveConversationPort）存 PostgreSQL。
+ * 跟模型有關的 bean（ChatModel、EmbeddingModel、ChatMemory、ChatClient.Builder）都是 Spring AI 依
+ * application.properties 的 spring.ai.* 自動建的 —— 連到哪、等多久、生成上限是設定，不是程式。
+ * 這裡只決定「怎麼組」：
+ * - 對話紀錄：MessageChatMemoryAdvisor + 自動組裝的 ChatMemory（PostgreSQL、只留最近 20 則）
+ * - RAG：RetrievalAugmentationAdvisor + 知識庫的 retriever
  *
- * 跟 Application 拆開，是因為兩者回答的是不同問題：
- * 那邊回答「怎麼啟動」，這邊回答「誰接誰」。
- * 模組變多時，這邊會一個模組一個 Configuration，那邊永遠只有 main。
- *
- * inbound 那一側（HTTP 入口 ChatController）不在這裡 new：它是個 RestController，
- * 由元件掃描接管。放心讓它自動接的理由是 —— 它只認得 AskQuestionUseCase 這個 port，
- * 不認得任何具體實作，所以「挑實作」的權力還是只在這裡一處。
- *
- * 放在根 package eat 而不是 eat.conversation 裡面，是刻意的：
- * 組裝根必須站在所有模組外面，才有資格認識它們全部。
- *
- * 類別不是 public：它是給 Spring 掃進來的，沒有任何程式該直接引用它。
- *
- * proxyBeanMethods = false：下面每個 Bean 需要的東西都從方法參數收（例如 askQuestion 收
- * 兩個 port），沒有一個 Bean 方法去呼叫另一個 Bean 方法，所以不需要 Spring 用 CGLIB
- * 把這個類別再包一層去攔截那種呼叫。關掉它比較單純，也少一次執行期產生位元組碼。
+ * 放在根 package eat、類別不 public、proxyBeanMethods = false，理由跟以前一樣：
+ * 組裝根站在所有模組外面，沒有程式該直接引用它，Bean 方法之間也不互相呼叫。
  */
 @Configuration(proxyBeanMethods = false)
 class ConversationConfiguration {
 
-    // 這幾個 Bean 就是全部的接線：真正的實作在回傳型別上被換成介面，之後誰也看不到 llama.cpp。
-    // 順序不必自己管，Spring 看參數型別就知道誰要先建 ——
-    // askQuestion 要兩個 port，容器就會先把下面那兩個建好再餵進來。
-    //
-    // 兩台模型的位址從 Spring 的 Environment 拿，不再自己讀 System.getProperty：
-    // 預設值寫在 application.properties（本機開發），容器裡由 application-docker.properties 覆蓋成服務名稱。
-    // Environment 同時涵蓋系統屬性和環境變數，所以 -Dllamacpp.baseUri=...（整合測試在用）
-    // 和環境變數 LLAMACPP_BASEURI 都照樣能蓋掉設定檔，優先序由 Spring 管，這裡不必知道值從哪來。
-    // 屬性名稱沿用原本的 llamacpp.baseUri，不改成 base-uri：整合測試用同一組名字檢查 server 在不在。
+    // 檢索參數。原本的規則是「地板 0.40 + 相對門檻 0.9 + 前 3 筆」，
+    // Spring AI 的 VectorStoreDocumentRetriever 只有絕對門檻和 topK，相對門檻拿掉了 ——
+    // 代價是「同一份文件但不同主題」的段落比較容易一起被撈進來。
+    // 0.40 是對 bge-m3 + 這份知識庫量出來的（不相干 0.27～0.32、相關但抽象 0.50～0.56），
+    // 換 embedding 模型就得重量，RetrievalQualityTest 守著它。
+    private static final int TOP_K = 3;
+    private static final double SIMILARITY_THRESHOLD = 0.40;
 
-    //
-    // 每台模型伺服器各給一個 RestClient：連到哪（base URL）、等多久（逾時）是部署決定，在這裡定；
-    // 打哪個路徑、送什麼、錯誤怎麼翻是協定知識，留在 adapter。
-    // 這裡沒有一行觀測程式碼：RestClient 從 Spring Boot 注入的 Builder 建，Boot 已經在 Builder 上
-    // 掛好觀測，每次呼叫自動有 HTTP span、http.client.requests 指標、請求帶 traceparent 標頭。
-    // 自己 RestClient.create() 的話這些全都沒有。
+    // 參考資料怎麼跟問題組在一起。{context} 和 {query} 是 Spring AI 填的兩個空格。
+    // 措辭照抄原本的 GroundedQuestion：防幻覺那句話夾在資料之後、問題之前 ——
+    // 放最前面會被大量資料淹掉，放問題之後又離問題太遠。
+    // 「問題：」是分隔線，免得模型把提問當成參考資料的最後一段。
+    private static final String GROUNDED_QUESTION = """
+            參考資料：
+            {context}
 
+            請依據上述參考資料回答，資料中沒有提到的內容不要自行推測。
+
+            問題：{query}""";
+
+    /**
+     * 知識庫：markdown 切好段、第一次提問才算向量放進記憶體裡的 SimpleVectorStore。
+     *
+     * 要換成別種檢索（向量資料庫、全文搜尋、加 rerank），動的就是這個 Bean。
+     */
     @Bean
-    GenerateReplyPort generateReplyPort(RestClient.Builder restClientBuilder,
-                                        ClientHttpRequestFactoryBuilder<?> requestFactoryBuilder,
-                                        @Value("${llamacpp.baseUri}") URI baseUri,
-                                        @Value("${llamacpp.connectTimeout}") Duration connectTimeout,
-                                        @Value("${llamacpp.readTimeout}") Duration readTimeout) {
-        return new LlamaCppGenerateReplyAdapter(
-                llamaCppClient(restClientBuilder, requestFactoryBuilder, baseUri, connectTimeout, readTimeout));
+    DocumentRetriever knowledgeBase(EmbeddingModel embeddingModel) {
+        SimpleVectorStore vectorStore = SimpleVectorStore.builder(embeddingModel).build();
+        DocumentRetriever byVector = VectorStoreDocumentRetriever.builder()
+                .vectorStore(vectorStore)
+                .topK(TOP_K)
+                .similarityThreshold(SIMILARITY_THRESHOLD)
+                .build();
+        return new KnowledgeBaseRetriever(vectorStore, MarkdownKnowledgeBase.documents(), byVector);
     }
 
-    // 要換成別種檢索（全文搜尋、hybrid、加 rerank），動的就只有這個 Bean 這一行 ——
-    // AskQuestionService、GroundedQuestion、Conversation、Passage、RetrievePassagesPort、
-    // ChatController、GenerateReplyPort 那一側，以及所有測試，一個字都不用改。
-    //
-    // 換 embedding 供應商也是換這一行，但換的是整個 adapter，不是只換「文字變向量」那一段：
-    // 檢索門檻是對 bge-m3 量出來的，換了模型就得重量，所以門檻跟著供應商走。
-    //
-    // embedding 是另一台 server、另一顆模型（bge-m3），所以是另一個位址。
-    // 生成用的 qwen3:8b 不能兼差：它沒被訓練成「向量距離 = 語意相似度」，
-    // 而且為了一個向量跑一次 8B 推論貴得離譜。
+    /**
+     * 聊天用的 ChatClient：每一題先帶上這段對話的歷史，再把檢索到的片段組進提問。
+     *
+     * 兩個 advisor 的先後由 order 決定（數字小的先處理請求），RAG 的 order 明寫成「緊跟在記憶後面」：
+     * 記憶那一層先拿到請求，存進資料庫的是使用者原本那句話；RAG 接著才把參考資料組進這一次的提問，
+     * 帶著參考資料的版本只送給模型，不會一輪一輪疊進歷史。
+     * 不靠 RAG 的預設 order：預設值沒寫在文件上，哪天改了，記憶就會存到組好的長提問。
+     *
+     * 沒檢索到東西時（allowEmptyContext）照原本的提問送出去，讓模型自由發揮：
+     * Spring AI 預設是叫模型回「我不知道」，但檢索漏掉不代表模型自己不知道。
+     */
     @Bean
-    RetrievePassagesPort retrievePassagesPort(RestClient.Builder restClientBuilder,
-                                              ClientHttpRequestFactoryBuilder<?> requestFactoryBuilder,
-                                              @Value("${llamacpp.embeddingBaseUri}") URI embeddingBaseUri,
-                                              @Value("${llamacpp.connectTimeout}") Duration connectTimeout,
-                                              @Value("${llamacpp.embeddingReadTimeout}") Duration readTimeout) {
-        return new LlamaCppRetrievePassagesAdapter(
-                llamaCppClient(restClientBuilder, requestFactoryBuilder, embeddingBaseUri, connectTimeout, readTimeout),
-                MarkdownKnowledgeBase.passages());
-    }
-
-    // 兩台用同一個做法建，只差位址和逾時。
-    //
-    // RestClient.Builder 每次注入都是一個新的（Boot 把它設成 prototype），所以兩個 Bean 方法各拿各的，
-    // 設了 baseUrl 不會互相污染。
-    // requestFactoryBuilder 也用 Boot 給的：底層用哪個 HTTP 函式庫（預設是 JDK 的 HttpClient）
-    // 由 spring.http.clients.imperative.factory 統一決定，這裡只疊上這台自己的逾時。
-    private static RestClient llamaCppClient(RestClient.Builder restClientBuilder,
-                                             ClientHttpRequestFactoryBuilder<?> requestFactoryBuilder,
-                                             URI baseUri, Duration connectTimeout, Duration readTimeout) {
-        return restClientBuilder
-                .baseUrl(baseUri.toString())
-                .requestFactory(requestFactoryBuilder.build(
-                        HttpClientSettings.defaults().withTimeouts(connectTimeout, readTimeout)))
+    ChatClient chatClient(ChatClient.Builder builder, ChatMemory chatMemory, DocumentRetriever knowledgeBase) {
+        RetrievalAugmentationAdvisor rag = RetrievalAugmentationAdvisor.builder()
+                .documentRetriever(knowledgeBase)
+                .queryAugmenter(ContextualQueryAugmenter.builder()
+                        .promptTemplate(new PromptTemplate(GROUNDED_QUESTION))
+                        .documentFormatter(ConversationConfiguration::numbered)
+                        .allowEmptyContext(true)
+                        .build())
+                .order(Advisor.DEFAULT_CHAT_MEMORY_PRECEDENCE_ORDER + 1)
+                .build();
+        return builder
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build(), rag)
                 .build();
     }
 
-    // 對話紀錄存 PostgreSQL。一個實作同時當 LoadConversationPort 和 SaveConversationPort：
-    // 回傳型別只能寫一個，所以這個 Bean 的型別是實作本身（其他 Bean 都回傳介面，這裡是唯一的例外）；
-    // 下面 askQuestion 照樣用兩個 port 介面收它，Spring 看型別就知道同一個物件兩邊都適用。
-    // 連線（DataSource）、JdbcClient、交易管理器都是 Spring Boot 依 spring.datasource.* 自動建好的。
-    @Bean
-    JdbcConversationAdapter conversationStore(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
-        return new JdbcConversationAdapter(jdbcClient, new TransactionTemplate(transactionManager));
-    }
-
-    @Bean
-    AskQuestionUseCase askQuestion(LoadConversationPort loadConversationPort,
-                                   RetrievePassagesPort retrievePassagesPort,
-                                   GenerateReplyPort generateReplyPort,
-                                   SaveConversationPort saveConversationPort) {
-        return new AskQuestionService(loadConversationPort, retrievePassagesPort, generateReplyPort,
-                saveConversationPort);
+    // 片段編號：讓模型有辦法在回覆裡指名出處（「根據 [2]」）。
+    // 每個片段的第一行就是出處（MarkdownKnowledgeBase 把它接在內文前面），所以不必另外印
+    private static String numbered(List<Document> documents) {
+        return IntStream.range(0, documents.size())
+                .mapToObj(i -> "[" + (i + 1) + "]" + documents.get(i).getText())
+                .collect(Collectors.joining("\n"));
     }
 }

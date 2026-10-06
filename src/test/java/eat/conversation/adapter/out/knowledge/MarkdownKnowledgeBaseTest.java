@@ -1,17 +1,35 @@
 package eat.conversation.adapter.out.knowledge;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-
-import eat.conversation.application.domain.model.Passage;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.document.Document;
 
 @DisplayName("MarkdownKnowledgeBase")
 class MarkdownKnowledgeBaseTest {
+
+    // 一段的內文與出處。Document 本身不好直接比：每個都帶著一個隨機的 id
+    private record Section(String text, String source) {
+    }
+
+    // 把 Document 拆回內文與出處，順便驗兩件事：文字是「出處 + 換行 + 內文」、metadata 裡的出處跟文字裡的一致
+    private static List<Section> sections(List<Document> documents) {
+        return documents.stream().map(document -> {
+            String source = source(document);
+            String prefix = source + "\n";
+            assertTrue(document.getText().startsWith(prefix), "文字沒有以出處開頭：" + document.getText());
+            return new Section(document.getText().substring(prefix.length()), source);
+        }).toList();
+    }
+
+    private static String source(Document document) {
+        return (String) document.getMetadata().get(MarkdownKnowledgeBase.SOURCE);
+    }
 
     @Nested
     @DisplayName("照 ## 標題切段")
@@ -33,9 +51,9 @@ class MarkdownKnowledgeBaseTest {
                     """;
 
             assertEquals(List.of(
-                    new Passage("富含 Omega-3。", "鮭魚.md > 營養成分"),
-                    new Passage("中火煎四分鐘。", "鮭魚.md > 烹調建議")),
-                    MarkdownKnowledgeBase.chunk("鮭魚.md", markdown));
+                    new Section("富含 Omega-3。", "鮭魚.md > 營養成分"),
+                    new Section("中火煎四分鐘。", "鮭魚.md > 烹調建議")),
+                    sections(MarkdownKnowledgeBase.chunk("鮭魚.md", markdown)));
         }
 
         @Test
@@ -48,8 +66,8 @@ class MarkdownKnowledgeBaseTest {
                     先吸乾水分。
                     """;
 
-            assertEquals(List.of(new Passage("香煎：中火煎四分鐘。\n### 小技巧\n先吸乾水分。", "鮭魚.md > 烹調建議")),
-                    MarkdownKnowledgeBase.chunk("鮭魚.md", markdown));
+            assertEquals(List.of(new Section("香煎：中火煎四分鐘。\n### 小技巧\n先吸乾水分。", "鮭魚.md > 烹調建議")),
+                    sections(MarkdownKnowledgeBase.chunk("鮭魚.md", markdown)));
         }
 
         @Test
@@ -63,9 +81,9 @@ class MarkdownKnowledgeBaseTest {
                     """;
 
             assertEquals(List.of(
-                    new Passage("常見的高蛋白魚類。", "鮭魚.md"),
-                    new Passage("富含 Omega-3。", "鮭魚.md > 營養成分")),
-                    MarkdownKnowledgeBase.chunk("鮭魚.md", markdown));
+                    new Section("常見的高蛋白魚類。", "鮭魚.md"),
+                    new Section("富含 Omega-3。", "鮭魚.md > 營養成分")),
+                    sections(MarkdownKnowledgeBase.chunk("鮭魚.md", markdown)));
         }
 
         @Test
@@ -78,8 +96,8 @@ class MarkdownKnowledgeBaseTest {
                     中火煎四分鐘。
                     """;
 
-            assertEquals(List.of(new Passage("中火煎四分鐘。", "鮭魚.md > 烹調建議")),
-                    MarkdownKnowledgeBase.chunk("鮭魚.md", markdown));
+            assertEquals(List.of(new Section("中火煎四分鐘。", "鮭魚.md > 烹調建議")),
+                    sections(MarkdownKnowledgeBase.chunk("鮭魚.md", markdown)));
         }
 
         @Test
@@ -88,8 +106,8 @@ class MarkdownKnowledgeBaseTest {
             // 這台機器的 git 會在 checkout 時把 .md 轉成 CRLF，所以這不是假想情境
             String markdown = "# 鮭魚\r\n\r\n## 營養成分\r\n\r\n富含 Omega-3。\r\n";
 
-            assertEquals(List.of(new Passage("富含 Omega-3。", "鮭魚.md > 營養成分")),
-                    MarkdownKnowledgeBase.chunk("鮭魚.md", markdown));
+            assertEquals(List.of(new Section("富含 Omega-3。", "鮭魚.md > 營養成分")),
+                    sections(MarkdownKnowledgeBase.chunk("鮭魚.md", markdown)));
         }
     }
 
@@ -108,6 +126,6 @@ class MarkdownKnowledgeBaseTest {
                         "雞胸肉.md > 營養成分",
                         "雞胸肉.md > 烹調建議",
                         "酪梨.md > 營養成分"),
-                MarkdownKnowledgeBase.passages().stream().map(Passage::source).toList());
+                MarkdownKnowledgeBase.documents().stream().map(MarkdownKnowledgeBaseTest::source).toList());
     }
 }

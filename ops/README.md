@@ -106,9 +106,9 @@ Alloy 加入了 deploy/ 的網路（`eat-deploy_default`）：用服務名稱抓
 curl 'localhost:9009/prometheus/api/v1/query?query=up'
 ```
 
-app 現在多了一組 `http_client_requests_seconds`：app 打給兩台模型的次數與耗時，`uri` 標籤分得出
-`/v1/embeddings`（檢索）和 `/v1/chat/completions`（生成），`status` 標籤分得出成功和失敗。
-這組是 RestClient 自動產生的，見下面「追蹤」一節。
+app 打給兩台模型的呼叫，原本有一組 `http_client_requests_seconds`（RestClient 自動產生）。
+改用 Spring AI 之後沒有了：Spring AI 的 OpenAI 模組底層是官方 openai-java SDK（OkHttp），不走 RestClient。
+取而代之的是 Spring AI 自己的觀測（`gen_ai.*` 系列，含 token 用量），見下面「追蹤」一節。
 
 ## 日誌：Loki 收什麼
 
@@ -158,7 +158,16 @@ sum by (service) (count_over_time({env="docker"} | json | log_level=~"WARN|ERROR
 ## 追蹤：一個請求的時間花在哪
 
 app 對每個請求開一個 trace（`management.tracing.sampling.probability=1.0`，學習環境全記），
-用 OTLP 推給 Alloy 的 4318，Alloy 再轉給 Tempo。一次 `/api/chat` 長這樣：
+用 OTLP 推給 Alloy 的 4318，Alloy 再轉給 Tempo。
+
+> **改用 Spring AI 之後，下面這棵樹還沒重新量過。** 以前往外的兩個 span 是 RestClient 產生的 HTTP span
+> （`http post /v1/embeddings`、`http post /v1/chat/completions`）；現在跟模型講話的是 Spring AI，
+> 底層是官方 openai-java SDK（OkHttp），**不會**產生 HTTP span，請求也不再帶 `traceparent` 標頭。
+> 換成 Spring AI 自己的觀測：ChatClient、advisor（記憶、RAG）、ChatModel、EmbeddingModel、VectorStore 各自一個 span，
+> 模型那幾個帶 `gen_ai.*` 屬性（模型名稱、token 用量）。部署後打一題，到 Tempo 看實際的 span 名稱，再回來補這張圖。
+> `eat — Traces (Tempo)` 儀表板裡用 `kind=client` 篩往外呼叫的那幾張圖，到時也要跟著改。
+
+以前（RestClient 時代）一次 `/api/chat` 長這樣：
 
 ```
 eat: http post /api/chat                   ← 請求進來（Spring 自動加的 ServerHttpObservationFilter 量）
@@ -166,20 +175,17 @@ eat: http post /api/chat                   ← 請求進來（Spring 自動加�
 └── http post /v1/chat/completions 200     ← 生成：qwen3 回答
 ```
 
-兩種 span 是不同的東西量的，兩邊都沒寫任何觀測程式碼：
-
 | span | 誰量的 | 為什麼是它 |
 |------|--------|------------|
 | 根 span（進來的請求） | Spring Boot 自動註冊的 filter | 進來的 HTTP 由 Spring MVC 處理，它管得到，不必寫任何設定 |
-| 往外的 HTTP 呼叫 | adapter 用的 `RestClient`：組裝根從 Spring Boot 的 Builder 建，Boot 已經在 Builder 上掛好觀測 | 狀態碼、一次提問發了幾次請求都看得到；請求也自動帶 `traceparent` 標頭 |
-
-adapter 只管協定（路徑、JSON、錯誤怎麼翻），`ConversationConfiguration` 只決定每個 adapter 連到哪、等多久。
+| 跟模型的往返 | Spring AI（ChatClient、ChatModel、EmbeddingModel 內建的 Micrometer Observation） | 不必寫觀測程式碼；比 HTTP span 多了 token 用量，少了 HTTP 狀態碼 |
 
 曾經用 AOP 在 outbound port 外面多包一層 span（名稱是 `retrievePassages`、`generateReply`），
-後來拿掉：HTTP span 已經看得出慢在哪，多一層主要只換到業務名稱和「把多次 HTTP 歸成一件事」，
-卻要多一個 aspectj 依賴，還得把整個 app 的 AOP 改成介面代理（adapter 是 final class）。
-之後如果某個 adapter 用的是不走 RestClient 的官方 SDK（不會自動產生 span），再回頭考慮。
+後來拿掉了。Spring AI 自己的 span 本來就是照「檢索」「生成」這種業務動作切的，更用不著了（實際名稱同樣等部署後確認）。
 llama.cpp 本身不產生 span，所以樹只到 app 呼叫出去的那一層。
+
+想在 trace 上看到送給模型的完整 prompt（下一步第 1 項），Spring AI 有現成的開關：
+`spring.ai.chat.client.observations.log-prompt=true`。prompt 裡可能有使用者的私人內容，所以預設關著，要開再想清楚。
 
 在 Grafana 看 trace 有兩個地方：
 

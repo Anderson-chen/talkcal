@@ -1,4 +1,4 @@
-package eat.calendar.adapter.out.extraction.llamacpp;
+package eat.calendar.adapter.out.extraction.springai;
 
 import eat.calendar.application.domain.model.CalendarEvent;
 import eat.calendar.application.domain.model.Category;
@@ -7,9 +7,8 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
-import org.springframework.boot.http.client.HttpClientSettings;
-import org.springframework.web.client.RestClient;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.ai.openai.OpenAiChatOptions;
 
 import java.io.IOException;
 import java.net.URI;
@@ -35,11 +34,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 這支測試第一次跑就抓到 0.7 溫度下「下週三」偶爾查錯，temperature 0 就是因此加的。
  * 哪天換了模型或改了 prompt，先跑這個。
  */
-@DisplayName("LlamaCppExtractEventsAdapter（真實 server）")
-class LlamaCppExtractEventsAdapterTest {
+@DisplayName("SpringAiExtractEventsAdapter（真實 server）")
+class SpringAiExtractEventsAdapterTest {
 
     private static final URI BASE_URI =
-            URI.create(System.getProperty("llamacpp.baseUri", "http://127.0.0.1:8080"));
+            URI.create(System.getProperty("spring.ai.openai.chat.base-url", "http://127.0.0.1:8080/v1"));
 
     // 2026-10-05 星期一 09:30
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 5, 9, 30);
@@ -66,13 +65,18 @@ class LlamaCppExtractEventsAdapterTest {
     }
 
     private static List<CalendarEvent> extract(String text) {
-        // 逾時跟 application.properties 的 llamacpp.connectTimeout / readTimeout 一致
-        RestClient llamaCpp = RestClient.builder()
-                .baseUrl(BASE_URI.toString())
-                .requestFactory(ClientHttpRequestFactoryBuilder.jdk().build(
-                        HttpClientSettings.defaults().withTimeouts(Duration.ofSeconds(5), Duration.ofMinutes(2))))
+        // 自己建一個 ChatModel，設定跟 application.properties 的 spring.ai.openai.chat.* 一致。
+        // 不起 Spring 容器：這裡只測 adapter 跟真模型的往返，不需要資料庫和其他 bean
+        OpenAiChatModel chatModel = OpenAiChatModel.builder()
+                .options(OpenAiChatOptions.builder()
+                        .baseUrl(BASE_URI.toString())
+                        .apiKey("not-used-by-llama-server")
+                        .model("qwen3-8b")
+                        .timeout(Duration.ofMinutes(2))
+                        .maxRetries(0)
+                        .build())
                 .build();
-        return new LlamaCppExtractEventsAdapter(llamaCpp).extractEvents(new EventDescription(text), NOW);
+        return new SpringAiExtractEventsAdapter(chatModel).extractEvents(new EventDescription(text), NOW);
     }
 
     @Test

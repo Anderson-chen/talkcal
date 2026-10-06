@@ -1,4 +1,4 @@
-package eat.calendar.adapter.out.extraction.llamacpp;
+package eat.calendar.adapter.out.extraction.springai;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -9,39 +9,38 @@ import eat.calendar.application.domain.model.CalendarEvent;
 import eat.calendar.application.domain.model.Category;
 import eat.calendar.application.domain.model.EventDescription;
 
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import tools.jackson.databind.ObjectMapper;
 
 @DisplayName("ExtractionResponse")
 class ExtractionResponseTest {
 
-    private static final ObjectMapper JSON = new ObjectMapper();
-
-    // 把模型輸出（內層 JSON）包進 llama.cpp 回應的外層信封，跟實測的形狀一樣
-    private static String response(String content, String finishReason) {
-        return JSON.writeValueAsString(java.util.Map.of(
-                "choices", List.of(java.util.Map.of(
-                        "finish_reason", finishReason,
-                        "index", 0,
-                        "message", java.util.Map.of("role", "assistant", "content", content)))));
+    // 把模型輸出（內層 JSON）包成 ChatModel 回來的樣子：Spring AI 拆好外層信封之後，就剩這兩樣
+    private static ChatResponse response(String content, String finishReason) {
+        return new ChatResponse(List.of(new Generation(new AssistantMessage(content),
+                ChatGenerationMetadata.builder().finishReason(finishReason).build())));
     }
 
-    private static String response(String content) {
+    private static ChatResponse response(String content) {
         return response(content, "stop");
     }
 
     // 大部分測試不在乎原句，用一句涵蓋各種結束時間說法的話當背景
     private static final String SAID = "明天下午三點跟小明吃飯，下週三早上九點到十點半看牙醫，晚上十點到凌晨一點唱歌";
 
-    private static List<CalendarEvent> extract(String body) {
+    private static List<CalendarEvent> extract(ChatResponse body) {
         return ExtractionResponse.events(body, new EventDescription(SAID));
     }
 
-    private static List<CalendarEvent> extract(String body, String said) {
+    private static List<CalendarEvent> extract(ChatResponse body, String said) {
         return ExtractionResponse.events(body, new EventDescription(said));
     }
 
@@ -81,15 +80,6 @@ class ExtractionResponseTest {
     }
 
     @Test
-    @DisplayName("llama.cpp 回 error 物件：帶出 server 自己的訊息")
-    void serverError() {
-        IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> extract("{\"error\":{\"code\":400,\"message\":\"failed to parse grammar\"}}"));
-
-        assertTrue(e.getMessage().contains("failed to parse grammar"));
-    }
-
-    @Test
     @DisplayName("被 max_tokens 截斷：直接說是截斷，不是說 JSON 壞了")
     void truncatedOutput() {
         IllegalStateException e = assertThrows(IllegalStateException.class,
@@ -105,9 +95,16 @@ class ExtractionResponseTest {
     }
 
     @Test
-    @DisplayName("外層回應不是合法 JSON：同樣算上游的錯")
-    void malformedEnvelopeIsAnUpstreamFailure() {
-        assertThrows(IllegalStateException.class, () -> extract("<html>502</html>"));
+    @DisplayName("沒有任何生成結果：算上游的錯")
+    void noGenerationIsAnUpstreamFailure() {
+        assertThrows(IllegalStateException.class, () -> extract(new ChatResponse(List.of())));
+    }
+
+    @Test
+    @DisplayName("finish_reason 的大小寫不影響截斷的判斷")
+    void truncationIgnoresCase() {
+        assertThrows(IllegalStateException.class,
+                () -> extract(response("{\"events\":[{\"title\":\"吃", "LENGTH")));
     }
 
     @Test
@@ -186,7 +183,7 @@ class ExtractionResponseTest {
 
     // ── 結束時間要拿原句核對（使用者回報的 bug：「明天下午3點和 Amy 開會」） ─────────────
 
-    private static String oneEvent(String end, String endSaid) {
+    private static ChatResponse oneEvent(String end, String endSaid) {
         String endJson = end == null ? "null" : "\"" + end + "\"";
         String saidJson = endSaid == null ? "null" : "\"" + endSaid + "\"";
         return response("{\"events\":[{\"title\":\"開會\",\"start\":\"2026-10-07T15:00\",\"end\":" + endJson
