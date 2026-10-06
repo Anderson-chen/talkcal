@@ -1,12 +1,16 @@
 package eat;
 
+import eat.calendar.adapter.in.assistant.CalendarAssistant;
 import eat.calendar.adapter.out.extraction.springai.SpringAiExtractEventsAdapter;
+import eat.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository;
 import eat.calendar.adapter.out.persistence.postgres.JdbcCalendarEventAdapter;
 import eat.calendar.application.domain.service.AddEventsService;
+import eat.calendar.application.domain.service.FindFreeSlotsService;
 import eat.calendar.application.domain.service.ListEventsService;
 import eat.calendar.application.domain.service.ParseEventsService;
 import eat.calendar.application.domain.service.RemoveEventService;
 import eat.calendar.application.port.in.AddEventsUseCase;
+import eat.calendar.application.port.in.FindFreeSlotsUseCase;
 import eat.calendar.application.port.in.ListEventsUseCase;
 import eat.calendar.application.port.in.ParseEventsUseCase;
 import eat.calendar.application.port.in.RemoveEventUseCase;
@@ -65,6 +69,26 @@ class CalendarConfiguration {
     @Bean
     ParseEventsUseCase parseEvents(ExtractEventsPort extractEventsPort, @Value("${calendar.zone}") ZoneId zone) {
         return new ParseEventsService(extractEventsPort, Clock.system(zone));
+    }
+
+    // 找空檔也要知道「現在」（過去的時間不算），時區跟解析用同一個
+    @Bean
+    FindFreeSlotsUseCase findFreeSlots(LoadEventsPort loadEventsPort, @Value("${calendar.zone}") ZoneId zone) {
+        return new FindFreeSlotsService(loadEventsPort, Clock.system(zone));
+    }
+
+    /**
+     * AI 助理：模型 + 自己的對話記憶 + 三個工具（工具背後是上面那些 use case）。
+     *
+     * 直接拿 ChatModel（跟抽行程、聊天背後是同一個），agent loop 由 CalendarAssistant 自己跑。
+     * 記憶不用 Spring AI 自動組裝的那個（JdbcChatMemoryRepository 會把工具訊息濾掉），用自己的表，原因寫在 V7。
+     */
+    @Bean
+    CalendarAssistant calendarAssistant(ChatModel chatModel, JdbcClient jdbcClient, PlatformTransactionManager transactionManager,
+                                        ParseEventsUseCase parseEvents, ListEventsUseCase listEvents,
+                                        FindFreeSlotsUseCase findFreeSlots, @Value("${calendar.zone}") ZoneId zone) {
+        JdbcAssistantMemoryRepository memory = new JdbcAssistantMemoryRepository(jdbcClient, new TransactionTemplate(transactionManager));
+        return new CalendarAssistant(chatModel, memory, parseEvents, listEvents, findFreeSlots, Clock.system(zone));
     }
 
     @Bean

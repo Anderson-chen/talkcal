@@ -1,5 +1,6 @@
 package eat.calendar.adapter.out.extraction.springai;
 
+import eat.calendar.adapter.shared.DateTable;
 import eat.calendar.application.domain.model.EventDescription;
 
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -8,11 +9,8 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 
-import java.time.DayOfWeek;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Objects;
 
@@ -38,12 +36,6 @@ final class ExtractionRequest {
     // server 啟動時的 0.7 是替聊天調的，聊天要一點變化；抽行程只有一個正確答案，變化就是錯誤。
     // 實測：同一份 body 在 0.7 下 10 次有 1 次把「下週三」查成下週二，0 之後 7 種句子各 10 次全對
     static final double TEMPERATURE = 0;
-
-    // 日期表涵蓋幾週（從這週一算起）。使用者最遠會說到「下下週」，再遠的通常會講日期
-    private static final int WEEKS = 3;
-    private static final List<String> WEEK_LABELS = List.of("這週", "下週", "下下週");
-    private static final List<String> DAY_LABELS = List.of("今天", "明天", "後天");
-    private static final String WEEKDAYS = "一二三四五六日";
 
     private static final DateTimeFormatter NOW_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
@@ -148,31 +140,7 @@ final class ExtractionRequest {
                 title 寫要做的事，有講跟誰就保留（例如「跟小明吃飯」「跟客戶開會」），但不要包含日期、時間和地點。
                 category 從四類選一個：work（工作、會議、客戶、報告、面試）、health（運動、看醫生、健身、瑜珈）、social（跟朋友或家人吃飯、聚會、約會）、personal（其他私事，例如繳費、讀書、購物）。
                 location：使用者有講在哪裡就填那個地點（例如「在健身房上課」→ 健身房）；沒講就給 null，不要自己編。
-                沒有任何行程就回空陣列。""".formatted(now.format(NOW_FORMAT), dateTable(now.toLocalDate()));
+                沒有任何行程就回空陣列。""".formatted(now.format(NOW_FORMAT), DateTable.of(now.toLocalDate()));
     }
 
-    /**
-     * 從這週一起連續 WEEKS 週，每天一列：「2026-10-14 = 下週三」，今天 / 明天 / 後天另外標出來。
-     *
-     * 這張表把「推算日期」換成「比對字串」：模型只要在表裡找到「下週三」那一列，
-     * 不必知道今天星期幾、也不必做加法。日曆的算術交給 java.time，那是它的專長。
-     *
-     * 一週從星期一開始（台灣的習慣）：星期日說「下週一」指的是明天，表裡也剛好是這樣排。
-     */
-    static String dateTable(LocalDate today) {
-        LocalDate monday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-        StringBuilder table = new StringBuilder();
-        for (int i = 0; i < WEEKS * 7; i++) {
-            LocalDate date = monday.plusDays(i);
-            table.append(date)
-                    .append(" = ").append(WEEK_LABELS.get(i / 7)).append(WEEKDAYS.charAt(date.getDayOfWeek().getValue() - 1));
-            long daysFromToday = date.toEpochDay() - today.toEpochDay();
-            if (daysFromToday >= 0 && daysFromToday < DAY_LABELS.size()) {
-                table.append(" = ").append(DAY_LABELS.get((int) daysFromToday));
-            }
-            table.append('\n');
-        }
-        // 最後一個換行拿掉，讓呼叫端的版面自己決定
-        return table.toString().stripTrailing();
-    }
 }

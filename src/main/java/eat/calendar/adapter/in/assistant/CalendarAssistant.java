@@ -1,0 +1,241 @@
+package eat.calendar.adapter.in.assistant;
+
+import eat.calendar.adapter.shared.DateTable;
+import eat.calendar.application.domain.model.CalendarEvent;
+import eat.calendar.application.port.in.FindFreeSlotsUseCase;
+import eat.calendar.application.port.in.ListEventsUseCase;
+import eat.calendar.application.port.in.ParseEventsUseCase;
+
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.MessageType;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallingManager;
+import org.springframework.ai.model.tool.ToolExecutionResult;
+import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.support.ToolCallbacks;
+
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * 行事曆的 AI 助理：一段對話，模型自己決定要查行程、找空檔、提議新增，還是先反問使用者。
+ *
+ * 分工是實測出來的（qwen3:8b，不 thinking）：
+ * - 模型擅長的交給模型：判斷使用者想做什麼、時間不確定時反問、把對話整理成一句完整的話、轉述查詢結果
+ * - 模型不擅長的不交給它：時間怎麼解析（propose_events 只收一句話，交給既有的抽取流程）、
+ *   空檔怎麼算（FreeSlots）、「下午」是幾點到幾點（DayPeriod）、存不存檔（使用者按確認）
+ *
+ * agent loop 寫在這裡（reply），不交給 Spring AI 的 ChatClient + advisor：
+ * 記憶裡一定要留著工具呼叫和工具結果。只留「使用者的話」和「助理最後那句」時，
+ * 下一輪模型看到的是「助理說了『已顯示卡片』就完成了」，於是改時間時只說不做、畫面上沒有卡片（使用者實際遇到的 bug）。
+ * Spring AI 的 JDBC 記憶庫會把工具訊息濾掉，MessageChatMemoryAdvisor 也只存頭尾兩則，
+ * 自己跑迴圈，每一則訊息都在手上，存什麼、截到哪都看得見。
+ */
+public final class CalendarAssistant {
+
+    // 溫度 0：同一段對話每次走同一條路，壞了重現得出來。實測 0 之下該問的會問、工具也選得對
+    private static final double TEMPERATURE = 0;
+    // 一次呼叫的上限。回覆本身很短，工具呼叫的參數也不長；超過就是模型停不下來了
+    private static final int MAX_TOKENS = 1024;
+    // 一句話最多跑幾步（呼叫模型的次數）。正常是兩步：呼叫工具 → 根據結果回話；超過就是在繞圈
+    static final int MAX_STEPS = 4;
+    // 記憶只留最近幾輪（一輪 = 使用者一句話，加上之後的工具呼叫和回覆）。
+    // 以輪為單位截：從中間截會留下沒有前頭呼叫的工具結果，API 會直接拒收
+    static final int MAX_TURNS = 10;
+    private static final DateTimeFormatter NOW_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+    private final ChatModel chatModel;
+    private final ChatMemoryRepository memory;
+    private final ToolCallingManager toolCallingManager = ToolCallingManager.builder().build();
+    private final ParseEventsUseCase parseEvents;
+    private final ListEventsUseCase listEvents;
+    private final FindFreeSlotsUseCase findFreeSlots;
+    private final Clock clock;
+
+    public CalendarAssistant(ChatModel chatModel, ChatMemoryRepository memory, ParseEventsUseCase parseEvents,
+                             ListEventsUseCase listEvents, FindFreeSlotsUseCase findFreeSlots, Clock clock) {
+        this.chatModel = Objects.requireNonNull(chatModel, "chatModel 不可為 null");
+        this.memory = Objects.requireNonNull(memory, "memory 不可為 null");
+        this.parseEvents = Objects.requireNonNull(parseEvents, "parseEvents 不可為 null");
+        this.listEvents = Objects.requireNonNull(listEvents, "listEvents 不可為 null");
+        this.findFreeSlots = Objects.requireNonNull(findFreeSlots, "findFreeSlots 不可為 null");
+        this.clock = Objects.requireNonNull(clock, "clock 不可為 null");
+    }
+
+    /** 助理這一輪說的話，以及這一輪提議的行程（畫面顯示成卡片，使用者確認後才存）。 */
+    public record Reply(String text, List<CalendarEvent> proposals) {
+    }
+
+    /** 對話裡給人看的一句：誰說的（使用者或助理）、說了什麼。 */
+    public record Line(boolean fromUser, String text) {
+    }
+
+    /**
+     * 這段對話給人看的部分：使用者的話、助理的回覆，照順序。重新整理頁面之後，畫面靠它接回同一段對話。
+     *
+     * 記憶是給模型看的格式，裡面有工具呼叫和工具結果；這裡全部濾掉 —— 那是助理怎麼做到的，不是它說了什麼。
+     * 提議過的卡片也不回：卡片後來是加入了還是取消了，記憶裡沒有，顯示一張可能已經過時的卡片不如不顯示。
+     * 沒有這段對話（從來沒有、或已經清空）就是空的。
+     */
+    public List<Line> history(String conversationId) {
+        Objects.requireNonNull(conversationId, "conversationId 不可為 null");
+        try {
+            return memory.findByConversationId(conversationId).stream()
+                    .filter(m -> m.getMessageType() == MessageType.USER
+                            || (m instanceof AssistantMessage a && !a.hasToolCalls() && a.getText() != null && !a.getText().isBlank()))
+                    .map(m -> new Line(m.getMessageType() == MessageType.USER, m.getText().strip()))
+                    .toList();
+        } catch (RuntimeException e) {
+            throw new IllegalStateException("讀取 AI 助理的對話失敗：" + e.getMessage(), e);
+        }
+    }
+
+    /** 清空這段對話（刪掉記憶）。本來就沒有也不算錯：使用者要的結果本來就是「它不在」。 */
+    public void forget(String conversationId) {
+        Objects.requireNonNull(conversationId, "conversationId 不可為 null");
+        try {
+            memory.deleteByConversationId(conversationId);
+        } catch (RuntimeException e) {
+            throw new IllegalStateException("清空 AI 助理的對話失敗：" + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 回應使用者的一句話（agent loop）。conversationId 是這段對話的身分（UUID），同一段對話的每一句都帶同一個。
+     *
+     * <pre>
+     * 讀出歷史（含工具呼叫）＋ 這一句
+     * 重複最多 MAX_STEPS 步：
+     *     呼叫模型（帶著工具定義；Spring AI 2.0 的 ChatModel 只會回「要呼叫哪個工具」，不會自己執行）
+     *     沒要工具 → 這就是回覆，結束
+     *     要工具   → ToolCallingManager 執行，「呼叫」和「結果」都接到對話後面，再問一次
+     * 存回記憶（只留最近 MAX_TURNS 輪）
+     * </pre>
+     *
+     * 失敗時（模型、資料庫出事、繞圈超過 MAX_STEPS）一律丟 IllegalStateException：
+     * 背後的例外型別五花八門，裡面還可能混著 IllegalArgumentException，不包起來會被誤認成「呼叫端送錯」。
+     */
+    public Reply reply(String conversationId, String message) {
+        Objects.requireNonNull(conversationId, "conversationId 不可為 null");
+        if (message == null || message.isBlank()) {
+            throw new IllegalArgumentException("訊息不可為 null 或空白");
+        }
+        try {
+            // 每一輪都重給 system：日期表要跟著「現在」走，昨天開始的對話今天繼續，「明天」就不一樣了。所以 system 不進記憶
+            SystemMessage system = new SystemMessage(instruction(LocalDateTime.now(clock)));
+            List<Message> conversation = new ArrayList<>(memory.findByConversationId(conversationId));
+            conversation.add(new UserMessage(message));
+            // 工具要知道使用者實際說過什麼（例如有沒有講早上晚上），不能只看模型整理出來的那句
+            List<String> userSaid = conversation.stream()
+                    .filter(m -> m.getMessageType() == MessageType.USER).map(Message::getText).toList();
+            CalendarTools tools = new CalendarTools(parseEvents, listEvents, findFreeSlots, userSaid);
+            OpenAiChatOptions options = OpenAiChatOptions.builder()
+                    .temperature(TEMPERATURE)
+                    .maxTokens(MAX_TOKENS)
+                    .toolCallbacks(ToolCallbacks.from(tools))
+                    .build();
+
+            for (int step = 0; step < MAX_STEPS; step++) {
+                Prompt prompt = new Prompt(withSystem(system, conversation), options);
+                ChatResponse response = chatModel.call(prompt);
+                if (!response.hasToolCalls()) {
+                    AssistantMessage answer = response.getResult().getOutput();
+                    String text = answer.getText();
+                    if (text == null || text.isBlank()) {
+                        // 不存：空白的回覆留在記憶裡，下一輪模型會照著學
+                        throw new IllegalStateException("AI 助理沒有回任何話");
+                    }
+                    conversation.add(answer);
+                    memory.saveAll(conversationId, recentTurns(conversation));
+                    return new Reply(text.strip(), tools.proposals());
+                }
+                // 執行工具；回來的歷史 = 這次送出的訊息 + 助理的工具呼叫 + 工具結果（system 也在裡面，拿掉）
+                ToolExecutionResult result = toolCallingManager.executeToolCalls(prompt, response);
+                conversation = withoutSystem(result.conversationHistory());
+            }
+            throw new IllegalStateException("AI 助理呼叫工具超過 " + MAX_STEPS + " 次還沒回話");
+        } catch (IllegalStateException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw new IllegalStateException("AI 助理失敗：" + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 只留最近 MAX_TURNS 輪。從某一輪的開頭（使用者的話）截，不從中間截：
+     * 工具結果前面一定要有呼叫它的那則助理訊息，拆開了 API 會拒收整個請求。
+     */
+    static List<Message> recentTurns(List<Message> conversation) {
+        List<Integer> turnStarts = new ArrayList<>();
+        for (int i = 0; i < conversation.size(); i++) {
+            if (conversation.get(i).getMessageType() == MessageType.USER) {
+                turnStarts.add(i);
+            }
+        }
+        if (turnStarts.size() <= MAX_TURNS) {
+            return List.copyOf(conversation);
+        }
+        return List.copyOf(conversation.subList(turnStarts.get(turnStarts.size() - MAX_TURNS), conversation.size()));
+    }
+
+    private static List<Message> withSystem(SystemMessage system, List<Message> conversation) {
+        List<Message> messages = new ArrayList<>(conversation.size() + 1);
+        messages.add(system);
+        messages.addAll(conversation);
+        return messages;
+    }
+
+    private static List<Message> withoutSystem(List<Message> messages) {
+        return new ArrayList<>(messages.stream().filter(m -> m.getMessageType() != MessageType.SYSTEM).toList());
+    }
+
+    /**
+     * 給模型的指示。每一段都是實測出來的：
+     * - 「不用算日期和時間」：讓它自己填時間時，「下週三」會算成星期二、結束時間會自己編
+     * - 對話範例：只用文字說「不確定就問」，它照樣直接提議 07:00；給了一段範例對話，它才會先問、
+     *   使用者回「晚上」之後再把整句合起來提議。找空檔的範例則是為了「to 不含，所以要多一天」——
+     *   沒有範例時它查「這週三、四」只查到週三
+     * - 「不能自己存、不要說已加入」：存檔一定要使用者按確認，模型的話不能讓人以為已經存了
+     * - 「一定要呼叫 propose_events，不要只用文字複述」：經過 Spring AI 之後，「明天七點吃晚餐」它只回了
+     *   「明天晚上七點吃晚餐。」—— 判斷對了（晚上），卻沒有提議，畫面上就沒有卡片可以確認
+     * - 「包括改時間」：使用者說「其實是早上」也是要新增（一張新的卡片），不是聊天
+     * - 「只有帶著時段的字才不用問」：原本寫成「從要做的事看得出來就不用問」，模型把「七點吃飯」也當成看得出來、
+     *   直接提議 19:00 —— 但早上七點吃飯也很常見。界線改成看字：早餐、晚餐、晨跑這種字本身帶著時段，其他一律問
+     */
+    static String instruction(LocalDateTime now) {
+        return """
+                你是使用者的行事曆助理，用繁體中文、簡短地回話。
+                現在是 %s。日期一律從下表找對應的那一列，不要自己推算：
+                %s
+
+                你能做的事：
+                - 使用者要新增行程（包括改時間，例如「其實是早上」）：用 propose_events，把行程整理成一句完整的話傳進去（你不用算日期和時間，行事曆會解析）。畫面會顯示卡片讓使用者確認，你不能自己存，也不要說「已加入」。
+                  使用者講了要做的事和時間，就是要新增行程：一定要呼叫 propose_events，不要只用文字把那句話複述一遍（時間不確定時才先問）。
+                - 使用者問某天或某段時間有什麼行程：用 list_events 查，再用一兩句話回答。
+                - 使用者問什麼時候有空：用 find_free_slots 查，再回答。
+                時間不確定時先問，不要猜：沒講上午下午的 7～11 點，就問「早上還是晚上？」。
+                只有要做的事本身就帶著時段的字才不用問：早餐、午餐、晚餐、宵夜、晨跑、夜跑、夜唱（「七點吃晚餐」是晚上、「七點晨跑」是早上）。
+                「吃飯」「見面」「開會」「運動」「看電影」這種早上晚上都可能的，一定要問，不要自己決定。
+                沒講上午下午的 1～6 點一律當下午，不用問。
+
+                範例：
+                使用者：明天七點和 Amy 見面
+                助理（不呼叫工具，直接問）：早上七點還是晚上七點？
+                使用者：晚上
+                助理：呼叫 propose_events，description =「明天晚上七點和 Amy 見面」
+                —
+                使用者：這週三、四哪個下午有空？
+                助理：呼叫 find_free_slots，from = 這週三，to = 這週五（to 不含，所以要多一天），period = AFTERNOON""".formatted(
+                now.format(NOW_FORMAT), DateTable.of(now.toLocalDate()));
+    }
+}
