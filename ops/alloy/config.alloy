@@ -52,22 +52,6 @@ prometheus.scrape "llama_cpp" {
   forward_to      = [prometheus.remote_write.mimir.receiver]
 }
 
-// (3) llama.cpp 的「嵌入」伺服器 —— 同一支 llama-server，但載的是 bge-m3、開 --embedding（deploy/ 的 llm-embedding）。
-//
-//     為什麼要獨立一個 job 而不是併進上面的 llama-cpp：
-//     兩台吐出來的 metric「名字完全一樣」（都是 llamacpp:xxx），只能靠 label 分辨來源。
-//     拆成兩個 job，就多了 job="llama-cpp" / job="llama-embedding" 這個天然的分界，
-//     查詢時寫 llamacpp:prompt_tokens_seconds{job="llama-embedding"} 就只會拿到這台的。
-//
-//     嵌入伺服器「不生成 token」，所以 predicted_* 那組永遠是 0 —— 它只做 prompt 的前向計算。
-//     真正有意義的是 prompt_tokens_seconds（嵌入吞吐）與 requests_processing/deferred（塞不塞）。
-prometheus.scrape "llama_embedding" {
-  job_name        = "llama-embedding"
-  targets         = [{"__address__" = "llm-embedding:8081"}]
-  scrape_interval = "15s"
-  forward_to      = [prometheus.remote_write.mimir.receiver]
-}
-
 // 抓到的指標推進 Mimir。remote_write 是 Prometheus 生態「把指標送去別處存」的標準協定，
 // 送 Mimir、送雲端服務都是同一個元件，只差 url。
 // 附帶的 exemplar（某個指標點上掛的 trace id）也會一起送，Grafana 圖上才點得進那次請求的 trace。
@@ -91,7 +75,7 @@ prometheus.remote_write "mimir" {
 discovery.docker "deploy" {
   host = "unix:///var/run/docker.sock"
 
-  // 只收 deploy/ 那組（compose 專案名 eat-deploy）：app、llm-chat、llm-embedding、model-seed。
+  // 只收 deploy/ 那組（compose 專案名 eat-deploy）：app、llm-chat、postgres、web、model-seed。
   // 不加這個會連這台機器上別的專案、還有 ops 自己（Loki、Grafana…）的 log 一起收進來。
   filter {
     name   = "label"

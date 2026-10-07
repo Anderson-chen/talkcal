@@ -27,10 +27,11 @@ eat 不只要「能跑」，還要能回答：**上線之後要顧慮哪些事�
 | 分層與架構守護 | ✅ | [ArchitectureTest](../src/test/java/eat/ArchitectureTest.java)：用 ArchUnit 把分層規則寫成測試，違反就紅燈 |
 | 整合測試用真的資料庫 | ✅ | Testcontainers 起真的 PostgreSQL；不用 H2 的理由寫在 [build.gradle](../build.gradle) |
 | API 契約文件 | ✅ | [OpenApiDocumentationTest](../src/test/java/eat/OpenApiDocumentationTest.java) |
+| 整個應用接起來的系統測試 | ❌ | 以前有一支對 `/api/chat` 起整個應用、打真 HTTP、接真模型的系統測試，隨著那個端點一起拿掉了。AI 助理目前只有元件層級的整合測試（`CalendarAssistantConversationTest`），還沒有從 HTTP 一路打到模型和資料庫的那一支 |
 | 前端測試 | ❌ | [web/package.json](../web/package.json) 沒有任何測試工具，目前只有 `vue-tsc` 型別檢查 |
 | AI 品質回歸（eval） | ❌ | 改了 prompt 或換模型之後，沒辦法知道有沒有變笨。需要一組固定題目加自動評分 |
 | 認證與授權 | ❌ | 沒有登入；知道 conversation id 就能讀那段對話 |
-| 濫用防護（rate limit） | ❌ | `/api/chat` 每次都占用 GPU，一個人就能把服務塞滿 |
+| 濫用防護（rate limit） | ❌ | `/api/calendar/assistant` 每次都占用 GPU（一輪還可能叫好幾次模型），一個人就能把服務塞滿 |
 | Prompt injection | ❌ | agent 能新增、刪除行程，破壞性操作沒有額外防線 |
 | 祕密管理 | ⚠️ | [application.properties](../src/main/resources/application.properties) 直接寫著資料庫密碼。開發用可以，上線要改從環境變數或 secrets 注入 |
 | Container 加固 | ✅ | [Dockerfile](../Dockerfile)：兩段式 build、不跑 root、exec 形式讓 JVM 收得到 SIGTERM |
@@ -83,11 +84,11 @@ eat 不只要「能跑」，還要能回答：**上線之後要顧慮哪些事�
 | 根目錄 README | ❌ | 打開 repo 第一眼沒有說明 |
 | 決策紀錄（ADR） | ⚠️ | 理由都寫在程式碼註解和各目錄的 README，但沒有集中的地方說明「為什麼選 Spring AI、llama.cpp、JDBC」 |
 | 相依套件升級 | ❌ | 沒有 Renovate 或 Dependabot |
-| 並行修改 | ⚠️ | [V1](../src/main/resources/db/migration/V1__create_conversations.sql) 的對話有樂觀鎖；`calendar_event` 沒有 version 欄位，兩個分頁同時改會互相覆蓋 |
+| 並行修改 | ❌ | `calendar_event` 沒有 version 欄位，兩個分頁同時改會互相覆蓋；助理的對話記憶是整段刪掉重插，同一段對話同時兩句，晚存的蓋掉早的（[V7](../src/main/resources/db/migration/V7__create_calendar_assistant_message.sql) 寫明接受這個代價） |
 | 冪等寫入 | ❌ | 按兩次「加入」或 agent 重試，可能多出一筆一樣的行程 |
 | 時區 | ✅ | [V2](../src/main/resources/db/migration/V2__create_calendar_events.sql) 寫了為什麼用不帶時區的 `TIMESTAMP` |
 | 隱私 | ❌ | 沒確認對話內容會不會進 Loki 和 Tempo，也沒有使用者要求刪除時的流程 |
-| 授權（License） | ❌ | 沒整理 Qwen3、bge-m3 和前端套件的授權 |
+| 授權（License） | ❌ | 沒整理 Qwen3 和前端套件的授權 |
 | 資料歸檔 | ❌ | 舊資料是直接刪掉；還沒有「壓縮後放到物件儲存」的流程 |
 
 ---

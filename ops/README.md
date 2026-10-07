@@ -21,7 +21,7 @@
 |------|------------------|------------|----------|------|----------|
 | 指標 | 標籤 + 一個數字 | 有沒有問題、多嚴重（p95 變慢了） | Alloy **拉** | Mimir | PromQL |
 | 日誌 | 一行文字（JSON） | 發生了什麼事（那個請求問了什麼） | Alloy **讀** stdout | Loki | LogQL |
-| 追蹤 | 一棵 span 樹 | 時間花在哪一段（檢索還是生成） | app **推**給 Alloy | Tempo | TraceQL |
+| 追蹤 | 一棵 span 樹 | 時間花在哪一段（助理叫了幾次模型、各多久） | app **推**給 Alloy | Tempo | TraceQL |
 
 ## 五個角色
 
@@ -95,7 +95,6 @@ Alloy 加入了 deploy/ 的網路（`eat-deploy_default`）：用服務名稱抓
 |-----|------|------|
 | `eat-app` | `app:8090/actuator/prometheus` | deploy/ 的 app 容器 |
 | `llama-cpp` | `llm-chat:8080/metrics` | Qwen3-8B（deploy/ 的 llm-chat） |
-| `llama-embedding` | `llm-embedding:8081/metrics` | bge-m3（deploy/ 的 llm-embedding） |
 
 每 15 秒抓一次，用 `remote_write` 推進 Mimir。本機 bootRun 的 app 不在 deploy/ 的網路裡，不會被抓。
 
@@ -106,7 +105,7 @@ Alloy 加入了 deploy/ 的網路（`eat-deploy_default`）：用服務名稱抓
 curl 'localhost:9009/prometheus/api/v1/query?query=up'
 ```
 
-app 打給兩台模型的呼叫，原本有一組 `http_client_requests_seconds`（RestClient 自動產生）。
+app 打給模型的呼叫，原本有一組 `http_client_requests_seconds`（RestClient 自動產生）。
 改用 Spring AI 之後沒有了：Spring AI 的 OpenAI 模組底層是官方 openai-java SDK（OkHttp），不走 RestClient。
 取而代之的是 Spring AI 自己的觀測（`gen_ai.*` 系列，含 token 用量），見下面「追蹤」一節。
 
@@ -120,7 +119,7 @@ Alloy 透過 Docker 的 API（`docker.sock`）自動發現 `deploy/` 那組容�
 
 | 標籤 | 例子 | 用途 |
 |------|------|------|
-| `service` | `app`、`llm-chat`、`llm-embedding` | compose 服務名，最穩，查詢主要靠它 |
+| `service` | `app`、`llm-chat`、`postgres` | compose 服務名，最穩，查詢主要靠它 |
 | `container` | `eat-app` | 容器名 |
 | `env` | `docker` | 環境。之後別的環境的 log 也送進來時用它分開 |
 
@@ -133,7 +132,7 @@ trace id **不是**標籤（每個請求都不同，放進標籤會讓索引爆�
 左側 **Explore** → 資料源選 **Loki** → 切到 **Code** 模式貼查詢：
 
 ```logql
-# 三個服務一起看，照時間排——一次提問會先看到 llm-embedding（檢索）、再看到 llm-chat（生成）
+# deploy/ 的服務一起看，照時間排——跟助理說一句話，會看到 app 的 access log 和 llm-chat 的一次或好幾次生成
 {env="docker"}
 
 # 只看生成模型每次請求的耗時
@@ -145,7 +144,7 @@ trace id **不是**標籤（每個請求都不同，放進標籤會讓索引爆�
 # app 的 access log：每個請求一行，帶方法、路徑、請求與回應的 body、狀態碼、耗時、traceId（AccessLogFilter 寫的）
 {service="app"} | json | log_logger="access"
 
-# 只看失敗的提問，連同當時問了什麼、回了什麼
+# 只看失敗的請求，連同當時送了什麼、回了什麼
 {service="app"} | json | log_logger="access" | http_response_status_code >= 400
 
 # 超過 5 秒的慢請求（event_duration 是奈秒）
@@ -160,28 +159,20 @@ sum by (service) (count_over_time({env="docker"} | json | log_level=~"WARN|ERROR
 app 對每個請求開一個 trace（`management.tracing.sampling.probability=1.0`，學習環境全記），
 用 OTLP 推給 Alloy 的 4318，Alloy 再轉給 Tempo。
 
-> **改用 Spring AI 之後，下面這棵樹還沒重新量過。** 以前往外的兩個 span 是 RestClient 產生的 HTTP span
-> （`http post /v1/embeddings`、`http post /v1/chat/completions`）；現在跟模型講話的是 Spring AI，
+> **改用 Spring AI 之後，trace 的樹還沒重新量過。** 以前往外的 span 是 RestClient 產生的 HTTP span
+> （`http post /v1/chat/completions`）；現在跟模型講話的是 Spring AI，
 > 底層是官方 openai-java SDK（OkHttp），**不會**產生 HTTP span，請求也不再帶 `traceparent` 標頭。
-> 換成 Spring AI 自己的觀測：ChatClient、advisor（記憶、RAG）、ChatModel、EmbeddingModel、VectorStore 各自一個 span，
-> 模型那幾個帶 `gen_ai.*` 屬性（模型名稱、token 用量）。部署後打一題，到 Tempo 看實際的 span 名稱，再回來補這張圖。
+> 換成 Spring AI 自己的觀測：AI 助理直接用 ChatModel，每叫一次模型一個 span，帶 `gen_ai.*` 屬性（模型名稱、token 用量）。
+> 部署後跟助理說一句話，到 Tempo 看實際的 span 名稱，再回來補一張 `http post /api/calendar/assistant` 的樹。
 > `eat — Traces (Tempo)` 儀表板裡用 `kind=client` 篩往外呼叫的那幾張圖，到時也要跟著改。
-
-以前（RestClient 時代）一次 `/api/chat` 長這樣：
-
-```
-eat: http post /api/chat                   ← 請求進來（Spring 自動加的 ServerHttpObservationFilter 量）
-├── http post /v1/embeddings       200     ← 檢索：問題轉向量（第一次提問會多好幾次：先替知識庫建索引）
-└── http post /v1/chat/completions 200     ← 生成：qwen3 回答
-```
 
 | span | 誰量的 | 為什麼是它 |
 |------|--------|------------|
 | 根 span（進來的請求） | Spring Boot 自動註冊的 filter | 進來的 HTTP 由 Spring MVC 處理，它管得到，不必寫任何設定 |
-| 跟模型的往返 | Spring AI（ChatClient、ChatModel、EmbeddingModel 內建的 Micrometer Observation） | 不必寫觀測程式碼；比 HTTP span 多了 token 用量，少了 HTTP 狀態碼 |
+| 跟模型的往返 | Spring AI（ChatModel 內建的 Micrometer Observation） | 不必寫觀測程式碼；比 HTTP span 多了 token 用量，少了 HTTP 狀態碼 |
 
 曾經用 AOP 在 outbound port 外面多包一層 span（名稱是 `retrievePassages`、`generateReply`），
-後來拿掉了。Spring AI 自己的 span 本來就是照「檢索」「生成」這種業務動作切的，更用不著了（實際名稱同樣等部署後確認）。
+後來拿掉了。Spring AI 自己的 span 本來就是照「叫一次模型」這種動作切的，更用不著了（實際名稱同樣等部署後確認）。
 llama.cpp 本身不產生 span，所以樹只到 app 呼叫出去的那一層。
 
 想在 trace 上看到送給模型的完整 prompt（下一步第 1 項），Spring AI 有現成的開關：
@@ -189,9 +180,9 @@ llama.cpp 本身不產生 span，所以樹只到 app 呼叫出去的那一層。
 
 在 Grafana 看 trace 有兩個地方：
 
-- **儀表板 `eat — Traces (Tempo)`**：全部用 TraceQL 查 Tempo。上排是從 trace 算出來的數字（提問速率、
-  檢索／生成各段的 p95、沒成功的 span 數），下排是請求清單（最近的、超過 5 秒的、沒成功的），點 Trace ID 就打開瀑布圖。
-  查詢只挑 `/api/chat`，只看提問本身。（actuator 的抓取與健康檢查在 app 端就不產生 trace 了，見 `ObservationConfiguration`。）
+- **儀表板 `eat — Traces (Tempo)`**：全部用 TraceQL 查 Tempo。上排是從 trace 算出來的數字（助理請求速率、
+  各段的 p95、沒成功的 span 數），下排是請求清單（最近的、超過 5 秒的、沒成功的），點 Trace ID 就打開瀑布圖。
+  查詢只挑 `/api/calendar/assistant`，只看跟助理的對話。（actuator 的抓取與健康檢查在 app 端就不產生 trace 了，見 `ObservationConfiguration`。）
 - **Explore** → 資料源選 **Tempo** → **Search** 分頁，Service Name 選 `eat`：自己下條件找。
 
 儀表板上排用的是 **TraceQL metrics**（`| rate()`、`| quantile_over_time()`）：Tempo 直接從存下來的 span 算出時間序列，
@@ -211,8 +202,8 @@ ops/ 沒起時 trace 送不出去，app 只會在 log 印 warning，請求照常
 
 ## 下一步（一次一件）
 
-1. **app 記錄送給模型的完整 prompt**：access log 已經記了使用者問了什麼（請求 body），
-   但還看不到檢索到哪幾段、最後組出來送給 llm-chat 的 prompt 長什麼樣。
+1. **app 記錄送給模型的完整 prompt**：access log 已經記了使用者說了什麼（請求 body），
+   但還看不到最後組出來送給 llm-chat 的 prompt（system 指示、日期表、工具結果）長什麼樣。
    補上之後（帶著 traceId）就能從 trace 一路點到那次的 prompt，
    也補回原生 `.bat` 的 `--log-prompts-dir` 拿掉後少掉的 prompt 紀錄。
 2. **收集器備援練習**：起兩台 Alloy 抓同一批 target（HA pair），各帶 `__replica__` 標籤，
@@ -230,5 +221,5 @@ ops/
 ├── tempo/tempo.yaml                          # 追蹤：單機最小設定
 └── grafana/provisioning/
     ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
-    └── dashboards/                           # eat-app、llama-cpp、llama-embedding（指標）、eat-traces（trace）
+    └── dashboards/                           # eat-app、llama-cpp（指標）、eat-traces（trace）
 ```

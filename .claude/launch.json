@@ -30,23 +30,6 @@
       "port": 8080
     },
     {
-      "name": "llama-embedding-server",
-      "runtimeExecutable": "C:\\llm\\llama.cpp\\llama-server.exe",
-      "runtimeArgs": [
-        "-m",
-        "C:\\llm\\models\\bge-m3-Q8_0.gguf",
-        "--alias",
-        "bge-m3",
-        "--embedding",
-        "--port",
-        "8081",
-        "--metrics",
-        "--log-file",
-        "C:\\llm\\logs\\llama-embedding-server.log"
-      ],
-      "port": 8081
-    },
-    {
       "name": "eat",
       "runtimeExecutable": "C:\\project\\eat\\gradlew.bat",
       "runtimeArgs": [

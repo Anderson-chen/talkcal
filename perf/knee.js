@@ -6,7 +6,7 @@
 //   低於臨界值：多一個人，吞吐量跟著漲，延遲幾乎不變（server 還有空位）
 //   超過臨界值：多一個人，吞吐量不動，延遲直接加上去（多的人只是在排隊）
 //
-// 每一階都是 constant-vus、問完立刻再問（不 sleep），讓「VU 數」= 「持續壓在 server 上的請求數」。
+// 每一階都是 constant-vus、說完立刻再說（不 sleep），讓「VU 數」= 「持續壓在 server 上的請求數」。
 // 跟 concurrent.js 的差別：那支量「一瞬間湧進 N 個」，這支量「持續有 N 個在用」的穩定狀態。
 //
 // 預設打 docker 那台 app（18090），全程約 STEPS 階數 × (HOLD_S + GAP_S) 秒：
@@ -15,19 +15,20 @@
 //   PowerShell:  $env:HOLD_S="10"; k6 run perf/knee.js
 // 自訂要量哪幾階：
 //   PowerShell:  $env:STEPS="1,4,8,16,32"; k6 run perf/knee.js
-// 換一題問（每個請求都問這一題）：
-//   PowerShell:  $env:QUESTION="2 加 2 等於多少？"; k6 run perf/knee.js
+// 換一句話（每個請求都說這一句）：
+//   PowerShell:  $env:MESSAGE="這週末有空嗎？"; k6 run perf/knee.js
 
 import './lib/docker-target.js';
-import { ask } from './lib/chat.js';
+import { say } from './lib/assistant.js';
 
-// 每個請求都問同一題，不隨機挑。這支要量的是「同時人數」的影響，
-// 而各題回覆長度差很多（只要名字的題目 2 個 token、一句話介紹自己 40 個），
-// 隨機挑題的話，延遲主要取決於「這一階剛好抽到幾題長的」，人數的影響反而被蓋掉。
-// 預設挑一題回覆長度中等的。同一題會命中 llama.cpp 的 prompt 快取，但 prefill 只占十幾毫秒，可以忽略。
-const QUESTION = __ENV.QUESTION || '用一句話介紹你自己。';
+// 每個請求都說同一句，不隨機挑。這支要量的是「同時人數」的影響，
+// 而各句的成本差很多（查行程叫兩次模型，提議新行程還要多抽一次行程），
+// 隨機挑的話，延遲主要取決於「這一階剛好抽到幾句貴的」，人數的影響反而被蓋掉。
+// 預設挑一句查詢：走一次工具（list_events）、不提議，成本比較穩。
+// 同一句會命中 llama.cpp 的 prompt 快取，但 prefill 只占十幾毫秒，可以忽略。
+const MESSAGE = __ENV.MESSAGE || '明天有什麼行程？';
 const STEPS = (__ENV.STEPS || '1,2,3,4,5,6,8,12,16').split(',').map(Number);
-// 每階維持多久。預設 5 秒，跑一輪比較快；1 人那階一個請求幾百毫秒，只有十筆上下，
+// 每階維持多久。預設 5 秒，跑一輪比較快；但助理一輪要好幾秒，5 秒裡只收得到幾筆，
 // 中位數會抖。要更穩的數字就拉長：$env:HOLD_S="20"
 const HOLD_S = Number(__ENV.HOLD_S || 5);
 // 階與階之間的空檔：上一階還在排隊的請求會在 gracefulStop 內跑完，不留空檔就會混進下一階
@@ -56,11 +57,11 @@ export const options = { scenarios, thresholds };
 
 // 暖身：第一個請求常特別慢，在 setup 裡跑掉，不算進任何一階
 export function setup() {
-  ask(QUESTION);
+  say(MESSAGE);
 }
 
 export default function () {
-  ask(QUESTION);
+  say(MESSAGE);
 }
 
 // 收工時印一張「每一階一列」的表，直接看哪一列開始吞吐量不漲、延遲衝上去

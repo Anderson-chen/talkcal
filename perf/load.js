@@ -1,4 +1,4 @@
-// load —— 找出「同時幾個人在問，就開始塞車」。
+// load —— 找出「同時幾個人在跟助理說話，就開始塞車」。
 //
 // smoke 證明路是通的；這支回答下一個問題：併發變多時，延遲怎麼變？
 //
@@ -13,14 +13,14 @@
 // launch.json 沒帶 -np，所以是 llama.cpp 自己決定的預設值；改了 -np 就用環境變數對上：
 //   PowerShell:  $env:SLOTS="2"; k6 run perf/load.js
 //
-// 怎麼跑（app 8090、llama-server 8080 都要在跑；全程約 4~5 分鐘）：
+// 怎麼跑（app 8090、llama-server 8080、PostgreSQL 都要在跑；全程約 4~5 分鐘）：
 //   k6 run perf/load.js
 // 只想先確認腳本本身沒寫錯，把每段縮成 10 秒（全程約 2 分鐘）：
 //   PowerShell:  $env:HOLD_S="10"; k6 run perf/load.js
 // 邊跑邊開 Grafana 的 llama.cpp 與 eat app 兩張 dashboard 對照看，最有感。
 
 import { sleep } from 'k6';
-import { QUESTIONS, ask } from './lib/chat.js';
+import { MESSAGES, say } from './lib/assistant.js';
 
 const SLOTS = Number(__ENV.SLOTS || 4);
 // 每段平台維持多久。一個請求要好幾秒，太短的話每段只收到幾筆，p95 會很不準
@@ -38,7 +38,7 @@ const ABOVE_START = AT_START + HOLD_S + GAP_S;
 function plateau(vus, startS) {
   return {
     executor: 'constant-vus',
-    exec: 'chat',
+    exec: 'talk',
     vus,
     duration: `${HOLD_S}s`,
     startTime: `${startS}s`,
@@ -48,10 +48,10 @@ function plateau(vus, startS) {
 
 export const options = {
   scenarios: {
-    // 暖身只問一題，而且不設任何門檻 —— 它的數字不算數
+    // 暖身只說一句，而且不設任何門檻 —— 它的數字不算數
     warmup: {
       executor: 'shared-iterations',
-      exec: 'chat',
+      exec: 'talk',
       vus: 1,
       iterations: 1,
       maxDuration: `${WARMUP_S}s`,
@@ -62,7 +62,7 @@ export const options = {
   },
 
   thresholds: {
-    // 這支只送正常問題，所以任何非 2xx 都是真的失敗（通常是 502 = llama.cpp 那頭出事）。
+    // 這支只送正常訊息，所以任何非 2xx 都是真的失敗（通常是 502 = llama.cpp 那頭出事）。
     // 第二條是保險絲：失敗率衝過 10% 就提前收工 ——
     // 對著一台已經倒下的 server 再打好幾分鐘，除了一堆 502 什麼也量不到。
     http_req_failed: ['rate<0.01', { threshold: 'rate<0.1', abortOnFail: true, delayAbortEval: '30s' }],
@@ -78,12 +78,12 @@ export const options = {
   },
 };
 
-export function chat() {
-  // 隨機挑題而不是照順序：多個 VU 同時跑時，照順序會讓大家在同一刻問同一題
-  ask(QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)]);
+export function talk() {
+  // 隨機挑而不是照順序：多個 VU 同時跑時，照順序會讓大家在同一刻說同一句
+  say(MESSAGES[Math.floor(Math.random() * MESSAGES.length)]);
 
-  // 思考時間 1 秒：模擬真人看完回覆再問下一題。
+  // 思考時間 1 秒：模擬真人看完回覆再說下一句。
   // 它遠小於一次回覆要的好幾秒，所以「VU 數」≈「同時壓在 llama-server 上的請求數」，
-  // 才能直接拿來跟 SLOTS 比。
+  // 才能直接拿來跟 SLOTS 比（助理一輪裡的幾次模型呼叫是一個接一個，同一刻只占一個 slot）。
   sleep(1);
 }

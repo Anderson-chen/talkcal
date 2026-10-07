@@ -1,7 +1,7 @@
 {
   "uid": "eat-traces",
   "title": "eat — Traces (Tempo)",
-  "description": "資料全部來自 Tempo，用 TraceQL 查。上排是從 trace 算出來的數字（TraceQL metrics），下排是一筆一筆的請求清單，點 Trace ID 就打開那個請求的瀑布圖。只挑 /api/chat，只看提問本身（actuator 的抓取與健康檢查在 app 端就不產生 trace，見 ObservationConfiguration）。",
+  "description": "資料全部來自 Tempo，用 TraceQL 查。上排是從 trace 算出來的數字（TraceQL metrics），下排是一筆一筆的請求清單，點 Trace ID 就打開那個請求的瀑布圖。只挑 /api/calendar/assistant，只看跟 AI 助理的對話（actuator 的抓取與健康檢查在 app 端就不產生 trace，見 ObservationConfiguration）。",
   "tags": [
     "eat",
     "traces",
@@ -26,8 +26,8 @@
     {
       "id": 1,
       "type": "timeseries",
-      "title": "提問速率 (req/s)",
-      "description": "{name=\"http post /api/chat\"} | rate() —— 直接從 trace 數出來的每秒提問數。跟 eat-app 儀表板從指標算的那張應該對得起來：同一批請求，一份記成數字、一份記成 trace。用 span 名稱篩而不是 span.uri：根 span 用 uri 屬性篩在 Tempo 3 上查不到東西。",
+      "title": "助理請求速率 (req/s)",
+      "description": "{name=\"http post /api/calendar/assistant\"} | rate() —— 直接從 trace 數出來的每秒請求數。跟 eat-app 儀表板從指標算的那張應該對得起來：同一批請求，一份記成數字、一份記成 trace。用 span 名稱篩而不是 span.uri：根 span 用 uri 屬性篩在 Tempo 3 上查不到東西。",
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -47,14 +47,14 @@
           },
           "queryType": "traceql",
           "metricsQueryType": "range",
-          "query": "{name=\"http post /api/chat\"} | rate()"
+          "query": "{name=\"http post /api/calendar/assistant\"} | rate()"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
           "min": 0,
-          "displayName": "/api/chat",
+          "displayName": "/api/calendar/assistant",
           "custom": {
             "drawStyle": "line",
             "lineWidth": 2,
@@ -79,7 +79,7 @@
       "id": 2,
       "type": "timeseries",
       "title": "時間花在哪一段 (p95)",
-      "description": "{name=\"http post /api/chat\" || kind=client} | quantile_over_time(duration, .95) by (span.uri) —— 整個請求（/api/chat），以及 app 打給兩台模型的 HTTP 呼叫：/v1/embeddings（檢索：問題轉向量）、/v1/chat/completions（生成）。這是 trace 才答得出來的問題 —— 指標只知道整個請求多慢，trace 知道慢在哪一段。往外的 HTTP span 由 adapter 的 RestClient 自動產生（kind=client），所以用 kind 挑出來、用 uri 分線。注意 TraceQL 的分位數是用 2 的次方分桶估的（0.5s、1s、2s…），只適合看量級和趨勢，要精準數字看 eat-app 儀表板。寫成一條查詢、用 by 分線，而不是一段一條查詢：這版 Grafana 的 Tempo 資料源在同一個 panel 裡只會送出第一條 TraceQL metrics 查詢。",
+      "description": "{name=\"http post /api/calendar/assistant\" || kind=client} | quantile_over_time(duration, .95) by (span.uri) —— 整個請求（/api/calendar/assistant），以及 app 打給模型的 HTTP 呼叫：/v1/chat/completions（助理一輪可能叫好幾次：先查行程、再提議）。這是 trace 才答得出來的問題 —— 指標只知道整個請求多慢，trace 知道慢在哪一段。往外的 HTTP span 由 adapter 的 RestClient 自動產生（kind=client），所以用 kind 挑出來、用 uri 分線。注意 TraceQL 的分位數是用 2 的次方分桶估的（0.5s、1s、2s…），只適合看量級和趨勢，要精準數字看 eat-app 儀表板。寫成一條查詢、用 by 分線，而不是一段一條查詢：這版 Grafana 的 Tempo 資料源在同一個 panel 裡只會送出第一條 TraceQL metrics 查詢。",
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -99,7 +99,7 @@
           },
           "queryType": "traceql",
           "metricsQueryType": "range",
-          "query": "{name=\"http post /api/chat\" || kind=client} | quantile_over_time(duration, .95) by (span.uri)"
+          "query": "{name=\"http post /api/calendar/assistant\" || kind=client} | quantile_over_time(duration, .95) by (span.uri)"
         }
       ],
       "fieldConfig": {
@@ -131,7 +131,7 @@
       "id": 3,
       "type": "timeseries",
       "title": "沒成功的 span 數",
-      "description": "{resource.service.name=\"eat\" && (span.outcome != \"SUCCESS\" || status = error)} | count_over_time() by (name) —— 兩種失敗一起數：請求本身沒成功（/api/chat 回 400、502），以及打給模型的 HTTP 呼叫沒成功（outcome 是 Spring 標的 CLIENT_ERROR、SERVER_ERROR，連不上時 span 狀態是 error）。平常沒資料是正常的。",
+      "description": "{resource.service.name=\"eat\" && (span.outcome != \"SUCCESS\" || status = error)} | count_over_time() by (name) —— 兩種失敗一起數：請求本身沒成功（助理回 400、502），以及打給模型的 HTTP 呼叫沒成功（outcome 是 Spring 標的 CLIENT_ERROR、SERVER_ERROR，連不上時 span 狀態是 error）。平常沒資料是正常的。",
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -181,8 +181,8 @@
     {
       "id": 4,
       "type": "table",
-      "title": "最近的提問",
-      "description": "最近 20 筆 /api/chat。點 Trace ID 打開瀑布圖，看這一次檢索、生成各花多久；瀑布圖上再點「Logs for this span」就跳到 Loki 看它的 access log（問了什麼、回了什麼）。",
+      "title": "最近的助理請求",
+      "description": "最近 20 筆 /api/calendar/assistant。點 Trace ID 打開瀑布圖，看這一輪叫了幾次模型、各花多久；瀑布圖上再點「Logs for this span」就跳到 Loki 看它的 access log（說了什麼、回了什麼）。",
       "gridPos": {
         "h": 10,
         "w": 12,
@@ -201,7 +201,7 @@
             "uid": "tempo"
           },
           "queryType": "traceql",
-          "query": "{name=\"http post /api/chat\"}",
+          "query": "{name=\"http post /api/calendar/assistant\"}",
           "limit": 20,
           "tableType": "traces"
         }
@@ -217,8 +217,8 @@
     {
       "id": 5,
       "type": "table",
-      "title": "慢的提問 (> 5 秒)",
-      "description": "{name=\"http post /api/chat\" && duration > 5s} —— 長尾在這裡。通常是 Qwen3 的 thinking 生太多 token，點開看是不是幾乎整段都在 /v1/chat/completions。門檻 5 秒跟 Loki 那條慢請求查詢一致。",
+      "title": "慢的助理請求 (> 5 秒)",
+      "description": "{name=\"http post /api/calendar/assistant\" && duration > 5s} —— 長尾在這裡。通常是 Qwen3 的 thinking 生太多 token，點開看是不是幾乎整段都在 /v1/chat/completions。門檻 5 秒跟 Loki 那條慢請求查詢一致。",
       "gridPos": {
         "h": 10,
         "w": 12,
@@ -237,7 +237,7 @@
             "uid": "tempo"
           },
           "queryType": "traceql",
-          "query": "{name=\"http post /api/chat\" && duration > 5s}",
+          "query": "{name=\"http post /api/calendar/assistant\" && duration > 5s}",
           "limit": 20,
           "tableType": "traces"
         }

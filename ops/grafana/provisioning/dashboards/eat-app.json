@@ -42,7 +42,7 @@
     {
       "id": 2,
       "type": "timeseries",
-      "title": "/api/chat 延遲 (p95 / p99)",
+      "title": "/api/calendar/assistant 延遲 (p95 / p99)",
       "description": "histogram_quantile 從 http_server_requests_seconds_bucket 算出的長尾延遲。⚠️ 需要 application.properties 的 percentiles-histogram=true，app 重啟後才有 buckets、這個 panel 才有資料。平均會把長尾藏起來，壓測要看的就是這條 p99。圖上的小菱形是 exemplar：某個真實請求的耗時，帶著它的 trace id，滑過去點一下就跳到 Tempo 看那個請求每一段花多久。",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "mimir" },
@@ -50,14 +50,14 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "mimir" },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{uri=\"/api/chat\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{uri=\"/api/calendar/assistant\"}[5m])))",
           "legendFormat": "p95",
           "exemplar": true
         },
         {
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "mimir" },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{uri=\"/api/chat\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{uri=\"/api/calendar/assistant\"}[5m])))",
           "legendFormat": "p99"
         }
       ],
@@ -78,7 +78,7 @@
       "id": 3,
       "type": "timeseries",
       "title": "平均延遲，依 endpoint",
-      "description": "rate(sum)/rate(count) —— 每個 endpoint 的平均耗時。/api/chat 會明顯比別人高（後面掛著 LLM）。這個不必 histogram 就有；要看長尾還是得靠上面的 p95/p99。",
+      "description": "rate(sum)/rate(count) —— 每個 endpoint 的平均耗時。/api/calendar/assistant 會明顯比別人高（後面掛著 LLM）。這個不必 histogram 就有；要看長尾還是得靠上面的 p95/p99。",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "mimir" },
       "targets": [

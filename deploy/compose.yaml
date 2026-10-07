@@ -1,22 +1,22 @@
 # 這個 stack 是「在本機模擬雲端部署」：把原本用 .bat 跑在 Windows 上的服務，一個一個搬進容器。
 # 跟 ops/ 分開：ops/ 是觀測（看別人），這裡是被部署的服務本身（被看的那些）。
 #
-# 都在容器裡：Qwen3-8B 生成、bge-m3 embedding、PostgreSQL、eat app，以及前面擋一層的 nginx（web）。
-# 要退回去就 `docker compose down`，再點原本的兩支 .bat、./gradlew bootRun。
+# 都在容器裡：Qwen3-8B 生成、PostgreSQL、eat app，以及前面擋一層的 nginx（web）。
+# 要退回去就 `docker compose down`，再點原本的 .bat、./gradlew bootRun。
 #
 # 容器之間怎麼溝通：同一個 compose 的服務自動在同一個網路（eat-deploy_default）上，
 # 用服務名稱互相找——app 打 http://llm-chat:8080，不經過主機、不看 ports 發佈成幾號。
 #
 # 發佈到主機的埠（ports）是給「容器外面」的人用的：
-#   8080 / 8081 —— 模型。沿用原生的埠，這樣本機開發的 ./gradlew bootRun 照樣打得到。
-#                  （ops/ 的 Alloy 不靠這兩個埠：它加入了這組的網路，直接用服務名稱抓。）
-#                  代價：跟原生 .bat 搶同樣的埠，起這個之前要先關掉那兩個視窗。
+#   8080        —— 模型。沿用原生的埠，這樣本機開發的 ./gradlew bootRun 照樣打得到。
+#                  （ops/ 的 Alloy 不靠這個埠：它加入了這組的網路，直接用服務名稱抓。）
+#                  代價：跟原生 .bat 搶同樣的埠，起這個之前要先關掉那個視窗。
 #   18090       —— 容器裡的 app。刻意不用 8090：8090 留給本機開發的 bootRun，兩個可以同時開著比對。
 #   18080       —— 容器裡的前端（nginx）。瀏覽器開這個，/api 由 nginx 轉給 app。
 
 name: eat-deploy
 
-# 兩個服務共用同一個自己 build 的映像檔（Dockerfile 在 llama-server/，為什麼自己 build 寫在那裡）。
+# 模型服務和播種共用同一個自己 build 的映像檔（Dockerfile 在 llama-server/，為什麼自己 build 寫在那裡）。
 # image 給一個自己的名字：build 完就存成這個名字，之後上雲端就是把它推到 registry。
 # tag 把兩個關鍵版本都寫進去，看名字就知道裡面是哪個 llama.cpp、哪個 CUDA。
 x-llama-server: &llama-server
@@ -25,7 +25,7 @@ x-llama-server: &llama-server
     context: ./llama-server
 
 # x- 開頭的頂層欄位 Compose 會直接忽略，專門拿來放「要重複用的片段」。
-# &gpu 是 YAML 錨點，下面用 *gpu 引用——兩個服務要的 GPU 設定一模一樣，寫一次就好。
+# &gpu 是 YAML 錨點，下面用 *gpu 引用——GPU 設定集中寫在這裡，之後多一個模型服務也直接引用。
 x-gpu: &gpu
   resources:
     reservations:
@@ -33,9 +33,8 @@ x-gpu: &gpu
         # 跟 Docker 要 GPU。沒這段，容器裡看不到顯卡，-ngl 99 會靜靜退回 CPU 跑（慢十倍以上）。
         # 雲端 k8s 上對應的是 resources.limits: nvidia.com/gpu: 1。
         #
-        # 注意本機跟雲端的差異：Docker Desktop 不切分 GPU，兩個容器都看得到整張卡、共用 12GB VRAM
-        # （跟原生跑兩個程序一樣）。但 k8s 的 nvidia.com/gpu: 1 是「獨佔一整張」，兩個 Pod 就要兩張卡。
-        # 上雲端時要另外決定：兩個容器塞同一個 Pod 共用一張卡，或把 embedding 改跑 CPU。
+        # 注意本機跟雲端的差異：Docker Desktop 不切分 GPU，每個容器都看得到整張卡、共用 12GB VRAM。
+        # 但 k8s 的 nvidia.com/gpu: 1 是「獨佔一整張」，以後多一個要 GPU 的服務就要多一張卡。
         - driver: nvidia
           count: 1
           capabilities: [gpu]
@@ -107,7 +106,7 @@ services:
       - -np
       - "200"
       # 讓所有 slot 共用上面那 32768 的 context。不帶 -np 時 llama.cpp 自動打開它；
-      # 一旦明確給了 -np 就變成關，32768 被均分成每個 slot 約 163，知識庫片段一長就會被截斷。
+      # 一旦明確給了 -np 就變成關，32768 被均分成每個 slot 約 163，助理的系統指示加對話歷史一長就會被截斷。
       - --kv-unified
       - --jinja
       - --reasoning
@@ -151,60 +150,7 @@ services:
 
     restart: unless-stopped
 
-  # ── 嵌入模型：bge-m3 ──────────────────────────────────────────
-  llm-embedding:
-    # 跟 llm-chat 同一個映像檔：llama-server 本身就能當 embedding server，差別只在啟動參數。
-    # 所以不用多 build 一個 image，本機磁碟、雲端的 image cache 都只存一份。
-    <<: *llama-server
-    container_name: eat-llm-embedding
-
-    # 參數照抄正在跑的 bge-m3-Q8server.bat。
-    command:
-      - -m
-      - /models/bge-m3-Q8_0.gguf
-      - --host
-      - 0.0.0.0
-      - --port
-      - "8081"
-      - -ngl
-      - "99"
-      - -c
-      - "8192"
-      # -ub（micro-batch）要 >= 單次要嵌入的 token 數：embedding 是一次把整段文字吃進去，
-      # 不像生成可以分批。-ub 小於輸入長度，server 會直接回錯，不會幫你切。
-      - -ub
-      - "8192"
-      - --embedding         # 開 /v1/embeddings，關掉生成
-      # bge-m3 是用 [CLS] 那個位置的向量當整句的代表，pooling 要跟模型訓練時一樣，
-      # 選錯（例如 mean）照樣吐得出向量，但相似度會悄悄變爛——檢索門檻就是對 cls 量出來的。
-      - --pooling
-      - cls
-      - --metrics
-
-    ports:
-      - "127.0.0.1:8081:8081"
-
-    volumes:
-      - models:/models:ro
-
-    depends_on:
-      model-seed:
-        condition: service_completed_successfully
-
-    deploy: *gpu
-
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      # 600MB 的模型，比 Qwen 小快十倍，寬限期不用那麼長。
-      start_period: 30s
-
-    restart: unless-stopped
-
-  # ── eat app ────────────────────────────────────────────────────
-  # ── 對話紀錄 ─────────────────────────────────────────────────
+  # ── 行程與 AI 助理的對話記憶 ─────────────────────────────────
   postgres:
     image: postgres:18.6-alpine       # 釘死版本；alpine 版比較小
     container_name: eat-postgres
@@ -228,6 +174,7 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # ── eat app ────────────────────────────────────────────────────
   app:
     # Dockerfile 在 repo 根目錄（要看得到 src/ 和 gradle wrapper），所以 context 是上一層
     image: eat/app:local
@@ -245,11 +192,9 @@ services:
       - "127.0.0.1:18090:8090"
 
     depends_on:
-      # 兩顆模型都 healthy（載完、能接請求）才啟動 app。
-      # app 啟動時其實不打模型（embedding 等第一個提問才索引），但這樣第一個請求就不會撞上還在載入的模型。
+      # 模型 healthy（載完、能接請求）才啟動 app。
+      # app 啟動時其實不打模型，但這樣第一個請求就不會撞上還在載入的模型。
       llm-chat:
-        condition: service_healthy
-      llm-embedding:
         condition: service_healthy
       # 資料庫要先能連：app 啟動時 Flyway 就會連上去建表，連不上 app 起不來
       postgres:
