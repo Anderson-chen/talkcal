@@ -11,13 +11,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import eat.calendar.application.domain.model.CalendarEvent;
 import eat.calendar.application.domain.model.Category;
 import eat.calendar.application.domain.model.DateRange;
-import eat.calendar.application.domain.model.EventDescription;
 import eat.calendar.application.domain.model.EventId;
 import eat.calendar.application.domain.model.ScheduledEvent;
 import eat.calendar.application.port.in.AddEventsUseCase;
 import eat.calendar.application.port.in.EventNotFoundException;
 import eat.calendar.application.port.in.ListEventsUseCase;
-import eat.calendar.application.port.in.ParseEventsUseCase;
 import eat.calendar.application.port.in.RemoveEventUseCase;
 
 import java.time.LocalDate;
@@ -41,10 +39,11 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * CalendarController 走一遍真的 Spring MVC（理由同 ChatControllerTest：這個類別幾乎每一行都在跟 Spring 講話）。
+ * CalendarController 走一遍真的 Spring MVC：這個類別幾乎每一行都在跟 Spring 講話
+ * （路由、JSON 綁定、狀態碼、例外翻譯），不起 MockMvc 就等於沒測。
  *
- * 四個 use case 由一個手寫的假物件同時扮演。假物件照著核心真正的規則演
- * （空白描述丟 IllegalArgumentException、期間交給 DateRange 檢查），測試才不會描述一個不存在的情境。
+ * 三個 use case 由一個手寫的假物件同時扮演。假物件照著核心真正的規則演
+ * （期間交給 DateRange 檢查、不存在的 id 丟 EventNotFoundException），測試才不會描述一個不存在的情境。
  */
 @WebMvcTest(CalendarController.class)
 @Import(CalendarControllerTest.StubConfiguration.class)
@@ -66,76 +65,6 @@ class CalendarControllerTest {
             CalendarEvent.startingAt("跟小明吃飯", LocalDateTime.of(2026, 10, 6, 15, 0))
                     .withCategory(Category.SOCIAL).withDetails("拉麵店", null);
     private static final EventId DINNER_ID = new EventId(UUID.fromString("3f1c8a2e-6b0d-4d7e-9a51-2c4e8f7b9d10"));
-
-    @Nested
-    @DisplayName("POST /api/calendar/parse")
-    class Parse {
-
-        @Test
-        @DisplayName("把描述交給 use case，草稿包成 JSON（沒有 id，時間是 ISO 牆上時間）")
-        void returnsDrafts() throws Exception {
-            mockMvc.perform(post("/api/calendar/parse")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"text\":\"明天三點跟小明吃飯\"}"))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.events[0].title").value("跟小明吃飯"))
-                    .andExpect(jsonPath("$.events[0].start").value("2026-10-06T15:00:00"))
-                    .andExpect(jsonPath("$.events[0].end").value("2026-10-06T16:00:00"))
-                    .andExpect(jsonPath("$.events[0].category").value("SOCIAL"))
-                    .andExpect(jsonPath("$.events[0].location").value("拉麵店"))
-                    .andExpect(jsonPath("$.events[0].note").doesNotExist())
-                    .andExpect(jsonPath("$.events[0].id").doesNotExist());
-
-            assertEquals(List.of("明天三點跟小明吃飯"), calendar.descriptions);
-        }
-
-        @Test
-        @DisplayName("沒解析出行程：200 加空陣列，不是錯誤")
-        void noEvents() throws Exception {
-            calendar.parse = description -> List.of();
-
-            mockMvc.perform(post("/api/calendar/parse")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"text\":\"今天天氣真好\"}"))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.events").isEmpty());
-        }
-
-        @Test
-        @DisplayName("描述空白：400")
-        void blankText() throws Exception {
-            mockMvc.perform(post("/api/calendar/parse")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"text\":\"  \"}"))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.error").exists());
-        }
-
-        @Test
-        @DisplayName("模型出事：502")
-        void modelFailure() throws Exception {
-            calendar.parse = description -> {
-                throw new IllegalStateException("呼叫 llama.cpp 失敗");
-            };
-
-            mockMvc.perform(post("/api/calendar/parse")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"text\":\"明天三點跟小明吃飯\"}"))
-                    .andExpect(status().isBadGateway())
-                    .andExpect(jsonPath("$.error").value("呼叫 llama.cpp 失敗"));
-        }
-
-        @Test
-        @DisplayName("JSON 本身壞掉：400 而不是 502，也不驚動 use case")
-        void malformedJson() throws Exception {
-            mockMvc.perform(post("/api/calendar/parse")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"text\": 這不是 JSON"))
-                    .andExpect(status().isBadRequest());
-
-            assertTrue(calendar.descriptions.isEmpty());
-        }
-    }
 
     @Nested
     @DisplayName("POST /api/calendar/events")
@@ -160,7 +89,7 @@ class CalendarControllerTest {
         }
 
         @Test
-        @DisplayName("使用者在預覽畫面上改壞了（結束早於開始）：400，而且一筆都不存")
+        @DisplayName("使用者在確認卡片上改壞了（結束早於開始）：400，而且一筆都不存")
         void editedIntoInvalidIsRejected() throws Exception {
             mockMvc.perform(post("/api/calendar/events")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -330,28 +259,16 @@ class CalendarControllerTest {
     /**
      * 一個假物件同時扮演三個 use case：記下收到什麼，每題可以換掉行為。
      */
-    static final class StubCalendar implements ParseEventsUseCase, AddEventsUseCase, ListEventsUseCase, RemoveEventUseCase {
+    static final class StubCalendar implements AddEventsUseCase, ListEventsUseCase, RemoveEventUseCase {
 
-        // 預設行為照核心的規則演：描述交給 EventDescription 檢查、期間交給 DateRange 檢查
-        private static final Function<String, List<CalendarEvent>> DEFAULT_PARSE = description -> {
-            new EventDescription(description);
-            return List.of(DINNER);
-        };
+        // 預設行為照核心的規則演：期間交給 DateRange 檢查
         private static final Function<DateRange, List<ScheduledEvent>> DEFAULT_LIST =
                 range -> List.of(new ScheduledEvent(DINNER_ID, DINNER));
 
-        Function<String, List<CalendarEvent>> parse = DEFAULT_PARSE;
         Function<DateRange, List<ScheduledEvent>> list = DEFAULT_LIST;
-        final List<String> descriptions = new ArrayList<>();
         final List<CalendarEvent> added = new ArrayList<>();
         final List<DateRange> ranges = new ArrayList<>();
         final List<EventId> removed = new ArrayList<>();
-
-        @Override
-        public List<CalendarEvent> parseEvents(String description) {
-            descriptions.add(description);
-            return parse.apply(description);
-        }
 
         @Override
         public List<ScheduledEvent> addEvents(List<CalendarEvent> events) {
@@ -376,9 +293,7 @@ class CalendarControllerTest {
         }
 
         void reset() {
-            parse = DEFAULT_PARSE;
             list = DEFAULT_LIST;
-            descriptions.clear();
             added.clear();
             ranges.clear();
             removed.clear();

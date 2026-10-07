@@ -1,4 +1,4 @@
-package eat.conversation.adapter.in.web;
+package eat;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -19,7 +19,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 /**
  * AccessLogFilter 的測試，直接餵 Mock 的 request/response，不起 Spring。
  *
- * 跟 ChatControllerTest 不同：這個 filter 只用到 Servlet API，路由、綁定都跟它無關，
+ * 跟 CalendarControllerTest 這類 web 切片不同：這個 filter 只用到 Servlet API，路由、綁定都跟它無關，
  * 起 MockMvc 驗不到更多東西。要驗的只有「有沒有寫出那一行、該跳過的有沒有跳過」，
  * 所以用 OutputCaptureExtension 抓 stdout 來看。
  */
@@ -32,47 +32,47 @@ class AccessLogFilterTest {
     @Test
     @DisplayName("記下方法、路徑與狀態碼")
     void logsMethodPathAndStatus(CapturedOutput output) throws Exception {
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/chat");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/calendar/assistant");
         MockHttpServletResponse response = new MockHttpServletResponse();
         response.setStatus(502);
 
         filter.doFilter(request, response, new MockFilterChain());
 
-        assertTrue(output.getOut().contains("POST /api/chat"), output.getOut());
+        assertTrue(output.getOut().contains("POST /api/calendar/assistant"), output.getOut());
         assertTrue(output.getOut().contains("-> 502"), output.getOut());
     }
 
     @Test
     @DisplayName("記下請求的 body——controller 讀走之後也拿得到")
     void logsRequestBody(CapturedOutput output) throws Exception {
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/chat");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/calendar/assistant");
         request.setContentType("application/json");
-        request.setContent("{\"question\":\"牛肉麵\"}".getBytes(StandardCharsets.UTF_8));
+        request.setContent("{\"message\":\"明天七點和 Amy 見面\"}".getBytes(StandardCharsets.UTF_8));
         // 扮演 controller：把 body 整條讀完。ContentCachingRequestWrapper 是「讀了才存」，
         // 用不讀 body 的 MockFilterChain 會測不出東西
         FilterChain readsBody = (req, res) -> req.getInputStream().readAllBytes();
 
         filter.doFilter(request, new MockHttpServletResponse(), readsBody);
 
-        assertTrue(output.getOut().contains("{\"question\":\"牛肉麵\"}"), output.getOut());
+        assertTrue(output.getOut().contains("{\"message\":\"明天七點和 Amy 見面\"}"), output.getOut());
     }
 
     @Test
     @DisplayName("記下回應的 body，而且照樣送到客戶端")
     void logsResponseBodyAndStillSendsIt(CapturedOutput output) throws Exception {
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/chat");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/calendar/assistant");
         MockHttpServletResponse response = new MockHttpServletResponse();
         // 扮演 controller：寫出一段 JSON 回覆
         FilterChain writesReply = (req, res) -> {
             res.setContentType("application/json");
-            res.getOutputStream().write("{\"reply\":\"好吃\"}".getBytes(StandardCharsets.UTF_8));
+            res.getOutputStream().write("{\"reply\":\"幫你排好了\"}".getBytes(StandardCharsets.UTF_8));
         };
 
         filter.doFilter(request, response, writesReply);
 
-        assertTrue(output.getOut().contains("{\"reply\":\"好吃\"}"), output.getOut());
+        assertTrue(output.getOut().contains("{\"reply\":\"幫你排好了\"}"), output.getOut());
         // 被攔下的內容一定要還給客戶端，不然 log 有了、回應卻是空的
-        assertEquals("{\"reply\":\"好吃\"}", response.getContentAsString(StandardCharsets.UTF_8));
+        assertEquals("{\"reply\":\"幫你排好了\"}", response.getContentAsString(StandardCharsets.UTF_8));
     }
 
     @Test

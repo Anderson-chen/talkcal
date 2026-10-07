@@ -1,4 +1,4 @@
-package eat.conversation.adapter.in.web;
+package eat;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -32,7 +32,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
  *
  * 為什麼起真的 server（RANDOM_PORT）而不用 MockMvc：要驗的正是 Servlet 容器裡 filter 的真實排序，
  * MockMvc 自己組 filter 鏈，驗到的可能不是正式環境那一條。
- * 不需要模型也不需要資料庫：送空白問題，在碰到 ChatClient 之前就回 400。
+ * 不需要模型也不需要資料庫：送空白訊息，助理在讀記憶、叫模型之前就回 400。
  * 資料庫連線池要等第一次查詢才真的連，只有 Flyway 會在啟動時連，所以把它關掉。
  *
  * 為什麼看 log 事件的 MDC，而不是把輸出開成 ECS JSON 再找 "traceId"：
@@ -74,9 +74,9 @@ class AccessLogTraceIdTest {
     @Test
     @DisplayName("一個請求的 access log，MDC 裡帶著那個請求的 traceId")
     void accessLogCarriesTraceId() throws Exception {
-        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/chat"))
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/calendar/assistant"))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("{\"question\":\"   \"}"))
+                .POST(HttpRequest.BodyPublishers.ofString("{\"message\":\"   \"}"))
                 .build();
         HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.discarding());
 

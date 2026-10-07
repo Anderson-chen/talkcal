@@ -1,9 +1,5 @@
 <script setup lang="ts">
-// 畫面上目前只有行事曆。
-//
-// 原本上方有「聊天 / 行事曆」兩個分頁，聊天分頁（純營養問答，打 POST /api/chat）先從畫面拿掉了。
-// ChatView.vue、chat.ts 和後端的 /api/chat 都還在：要放回來，就是把分頁列和 KeepAlive 加回這裡
-// （見 git 歷史裡這個檔案的上一版）。
+// 畫面只有行事曆（連同它的 AI 助理）：產品只有一條主線，用自然語言管行事曆。
 import CalendarView from './calendar/CalendarView.vue'
 </script>
 

@@ -28,9 +28,8 @@ import java.util.UUID;
 /**
  * 行事曆 AI 助理的 HTTP 入口：一句話進來，助理的回覆和它提議的行程出去。
  *
- * 跟 POST /parse 的差別：/parse 是固定流程（一句話一定被當成要新增的行程），
  * 這裡是一段對話 —— 助理可能先反問、可能去查行程或找空檔，也可能提議新增。
- * 提議的行程跟 /parse 回的是同一個形狀（EventFields），畫面照樣顯示卡片、使用者確認後送 POST /events 才存。
+ * 提議的行程跟 POST /events 收的是同一個形狀（EventFields），畫面顯示卡片、使用者確認後送 POST /events 才存。
  *
  * 多輪對話靠 conversationId（UUID）：第一句不帶，回應裡會拿到一個；之後每句帶著它。歷史存在伺服器。
  * 重新整理頁面後用 GET 讀回那段對話給人看的部分。
@@ -88,7 +87,7 @@ public final class CalendarAssistantController {
         }
     }
 
-    // 沒帶就開新對話；帶了就要是 UUID（spring_ai_chat_memory 的 conversation_id 只放得下 36 個字）
+    // 沒帶就開新對話；帶了就要是 UUID（calendar_assistant_message 的 conversation_id 是 UUID 欄位，見 V7）
     private static String conversationId(String requested) {
         if (requested == null || requested.isBlank()) {
             return UUID.randomUUID().toString();
@@ -113,7 +112,7 @@ public final class CalendarAssistantController {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(new CalendarFailure(e.getMessage()));
     }
 
-    // 名字不跟 ChatController 的 Request／Response 撞：springdoc 用簡單類別名當 schema 名稱
+    // 名字帶著 Assistant，不叫 Request／Response：springdoc 用簡單類別名當 schema 名稱，太通用的名字遲早撞名
     public record AssistantRequest(
             @Schema(description = "使用者說的話", example = "明天七點和 Amy 見面") String message,
             @Schema(description = "要接續的對話；不帶就開一段新對話", nullable = true) String conversationId) {

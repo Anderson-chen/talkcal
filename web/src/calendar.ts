@@ -1,5 +1,5 @@
 // 跟後端 /api/calendar/* 的契約。形狀照抄 CalendarController 的巢狀 record，
-// 後端那邊改了欄位，這裡要跟著改（理由同 chat.ts：同一個 commit 一起改）。
+// 後端那邊改了欄位，這裡要跟著改，而且同一個 commit 一起改：兩邊沒有共用的型別，不一起改就會悄悄對不上。
 //
 // 時間都是字串，格式是不帶時區的 ISO 牆上時間（例如 "2026-10-06T15:00:00"），刻意不轉成 Date：
 // Date 一定帶著時區，瀏覽器會用使用者電腦的時區解讀它；而後端存的是「台北的牆上三點」，
@@ -10,7 +10,7 @@ export type Category = 'WORK' | 'PERSONAL' | 'HEALTH' | 'SOCIAL'
 
 export const CATEGORIES: readonly Category[] = ['WORK', 'PERSONAL', 'HEALTH', 'SOCIAL']
 
-/** 一筆行程的欄位。預覽的回應、確認的請求共用這個形狀：/parse 拿到的東西改完原樣送回 /events。 */
+/** 一筆行程的欄位。助理的提議、確認的請求共用這個形狀：提議的卡片改完原樣送回 /events。 */
 export interface EventFields {
   title: string
   start: string
@@ -91,7 +91,7 @@ function normalize<T extends EventFields>(event: T): T {
 export class NotFoundError extends Error {}
 
 /**
- * 錯誤處理跟 chat.ts 的 ask 一樣：非 2xx 一律丟 Error，訊息優先用後端的 CalendarFailure.error，
+ * 錯誤處理：非 2xx 一律丟 Error，訊息優先用後端的 CalendarFailure.error，
  * 拿不到（proxy 連不上 app，回的不是 JSON）就退回 HTTP 狀態碼。
  */
 async function send(url: string, init: RequestInit): Promise<Response> {

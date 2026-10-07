@@ -50,7 +50,7 @@ class ArchitectureTest {
 
     /**
      * 兩側的 adapter 互不認識。
-     * 入口那側（目前是 HTTP 的 ChatController、CalendarController）換成別的、模型換成別家，都不該牽動另一側。
+     * 入口那側（目前是 HTTP 的 controller 和 AI 助理的工具）換成別的、模型換成別家，都不該牽動另一側。
      */
     @ArchTest
     static final ArchRule inboundAdaptersMustNotDependOnOutboundAdapters =
@@ -59,22 +59,14 @@ class ArchitectureTest {
                     .because("inbound 只該透過 port 使喚 core，core 才決定要不要呼叫 outbound");
 
     /**
-     * 只有組裝根可以認識具體的實作。下面三條是同一句話套在 adapter.out 的三個子樹上。
+     * 只有組裝根可以認識具體的實作。下面兩條是同一句話套在 adapter.out 的兩個子樹上。
      *
      * adapter.out 底下每個 package 就是「某一種往外的實作們」：
-     * knowledge 放 conversation 的知識庫（給 Spring AI 的 RAG 用）、
-     * persistence 放 calendar 的 Save / Load / DeleteEventPort 的、extraction 放 calendar 的 ExtractEventsPort 的，
+     * persistence 放 Save / Load / DeleteEventPort 的（和助理的對話記憶）、extraction 放 ExtractEventsPort 的，
      * 供應商一律再往下一層（persistence.postgres、extraction.springai）。
      *
      * 守住的是「換一行 new 就能換掉實作」這個承諾 —— 一旦有第二個地方 import 它，那個承諾就破了。
      */
-    @ArchTest
-    static final ArchRule onlyTheCompositionRootMayKnowTheKnowledgeAdapters =
-            noClasses().that().resideOutsideOfPackages("eat", "..adapter.out.knowledge..")
-                    .should().dependOnClassesThat().resideInAPackage("..adapter.out.knowledge..")
-                    .because("檢索方式遲早會換（全文搜尋、hybrid、加 rerank）；"
-                            + "讓實作漏進 core 或別的 adapter，那一換就會牽一髮動全身");
-
     @ArchTest
     static final ArchRule onlyTheCompositionRootMayKnowThePersistenceAdapters =
             noClasses().that().resideOutsideOfPackages("eat", "..adapter.out.persistence..")
@@ -82,7 +74,7 @@ class ArchitectureTest {
                     .because("存在哪（PostgreSQL、別的資料庫、記憶體）是組裝時的決定；"
                             + "SQL 和表的長相只該出現在 persistence 這一包");
 
-    // calendar 模組的 outbound 子樹：ExtractEventsPort 的實作們（目前只有 Spring AI 那個）
+    // ExtractEventsPort 的實作們（目前只有 Spring AI 那個）
     @ArchTest
     static final ArchRule onlyTheCompositionRootMayKnowTheExtractionAdapters =
             noClasses().that().resideOutsideOfPackages("eat", "..adapter.out.extraction..")
@@ -152,9 +144,9 @@ class ArchitectureTest {
     /**
      * core 不准依賴 OpenAPI 的註解。跟 Jackson 那條同一個道理，只是換成 API 文件。
      *
-     * @Schema、@Operation 描述的是「HTTP 上長什麼樣」，那是 ChatController 這個 adapter 的事。
+     * @Schema、@Operation 描述的是「HTTP 上長什麼樣」，那是 controller 這種 adapter 的事。
      * 一旦為了讓文件好看就在 CalendarEvent 上加 @Schema，domain 就開始替某一種協定打扮了。
-     * 要寫文件，就寫在 adapter 自己的 wire format（ChatController.Request/Response）上。
+     * 要寫文件，就寫在 adapter 自己的 wire format（例如 CalendarController.EventFields）上。
      */
     @ArchTest
     static final ArchRule coreMustNotDependOnOpenApi =
@@ -163,13 +155,16 @@ class ArchitectureTest {
                     .because("API 文件描述的是線路格式，屬於 inbound adapter，不該滲進業務規則");
 
     /**
-     * 模組之間互不認識：conversation（營養問答）和 calendar（行事曆）是兩門不同的業務。
+     * 模組之間互不認識：不同的業務各自一個模組。
+     *
+     * 目前只有 calendar 一個模組（一般問答的 conversation 模組已經拿掉），這條暫時不會擋到東西。
+     * 留著是因為 AI 助理遲早要拆成自己的模組（見 AssistantMemoryCleanup 的註解），拆開那天它就開始守門。
      *
      * eat.(*).. 把 eat 底下第一層的 package 各切成一片（一個模組一片）；
      * 根 package eat 本身（Application、各模組的 Configuration）不在任何一片裡，
      * 所以組裝根照樣可以同時認識兩個模組 —— 那正是它的工作。
      *
-     * 哪天行事曆真的需要問答的能力（或反過來），該做的是在自己模組裡定義一個 outbound port，
+     * 哪天一個模組需要另一個模組的能力，該做的是在自己模組裡定義一個 outbound port，
      * 由組裝根接上另一個模組的 use case，而不是直接 import 對方的類別。
      */
     @ArchTest
@@ -184,7 +179,7 @@ class ArchitectureTest {
      */
     @ArchTest
     static final ArchRule packagesMustBeFreeOfCycles =
-            // eat.(*).(**)：每個模組裡的每個 package 各切一片（原本只寫了 eat.conversation，calendar 進來後改成通用的）。
+            // eat.(*).(**)：每個模組裡的每個 package 各切一片。
             // 模組之間的依賴由上面的 modulesMustNotDependOnEachOther 管，這條只看模組內部
             slices().matching("eat.(*).(**)")
                     .should().beFreeOfCycles()

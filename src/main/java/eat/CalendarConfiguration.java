@@ -33,15 +33,17 @@ import java.time.Duration;
 import java.time.ZoneId;
 
 /**
- * calendar 模組的接線：跟 ConversationConfiguration 並列，一個模組一個。
+ * calendar 模組的接線：哪個 port 用哪個實作、use case 怎麼 new 出來。一個模組一個 Configuration。
  *
- * 理由跟那邊一樣（站在所有模組外面才有資格認識它們、類別不 public、proxyBeanMethods = false），這裡不重抄。
- * 兩個 Configuration 都在 package eat，但彼此不引用：
- * ArchitectureTest 的 modulesMustNotDependOnEachOther 只管 eat 底下的模組，
- * 組裝根同時認識兩個模組是它的工作，兩個 Configuration 互相認識就沒必要了。
+ * 放在根 package eat、類別不 public、proxyBeanMethods = false：
+ * 組裝根站在所有模組外面，才有資格認識 adapter 的具體類別（ArchitectureTest 只准這一圈認識它們）；
+ * 沒有程式該直接引用它，Bean 方法之間也不互相呼叫。
+ *
+ * 跟模型有關的 bean（ChatModel）是 Spring AI 依 application.properties 的 spring.ai.* 自動建的 ——
+ * 連到哪、等多久、生成上限是設定，不是程式。
  *
  * 這裡要下的決定：
- * - ExtractEventsPort 用 Spring AI 的 ChatModel（跟聊天共用同一個，自動組裝的那一個）
+ * - ExtractEventsPort 用 Spring AI 的 ChatModel（跟 AI 助理共用同一個，自動組裝的那一個）
  * - 行程存 PostgreSQL（一個實作同時當 Save / Load / DeleteEventPort）
  * - 「現在」用哪個時區的時鐘
  * - AI 助理的舊對話留多久（AssistantMemoryCleanup 每天清一次，所以要開排程）
@@ -50,9 +52,9 @@ import java.time.ZoneId;
 @EnableScheduling
 class CalendarConfiguration {
 
-    // ChatModel 是 Spring AI 依 spring.ai.openai.chat.* 自動建好的，跟聊天的 ChatClient 背後是同一個。
+    // ChatModel 是 Spring AI 依 spring.ai.openai.chat.* 自動建好的，跟 AI 助理背後是同一個。
     // 抽行程自己的需求（溫度 0、max_tokens 1024、JSON Schema）在每個請求的選項裡帶，不必另建一個。
-    // 代價：逾時也跟聊天共用（2 分鐘）。以前這裡自己建 RestClient、30 秒就放棄；現在靠 max_tokens 擋住失控
+    // 代價：逾時也跟助理共用（2 分鐘）。以前這裡自己建 RestClient、30 秒就放棄；現在靠 max_tokens 擋住失控
     @Bean
     ExtractEventsPort extractEventsPort(ChatModel chatModel) {
         return new SpringAiExtractEventsAdapter(chatModel);
@@ -84,26 +86,25 @@ class CalendarConfiguration {
     /**
      * AI 助理：模型 + 自己的對話記憶 + 三個工具（工具背後是上面那些 use case）。
      *
-     * 直接拿 ChatModel（跟抽行程、聊天背後是同一個），agent loop 由 CalendarAssistant 自己跑。
+     * 直接拿 ChatModel（跟抽行程背後是同一個），agent loop 由 CalendarAssistant 自己跑。
      * 記憶不用 Spring AI 自動組裝的那個（JdbcChatMemoryRepository 會把工具訊息濾掉），用自己的表，原因寫在 V7。
      */
     @Bean
-    CalendarAssistant calendarAssistant(ChatModel chatModel, JdbcClient jdbcClient, PlatformTransactionManager transactionManager,
+    CalendarAssistant calendarAssistant(ChatModel chatModel, JdbcAssistantMemoryRepository assistantMemory,
                                         ParseEventsUseCase parseEvents, ListEventsUseCase listEvents,
                                         FindFreeSlotsUseCase findFreeSlots, @Value("${calendar.zone}") ZoneId zone) {
-        return new CalendarAssistant(chatModel, assistantMemory(jdbcClient, transactionManager),
-                parseEvents, listEvents, findFreeSlots, Clock.system(zone));
+        return new CalendarAssistant(chatModel, assistantMemory, parseEvents, listEvents, findFreeSlots, Clock.system(zone));
     }
 
     @Bean
-    AssistantMemoryCleanup assistantMemoryCleanup(JdbcClient jdbcClient, PlatformTransactionManager transactionManager,
+    AssistantMemoryCleanup assistantMemoryCleanup(JdbcAssistantMemoryRepository assistantMemory,
                                                   @Value("${calendar.assistant.retention}") Duration retention) {
-        return new AssistantMemoryCleanup(assistantMemory(jdbcClient, transactionManager), retention, Clock.systemUTC());
+        return new AssistantMemoryCleanup(assistantMemory, retention, Clock.systemUTC());
     }
 
-    // 助理和清理工作各 new 一個（它沒有狀態，兩個跟一個一樣）。刻意不註冊成 bean：
-    // 它的型別是 ChatMemoryRepository，一進容器，聊天那邊自動組裝的 ChatMemory 就會撞見兩個、不知道用哪個
-    private static JdbcAssistantMemoryRepository assistantMemory(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
+    // 助理讀寫、清理工作刪除，用的是同一張表、同一個實作
+    @Bean
+    JdbcAssistantMemoryRepository assistantMemory(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
         return new JdbcAssistantMemoryRepository(jdbcClient, new TransactionTemplate(transactionManager));
     }
 

@@ -1,4 +1,4 @@
-package eat.conversation.adapter.in.web;
+package eat;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -25,9 +25,10 @@ import java.util.concurrent.TimeUnit;
  * 容器裡的 log 一律寫 stdout 給 Alloy 收（見 ops/alloy/config.alloy），
  * 走 SLF4J 才會跟其他 log 一樣在 docker profile 下印成 ECS JSON，Loki 用 `| json` 就拆得開。
  *
- * 為什麼放在 adapter.in.web：「HTTP 請求」本來就只存在這一圈，core 不知道有 HTTP 這回事。
+ * 為什麼放在根 package、不放在某個模組的 adapter.in.web：它記的是整個應用的每一個請求，
+ * 不屬於任何一門業務，跟 ObservationConfiguration 一樣是全站的觀測設定。core 照樣不知道有 HTTP 這回事。
  *
- * 請求內容（body）也一起記在同一行：一次提問的「問了什麼」和「回幾號、花多久」放在一起，
+ * 請求內容（body）也一起記在同一行：一次請求的「送了什麼」和「回幾號、花多久」放在一起，
  * 在 Loki 查一筆就看得完整，不必再拿時間去對另一行 log。
  */
 @Component
@@ -48,7 +49,7 @@ final class AccessLogFilter extends OncePerRequestFilter {
     // 之後想單獨調它的等級或關掉也只要一行 logging.level.access=WARN。
     private static final Logger log = LoggerFactory.getLogger("access");
 
-    // body 最多記這麼多 byte。提問是一兩句話、回覆是幾段文字，8 KB 綽綽有餘；
+    // body 最多記這麼多 byte。使用者的話是一兩句、助理的回覆是幾段文字加幾張提議卡片，8 KB 綽綽有餘；
     // 設上限是怕一大包進出時，log 一行就爆掉。超過的部分照樣傳遞，只是不記。
     private static final int MAX_BODY_BYTES = 8 * 1024;
 
@@ -106,7 +107,7 @@ final class AccessLogFilter extends OncePerRequestFilter {
 
     /**
      * actuator 不記：Alloy 每 15 秒來抓一次 /actuator/prometheus，
-     * 全記下來的話 access log 大半是它，真正的提問反而被淹掉。
+     * 全記下來的話 access log 大半是它，真正的請求反而被淹掉。
      * 健康檢查、指標本身就有 Alloy + Mimir 盯著，不缺這份紀錄。
      */
     @Override
