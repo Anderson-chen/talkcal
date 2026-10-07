@@ -13,7 +13,7 @@ app 也不知道有人在壓它。
 |------------|--------|----|
 | llama.cpp server | 你平常那台常駐的 | 8080 |
 | PostgreSQL | `docker compose -f deploy/compose.yaml up -d postgres` | 5432 |
-| eat app | `./gradlew bootRun` | 8090 |
+| talkcal app | `./gradlew bootRun` | 8090 |
 | k6（打壓的工具） | 見下方安裝 | — |
 
 llama.cpp 沒開也能跑 smoke，只是「正常訊息回 200」那條會紅、「空白訊息回 400」那條照樣綠
@@ -85,7 +85,7 @@ llama-server 改了 `-np`（slot 數）時，用 `SLOTS` 對上，三段平台�
 $env:SLOTS="2"; k6 run perf/load.js
 ```
 
-跑的時候開著 Grafana 的 **llama.cpp — LLM server** 與 **eat — Spring app** 兩張 dashboard，
+跑的時候開著 Grafana 的 **llama.cpp — LLM server** 與 **talkcal — Spring app** 兩張 dashboard，
 `above` 那段會看到「排隊中」離開 0、p95 往上跳。
 
 ### concurrent 與 knee：預設打 docker 那台 app
@@ -202,7 +202,7 @@ launch.json 的原生 llama-server 沒帶 `-np`，是 llama.cpp 的預設值（4
      k6 run -o experimental-prometheus-rw perf/load.js
      ```
      （用 `K6_PROMETHEUS_RW_SERVER_URL` 指到 `http://localhost:9009/api/v1/push`。）
-   - app 那邊的指標已經在吐（Grafana 查 `up{job="eat-app"}` 是 1），接上後就能三層疊圖。
+   - app 那邊的指標已經在吐（Grafana 查 `up{job="talkcal-app"}` 是 1），接上後就能三層疊圖。
 
 ## 檔案結構
 

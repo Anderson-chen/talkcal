@@ -64,7 +64,7 @@ datasources:
     jsonData:
       # trace → log：在 trace 上點一下，就去 Loki 找「內容含這個 trace id」的 log。
       # 用自訂查詢而不是 Grafana 預設的「拿 span 的屬性對 Loki 標籤」：
-      # trace 上的服務叫 eat（spring.application.name），Loki 標籤上叫 app（compose 服務名），兩邊對不起來；
+      # trace 上的服務叫 talkcal（spring.application.name），Loki 標籤上叫 app（compose 服務名），兩邊對不起來；
       # trace id 兩邊都有，用它最準。前後各多抓一分鐘，避免時鐘或延遲讓 log 落在 span 的時間範圍外。
       tracesToLogsV2:
         datasourceUid: loki

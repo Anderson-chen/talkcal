@@ -8,7 +8,7 @@
 | 服務 | 在哪跑 | 埠 |
 |------|--------|----|
 | Qwen3-8B 生成模型 | **容器**（`llm-chat`） | 8080 |
-| eat app | **容器**（`app`） | 18090 |
+| talkcal app | **容器**（`app`） | 18090 |
 | PostgreSQL（行程、AI 助理的對話記憶） | **容器**（`postgres`） | 5432（只綁 127.0.0.1） |
 | 前端（nginx + Vue） | **容器**（`web`） | 18080 —— 用瀏覽器開這個 |
 
@@ -63,10 +63,10 @@ app 的 18090 仍然開著，給 k6 和 curl 直接打，不多經過一層 ngin
 
 ## 容器之間怎麼溝通
 
-同一個 compose 的服務自動在同一個網路（`eat-deploy_default`）上，Docker 內建 DNS 把服務名稱解析成容器 IP：
+同一個 compose 的服務自動在同一個網路（`talkcal-deploy_default`）上，Docker 內建 DNS 把服務名稱解析成容器 IP：
 
 ```bash
-docker exec eat-app getent hosts llm-chat     # → 172.22.0.x  llm-chat
+docker exec talkcal-app getent hosts llm-chat     # → 172.22.0.x  llm-chat
 ```
 
 IP 每次重建容器都可能變，服務名稱不會——所以設定檔只寫名字。容器間走的是**容器內部的埠**，
@@ -78,7 +78,7 @@ ops/ 的 Alloy 也不靠它：Alloy 加入了這組的網路，跟 app 一樣用
 **app**：repo 根目錄的 `Dockerfile`，build 用 Docker Hub 的 `gradle:9.2.1-jdk25`，執行用 `eclipse-temurin:25-jre`。
 不用 `./gradlew`：Gradle 本體的下載點轉到 GitHub，本機實測 0.17 MB/s。第一次 build 約 1.5 分鐘，映像檔約 500MB。
 
-**模型**：用一個**自己 build** 的映像檔 `eat/llama-server:b10964-cuda13.0.1`（`llama-server/Dockerfile`）。
+**模型**：用一個**自己 build** 的映像檔 `talkcal/llama-server:b10964-cuda13.0.1`（`llama-server/Dockerfile`）。
 
 為什麼不能直接拿 `C:\llm\llama.cpp` 用：容器裡是 Linux，`.exe` 和 `.dll` 是 Windows 格式，跑不了。
 要的是 Linux 版 llama-server + Linux 版 CUDA 函式庫。模型檔（`.gguf`）是純資料，不用重新下載（見下一節）。
@@ -127,7 +127,7 @@ docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新
 
 | 這裡 | 雲端（k8s）上對應的東西 |
 |------|------------------------|
-| `image: eat/llama-server:b10964-cuda13.0.1` 釘版本 | Deployment 的 image tag，同樣要釘；image 推到同區的 registry |
+| `image: talkcal/llama-server:b10964-cuda13.0.1` 釘版本 | Deployment 的 image tag，同樣要釘；image 推到同區的 registry |
 | `deploy.resources...driver: nvidia` | `resources.limits: nvidia.com/gpu: 1` |
 | `healthcheck` 打 `/health` | readinessProbe（載模型期間不導流量進來） |
 | `start_period: 120s` | startupProbe / `initialDelaySeconds` |
@@ -137,7 +137,7 @@ docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新
 | `SPRING_PROFILES_ACTIVE=docker` | Deployment 的 env，或 ConfigMap |
 | 具名 volume `models` | PersistentVolumeClaim |
 | `postgres` 容器 + `postgres-data` volume | 雲端託管的資料庫（RDS、Cloud SQL），不自己在 k8s 裡跑 |
-| `POSTGRES_PASSWORD: eat` 寫在 compose | Secret，app 用環境變數 `SPRING_DATASOURCE_PASSWORD` 拿 |
+| `POSTGRES_PASSWORD: talkcal` 寫在 compose | Secret，app 用環境變數 `SPRING_DATASOURCE_PASSWORD` 拿 |
 
 ## 下一步（一次一件）
 
@@ -156,7 +156,7 @@ app 把行程（`calendar_event`）和 AI 助理的對話記憶（`calendar_assi
 直接看資料：
 
 ```bash
-docker exec -it eat-postgres psql -U eat -d eat
+docker exec -it talkcal-postgres psql -U talkcal -d talkcal
 ```
 
 ```sql

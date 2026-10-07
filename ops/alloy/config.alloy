@@ -27,13 +27,13 @@
 // 跟 deploy/ 裡 app 打 http://llm-chat:8080 是同一套規則，不看主機發佈成幾號埠。
 // 本機 bootRun 的 app 不在這個網路裡，不會被抓；要看它的指標直接開 localhost:8090/actuator/prometheus。
 //
-// job_name 寫明：不寫的話 job 標籤會變成元件名（prometheus.scrape.eat_app），儀表板的查詢就對不上了。
+// job_name 寫明：不寫的話 job 標籤會變成元件名（prometheus.scrape.talkcal_app），儀表板的查詢就對不上了。
 // scrape_interval 寫明：Alloy 預設 60 秒，比 Prometheus 慣用的 15 秒粗很多。
 
 // (1) 我們的 Spring app —— deploy/ 的 app 服務。8090 是容器「裡面」的埠，
 //     主機上看到的 18090 只是 ports 發佈出去給瀏覽器用的，容器之間用不到。
-prometheus.scrape "eat_app" {
-  job_name        = "eat-app"
+prometheus.scrape "talkcal_app" {
+  job_name        = "talkcal-app"
   targets         = [{"__address__" = "app:8090"}]
   metrics_path    = "/actuator/prometheus"   // Spring Boot 吐 Prometheus 指標的預設路徑
   scrape_interval = "15s"
@@ -75,11 +75,11 @@ prometheus.remote_write "mimir" {
 discovery.docker "deploy" {
   host = "unix:///var/run/docker.sock"
 
-  // 只收 deploy/ 那組（compose 專案名 eat-deploy）：app、llm-chat、postgres、web、model-seed。
+  // 只收 deploy/ 那組（compose 專案名 talkcal-deploy）：app、llm-chat、postgres、web、model-seed。
   // 不加這個會連這台機器上別的專案、還有 ops 自己（Loki、Grafana…）的 log 一起收進來。
   filter {
     name   = "label"
-    values = ["com.docker.compose.project=eat-deploy"]
+    values = ["com.docker.compose.project=talkcal-deploy"]
   }
 }
 
@@ -92,7 +92,7 @@ discovery.relabel "deploy" {
   // targets 留空：這裡只是定義規則，由下面 loki.source.docker 拿去套用
   targets = []
 
-  // Docker 給的容器名前面多一個斜線（/eat-app），去掉
+  // Docker 給的容器名前面多一個斜線（/talkcal-app），去掉
   rule {
     source_labels = ["__meta_docker_container_name"]
     regex         = "/(.*)"

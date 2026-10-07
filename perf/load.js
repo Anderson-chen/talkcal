@@ -17,7 +17,7 @@
 //   k6 run perf/load.js
 // 只想先確認腳本本身沒寫錯，把每段縮成 10 秒（全程約 2 分鐘）：
 //   PowerShell:  $env:HOLD_S="10"; k6 run perf/load.js
-// 邊跑邊開 Grafana 的 llama.cpp 與 eat app 兩張 dashboard 對照看，最有感。
+// 邊跑邊開 Grafana 的 llama.cpp 與 talkcal app 兩張 dashboard 對照看，最有感。
 
 import { sleep } from 'k6';
 import { MESSAGES, say } from './lib/assistant.js';

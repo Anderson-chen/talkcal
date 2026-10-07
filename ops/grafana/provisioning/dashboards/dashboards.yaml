@@ -12,7 +12,7 @@
 apiVersion: 1
 
 providers:
-  - name: eat-dashboards
+  - name: talkcal-dashboards
     # 讓「在 UI 上動過的版本」不會一重啟就被檔案蓋掉前，先問一下 ——
     # 學習用途下設 false：以檔案為準，UI 上的臨時修改重啟後會被檔案覆蓋回去。
     # 想在 UI 上試改就別存檔，或把試好的結果貼回 JSON。

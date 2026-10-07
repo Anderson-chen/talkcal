@@ -77,7 +77,7 @@ export function toCssVars(theme: Theme): Record<string, string> {
   return vars
 }
 
-const STORAGE_KEY = 'eat.calendar.theme'
+const STORAGE_KEY = 'talkcal.calendar.theme'
 
 /**
  * 記住使用者選的主題。只是這台瀏覽器的個人偏好，所以放 localStorage 就好，不必存到後端。

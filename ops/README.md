@@ -86,14 +86,14 @@ docker compose down                 # 關掉（資料留著）
 docker compose down -v              # 關掉並清空資料，整組重來
 ```
 
-Alloy 加入了 deploy/ 的網路（`eat-deploy_default`）：用服務名稱抓指標，app 也用 `alloy:4318` 送 trace。
+Alloy 加入了 deploy/ 的網路（`talkcal-deploy_default`）：用服務名稱抓指標，app 也用 `alloy:4318` 送 trace。
 代價是**要先起 deploy/ 再起 ops/**，網路不存在時 Alloy 起不來。
 
 ## 指標：Alloy 抓誰、送去哪
 
 | job | 位址 | 是誰 |
 |-----|------|------|
-| `eat-app` | `app:8090/actuator/prometheus` | deploy/ 的 app 容器 |
+| `talkcal-app` | `app:8090/actuator/prometheus` | deploy/ 的 app 容器 |
 | `llama-cpp` | `llm-chat:8080/metrics` | Qwen3-8B（deploy/ 的 llm-chat） |
 
 每 15 秒抓一次，用 `remote_write` 推進 Mimir。本機 bootRun 的 app 不在 deploy/ 的網路裡，不會被抓。
@@ -111,7 +111,7 @@ app 打給模型的呼叫，原本有一組 `http_client_requests_seconds`（Res
 
 ## 日誌：Loki 收什麼
 
-Alloy 透過 Docker 的 API（`docker.sock`）自動發現 `deploy/` 那組容器（compose 專案 `eat-deploy`），
+Alloy 透過 Docker 的 API（`docker.sock`）自動發現 `deploy/` 那組容器（compose 專案 `talkcal-deploy`），
 讀它們的 stdout 送進 Loki。新容器起來不必改設定；其他專案的容器、ops 自己的容器都不收。
 管線怎麼接、為什麼這樣選標籤，見 `alloy/config.alloy` 的註解。
 
@@ -120,7 +120,7 @@ Alloy 透過 Docker 的 API（`docker.sock`）自動發現 `deploy/` 那組容�
 | 標籤 | 例子 | 用途 |
 |------|------|------|
 | `service` | `app`、`llm-chat`、`postgres` | compose 服務名，最穩，查詢主要靠它 |
-| `container` | `eat-app` | 容器名 |
+| `container` | `talkcal-app` | 容器名 |
 | `env` | `docker` | 環境。之後別的環境的 log 也送進來時用它分開 |
 
 trace id **不是**標籤（每個請求都不同，放進標籤會讓索引爆掉），它在 log 內容的 `traceId` 欄位裡。
@@ -164,7 +164,7 @@ app 對每個請求開一個 trace（`management.tracing.sampling.probability=1.
 > 底層是官方 openai-java SDK（OkHttp），**不會**產生 HTTP span，請求也不再帶 `traceparent` 標頭。
 > 換成 Spring AI 自己的觀測：AI 助理直接用 ChatModel，每叫一次模型一個 span，帶 `gen_ai.*` 屬性（模型名稱、token 用量）。
 > 部署後跟助理說一句話，到 Tempo 看實際的 span 名稱，再回來補一張 `http post /api/calendar/assistant` 的樹。
-> `eat — Traces (Tempo)` 儀表板裡用 `kind=client` 篩往外呼叫的那幾張圖，到時也要跟著改。
+> `talkcal — Traces (Tempo)` 儀表板裡用 `kind=client` 篩往外呼叫的那幾張圖，到時也要跟著改。
 
 | span | 誰量的 | 為什麼是它 |
 |------|--------|------------|
@@ -180,14 +180,14 @@ llama.cpp 本身不產生 span，所以樹只到 app 呼叫出去的那一層。
 
 在 Grafana 看 trace 有兩個地方：
 
-- **儀表板 `eat — Traces (Tempo)`**：全部用 TraceQL 查 Tempo。上排是從 trace 算出來的數字（助理請求速率、
+- **儀表板 `talkcal — Traces (Tempo)`**：全部用 TraceQL 查 Tempo。上排是從 trace 算出來的數字（助理請求速率、
   各段的 p95、沒成功的 span 數），下排是請求清單（最近的、超過 5 秒的、沒成功的），點 Trace ID 就打開瀑布圖。
   查詢只挑 `/api/calendar/assistant`，只看跟助理的對話。（actuator 的抓取與健康檢查在 app 端就不產生 trace 了，見 `ObservationConfiguration`。）
-- **Explore** → 資料源選 **Tempo** → **Search** 分頁，Service Name 選 `eat`：自己下條件找。
+- **Explore** → 資料源選 **Tempo** → **Search** 分頁，Service Name 選 `talkcal`：自己下條件找。
 
 儀表板上排用的是 **TraceQL metrics**（`| rate()`、`| quantile_over_time()`）：Tempo 直接從存下來的 span 算出時間序列，
 不必另外開 metrics-generator 把數字寫進 Mimir。代價是分位數用 2 的次方分桶估（0.5s、1s、2s…），
-只適合看「慢在哪一段」的量級，精準的 p95 看 eat-app 儀表板（指標那條線）。
+只適合看「慢在哪一段」的量級，精準的 p95 看 talkcal-app 儀表板（指標那條線）。
 
 本機 bootRun 的 app 也會送 trace（走主機的 `127.0.0.1:4318`），只要 ops/ 有起來。
 ops/ 沒起時 trace 送不出去，app 只會在 log 印 warning，請求照常處理。
@@ -196,7 +196,7 @@ ops/ 沒起時 trace 送不出去，app 只會在 log 印 warning，請求照常
 
 | 從 | 到 | 怎麼點 | 靠什麼接起來 |
 |----|----|--------|--------------|
-| 指標（eat-app 儀表板的 p95 圖） | trace | 圖上的小菱形（exemplar）→ 點 trace_id | app 吐指標時在 histogram 的點上附 trace id，Mimir 存下來（`max_global_exemplars_per_user`） |
+| 指標（talkcal-app 儀表板的 p95 圖） | trace | 圖上的小菱形（exemplar）→ 點 trace_id | app 吐指標時在 histogram 的點上附 trace id，Mimir 存下來（`max_global_exemplars_per_user`） |
 | log（Loki 的 access log） | trace | 展開一行 → **到 Tempo 看這個請求** | Loki 資料源的 derived field 從內容抓出 `traceId` |
 | trace（Tempo） | log | span 旁的 **Logs for this span** | Tempo 資料源用 trace id 去 Loki 搜內容 |
 
@@ -221,5 +221,5 @@ ops/
 ├── tempo/tempo.yaml                          # 追蹤：單機最小設定
 └── grafana/provisioning/
     ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
-    └── dashboards/                           # eat-app、llama-cpp（指標）、eat-traces（trace）
+    └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces（trace）
 ```

@@ -1,7 +1,7 @@
 {
   "uid": "llama-cpp",
   "title": "llama.cpp — LLM server",
-  "tags": ["eat", "llm"],
+  "tags": ["talkcal", "llm"],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,

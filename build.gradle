@@ -168,7 +168,7 @@ tasks.named('check') {
 }
 
 application {
-    mainClass = 'eat.Application'
+    mainClass = 'io.github.andersonchen.talkcal.Application'
 }
 
 // 一鍵部署 app 到本機 Docker：./gradlew deployApp

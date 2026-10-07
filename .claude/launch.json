@@ -30,8 +30,8 @@
       "port": 8080
     },
     {
-      "name": "eat",
-      "runtimeExecutable": "C:\\project\\eat\\gradlew.bat",
+      "name": "talkcal",
+      "runtimeExecutable": "C:\\project\\talkcal\\gradlew.bat",
       "runtimeArgs": [
         "bootRun"
       ],

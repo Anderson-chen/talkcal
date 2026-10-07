@@ -36,7 +36,7 @@ const GREETING = '嗨！我是你的行事曆助理。可以幫你新增行程�
 
 // conversationId 存在這台瀏覽器：跟主題一樣是個人的東西，不必存到後端。
 // 私密視窗、被封鎖的網站資料都可能讓 localStorage 丟例外，一律吞掉 —— 最壞就是重新整理後開新對話
-const STORAGE_KEY = 'eat.calendar.assistant.conversation'
+const STORAGE_KEY = 'talkcal.calendar.assistant.conversation'
 
 function loadConversationId(): string | undefined {
   try {

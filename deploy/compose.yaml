@@ -1,10 +1,10 @@
 # 這個 stack 是「在本機模擬雲端部署」：把原本用 .bat 跑在 Windows 上的服務，一個一個搬進容器。
 # 跟 ops/ 分開：ops/ 是觀測（看別人），這裡是被部署的服務本身（被看的那些）。
 #
-# 都在容器裡：Qwen3-8B 生成、PostgreSQL、eat app，以及前面擋一層的 nginx（web）。
+# 都在容器裡：Qwen3-8B 生成、PostgreSQL、talkcal app，以及前面擋一層的 nginx（web）。
 # 要退回去就 `docker compose down`，再點原本的 .bat、./gradlew bootRun。
 #
-# 容器之間怎麼溝通：同一個 compose 的服務自動在同一個網路（eat-deploy_default）上，
+# 容器之間怎麼溝通：同一個 compose 的服務自動在同一個網路（talkcal-deploy_default）上，
 # 用服務名稱互相找——app 打 http://llm-chat:8080，不經過主機、不看 ports 發佈成幾號。
 #
 # 發佈到主機的埠（ports）是給「容器外面」的人用的：
@@ -14,13 +14,13 @@
 #   18090       —— 容器裡的 app。刻意不用 8090：8090 留給本機開發的 bootRun，兩個可以同時開著比對。
 #   18080       —— 容器裡的前端（nginx）。瀏覽器開這個，/api 由 nginx 轉給 app。
 
-name: eat-deploy
+name: talkcal-deploy
 
 # 模型服務和播種共用同一個自己 build 的映像檔（Dockerfile 在 llama-server/，為什麼自己 build 寫在那裡）。
 # image 給一個自己的名字：build 完就存成這個名字，之後上雲端就是把它推到 registry。
 # tag 把兩個關鍵版本都寫進去，看名字就知道裡面是哪個 llama.cpp、哪個 CUDA。
 x-llama-server: &llama-server
-  image: eat/llama-server:b10964-cuda13.0.1
+  image: talkcal/llama-server:b10964-cuda13.0.1
   build:
     context: ./llama-server
 
@@ -49,7 +49,7 @@ services:
   # 拉到本機磁碟（PVC），主程式只讀本機磁碟。這裡的「物件儲存」由 C:\llm\models 扮演。
   model-seed:
     <<: *llama-server               # 借用同一個映像檔（有 bash、sha256sum），不用多拉一個 image
-    container_name: eat-model-seed
+    container_name: talkcal-model-seed
     # volume 剛建好時擁有者是 root，映像檔預設的 ubuntu 使用者寫不進去，播種這一步用 root。
     # 只有這個跑完就結束的容器是 root，長駐的模型服務還是一般使用者。
     user: root
@@ -85,7 +85,7 @@ services:
   # ── 生成模型：Qwen3-8B ─────────────────────────────────────────
   llm-chat:
     <<: *llama-server
-    container_name: eat-llm-chat
+    container_name: talkcal-llm-chat
 
     # 參數照抄正在跑的 .bat（那才是實際在用的；.claude/launch.json 那份已經跟它分岔了）。
     # 從此這裡是唯一真相：雲端上跑的就是這幾行。
@@ -153,13 +153,13 @@ services:
   # ── 行程與 AI 助理的對話記憶 ─────────────────────────────────
   postgres:
     image: postgres:18.6-alpine       # 釘死版本；alpine 版比較小
-    container_name: eat-postgres
+    container_name: talkcal-postgres
     environment:
       # 本機學習用的帳密，跟 application.properties 的預設值一致。
       # 正式環境不這樣寫：密碼放 secret，app 那邊用環境變數 SPRING_DATASOURCE_PASSWORD 蓋掉。
-      POSTGRES_DB: eat
-      POSTGRES_USER: eat
-      POSTGRES_PASSWORD: eat
+      POSTGRES_DB: talkcal
+      POSTGRES_USER: talkcal
+      POSTGRES_PASSWORD: talkcal
     ports:
       # 給本機 bootRun 的 app 和你自己用 psql / IDE 連。只綁 127.0.0.1，不對區網開放。
       - "127.0.0.1:5432:5432"
@@ -168,19 +168,19 @@ services:
       - postgres-data:/var/lib/postgresql
     healthcheck:
       # pg_isready：資料庫真的能接連線才算 healthy，app 要等它
-      test: ["CMD-SHELL", "pg_isready -U eat -d eat"]
+      test: ["CMD-SHELL", "pg_isready -U talkcal -d talkcal"]
       interval: 5s
       timeout: 3s
       retries: 10
     restart: unless-stopped
 
-  # ── eat app ────────────────────────────────────────────────────
+  # ── talkcal app ────────────────────────────────────────────────────
   app:
     # Dockerfile 在 repo 根目錄（要看得到 src/ 和 gradle wrapper），所以 context 是上一層
-    image: eat/app:local
+    image: talkcal/app:local
     build:
       context: ..
-    container_name: eat-app
+    container_name: talkcal-app
 
     environment:
       # 打開 docker profile：application-docker.properties 蓋掉預設值——
@@ -213,10 +213,10 @@ services:
   # ── 前端：nginx 送 Vue 靜態檔，並把 /api 轉給 app ──────────────────
   # 瀏覽器只連這一個入口，看到的是同一個來源，app 不必開 CORS。對照雲端：Ingress / CDN 那一層。
   web:
-    image: eat/web:local
+    image: talkcal/web:local
     build:
       context: ../web             # Dockerfile、nginx.conf 都在 web/ 裡，前端自己的東西放一起
-    container_name: eat-web
+    container_name: talkcal-web
 
     ports:
       # 18080：跟 app 的 18090 一樣用 1 開頭標示「容器版」。只綁 127.0.0.1，不對區網開放。

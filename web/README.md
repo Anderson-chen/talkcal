@@ -1,6 +1,6 @@
 # web
 
-eat 的前端：Vue 3 + TypeScript + Vite。只是後端 API 的另一個呼叫端（跟 k6、curl 地位一樣），後端不知道它存在。
+talkcal 的前端：Vue 3 + TypeScript + Vite。只是後端 API 的另一個呼叫端（跟 k6、curl 地位一樣），後端不知道它存在。
 
 畫面只有行事曆和它的 AI 助理，對應後端的 calendar 模組：
 

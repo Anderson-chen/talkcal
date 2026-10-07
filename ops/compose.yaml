@@ -14,14 +14,14 @@
 # 刻意不寫 version: 欄位 —— Compose v2 已經不看它了，寫了反而跳 warning。
 
 # 給這組容器一個共同名字前綴，跟別的專案的容器分開；也讓 `docker compose down` 一次收乾淨。
-name: eat-observability
+name: talkcal-observability
 
 services:
   # ── 指標資料庫 ────────────────────────────────────────────────
   # 只存不抓：指標由 Alloy 抓完用 remote_write 推進來。為什麼不用 Prometheus 見 README 的「選型理由」。
   mimir:
     image: grafana/mimir:3.2.1        # 釘死版本，換機器也拉到同一版（跟 build.gradle 釘 JDK 版本同個道理）
-    container_name: eat-mimir
+    container_name: talkcal-mimir
     command:
       - -config.file=/etc/mimir/mimir.yaml
     ports:
@@ -39,7 +39,7 @@ services:
   # ── 日誌資料庫 ────────────────────────────────────────────────
   loki:
     image: grafana/loki:3.3.0
-    container_name: eat-loki
+    container_name: talkcal-loki
     command: -config.file=/etc/loki/loki-config.yaml
     ports:
       - "3100:3100"                   # Loki 的 API 埠。Alloy 往這裡送、Grafana 從這裡查
@@ -51,7 +51,7 @@ services:
   # ── 追蹤資料庫 ────────────────────────────────────────────────
   tempo:
     image: grafana/tempo:3.1.0
-    container_name: eat-tempo
+    container_name: talkcal-tempo
     command:
       - -config.file=/etc/tempo/tempo.yaml
     # 不對主機開任何埠：寫入（4317）只有 Alloy 會來、查詢（3200）只有 Grafana 會來，都在 compose 網路裡。
@@ -64,7 +64,7 @@ services:
   # ── 畫圖前台 ─────────────────────────────────────────────────
   grafana:
     image: grafana/grafana:11.4.0
-    container_name: eat-grafana
+    container_name: talkcal-grafana
     ports:
       - "3000:3000"                   # 主角。開 http://localhost:3000 就是儀表板
     environment:
@@ -92,7 +92,7 @@ services:
   # 管線怎麼接見 alloy/config.alloy。
   alloy:
     image: grafana/alloy:v1.11.0
-    container_name: eat-alloy
+    container_name: talkcal-alloy
     command:
       - run
       - /etc/alloy/config.alloy
@@ -115,11 +115,11 @@ services:
       - alloy-data:/var/lib/alloy/data
     networks:
       # default：這組自己的網路，用服務名稱找 mimir、loki、tempo。
-      # eat-deploy：deploy/ 那組的網路。接上後就能直接用服務名稱抓 app:8090、llm-chat:8080，
+      # talkcal-deploy：deploy/ 那組的網路。接上後就能直接用服務名稱抓 app:8090、llm-chat:8080，
       #   不繞主機、不看 ports 發佈成幾號——跟 deploy/ 裡 app 找模型是同一套規則。
       #   反方向也通：deploy/ 的 app 用 http://alloy:4318 把 trace 送過來。
       - default
-      - eat-deploy
+      - talkcal-deploy
     depends_on:
       - mimir
       - loki
@@ -127,11 +127,11 @@ services:
     restart: unless-stopped
 
 networks:
-  eat-deploy:
+  talkcal-deploy:
     # external：這個網路不歸這組管，`docker compose down` 不會刪它。
-    # deploy/compose.yaml 沒自訂網路，Compose 預設幫它建「<專案名>_default」，專案名是 eat-deploy。
+    # deploy/compose.yaml 沒自訂網路，Compose 預設幫它建「<專案名>_default」，專案名是 talkcal-deploy。
     external: true
-    name: eat-deploy_default
+    name: talkcal-deploy_default
 
 # 具名 volume：資料交給 Docker 管，不落在專案資料夾裡（所以不必動 .gitignore）。
 # 要整組資料清掉重來：docker compose down -v

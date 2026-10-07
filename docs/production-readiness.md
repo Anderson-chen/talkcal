@@ -1,6 +1,6 @@
 # 上線準備清單（Production Readiness）
 
-eat 不只要「能跑」，還要能回答：**上線之後要顧慮哪些事？哪些做了、哪些還沒？**
+talkcal 不只要「能跑」，還要能回答：**上線之後要顧慮哪些事？哪些做了、哪些還沒？**
 這份清單就是那個答案。每補完一項就把狀態改掉並附上證據的連結；還沒做的也照實列出來，已知的缺口比假裝沒有缺口好。
 
 最後盤點：2026-10-07
@@ -24,9 +24,9 @@ eat 不只要「能跑」，還要能回答：**上線之後要顧慮哪些事�
 
 | 面向 | 狀態 | 證據或缺口 |
 |---|---|---|
-| 分層與架構守護 | ✅ | [ArchitectureTest](../src/test/java/eat/ArchitectureTest.java)：用 ArchUnit 把分層規則寫成測試，違反就紅燈 |
+| 分層與架構守護 | ✅ | [ArchitectureTest](../src/test/java/io/github/andersonchen/talkcal/ArchitectureTest.java)：用 ArchUnit 把分層規則寫成測試，違反就紅燈 |
 | 整合測試用真的資料庫 | ✅ | Testcontainers 起真的 PostgreSQL；不用 H2 的理由寫在 [build.gradle](../build.gradle) |
-| API 契約文件 | ✅ | [OpenApiDocumentationTest](../src/test/java/eat/OpenApiDocumentationTest.java) |
+| API 契約文件 | ✅ | [OpenApiDocumentationTest](../src/test/java/io/github/andersonchen/talkcal/OpenApiDocumentationTest.java) |
 | 整個應用接起來的系統測試 | ❌ | 以前有一支對 `/api/chat` 起整個應用、打真 HTTP、接真模型的系統測試，隨著那個端點一起拿掉了。AI 助理目前只有元件層級的整合測試（`CalendarAssistantConversationTest`），還沒有從 HTTP 一路打到模型和資料庫的那一支 |
 | 前端測試 | ❌ | [web/package.json](../web/package.json) 沒有任何測試工具，目前只有 `vue-tsc` 型別檢查 |
 | AI 品質回歸（eval） | ❌ | 改了 prompt 或換模型之後，沒辦法知道有沒有變笨。需要一組固定題目加自動評分 |
@@ -55,14 +55,14 @@ eat 不只要「能跑」，還要能回答：**上線之後要顧慮哪些事�
 | 面向 | 狀態 | 證據或缺口 |
 |---|---|---|
 | 指標、log、trace 三種訊號 | ✅ | [ops/](../ops/README.md)：Alloy → Mimir / Loki / Tempo → Grafana，4 個 dashboard |
-| 結構化 log 帶 trace id | ✅ | 容器裡用 ECS 格式；[AccessLogTraceIdTest](../src/test/java/eat/conversation/adapter/in/web/AccessLogTraceIdTest.java) |
+| 結構化 log 帶 trace id | ✅ | 容器裡用 ECS 格式；[AccessLogTraceIdTest](../src/test/java/io/github/andersonchen/talkcal/AccessLogTraceIdTest.java) |
 | 健康檢查 | ✅ | compose healthcheck 打 `/actuator/health` |
 | Actuator 暴露面 | ⚠️ | 只開 `health`、`prometheus`，但跟 API 同一個埠，沒有分開只給內網 |
 | 壓測與容量 | ✅ | [perf/](../perf/README.md)：smoke、load、knee，用 Little's Law 驗算 |
 | SLO | ❌ | 沒定義什麼叫「夠好」；dashboard 能看，但沒有可以比較的標準 |
 | 成本 | ❌ | 沒記錄 token 用量，沒算過自架 GPU 和雲端 API 在多少用量時交叉 |
 | 產品指標 | ❌ | 知道系統健不健康，不知道功能有沒有人用（例如助理提議的行程被採納幾成） |
-| 資料保存期限 | ✅ | [AssistantMemoryCleanup](../src/main/java/eat/AssistantMemoryCleanup.java)：30 天沒說話的對話每天清掉 |
+| 資料保存期限 | ✅ | [AssistantMemoryCleanup](../src/main/java/io/github/andersonchen/talkcal/AssistantMemoryCleanup.java)：30 天沒說話的對話每天清掉 |
 | Trace 取樣率 | ⚠️ | 目前 100% 取樣。本機沒問題，上線流量大時要調整 |
 
 ## ④ 出事的時候（Respond）
