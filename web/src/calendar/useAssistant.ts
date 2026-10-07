@@ -5,11 +5,12 @@
 // 一句話可以提議好幾筆，每筆一張卡片；可以先「修改」（帶到新增表單）或「移除」某一筆，再一次全部加入。
 //
 // 對話的記憶在後端，這裡只記 conversationId（存在 localStorage）和畫面上的訊息。
-// 重新整理之後，用 conversationId 向後端讀回那段對話的文字接著聊；按「清空」就連後端那段一起刪掉、從頭開始。
+// 重新整理之後，用 conversationId 向後端讀回那段對話的文字接著聊；按「清空」只是丟掉這個 id，下一句由後端發新的 id、從頭開始。
+// 後端那段不刪：清空是「這台瀏覽器不再接那段」，不是銷毀紀錄；沒人接的舊對話由後端每天的清理排程處理（30 天）。
 // 讀回來的舊訊息不帶卡片：卡片當時是加入還是取消，後端沒有記，顯示可能已過時的卡片不如不顯示。
 
 import { inject, ref, type InjectionKey } from 'vue'
-import { assistantHistory, forgetConversation, talkToAssistant, type EventFields } from '../calendar'
+import { assistantHistory, talkToAssistant, type EventFields } from '../calendar'
 import { message, type CalendarState } from './useCalendar'
 
 export type ProposalStatus = 'pending' | 'added' | 'removed'
@@ -63,7 +64,6 @@ export function useAssistant(calendar: CalendarState) {
   const input = ref('')
   const typing = ref(false)
   const saving = ref(false)
-  const clearing = ref(false)
   // 後端那段對話的身分：第一句之後才有，之後每句都帶著；重新整理後從 localStorage 拿回來
   let conversationId = loadConversationId()
 
@@ -88,21 +88,13 @@ export function useAssistant(calendar: CalendarState) {
   }
   restore()
 
-  /** 清空：後端那段一起刪掉、從頭開始。刪不掉（後端出事）就留著，讓使用者知道沒清成。 */
-  async function clear() {
-    if (clearing.value || typing.value) return
-    clearing.value = true
-    try {
-      if (conversationId) await forgetConversation(conversationId)
-      conversationId = undefined
-      saveConversationId(undefined)
-      messages.value = [say('ai', GREETING)]
-      input.value = ''
-    } catch (e) {
-      messages.value.push(say('ai', `清空失敗：${message(e)}。可以稍後再試一次。`))
-    } finally {
-      clearing.value = false
-    }
+  /** 清空：丟掉 conversationId，下一句不帶 id，後端就開一段新的。不用等後端，也就不會清空失敗。 */
+  function clear() {
+    if (typing.value) return
+    conversationId = undefined
+    saveConversationId(undefined)
+    messages.value = [say('ai', GREETING)]
+    input.value = ''
   }
 
   async function send(text = input.value) {
@@ -154,7 +146,7 @@ export function useAssistant(calendar: CalendarState) {
     })
   }
 
-  return { messages, input, typing, saving, clearing, send, confirm, cancel, drop, edit, clear }
+  return { messages, input, typing, saving, send, confirm, cancel, drop, edit, clear }
 }
 
 export type AssistantState = ReturnType<typeof useAssistant>

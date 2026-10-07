@@ -13,14 +13,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -35,7 +33,9 @@ import java.util.UUID;
  * 提議的行程跟 /parse 回的是同一個形狀（EventFields），畫面照樣顯示卡片、使用者確認後送 POST /events 才存。
  *
  * 多輪對話靠 conversationId（UUID）：第一句不帶，回應裡會拿到一個；之後每句帶著它。歷史存在伺服器。
- * 重新整理頁面後用 GET 讀回那段對話給人看的部分；「清空」用 DELETE。
+ * 重新整理頁面後用 GET 讀回那段對話給人看的部分。
+ * 沒有 DELETE：「清空」是前端丟掉 conversationId、下一句開新的一段；舊的那段留給每天的清理排程（AssistantMemoryCleanup）。
+ * 紀錄只由排程按保留期限刪，不讓一個按鈕（或任何拿得到 id 的請求）把它抹掉。
  */
 @RestController
 @RequestMapping("/api/calendar/assistant")
@@ -78,19 +78,6 @@ public final class CalendarAssistantController {
         return new AssistantHistory(id, assistant.history(id).stream()
                 .map(line -> new AssistantLine(line.fromUser() ? "user" : "assistant", line.text()))
                 .toList());
-    }
-
-    @DeleteMapping("/{conversationId}")
-    // 204，而且本來就沒有也是 204：「清空」要的結果就是「它不在」，按兩次不該報錯
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "清空一段對話")
-    @ApiResponse(responseCode = "204", description = "清掉了（本來就沒有也一樣）")
-    @ApiResponse(responseCode = "400", description = "conversationId 不是 UUID",
-            content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
-    @ApiResponse(responseCode = "502", description = "資料庫出事；稍後重試",
-            content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
-    public void forget(@PathVariable String conversationId) {
-        assistant.forget(existingConversationId(conversationId));
     }
 
     private static String existingConversationId(String requested) {

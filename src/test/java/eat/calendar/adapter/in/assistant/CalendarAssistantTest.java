@@ -212,21 +212,6 @@ class CalendarAssistantTest {
     }
 
     @Test
-    @DisplayName("forget：清空之後讀回來是空的，下一句是全新的對話；本來就沒有也不算錯")
-    void forgetClearsTheConversation() {
-        CalendarAssistant assistant = assistant(scripted(says("好")));
-        assistant.reply(ID, "明天有什麼行程？");
-
-        assistant.forget(ID);
-        assistant.forget(ID);
-
-        assertTrue(assistant.history(ID).isEmpty());
-        assistant.reply(ID, "嗨");
-        // 清空後的第一句：送給模型的只有 system 和這一句
-        assertEquals(2, prompts.getLast().getInstructions().size());
-    }
-
-    @Test
     @DisplayName("使用者回報：沒呼叫工具卻說「已顯示卡片」→ 提醒它重來；它這次真的呼叫了，就照常出卡片。那句假話和提醒都不進記憶")
     void falseClaimIsCorrected() {
         CalendarAssistant.Reply reply = assistant(scripted(says("已顯示卡片，請確認。"), proposes("這週三中午寫日記"), says("請確認卡片。")))

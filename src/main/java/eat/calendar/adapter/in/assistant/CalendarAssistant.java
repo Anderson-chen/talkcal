@@ -112,7 +112,7 @@ public final class CalendarAssistant {
      *
      * 記憶是給模型看的格式，裡面有工具呼叫和工具結果；這裡全部濾掉 —— 那是助理怎麼做到的，不是它說了什麼。
      * 提議過的卡片也不回：卡片後來是加入了還是取消了，記憶裡沒有，顯示一張可能已經過時的卡片不如不顯示。
-     * 沒有這段對話（從來沒有、或已經清空）就是空的。
+     * 沒有這段對話（從來沒有、或已經被清理排程刪掉）就是空的。
      */
     public List<Line> history(String conversationId) {
         Objects.requireNonNull(conversationId, "conversationId 不可為 null");
@@ -124,16 +124,6 @@ public final class CalendarAssistant {
                     .toList();
         } catch (RuntimeException e) {
             throw new IllegalStateException("讀取 AI 助理的對話失敗：" + e.getMessage(), e);
-        }
-    }
-
-    /** 清空這段對話（刪掉記憶）。本來就沒有也不算錯：使用者要的結果本來就是「它不在」。 */
-    public void forget(String conversationId) {
-        Objects.requireNonNull(conversationId, "conversationId 不可為 null");
-        try {
-            memory.deleteByConversationId(conversationId);
-        } catch (RuntimeException e) {
-            throw new IllegalStateException("清空 AI 助理的對話失敗：" + e.getMessage(), e);
         }
     }
 

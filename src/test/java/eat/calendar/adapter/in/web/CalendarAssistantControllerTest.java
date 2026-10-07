@@ -1,6 +1,5 @@
 package eat.calendar.adapter.in.web;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -113,22 +112,9 @@ class CalendarAssistantControllerTest {
     }
 
     @Test
-    @DisplayName("DELETE：清空，204；之後讀回來是空的；再清一次也是 204")
-    void forget() throws Exception {
-        String id = "5e34e2f8-aee9-48ce-99fc-3795ac34278f";
-        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"message\":\"嗨\",\"conversationId\":\"" + id + "\"}"));
-
-        mockMvc.perform(delete(URL + "/" + id)).andExpect(status().isNoContent());
-        mockMvc.perform(delete(URL + "/" + id)).andExpect(status().isNoContent());
-        mockMvc.perform(get(URL + "/" + id)).andExpect(jsonPath("$.messages").isEmpty());
-    }
-
-    @Test
-    @DisplayName("GET、DELETE 的 conversationId 不是 UUID：400")
-    void badIdOnHistoryAndForget() throws Exception {
+    @DisplayName("GET 的 conversationId 不是 UUID：400")
+    void badIdOnHistory() throws Exception {
         mockMvc.perform(get(URL + "/abc")).andExpect(status().isBadRequest());
-        mockMvc.perform(delete(URL + "/abc")).andExpect(status().isBadRequest());
     }
 
     @TestConfiguration(proxyBeanMethods = false)

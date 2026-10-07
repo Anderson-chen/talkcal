@@ -59,11 +59,6 @@ export async function assistantHistory(conversationId: string): Promise<Assistan
   return (await res.json()) as AssistantHistory
 }
 
-/** 清空一段對話。本來就沒有也算成功。 */
-export async function forgetConversation(conversationId: string): Promise<void> {
-  await send(`/api/calendar/assistant/${encodeURIComponent(conversationId)}`, { method: 'DELETE' })
-}
-
 /** 把確認過的草稿（或手動表單）存起來。全部存或全部不存；有一筆不合規就整批 400。 */
 export async function addEvents(events: EventFields[]): Promise<SavedEvent[]> {
   const res = await send('/api/calendar/events', { method: 'POST', body: JSON.stringify({ events }) })
