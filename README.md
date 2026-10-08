@@ -6,8 +6,7 @@
 也能問「這週末有空嗎？」「下週一早上有哪些空檔？」。模型自己架（llama.cpp + Qwen3-8B），不呼叫雲端 API。
 
 這個 repo 是作品集。功能刻意只做一條主線，重點放在**一個產品上線後要顧慮的事**：
-架構怎麼守、怎麼觀測、怎麼壓測、怎麼部署，以及還缺什麼。
-目前做到哪、缺什麼，照生命週期盤點在 **[上線準備清單](docs/production-readiness.md)**。
+架構怎麼守、怎麼觀測、怎麼壓測、怎麼部署。
 
 ## 架構
 
@@ -42,7 +41,7 @@ deploy/    把 app、前端、模型、資料庫跑起來的 Docker Compose
 ops/       觀測：Alloy → Mimir / Loki / Tempo → Grafana
 perf/      k6 壓測
 ci/        CI 要檢查什麼、在什麼環境檢查
-docs/      上線準備清單、設計稿
+docs/      設計稿
 ```
 
 ## 程式結構
@@ -123,7 +122,6 @@ CI 在每次 push、PR 時於 GitHub 上跑，本機則由 pre-push hook 在推�
 
 | 想知道 | 看哪裡 |
 |---|---|
-| 上線要顧哪些事、做到哪 | [docs/production-readiness.md](docs/production-readiness.md) |
 | 怎麼部署、容器之間怎麼溝通、對照雲端是什麼 | [deploy/README.md](deploy/README.md) |
 | 怎麼觀測、三種訊號怎麼互跳 | [ops/README.md](ops/README.md) |
 | 怎麼壓測、怎麼讀結果 | [perf/README.md](perf/README.md) |
