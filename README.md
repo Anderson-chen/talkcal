@@ -51,8 +51,12 @@ docs/      上線準備清單、設計稿
 
 ```
 io.github.andersonchen.talkcal
-├── Application、CalendarConfiguration …   組裝根：唯一認識具體實作的地方
-└── calendar
+├── Application            只負責啟動（留在根 package，元件掃描和測試都從這裡找起）
+├── app                    組裝根，代表整個應用程式：業務模組不知道自己被怎麼組起來
+│   ├── config             所有 @Configuration，唯一認識具體實作的地方
+│   ├── job                排程工作（每天清舊對話）
+│   └── observability      全站共用的 access log
+└── calendar               行事曆這門業務，一個模組
     ├── application
     │   ├── domain.model     業務規則（CalendarEvent、FreeSlots…），純 Java，不認識 Spring
     │   ├── domain.service   use case 的實作，只呼叫 model 和 port
@@ -64,7 +68,7 @@ io.github.andersonchen.talkcal
 ```
 
 分層規則寫成 [ArchitectureTest](backend/src/test/java/io/github/andersonchen/talkcal/ArchitectureTest.java)（ArchUnit）：
-依賴只能由外往內、core 不准依賴 Spring 和 Jackson、只有組裝根能認識 adapter 的具體類別。違反就紅燈，不靠 code review 記得。
+依賴只能由外往內、core 不准依賴 Spring 和 Jackson、只有組裝根（app.config、app.job）能認識 adapter 的具體類別、模組之間互不 import。違反就紅燈，不靠 code review 記得。
 
 ## 技術選型
 

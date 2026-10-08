@@ -5,6 +5,8 @@ import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
+import static com.tngtech.archunit.base.DescribedPredicate.alwaysTrue;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAnyPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
@@ -27,8 +29,15 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
 @AnalyzeClasses(packages = ArchitectureTest.ROOT, importOptions = ImportOption.DoNotIncludeTests.class)
 class ArchitectureTest {
 
-    // 根 package：組裝根（Application、各模組的 Configuration）就住在這一層，功能模組是它底下的子 package
+    // 根 package：只有 Application。底下是 app（組裝根，代表整個應用程式）和各業務模組（calendar）
     static final String ROOT = "io.github.andersonchen.talkcal";
+
+    // app 裡唯一可以認識 adapter 具體類別、也可以同時認識好幾個模組的兩個 package：
+    //   app.config —— 所有 @Configuration（誰接誰）
+    //   app.job    —— 排程工作（直接做某張表的維護，例如清舊對話）
+    // app.observability 也在 app 裡，但它是全站共用的觀測，不需要、也不准認識任何一門業務
+    static final String CONFIG = ROOT + ".app.config..";
+    static final String JOB = ROOT + ".app.job..";
 
     /**
      * 最重要的一條：依賴方向只能由外往內。
@@ -62,7 +71,7 @@ class ArchitectureTest {
                     .because("inbound 只該透過 port 使喚 core，core 才決定要不要呼叫 outbound");
 
     /**
-     * 只有組裝根可以認識具體的實作。下面兩條是同一句話套在 adapter.out 的兩個子樹上。
+     * 只有組裝根裡的 app.config、app.job 可以認識具體的實作。下面兩條是同一句話套在 adapter.out 的兩個子樹上。
      *
      * adapter.out 底下每個 package 就是「某一種往外的實作們」：
      * persistence 放 Save / Load / DeleteEventPort 的（和助理的對話記憶）、extraction 放 ExtractEventsPort 的，
@@ -72,7 +81,7 @@ class ArchitectureTest {
      */
     @ArchTest
     static final ArchRule onlyTheCompositionRootMayKnowThePersistenceAdapters =
-            noClasses().that().resideOutsideOfPackages(ROOT, "..adapter.out.persistence..")
+            noClasses().that().resideOutsideOfPackages(CONFIG, JOB, "..adapter.out.persistence..")
                     .should().dependOnClassesThat().resideInAPackage("..adapter.out.persistence..")
                     .because("存在哪（PostgreSQL、別的資料庫、記憶體）是組裝時的決定；"
                             + "SQL 和表的長相只該出現在 persistence 這一包");
@@ -80,7 +89,7 @@ class ArchitectureTest {
     // ExtractEventsPort 的實作們（目前只有 Spring AI 那個）
     @ArchTest
     static final ArchRule onlyTheCompositionRootMayKnowTheExtractionAdapters =
-            noClasses().that().resideOutsideOfPackages(ROOT, "..adapter.out.extraction..")
+            noClasses().that().resideOutsideOfPackages(CONFIG, JOB, "..adapter.out.extraction..")
                     .should().dependOnClassesThat().resideInAPackage("..adapter.out.extraction..")
                     .because("用哪個模型解析行程是組裝時的決定；日期表、JSON Schema 這些只對某顆模型有效的手法，"
                             + "只該出現在 extraction 這一包");
@@ -163,17 +172,18 @@ class ArchitectureTest {
      * 目前只有 calendar 一個模組（一般問答的 conversation 模組已經拿掉），這條暫時不會擋到東西。
      * 留著是因為 AI 助理遲早要拆成自己的模組（見 AssistantMemoryCleanup 的註解），拆開那天它就開始守門。
      *
-     * ROOT.(*).. 把根 package 底下第一層的 package 各切成一片（一個模組一片）；
-     * 根 package 本身（Application、各模組的 Configuration）不在任何一片裡，
-     * 所以組裝根照樣可以同時認識兩個模組 —— 那正是它的工作。
+     * ROOT.(*).. 把根 package 底下第一層的 package 各切成一片（一個模組一片），app 也是一片。
+     * app 裡的 config、job 是組裝根，本來就要認識各個模組 —— 從它們出發的依賴不算；
+     * app.observability 沒有這個豁免：它是全站共用的觀測，同樣不准認識任何一門業務。
      *
      * 哪天一個模組需要另一個模組的能力，該做的是在自己模組裡定義一個 outbound port，
-     * 由組裝根接上另一個模組的 use case，而不是直接 import 對方的類別。
+     * 由 app.config 接上另一個模組的 use case，而不是直接 import 對方的類別。
      */
     @ArchTest
     static final ArchRule modulesMustNotDependOnEachOther =
             slices().matching(ROOT + ".(*)..")
                     .should().notDependOnEachOther()
+                    .ignoreDependency(resideInAnyPackage(CONFIG, JOB), alwaysTrue())
                     .because("模組直接互相 import，就再也沒辦法單獨改動、單獨拆出去其中一個");
 
     /**

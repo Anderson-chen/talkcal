@@ -1,4 +1,4 @@
-package io.github.andersonchen.talkcal;
+package io.github.andersonchen.talkcal.app.observability;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;

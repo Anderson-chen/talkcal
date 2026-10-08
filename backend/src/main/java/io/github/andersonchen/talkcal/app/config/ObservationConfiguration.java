@@ -1,4 +1,4 @@
-package io.github.andersonchen.talkcal;
+package io.github.andersonchen.talkcal.app.config;
 
 import io.micrometer.observation.ObservationPredicate;
 import org.springframework.context.annotation.Bean;
@@ -13,8 +13,8 @@ import org.springframework.http.server.observation.ServerRequestObservationConte
  *   往外的呼叫  —— Spring AI 的 ChatModel 自己開的 Observation
  * 這裡只負責把不值得看的擋掉。
  *
- * 跟 CalendarConfiguration 分開：那邊回答「calendar 模組誰接誰」，
- * 這邊回答的是整個 app 共用的維運決定，不屬於任何一個功能模組。
+ * 跟 CalendarConfiguration 同放在 app.config（組裝都集中在這裡），但分成兩個類別：
+ * 那邊回答「calendar 模組誰接誰」，這邊回答的是整個 app 共用的維運決定，不屬於任何一個功能模組。
  */
 @Configuration(proxyBeanMethods = false)
 class ObservationConfiguration {

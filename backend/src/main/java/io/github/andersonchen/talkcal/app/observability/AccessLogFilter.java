@@ -1,4 +1,4 @@
-package io.github.andersonchen.talkcal;
+package io.github.andersonchen.talkcal.app.observability;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -25,8 +25,8 @@ import java.util.concurrent.TimeUnit;
  * 容器裡的 log 一律寫 stdout 給 Alloy 收（見 ops/alloy/config.alloy），
  * 走 SLF4J 才會跟其他 log 一樣在 docker profile 下印成 ECS JSON，Loki 用 `| json` 就拆得開。
  *
- * 為什麼放在根 package、不放在某個模組的 adapter.in.web：它記的是整個應用的每一個請求，
- * 不屬於任何一門業務，跟 ObservationConfiguration 一樣是全站的觀測設定。core 照樣不知道有 HTTP 這回事。
+ * 為什麼放在 app.observability、不放在某個模組的 adapter.in.web：它記的是整個應用的每一個請求，
+ * 不屬於任何一門業務，跟 app.config 的 ObservationConfiguration 一樣是全站的觀測設定。core 照樣不知道有 HTTP 這回事。
  *
  * 請求內容（body）也一起記在同一行：一次請求的「送了什麼」和「回幾號、花多久」放在一起，
  * 在 Loki 查一筆就看得完整，不必再拿時間去對另一行 log。

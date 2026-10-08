@@ -1,4 +1,4 @@
-package io.github.andersonchen.talkcal;
+package io.github.andersonchen.talkcal.app.config;
 
 import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.CalendarAssistant;
 import io.github.andersonchen.talkcal.calendar.adapter.out.extraction.springai.SpringAiExtractEventsAdapter;
@@ -18,6 +18,7 @@ import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteEventP
 import io.github.andersonchen.talkcal.calendar.application.port.out.ExtractEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPort;
+import io.github.andersonchen.talkcal.app.job.AssistantMemoryCleanup;
 
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,8 +36,9 @@ import java.time.ZoneId;
 /**
  * calendar 模組的接線：哪個 port 用哪個實作、use case 怎麼 new 出來。一個模組一個 Configuration。
  *
- * 放在根 package、類別不 public、proxyBeanMethods = false：
- * 組裝根站在所有模組外面，才有資格認識 adapter 的具體類別（ArchitectureTest 只准這一圈認識它們）；
+ * 放在 app.config、類別不 public、proxyBeanMethods = false：
+ * 所有「誰接誰」的決定集中在 app.config 這一個 package —— 想知道某個介面背後是哪個實作，只要看這裡。
+ * 組裝根站在所有模組外面，才有資格認識 adapter 的具體類別（ArchitectureTest 只准 app.config、app.job 認識它們）；
  * 沒有程式該直接引用它，Bean 方法之間也不互相呼叫。
  *
  * 跟模型有關的 bean（ChatModel）是 Spring AI 依 application.properties 的 spring.ai.* 自動建的 ——

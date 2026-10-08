@@ -55,14 +55,14 @@ talkcal 不只要「能跑」，還要能回答：**上線之後要顧慮哪些�
 | 面向 | 狀態 | 證據或缺口 |
 |---|---|---|
 | 指標、log、trace 三種訊號 | ✅ | [ops/](../ops/README.md)：Alloy → Mimir / Loki / Tempo → Grafana，4 個 dashboard |
-| 結構化 log 帶 trace id | ✅ | 容器裡用 ECS 格式；[AccessLogTraceIdTest](../backend/src/test/java/io/github/andersonchen/talkcal/AccessLogTraceIdTest.java) |
+| 結構化 log 帶 trace id | ✅ | 容器裡用 ECS 格式；[AccessLogTraceIdTest](../backend/src/test/java/io/github/andersonchen/talkcal/app/observability/AccessLogTraceIdTest.java) |
 | 健康檢查 | ✅ | compose healthcheck 打 `/actuator/health` |
 | Actuator 暴露面 | ⚠️ | 只開 `health`、`prometheus`，但跟 API 同一個埠，沒有分開只給內網 |
 | 壓測與容量 | ✅ | [perf/](../perf/README.md)：smoke、load、knee，用 Little's Law 驗算 |
 | SLO | ❌ | 沒定義什麼叫「夠好」；dashboard 能看，但沒有可以比較的標準 |
 | 成本 | ❌ | 沒記錄 token 用量，沒算過自架 GPU 和雲端 API 在多少用量時交叉 |
 | 產品指標 | ❌ | 知道系統健不健康，不知道功能有沒有人用（例如助理提議的行程被採納幾成） |
-| 資料保存期限 | ✅ | [AssistantMemoryCleanup](../backend/src/main/java/io/github/andersonchen/talkcal/AssistantMemoryCleanup.java)：30 天沒說話的對話每天清掉 |
+| 資料保存期限 | ✅ | [AssistantMemoryCleanup](../backend/src/main/java/io/github/andersonchen/talkcal/app/job/AssistantMemoryCleanup.java)：30 天沒說話的對話每天清掉 |
 | Trace 取樣率 | ⚠️ | 目前 100% 取樣。本機沒問題，上線流量大時要調整 |
 
 ## ④ 出事的時候（Respond）

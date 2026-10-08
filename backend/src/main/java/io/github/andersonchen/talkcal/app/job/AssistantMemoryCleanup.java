@@ -1,4 +1,4 @@
-package io.github.andersonchen.talkcal;
+package io.github.andersonchen.talkcal.app.job;
 
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository;
 
@@ -17,12 +17,15 @@ import java.util.Objects;
  * 按「清空」（前端只丟掉 id，後端不刪）或換瀏覽器之後，舊的那段就沒人接得回來了，只會一直留在表裡。
  * 這裡是唯一會刪對話紀錄的地方。
  *
- * 為什麼放在組裝根、不放在 adapter.in：計時器也算是「從外面推進來」的入口，
+ * 為什麼放在 app.job、不放在 calendar 的 adapter.in：計時器也算是「從外面推進來」的入口，
  * 但它要直接用 JdbcAssistantMemoryRepository（不是 port，是這張表自己的維護工作），
- * 而 ArchitectureTest 只准組裝根認識 adapter.out.persistence。
+ * 而 ArchitectureTest 只准組裝根裡的 app.config、app.job 認識 adapter.out.persistence。
+ * 排程工作集中在 app.job：「這個 app 背地裡會自己做哪些事」一眼看得完，不必在各模組裡找 @Scheduled。
+ *
+ * 類別和建構子是 public：由 app.config 的 CalendarConfiguration 建出來，跨 package 了。
  * C 重構把助理搬成自己的模組時，這裡跟著改成呼叫那邊的 use case。
  */
-final class AssistantMemoryCleanup {
+public final class AssistantMemoryCleanup {
 
     private static final Logger log = LoggerFactory.getLogger(AssistantMemoryCleanup.class);
 
@@ -30,7 +33,7 @@ final class AssistantMemoryCleanup {
     private final Duration retention;
     private final Clock clock;
 
-    AssistantMemoryCleanup(JdbcAssistantMemoryRepository memory, Duration retention, Clock clock) {
+    public AssistantMemoryCleanup(JdbcAssistantMemoryRepository memory, Duration retention, Clock clock) {
         this.memory = Objects.requireNonNull(memory, "memory 不可為 null");
         this.retention = Objects.requireNonNull(retention, "retention 不可為 null");
         this.clock = Objects.requireNonNull(clock, "clock 不可為 null");
