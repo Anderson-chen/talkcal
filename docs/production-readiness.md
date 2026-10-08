@@ -3,7 +3,7 @@
 talkcal 不只要「能跑」，還要能回答：**上線之後要顧慮哪些事？哪些做了、哪些還沒？**
 這份清單就是那個答案。每補完一項就把狀態改掉並附上證據的連結；還沒做的也照實列出來，已知的缺口比假裝沒有缺口好。
 
-最後盤點：2026-10-07
+最後盤點：2026-10-08
 
 ## 怎麼分類
 
@@ -58,7 +58,7 @@ talkcal 不只要「能跑」，還要能回答：**上線之後要顧慮哪些�
 | 結構化 log 帶 trace id | ✅ | 容器裡用 ECS 格式；[AccessLogTraceIdTest](../backend/src/test/java/io/github/andersonchen/talkcal/app/observability/AccessLogTraceIdTest.java) |
 | 健康檢查 | ✅ | compose healthcheck 打 `/actuator/health` |
 | Actuator 暴露面 | ⚠️ | 只開 `health`、`prometheus`，但跟 API 同一個埠，沒有分開只給內網 |
-| 壓測與容量 | ✅ | [perf/](../perf/README.md)：smoke、load、knee，用 Little's Law 驗算 |
+| 壓測與容量 | ✅ | [perf/](../perf/README.md)：smoke、load、knee，用 Little's Law 驗算。k6 的指標還沒接進 Grafana，壓測曲線不能跟 app、模型的指標疊在同一張圖上看 |
 | SLO | ❌ | 沒定義什麼叫「夠好」；dashboard 能看，但沒有可以比較的標準 |
 | 成本 | ❌ | 沒記錄 token 用量，沒算過自架 GPU 和雲端 API 在多少用量時交叉 |
 | 產品指標 | ❌ | 知道系統健不健康，不知道功能有沒有人用（例如助理提議的行程被採納幾成） |
@@ -81,7 +81,7 @@ talkcal 不只要「能跑」，還要能回答：**上線之後要顧慮哪些�
 
 | 面向 | 狀態 | 證據或缺口 |
 |---|---|---|
-| 根目錄 README | ❌ | 打開 repo 第一眼沒有說明 |
+| 根目錄 README | ✅ | [README.md](../README.md)：產品是什麼、作品集想展示什麼、架構圖、怎麼跑、文件地圖 |
 | 決策紀錄（ADR） | ⚠️ | 理由都寫在程式碼註解和各目錄的 README，但沒有集中的地方說明「為什麼選 Spring AI、llama.cpp、JDBC」 |
 | 相依套件升級 | ❌ | 沒有 Renovate 或 Dependabot |
 | 並行修改 | ❌ | `calendar_event` 沒有 version 欄位，兩個分頁同時改會互相覆蓋；助理的對話記憶是整段刪掉重插，同一段對話同時兩句，晚存的蓋掉早的（[V7](../backend/src/main/resources/db/migration/V7__create_calendar_assistant_message.sql) 寫明接受這個代價） |
@@ -97,8 +97,8 @@ talkcal 不只要「能跑」，還要能回答：**上線之後要顧慮哪些�
 
 | 順序 | 做什麼 | 為什麼排在這裡 |
 |---|---|---|
-| 1 | 推上 GitHub、寫根目錄 README、補 CI | 其他東西都要靠這三樣才看得到、才有自動把關 |
-| 2 | 驗證並修好 graceful shutdown，寫成第一份 postmortem | 一個真實的問題同時練到部署、k6、事故處理 |
+| ~~1~~ | ~~推上 GitHub、寫根目錄 README、補 CI~~ ✅ | 其他東西都要靠這三樣才看得到、才有自動把關 |
+| 2 | 先把 k6 接進 Grafana，再驗證並修好 graceful shutdown，寫成第一份 postmortem | 一個真實的問題同時練到部署、k6、事故處理；k6 先接上 Grafana，邊壓邊部署時失敗尖峰、錯誤率、部署時間點才會在同一張圖上，證據一次到位 |
 | 3 | SLO、告警、runbook | 讓 `ops/` 從「看得到」變成「出事會叫人」 |
 | 4 | AI eval | LLM 產品特有的品質把關 |
 | 5 | Rate limit、prompt injection 防線 | 資安 |
