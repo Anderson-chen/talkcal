@@ -132,9 +132,6 @@ testing {
             dependencies {
                 // 測的是正式程式，所以要看得到 main 的類別
                 implementation project()
-                // Boot 4 把 TestRestTemplate 搬成獨立模組；只有 ChatApiSystemTest（真的走 HTTP）用得到，
-                // 所以只加在這個 suite，不污染單元測試的 classpath
-                implementation 'org.springframework.boot:spring-boot-resttestclient'
                 // 整合測試要真的 PostgreSQL：Testcontainers 每次測試起一個乾淨的容器，測完丟掉。
                 // 不用 H2 這類記憶體資料庫：SQL 方言不同（例如 ON CONFLICT），在 H2 綠燈不代表在 PostgreSQL 會過。
                 // spring-boot-testcontainers 讓 @ServiceConnection 自動把容器的連線資訊接進 Spring，不必手寫 URL。
