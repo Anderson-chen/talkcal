@@ -41,8 +41,8 @@ talkcal 不只要「能跑」，還要能回答：**上線之後要顧慮哪些�
 
 | 面向 | 狀態 | 證據或缺口 |
 |---|---|---|
-| 原始碼放在公開平台 | ❌ | 還沒有 git remote |
-| CI | ⚠️ | [ci/](../ci/README.md)：每次 push、PR 在乾淨的容器裡跑後端測試和前端打包，本機 pre-push 跑同一支。本機實測通過（有快取 30 秒、全新 2 分多）；GitHub 上的第一次執行還沒確認。GitHub 沒有 GPU，模型測試只在本機會真的跑 |
+| 原始碼放在公開平台 | ✅ | [GitHub：Anderson-chen/talkcal](https://github.com/Anderson-chen/talkcal)，公開 |
+| CI | ✅ | [ci/](../ci/README.md)：每次 push、PR 在乾淨的容器裡跑後端測試和前端打包，本機 pre-push 跑同一支。GitHub 上約 2 分 20 秒、本機有快取 30 秒。GitHub 沒有 GPU，模型測試只在本機會真的跑，跳過的會列在結果頁 |
 | 一鍵部署 | ✅ | `./gradlew deploy`，見 [deploy/README.md](../deploy/README.md) |
 | DB migration | ✅ | [Flyway V1–V7](../backend/src/main/resources/db/migration) |
 | 零停機的 schema 變更 | ❌ | 沒演練過 expand/contract（改欄位時新舊版本會同時在線） |
