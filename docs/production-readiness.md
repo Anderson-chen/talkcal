@@ -14,6 +14,8 @@ talkcal 不只要「能跑」，還要能回答：**上線之後要顧慮哪些�
 - [Mercari Production Readiness Checklist](https://github.com/mercari/production-readiness-checklist)：GitHub 上公開、實際在用的版本，分成 Maintainability / Observability / Reliability / Security / Data Storage，依 SLO 分等級決定要做到哪些
 - [AWS Well-Architected Generative AI Lens](https://docs.aws.amazon.com/wellarchitected/latest/generative-ai-lens/generative-ai-lens.html)：六根支柱套在生成式 AI 的生命週期上（選模型、prompt、整合、部署、持續改進）
 - [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/)、[OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/)：LLM 和 agent 特有的資安風險；表格裡的 `LLM01` 這類編號指的是這份
+- [trunkbaseddevelopment.com](https://trunkbaseddevelopment.com/)、[Git Flow 原文與作者 2020 年的補註](https://nvie.com/posts/a-successful-git-branching-model/)：分支策略和 hotfix 怎麼選
+- [AGENTS.md](https://agents.md/)、[DORA](https://dora.dev/)：AI 寫程式時，規則怎麼跟著 repo 走、怎麼量 AI 對交付的影響
 
 ```
 ① 能不能上線    ② 怎麼上線      ③ 跑起來之後     ④ 出事的時候     ⑤ 長期活下去
@@ -44,13 +46,14 @@ talkcal 不只要「能跑」，還要能回答：**上線之後要顧慮哪些�
 | 祕密管理 | ⚠️ | [application.properties](../backend/src/main/resources/application.properties) 直接寫著資料庫密碼。開發用可以，上線要改從環境變數或 secrets 注入 |
 | Container 加固 | ✅ | [Dockerfile](../backend/Dockerfile)：兩段式 build、不跑 root、exec 形式讓 JVM 收得到 SIGTERM |
 | 相依套件與映像檔掃描 | ❌ | 沒有 Trivy、OWASP dependency-check |
+| 祕密掃描 | ❌ | 沒有 gitleaks 這類工具，不小心把 API key commit 進去不會被擋。現在只有假 key，換成雲端模型之後就會有真的 |
 | 第三方映像檔與模型檔的來源 | ✅ | [compose](../deploy/compose.yaml) 裡的 postgres、llama.cpp 映像檔都釘死版本，不用 `latest`；模型檔複製進 volume 時比對 SHA256，對不上模型服務就不啟動（`LLM03` Supply Chain） |
 
 ## ② 怎麼上線（Release）
 
 | 面向 | 狀態 | 證據或缺口 |
 |---|---|---|
-| 原始碼放在公開平台 | ✅ | [GitHub：Anderson-chen/talkcal](https://github.com/Anderson-chen/talkcal)，公開 |
+| 原始碼放在 GitHub | ✅ | [GitHub：Anderson-chen/talkcal](https://github.com/Anderson-chen/talkcal)，公開（2026-10-08 從私人改回來，為了開得了 branch protection）。`docs/` 底下這份清單和它的 git 歷史也看得到；repo 裡沒有真的祕密（資料庫密碼、API key 都是本機用的假值） |
 | CI | ✅ | [ci/](../ci/README.md)：每次 push、PR 在乾淨的容器裡跑後端測試和前端打包，本機 pre-push 跑同一支。GitHub 上約 2 分 20 秒、本機有快取 30 秒。GitHub 沒有 GPU，模型測試只在本機會真的跑，跳過的會列在結果頁 |
 | 一鍵部署 | ✅ | `./gradlew deploy`，見 [deploy/README.md](../deploy/README.md) |
 | DB migration | ✅ | [Flyway V1–V8](../backend/src/main/resources/db/migration) |
@@ -58,7 +61,17 @@ talkcal 不只要「能跑」，還要能回答：**上線之後要顧慮哪些�
 | Graceful shutdown | ⚠️ | JVM 收得到 SIGTERM，但等待時間對不上：LLM 呼叫的 timeout 是 2 分鐘，Spring 每個關機階段預設只等 30 秒，[compose](../deploy/compose.yaml) 沒設 `stop_grace_period`，Docker 只等 10 秒就送 SIGKILL。**推測**每次部署都會砍斷正在回答的請求，待用 k6 邊壓邊部署驗證 |
 | Rollback | ❌ | app 映像檔固定叫 `talkcal/app:local`，沒有版本 tag，退不回上一版 |
 | 漸進式發布（canary） | ❌ | 只有一個 app 實例，新版一上就是全部流量。Google 和 Mercari 的清單都要求先放一小部分流量、看指標沒問題再全開；單機環境做不到，至少要先有 rollback |
-| Hotfix 流程 | ❌ | 沒有分支策略和 release tag |
+| 分支策略 | ⚠️ | 實際做法是 trunk-based：每個 commit 直接進 `master`，pre-push 先跑完整 CI 才推得出去。但沒寫成規則，也沒有 PR，變更只留下 commit、沒有審查紀錄。**不選 Git Flow**：它的 `develop`／`release/*`／`hotfix/*` 是為了「同時維護好幾個發行版」設計的（桌面軟體、SDK），連作者自己都在 2020 年補註說持續部署的服務該用更簡單的流程；talkcal 永遠只有線上那一版 |
+| Branch protection | ❌ | 現在擋壞程式的只有本機的 pre-push，`git push --no-verify` 就能跳過，換台電腦沒設 hook 也擋不到。branch protection 是 GitHub 伺服器那一端的規則，誰都跳不過（私人 repo 在免費方案開不了，所以 repo 改回了公開）。**還沒決定**要哪一種：A. 只禁止 force push 和刪除 `master`，照樣直推；B. 一定要發 PR、CI 綠燈才能合併。傾向 B：CI 從「可以跳過」變成「強制」，PR 也順便成為 AI 改動的審查紀錄（見下面「AI 改動的人工審查」），代價是每次改動多開一個 PR |
+| 程式碼格式與 lint | ❌ | 後端沒有 Spotless、Checkstyle，前端沒有 ESLint、Prettier；也沒有 SpotBugs、Error Prone 這類靜態分析。CI 只擋編譯、測試、型別錯誤。AI 寫的程式風格容易飄，formatter 能自動拉齊 |
+| 測試覆蓋率 | ❌ | 沒有 JaCoCo，不知道哪些程式沒被測到。只拿來找漏測的地方，不打算設門檻 |
+| 環境分層（staging） | ❌ | 只有本機開發和 docker 兩種設定，新版直接上「線上」，沒有先放在一個跟線上一樣的環境驗證。單機很難真的做出來，先列成已知限制 |
+| 版本與 release tag | ❌ | 沒有 git tag，映像檔也沒有版本號，說不出「線上現在跑的是哪個 commit」。要先有這個，rollback 和 hotfix 才有起點 |
+| Hotfix 流程 | ❌ | 沒寫下來。trunk-based 的做法是：修在 `master`、照常過 CI、部署；如果 `master` 已經有還不能上線的東西，就從線上那版的 tag 開短命分支，修好上線後再 cherry-pick 回 `master`。重點是「緊急」不等於「跳過 CI」：CI 要夠快（現在 GitHub 約 2 分 20 秒）才不會讓人想跳過 |
+| 用 AI 寫程式的把關 | ✅ | AI（Claude Code）寫的程式跟人寫的過同一道關，而且這道關不靠人記得：[ArchitectureTest](../backend/src/test/java/io/github/andersonchen/talkcal/ArchitectureTest.java) 擋分層違規、[CI](../ci/README.md) 擋測試和打包失敗、pre-push 讓壞的推不出去。AI 最常犯的錯（亂 import、跨層呼叫、改壞別的地方）都會變成紅燈 |
+| 給 AI 的專案規則 | ❌ | repo 裡沒有 `AGENTS.md` 或 `CLAUDE.md`。寫法慣例（註解寫原因、一次只長一個 class、選型理由寫進 README）只存在個人的 AI 設定裡，換一台電腦、換一個工具、換一個人就沒有了。業界做法是把這些寫成跟著 repo 走的規則檔。目前決定先不做（2026-10-08） |
+| AI 改動的人工審查 | ❌ | AI 的修改直接 commit 到 `master`，沒有經過 PR，審查只發生在對話當下，沒留下紀錄。可以改成 AI 一律開分支、發 PR，CI 綠了、自己看過 diff 再合併 |
+| 交付指標（DORA） | ❌ | 沒量部署頻率、變更前置時間、變更失敗率、復原時間。DORA 2025 的研究指出，用了 AI 之後產出變快，但交付穩定度常常下降；不量就不知道自己是哪一種 |
 
 ## ③ 跑起來之後（Run）
 
@@ -95,6 +108,8 @@ talkcal 不只要「能跑」，還要能回答：**上線之後要顧慮哪些�
 | 根目錄 README | ✅ | [README.md](../README.md)：產品是什麼、作品集想展示什麼、架構圖、怎麼跑、文件地圖 |
 | 決策紀錄（ADR） | ⚠️ | 理由都寫在程式碼註解和各目錄的 README，但沒有集中的地方說明「為什麼選 Spring AI、llama.cpp、JDBC」 |
 | 相依套件升級 | ❌ | 沒有 Renovate 或 Dependabot |
+| 待辦事項追蹤 | ❌ | 沒有 issue，待辦散在各份文件裡（例如 [README](../README.md) 的「改成可設定的路徑是待辦事項」）。開 GitHub Issues，文件裡只連過去 |
+| 本機環境可重現 | ⚠️ | 測試和 CI 都在容器裡跑，換機器也一樣；但模型檔路徑寫死 `C:\llm\models`（[compose](../deploy/compose.yaml)），整套服務只能在 Windows 上照原樣起來 |
 | 並行修改 | ⚠️ | 行程目前只能新增和刪除、沒有修改的 API，所以還沒有「兩個分頁互相覆蓋」的問題；以後加修改功能時，`calendar_event` 要先加 version 欄位。助理的對話記憶是整段刪掉重插，同一段對話同時送兩句，晚存的會蓋掉早的（[V7](../backend/src/main/resources/db/migration/V7__create_calendar_assistant_message.sql) 寫明接受這個代價） |
 | 冪等寫入 | ❌ | 按兩次「加入」或 agent 重試，可能多出一筆一樣的行程 |
 | 時區 | ✅ | [V2](../backend/src/main/resources/db/migration/V2__create_calendar_events.sql) 寫了為什麼用不帶時區的 `TIMESTAMP` |
