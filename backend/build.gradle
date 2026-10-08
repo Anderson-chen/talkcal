@@ -143,6 +143,14 @@ testing {
                 testTask.configure {
                     // 兩個都要跑時先跑秒回的那個，壞掉的單元測試不必等模型回完才知道
                     shouldRunAfter tasks.named('test')
+                    // 模型測試從系統屬性 spring.ai.openai.chat.base-url 讀 llama-server 在哪，
+                    // 但 Gradle 不會把自己的系統屬性傳進測試 JVM，所以從環境變數接過去。
+                    // 用 Spring 本來就認得的那個名字（application.properties 也提到它），不另外發明一個。
+                    // 主要給 ci/run.sh 用：測試跑在容器裡，127.0.0.1 是容器自己，要改指到主機上的模型
+                    def llmBaseUrl = providers.environmentVariable('SPRING_AI_OPENAI_CHAT_BASEURL')
+                    if (llmBaseUrl.isPresent()) {
+                        systemProperty 'spring.ai.openai.chat.base-url', llmBaseUrl.get()
+                    }
                     testLogging {
                         events 'passed', 'skipped', 'failed'
                     }
@@ -179,8 +187,8 @@ tasks.register('deployApp', Exec) {
     description = '跑測試、build app 映像檔、換掉 deploy/ 的 app 容器，等它 healthy'
     dependsOn tasks.named('test')
 
-    // 用專案目錄推出 deploy/，不寫死絕對路徑：換一台機器、換一個 clone 位置都能跑
-    workingDir = layout.projectDirectory.dir('deploy')
+    // 用專案目錄（backend/）推出旁邊的 deploy/，不寫死絕對路徑：換一台機器、換一個 clone 位置都能跑
+    workingDir = layout.projectDirectory.dir('../deploy')
 
     // 等 healthy 的上限（秒）。預設 300，模型第一次載入太慢時：./gradlew deployApp -PdeployWaitTimeout=600
     def waitTimeout = providers.gradleProperty('deployWaitTimeout').orElse('300').get()
@@ -204,7 +212,7 @@ tasks.register('deployWeb', Exec) {
     group = 'deployment'
     description = 'build 前端映像檔（含型別檢查）、換掉 deploy/ 的 web 容器，等它 healthy'
 
-    workingDir = layout.projectDirectory.dir('deploy')
+    workingDir = layout.projectDirectory.dir('../deploy')
 
     // nginx 幾秒就起好，不像 app 要等模型，預設 60 秒就夠
     def waitTimeout = providers.gradleProperty('deployWaitTimeout').orElse('60').get()
@@ -224,7 +232,7 @@ tasks.register('deployModels', Exec) {
     group = 'deployment'
     description = '重 build llama-server 映像檔、換掉 deploy/ 的模型容器，等它載好模型（healthy）'
 
-    workingDir = layout.projectDirectory.dir('deploy')
+    workingDir = layout.projectDirectory.dir('../deploy')
 
     // 載 5GB 的 Qwen 要時間，預設 600 秒；比 compose 裡 llm-chat 的 start_period（120s）寬鬆得多，
     // 因為這裡還包含映像檔重 build 的時間

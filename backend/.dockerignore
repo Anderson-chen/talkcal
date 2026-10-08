@@ -1,0 +1,12 @@
+# build context 是 backend/（Dockerfile 要看得到 src/ 和 build.gradle），
+# 但裡面還有容器 build 用不到的東西。排除掉的好處：送進 Docker 的 context 小、快，
+# 而且這些檔案改了不會讓 COPY 那一層的快取失效、白白重 build。
+
+# 本機的 build 產物：容器裡會自己重 build，帶進去反而可能混到舊的 class
+build/
+out/
+.gradle/
+
+# IDE
+.idea/
+*.iml

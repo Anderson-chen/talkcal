@@ -1,3 +1,9 @@
 # 從設計畫布匯出的打包檔（9MB，內含執行環境與字型），要跟匯出時一個 byte 都不差：
 # 當成二進位檔，git 不做換行轉換（這台機器 core.autocrlf=true，不設的話取出時會變成 CRLF）、也不嘗試算文字 diff。
 docs/design/calendar/prototype.html -text -diff
+
+# shell script 一律 LF：這台機器 core.autocrlf=true，不釘的話 checkout 出來會變成 CRLF，
+# bash 讀到行尾的 \r 會報 "$'\r': command not found"（ci/run.sh、pre-push hook 都是在 Git Bash 裡跑）
+*.sh text eol=lf
+.githooks/* text eol=lf
+backend/gradlew text eol=lf

@@ -31,9 +31,23 @@ AI 助理是自己寫的 agent loop：每一輪把對話歷史和三個工具交
 | `list_events` | 查一段日期裡的行程 | 不會 |
 | `find_free_slots` | 找一段日期、某個時段裡的空檔 | 不會 |
 
+## 目錄
+
+每個資料夾是一個關注點，各自有 README 說明設計理由：
+
+```
+backend/   Spring Boot app：程式碼、Gradle、Dockerfile
+web/       Vue 3 前端：程式碼、npm、Dockerfile、nginx 設定
+deploy/    把 app、前端、模型、資料庫跑起來的 Docker Compose
+ops/       觀測：Alloy → Mimir / Loki / Tempo → Grafana
+perf/      k6 壓測
+ci/        CI 要檢查什麼、在什麼環境檢查
+docs/      上線準備清單、設計稿
+```
+
 ## 程式結構
 
-後端是六角架構（Hexagonal / Ports & Adapters），目錄照 BuckPal 的慣例：
+後端（`backend/`）是六角架構（Hexagonal / Ports & Adapters），目錄照 BuckPal 的慣例：
 
 ```
 io.github.andersonchen.talkcal
@@ -49,7 +63,7 @@ io.github.andersonchen.talkcal
         └── out              PostgreSQL、Spring AI
 ```
 
-分層規則寫成 [ArchitectureTest](src/test/java/io/github/andersonchen/talkcal/ArchitectureTest.java)（ArchUnit）：
+分層規則寫成 [ArchitectureTest](backend/src/test/java/io/github/andersonchen/talkcal/ArchitectureTest.java)（ArchUnit）：
 依賴只能由外往內、core 不准依賴 Spring 和 Jackson、只有組裝根能認識 adapter 的具體類別。違反就紅燈，不靠 code review 記得。
 
 ## 技術選型
@@ -74,7 +88,7 @@ io.github.andersonchen.talkcal
 
 ```bash
 docker compose -f deploy/compose.yaml up -d postgres llm-chat   # 資料庫和模型（第一次要等模型複製、載入）
-./gradlew deploy                                                # 跑測試、build 並部署 app 和前端
+cd backend && ./gradlew deploy                                  # 跑測試、build 並部署 app 和前端
 ```
 
 瀏覽器開 <http://localhost:18080>。API 文件（Swagger UI）在 <http://localhost:18090/swagger-ui.html>。
@@ -84,16 +98,22 @@ docker compose -f deploy/compose.yaml up -d postgres llm-chat   # 資料庫和�
 本機開發（不進容器）：
 
 ```bash
-./gradlew bootRun                # app 在 8090，連 deploy/ 的 PostgreSQL 和模型
-npm --prefix web run dev         # 前端在 5173，/api 轉給 8090
+cd backend && ./gradlew bootRun  # app 在 8090，連 deploy/ 的 PostgreSQL 和模型
+npm --prefix web run dev         # 前端在 5173，/api 轉給 8090（在 repo 根目錄跑）
 ```
 
 ## 測試
 
+Gradle 指令都在 `backend/` 裡跑：
+
 ```bash
 ./gradlew test               # 單元測試、web 切片、架構規則：不需要任何外部服務，秒回
 ./gradlew integrationTest    # 對真的 llama-server 和 PostgreSQL（Testcontainers）；模型沒開就自動跳過那幾支
+../ci/run.sh                 # 跟 CI 完全一樣：在乾淨的容器裡跑上面全部，再加前端的型別檢查和打包
 ```
+
+CI 在每次 push、PR 時於 GitHub 上跑，本機則由 pre-push hook 在推之前先跑一次（`git config core.hooksPath .githooks` 啟用）。
+兩邊走同一支 `ci/run.sh`、同一個映像檔；GitHub 沒有 GPU，模型測試只在本機會真的跑。設計見 [ci/README.md](ci/README.md)。
 
 ## 文件地圖
 
@@ -103,6 +123,7 @@ npm --prefix web run dev         # 前端在 5173，/api 轉給 8090
 | 怎麼部署、容器之間怎麼溝通、對照雲端是什麼 | [deploy/README.md](deploy/README.md) |
 | 怎麼觀測、三種訊號怎麼互跳 | [ops/README.md](ops/README.md) |
 | 怎麼壓測、怎麼讀結果 | [perf/README.md](perf/README.md) |
+| CI 怎麼跑、為什麼在容器裡跑 | [ci/README.md](ci/README.md) |
 | 前端怎麼組成 | [web/README.md](web/README.md) |
 | 畫面設計稿和實作的差異 | [docs/design/calendar/README.md](docs/design/calendar/README.md) |
-| 資料表為什麼長這樣 | [src/main/resources/db/migration](src/main/resources/db/migration)（每支 SQL 開頭都寫了理由） |
+| 資料表為什麼長這樣 | [backend/src/main/resources/db/migration](backend/src/main/resources/db/migration)（每支 SQL 開頭都寫了理由） |

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# git push 之前，在乾淨的容器裡把 CI 跑一遍（ci/run.sh）。沒過就不推。
+#
+# 為什麼本機也要擋：GitHub 上的 CI 沒有 GPU，模型相關的測試在那裡永遠是跳過。
+# 這台電腦有模型，llama-server 開著的時候，這裡是那些測試唯一會真的被跑到的地方。
+#
+# 啟用（每個 clone 做一次；hook 不會跟著 git clone 自動生效）：
+#   git config core.hooksPath .githooks
+# 急著推、確定要跳過檢查：
+#   git push --no-verify
+
+set -euo pipefail
+
+# git 從 stdin 給「每個要推的 ref」：<本機 ref> <本機 sha> <遠端 ref> <遠端 sha>。
+# 測的是要推上去的那個 commit，不一定是 HEAD（例如推別的分支時）
+zero=0000000000000000000000000000000000000000
+while read -r local_ref local_sha remote_ref remote_sha; do
+    # 刪除遠端分支時本機 sha 是全 0，沒有東西要測
+    [ "$local_sha" = "$zero" ] && continue
+    echo "pre-push：檢查 ${local_ref#refs/heads/} ($(git rev-parse --short "$local_sha"))"
+    ci/run.sh "$local_sha" </dev/null
+done

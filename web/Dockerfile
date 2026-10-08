@@ -1,4 +1,4 @@
-# talkcal 前端的映像檔。跟 app 的 Dockerfile 一樣是兩段式——
+# talkcal 前端的映像檔。跟 app 的 Dockerfile（backend/Dockerfile）一樣是兩段式——
 #   build   —— Node + npm，把 .vue / .ts 編成靜態檔（dist/）
 #   runtime —— 只有 nginx，送靜態檔、把 /api 轉給 app。Node、node_modules、原始碼都不會跟著上雲端。
 

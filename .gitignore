@@ -1,9 +1,9 @@
-/out/
+out/
 
 # Gradle
-/build/
-/.gradle/
+build/
+.gradle/
 
 # IntelliJ：IDE 狀態不進版控，專案結構由 build.gradle 描述就夠了
-/.idea/
+.idea/
 *.iml

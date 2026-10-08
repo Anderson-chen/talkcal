@@ -176,10 +176,10 @@ services:
 
   # ── talkcal app ────────────────────────────────────────────────────
   app:
-    # Dockerfile 在 repo 根目錄（要看得到 src/ 和 gradle wrapper），所以 context 是上一層
+    # Dockerfile 在 backend/（要看得到 src/ 和 build.gradle），後端自己的東西放一起
     image: talkcal/app:local
     build:
-      context: ..
+      context: ../backend
     container_name: talkcal-app
 
     environment:

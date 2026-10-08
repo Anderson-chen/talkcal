@@ -1,7 +1,7 @@
 # ops —— 觀測環境（Observability）
 
 用 Docker 一次拉起 **Alloy + Mimir + Loki + Tempo + Grafana**，跟被觀測的服務分開。
-被觀測的是 `deploy/` 那組容器（app、兩顆模型），以及本機開發時用 `./gradlew bootRun` 跑的 app。
+被觀測的是 `deploy/` 那組容器（app、模型、資料庫、前端），以及本機開發時在 `backend/` 裡用 `./gradlew bootRun` 跑的 app。
 
 ## 整條流程
 

@@ -1,4 +1,4 @@
-# talkcal app 的映像檔。放在 repo 根目錄：build 要看得到 src/、build.gradle、gradle wrapper。
+# talkcal app 的映像檔。放在 backend/：build 要看得到 src/、build.gradle、gradle wrapper。
 # 跟 deploy/llama-server/Dockerfile 同樣是兩段式——
 #   build   —— 完整 JDK + Gradle，把程式編成一個可執行的 jar
 #   runtime —— 只有 JRE，把 jar 搬過去跑。JDK、Gradle、原始碼都不會跟著上雲端。

@@ -2,7 +2,7 @@
 
 用 [k6](https://k6.io) 從 HTTP 那頭壓 AI 助理 `POST /api/calendar/assistant`，量它在併發下的延遲與吞吐。
 助理一輪是一段 agent loop（可能叫模型好幾次、會讀寫 PostgreSQL），細節見 `lib/assistant.js` 開頭。
-跟 `ops/`（觀測環境）、`src/`（app）平行，是**獨立的一個關注點**：k6 不進 `src/`，
+跟 `ops/`（觀測環境）、`backend/`（app）平行，是**獨立的一個關注點**：k6 不進 `backend/`，
 app 也不知道有人在壓它。
 
 ## 先決條件
@@ -13,7 +13,7 @@ app 也不知道有人在壓它。
 |------------|--------|----|
 | llama.cpp server | 你平常那台常駐的 | 8080 |
 | PostgreSQL | `docker compose -f deploy/compose.yaml up -d postgres` | 5432 |
-| talkcal app | `./gradlew bootRun` | 8090 |
+| talkcal app | `backend/` 裡 `./gradlew bootRun` | 8090 |
 | k6（打壓的工具） | 見下方安裝 | — |
 
 llama.cpp 沒開也能跑 smoke，只是「正常訊息回 200」那條會紅、「空白訊息回 400」那條照樣綠

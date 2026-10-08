@@ -12,13 +12,15 @@
 | PostgreSQL（行程、AI 助理的對話記憶） | **容器**（`postgres`） | 5432（只綁 127.0.0.1） |
 | 前端（nginx + Vue） | **容器**（`web`） | 18080 —— 用瀏覽器開這個 |
 
-本機開發的 app（`./gradlew bootRun`，8090）可以同時開著：它打主機上發佈出來的 8080，
+本機開發的 app（`backend/` 裡 `./gradlew bootRun`，8090）可以同時開著：它打主機上發佈出來的 8080，
 用的是同一個模型容器。兩個 app 埠不同，可以並排比對。
 
 瀏覽器開 http://localhost:18080：nginx 送前端的靜態檔，`/api` 轉給 `app:8090`（設定在 `web/nginx.conf`）。
 app 的 18090 仍然開著，給 k6 和 curl 直接打，不多經過一層 nginx。
 
 ## 一鍵部署
+
+Gradle 指令都在 `backend/` 裡跑：
 
 ```bash
 ./gradlew deploy                                 # 前後端都部署：先 deployApp，再 deployWeb
@@ -44,7 +46,7 @@ app 的 18090 仍然開著，給 k6 和 curl 直接打，不多經過一層 ngin
 ./gradlew deployApp -PdeployWaitTimeout=600      # 模型第一次載入比較慢時，拉長等待（預設 300 秒）
 ```
 
-只動 app，不重 build 模型。定義在 `build.gradle` 最後的 `deployApp`，每一步為什麼這樣做見那裡的註解。
+只動 app，不重 build 模型。定義在 `backend/build.gradle` 最後的 `deployApp`，每一步為什麼這樣做見那裡的註解。
 
 ## 兩種環境怎麼分
 
@@ -75,7 +77,7 @@ ops/ 的 Alloy 也不靠它：Alloy 加入了這組的網路，跟 app 一樣用
 
 ## 映像檔從哪來
 
-**app**：repo 根目錄的 `Dockerfile`，build 用 Docker Hub 的 `gradle:9.2.1-jdk25`，執行用 `eclipse-temurin:25-jre`。
+**app**：`backend/Dockerfile`，build 用 Docker Hub 的 `gradle:9.2.1-jdk25`，執行用 `eclipse-temurin:25-jre`。
 不用 `./gradlew`：Gradle 本體的下載點轉到 GitHub，本機實測 0.17 MB/s。第一次 build 約 1.5 分鐘，映像檔約 500MB。
 
 **模型**：用一個**自己 build** 的映像檔 `talkcal/llama-server:b10964-cuda13.0.1`（`llama-server/Dockerfile`）。
@@ -150,7 +152,7 @@ docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新
 ## 行程與對話記憶（PostgreSQL）
 
 app 把行程（`calendar_event`）和 AI 助理的對話記憶（`calendar_assistant_message`，一則訊息一列、連工具呼叫一起存）
-存進 `postgres` 容器，資料表由 Flyway 在 app 啟動時自動建（`src/main/resources/db/migration`）。
+存進 `postgres` 容器，資料表由 Flyway 在 app 啟動時自動建（`backend/src/main/resources/db/migration`）。
 本機 bootRun 的 app 也連同一個資料庫（`127.0.0.1:5432`），所以要先 `docker compose up -d postgres`。
 
 直接看資料：

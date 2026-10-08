@@ -31,8 +31,10 @@
     },
     {
       "name": "talkcal",
-      "runtimeExecutable": "C:\\project\\talkcal\\gradlew.bat",
+      "runtimeExecutable": "C:\\project\\talkcal\\backend\\gradlew.bat",
       "runtimeArgs": [
+        "-p",
+        "backend",
         "bootRun"
       ],
       "port": 8090
