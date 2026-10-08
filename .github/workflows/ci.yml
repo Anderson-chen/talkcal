@@ -1,0 +1,77 @@
+# CI：每次推上來、每個 PR，都自動跑一遍「本機 ./gradlew deploy 之前會跑的那些檢查」。
+#
+# 為什麼要有：以前「部署前先跑測試」只靠自己記得用 ./gradlew deployApp。
+# 推上 GitHub 之後，改動不一定從那條路進來（直接 push、PR），把關要放在每條路都會經過的地方。
+#
+# 跑什麼、不跑什麼：
+#   backend —— 單元測試（含 ArchitectureTest）＋整合測試。整合測試裡要 PostgreSQL 的那幾支用 Testcontainers，
+#              GitHub 的 ubuntu runner 有 Docker，跑得起來；要真 llama-server 的那幾支會自動跳過（Assumptions），
+#              runner 沒有 GPU，也不該為了 CI 去下載 5GB 的模型。
+#   web     —— 型別檢查＋打包（npm run build 就是 vue-tsc 再 vite build）。
+#   不跑 k6：壓測要真的模型，在 CI 上量不出有意義的數字。
+#
+# 兩個 job 平行跑、互不依賴：前端壞了不必等後端測完才知道，反過來也一樣。
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# 只讀程式碼，不需要任何寫入權限。預設的 GITHUB_TOKEN 權限比這寬，明寫出來把它收窄
+permissions:
+  contents: read
+
+# 同一個分支連推好幾次，只跑最新那次：舊的結果已經沒人要看了
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # 跟 build.gradle 的 toolchain 同一版（25）。Gradle 找得到符合的 JDK 就直接用，不會再自己去下載
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+
+      # 快取 Gradle 的依賴和 build 結果，順便驗證 gradle-wrapper.jar 沒被換掉（官方發的才放行）。
+      # wrapper jar 是會被執行的二進位檔，有人在 PR 裡偷換它，CI 一跑就中招 —— 這一步就是防這個
+      - uses: gradle/actions/setup-gradle@v6
+
+      # test 先跑、integrationTest 後跑（build.gradle 設了 shouldRunAfter）：壞掉的單元測試秒回，不必等容器起來
+      - run: ./gradlew test integrationTest
+
+      # 測試失敗時把 HTML 報告留下來，在 Actions 頁面下載就看得到哪一題、為什麼紅，不必在本機重現
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: test-reports
+          path: build/reports/tests/
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+
+      # 跟 web/Dockerfile 的 node:22 同一版：CI 綠燈的組合，就是映像檔裡 build 的組合
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # npm ci 而不是 npm install：照 package-lock.json 原樣裝，lock 跟 package.json 對不上就直接失敗，
+      # 不會偷偷改 lock —— CI 要驗的正是「lock 裡寫的那一組」
+      - run: npm ci
+      - run: npm run build
