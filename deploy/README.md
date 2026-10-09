@@ -46,7 +46,8 @@ Gradle 指令都在 `backend/` 裡跑：
 ./gradlew deployApp -PdeployWaitTimeout=600      # 模型第一次載入比較慢時，拉長等待（預設 300 秒）
 ```
 
-只動 app，不重 build 模型。定義在 `backend/build.gradle` 最後的 `deployApp`，每一步為什麼這樣做見那裡的註解。
+只動 app（帶 `--no-deps`），不碰模型和資料庫，所以第一次部署前要先 `docker compose up -d postgres llm-chat`。
+以前沒帶 `--no-deps`，每次部署 app 都會順便重啟模型。定義在 `backend/build.gradle` 最後的 `deployApp`，每一步為什麼這樣做見那裡的註解。
 
 ## 兩種環境怎麼分
 

@@ -181,7 +181,13 @@ application {
 //
 // 為什麼要先跑測試：Dockerfile 刻意只打包、不跑測試，部署前「先驗過」這件事還沒有 CI 做，
 // 先掛在這裡。測試沒改過的話 Gradle 會判定 up-to-date 直接跳過，不會白跑。
-// 只動 app：兩顆模型重 build 要十分鐘，不該跟著每次部署；還沒起的話 depends_on 會先把它們拉起來。
+// 只動 app：模型重 build 要十分鐘、重啟期間所有請求都會失敗，不該跟著每次部署。
+//
+// --no-deps：不加的話，compose 會沿著 depends_on 走到 model-seed。它是跑完就結束的一次性容器，
+// compose 每次都把它重建，而 llm-chat 依賴它，就跟著被重建——部署 app 等於順便重啟模型
+// （2026-10-08 改名後第一次部署時從 compose 的輸出發現，`docker compose up --dry-run app` 可以重現）。
+// 代價：postgres 和 llm-chat 要先起好，第一次部署前先 `docker compose up -d postgres llm-chat`；
+// 沒起的話 app 連不上資料庫、啟動失敗，--wait 會等到逾時報錯，不會假裝成功。
 tasks.register('deployApp', Exec) {
     group = 'deployment'
     description = '跑測試、build app 映像檔、換掉 deploy/ 的 app 容器，等它 healthy'
@@ -197,7 +203,7 @@ tasks.register('deployApp', Exec) {
     // --wait：等到 compose 裡的 healthcheck 通過（/actuator/health 回 200）才結束。
     //   沒有它的話，Spring 還在啟動、甚至啟動失敗，這個 task 都會顯示成功。
     //   也因為交給 healthcheck 判斷，這裡不必再寫死主機埠去打一次。
-    commandLine 'docker', 'compose', 'up', '-d', '--build', '--wait', '--wait-timeout', waitTimeout, 'app'
+    commandLine 'docker', 'compose', 'up', '-d', '--build', '--no-deps', '--wait', '--wait-timeout', waitTimeout, 'app'
 }
 
 // 一鍵部署前端到本機 Docker：./gradlew deployWeb
@@ -220,7 +226,7 @@ tasks.register('deployWeb', Exec) {
     commandLine 'docker', 'compose', 'up', '-d', '--build', '--no-deps', '--wait', '--wait-timeout', waitTimeout, 'web'
 }
 
-// 只換兩顆模型：./gradlew deployModels
+// 只換模型：./gradlew deployModels
 // 升級 llama.cpp 版本、調 compose 裡的模型參數（-np、--temp…）之後用。
 //
 // 刻意不放進 deploy：模型很少改，換一次卻很貴——映像檔重 build 約十分鐘，
