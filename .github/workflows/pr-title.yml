@@ -1,0 +1,35 @@
+# PR 標題開頭一定要帶 Jira issue key（例如「TALKCAL-21 建立 Jira 流程」），沒有就紅燈。
+#
+# 為什麼要擋：GitHub for Jira 靠 key 把 PR 掛回 issue，Jira Automation 也靠它轉狀態。
+# 忘了帶 key，這個改動在 Jira 上就「不存在」—— 半年後看到這行程式，追不回當初為什麼做。
+# 靠人記得一定會漏，所以寫成檢查，再由 branch protection 設成必過。
+#
+# 為什麼不放進 ci/checks.sh：PR 標題只有 GitHub 上才有，本機 push 時根本還沒有 PR。
+# 這是平台那一層的事，換到 GitLab 就換成檢查 MR 標題（分層理由見 ci/README.md）。
+
+name: PR title
+
+on:
+  pull_request:
+    # edited：改標題時要重跑，不然補上 key 之後還是紅的
+    types: [opened, edited, synchronize, reopened]
+
+permissions: {}
+
+jobs:
+  pr-title:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      # 標題是使用者輸入。不能直接寫 ${{ github.event.pull_request.title }} 進 script：
+      # 標題裡放 `"; curl ... #` 就會變成指令執行（script injection）。
+      # 先放進環境變數，shell 只會把它當字串
+      - env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if [[ "$TITLE" =~ ^TALKCAL-[0-9]+\  ]]; then
+            echo "OK: $TITLE"
+          else
+            echo "::error::PR 標題開頭要帶 Jira issue key，例如「TALKCAL-21 建立 Jira 流程」。目前是：$TITLE"
+            exit 1
+          fi
