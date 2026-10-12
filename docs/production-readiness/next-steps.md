@@ -5,7 +5,7 @@
 | 順序 | 做什麼 | 為什麼排在這裡 |
 |---|---|---|
 | ~~1~~ | ~~推上 GitHub、寫根目錄 README、補 CI~~ ✅ | 其他東西都要靠這三樣才看得到、才有自動把關 |
-| 1.5 | ~~套用 [Branch protection](release.md#branch-protection)（選 B）~~ ✅，建 [Jira](release.md#jira) 流程 | 之後每一步都從一張 issue 開始、經過 PR 合併，紀錄從第 2 步就是完整的 |
+| ~~1.5~~ | ~~套用 [Branch protection](release.md#branch-protection)（選 B），建 [issue 流程](release.md#issues)~~ ✅（原本規劃 Jira，改用 GitHub Issues） | 之後每一步都從一張 issue 開始、經過 PR 合併，紀錄從第 2 步就是完整的 |
 | ~~1.6~~ | ~~[整個應用接起來的系統測試](ready.md#system-test)~~ ✅ | 第 2 步要邊壓邊部署，先確定整條路接起來是通的；改動小、跟其他步驟不衝突 |
 | ~~2~~ | ~~先把 k6 接進 Grafana，再驗證並修好 graceful shutdown，寫成第一份 postmortem~~ ✅ | 一個真實的問題同時練到部署、k6 和事故處理。k6 先接進 Grafana，邊壓邊部署的時候，失敗尖峰、錯誤率和部署時間點才會在同一張圖上，證據一次到位 |
 | 2.5 | 零停機部署：兩個 app 輪流，先起新的、健康了再關舊的 | 第 2 步量到：graceful shutdown 修好之後，部署期間還是有 15–25 秒沒人接，等得越久空窗越長。要先起新的才補得起來 |

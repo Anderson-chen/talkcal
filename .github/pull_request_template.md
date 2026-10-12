@@ -1,10 +1,10 @@
-<!-- 標題開頭要帶 issue key，例如「TALKCAL-21 建立 Jira 流程」，沒有的話 PR title 檢查會紅燈 -->
+Closes #
+
+<!-- 上面填 issue 編號。合併時 GitHub 會自動關掉它；沒填的話 PR issue 檢查會紅燈 -->
 
 ## 為什麼
 
-<!-- 一兩句講要解決什麼問題；細節留在 Jira issue -->
-
-Jira：https://yenanchen1014.atlassian.net/browse/TALKCAL-
+<!-- 一兩句講要解決什麼問題；細節留在 issue -->
 
 ## 改了什麼
 

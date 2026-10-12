@@ -1,0 +1,41 @@
+# PR 一定要連到 issue（描述裡寫「Closes #21」），沒有就紅燈。
+#
+# 為什麼要擋：issue 和 PR 的連動全靠這個連結 —— 合併時 GitHub 自動關 issue、
+# 看板自動移到 Done、半年後從 PR 點回當初的需求。忘了寫，整條就斷了。
+# 靠人記得一定會漏，所以寫成檢查，再由 branch protection 設成必過。
+#
+# 為什麼不自己用 regex 掃描述：問 GitHub「這個 PR 合併時會關哪些 issue」（closingIssuesReferences），
+# 判斷規則就跟 GitHub 真的會做的事一模一樣 —— 大小寫、Fixes/Resolves 這些變體、
+# 在側欄手動連的，都不用自己猜。
+#
+# 為什麼不放進 ci/checks.sh：PR 只有 GitHub 上才有，本機 push 時根本還沒有 PR。
+# 這是平台那一層的事（分層理由見 ci/README.md）。
+
+name: PR issue
+
+on:
+  pull_request:
+    # edited：補上 Closes #N 之後要重跑，不然還是紅的
+    types: [opened, edited, synchronize, reopened]
+
+# 只要讀 PR，不寫任何東西
+permissions:
+  pull-requests: read
+
+jobs:
+  pr-issue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          issues=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" \
+            --json closingIssuesReferences --jq '[.closingIssuesReferences[].number | "#\(.)"] | join(" ")')
+          if [ -n "$issues" ]; then
+            echo "合併時會關閉：$issues"
+          else
+            echo "::error::PR 沒有連到 issue。在描述裡寫「Closes #<issue 編號>」，合併時 GitHub 會自動關掉它。"
+            exit 1
+          fi

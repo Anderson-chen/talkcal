@@ -46,36 +46,41 @@ app 映像檔固定叫 `talkcal/app:local`，沒有版本 tag，退不回上一�
 
 只有一個 app 實例，新版一上線就承接全部流量；部署也是先關舊的、再開新的，中間有一段沒人接的空窗（2026-10-12 量到 15–25 秒，見 [postmortem](../postmortems/2026-10-12-deploy-cuts-in-flight-requests.md)）。第一步是零停機部署：起兩個 app，先起新的、健康了再關舊的。Google 和 Mercari 的清單都要求先放一小部分流量進來，看指標沒問題再全開。單機環境做不到，至少要先有 rollback。
 
-<a id="jira"></a>
-### 需求與待辦事項追蹤（Jira） ❌
+<a id="issues"></a>
+### 需求與待辦事項追蹤（GitHub Issues） ✅
 
-**現況**：沒有任何 issue。待辦事項散在各份文件裡（例如 [README](../../README.md) 裡的「改成可設定的路徑是待辦事項」），這份清單裡的 ❌ 也只是文字。一個改動「為什麼要做、做到哪裡、什麼時候上線」，只能從 commit 訊息猜。
-
-**要補的流程**：每個改動都從一張 issue 開始，issue key 一路帶到上線。
+每個改動都從一張 issue 開始，PR 用 `Closes #N` 連回去，合併時 issue 自動關閉。
 
 ```
-Jira issue      分支                 commit / PR                  CI        合併、部署       Jira 狀態
-TALKCAL-42 ──────▶ TALKCAL-42-graceful ──▶ 「TALKCAL-42 加長 stop_grace」 ──▶ 綠燈 ──▶ master、deploy ──▶ To Do → In Progress → In Review → Done
+issue #21 ──▶ 分支 21-issue-workflow ──▶ PR「Closes #21」──▶ CI 綠燈 ──▶ 合併進 master ──▶ #21 自動關閉
+ Todo            In Progress                In Review                                      Done
 ```
 
 | 步驟 | 做法 | 為什麼 |
 |---|---|---|
-| 開 issue | 這份清單的五段各開一個 Epic，每個 ❌ 是一張 Story 或 Task；告警、postmortem 找到的問題開成 Bug | 待辦只放一個地方，文件裡只連到 issue |
-| 開分支 | 分支名稱以 issue key 開頭，例如 `TALKCAL-42-graceful-shutdown` | 裝了 GitHub for Jira 之後，Jira 會自動把分支、commit、PR 掛回 issue |
-| commit 和 PR | 訊息和標題開頭帶 `TALKCAL-42` | 半年後看到一行程式，可以追回當初的需求和討論 |
-| 狀態流轉 | 開 PR 時轉成 In Review，合併並部署之後轉成 Done（用 Jira Automation 做，不靠人記得） | issue 的狀態就是真實的狀態 |
-| Hotfix | 開最高優先的 Bug，照上面同一條流程走，只是插隊 | 緊急不等於不留紀錄 |
+| 開 issue | 這份清單的五段各是一張父 issue（#8、#17、#30、#38、#46），每個 ❌ 是底下的 sub-issue；告警、postmortem 找到的問題也開成 issue | 待辦只放一個地方。父 issue 上的進度條就是這一段做完幾成 |
+| 開分支 | 在 issue 頁按「Create a branch」，名稱是 `編號-描述`，例如 `21-issue-workflow` | 分支直接掛在 issue 的 Development 欄 |
+| 開 PR | 描述寫 `Closes #21`（[PR 範本](../../.github/pull_request_template.md)已經放好） | 合併時 GitHub 自動關 issue；半年後從 `git blame` → commit → PR → issue，一路點得回當初為什麼做 |
+| 擋住沒連 issue 的 PR | [pr-issue.yml](../../.github/workflows/pr-issue.yml) 問 GitHub「這個 PR 合併時會關哪些 issue」，一個都沒有就紅燈，並設成 [Branch protection](#branch-protection) 的必過檢查 | 連結一斷，上面全部失效；靠人記得一定會漏 |
+| 狀態流轉 | Projects 看板的內建 workflow：issue 開了加進看板、PR 連上轉 In Review、關閉轉 Done | issue 的狀態就是真實的狀態，不靠人去拖卡片 |
+| Hotfix | 一樣先開 issue，照同一條流程走，只是插隊 | 緊急不等於不留紀錄 |
 
-**做完的證據**：Jira board 的截圖或公開連結、issue 上自動掛著的 PR 和部署紀錄。issue 從開到部署的時間，就是 [DORA](#dora) 的「變更前置時間」，有了 Jira 才量得出來。
+issue 開立到關閉的時間，就是 [DORA](#dora) 的「變更前置時間」的起點和終點。
 
-這條流程要靠 PR 才完整，[Branch protection](#branch-protection) 已決定選 B（一定走 PR）。
+**為什麼不用 Jira**（2026-10-12）：原本規劃用 Jira（issue key `TALKCAL-21` 寫進分支和 PR 標題，靠 GitHub for Jira 和 Jira Automation 串起來），Jira site 也建好、issue 也匯入了。改成 GitHub Issues 是因為：
+
+- 一個人開發，Jira 多出來的能力（跨團隊權限、複雜的 workflow、報表）用不到
+- 連動大多是 GitHub 原生的，不用裝 app、不用維護 Automation 規則，少一個外部系統可能壞掉
+- repo 是公開的，看的人點進來就看得到 issue 和 PR 怎麼串；Jira board 要另外開權限
+
+流程本身（issue → 分支 → PR → CI → 合併 → 自動關閉）跟 Jira 版一樣，團隊換成 Jira 時，換掉的只是 key 的格式和 [pr-issue.yml](../../.github/workflows/pr-issue.yml) 的檢查方式。
 
 <a id="branching"></a>
 ### 分支策略 ✅
 
 做法是 trunk-based，2026-10-12 起加上 PR：
 
-1. 從 `master` 開短命分支，名稱以 Jira issue key 開頭（還沒有 Jira 之前，用簡短的英文描述）
+1. 從 `master` 開短命分支，名稱是 `issue 編號-描述`，例如 `21-issue-workflow`（還沒有 issue 之前，用簡短的英文描述）
 2. 在分支上 commit，push 前 pre-push 先在本機跑一次 CI
 3. 開 PR 到 `master`，GitHub 上的 CI 綠燈、自己看過 diff 才合併
 4. 合併後刪掉分支，分支不活過幾天
@@ -94,7 +99,7 @@ TALKCAL-42 ──────▶ TALKCAL-42-graceful ──▶ 「TALKCAL-42 加
 - A. 只禁止 force push 和刪除 `master`，照樣直接推。
 - B. 一定要發 PR、CI 綠燈才能合併。
 
-**決定選 B**（2026-10-12）：CI 會從「可以跳過」變成「強制」，PR 也順便成為 AI 改動的審查紀錄（見 [AI 改動的人工審查](#ai-review)）和 [Jira](#jira) 流程的一環。代價是每次改動都要多開一個 PR。A 只防得了手滑，防不了沒過 CI 的程式碼進到 `master`。
+**決定選 B**（2026-10-12）：CI 會從「可以跳過」變成「強制」，PR 也順便成為 AI 改動的審查紀錄（見 [AI 改動的人工審查](#ai-review)）和 [issue 流程](#issues)的一環。代價是每次改動都要多開一個 PR。A 只防得了手滑，防不了沒過 CI 的程式碼進到 `master`。
 
 `master` 要套的規則：
 
@@ -102,6 +107,7 @@ TALKCAL-42 ──────▶ TALKCAL-42-graceful ──▶ 「TALKCAL-42 加
 |---|---|---|
 | 合併前要有 PR | 要，不用別人核准 | 只有一個人開發，GitHub 不讓作者核准自己的 PR；要的是「一定經過 PR」，不是「一定有人核准」 |
 | 合併前 CI 要綠燈 | 要，檢查項目是 `checks`（[ci.yml](../../.github/workflows/ci.yml) 裡的 job），分支要跟 `master` 同步 | 沒跑過最新 `master` 的組合，綠燈不算數 |
+| 合併前要連到 issue | 要，檢查項目是 `pr-issue`（[pr-issue.yml](../../.github/workflows/pr-issue.yml)），2026-10-12 加上 | 沒連 issue，[issue 流程](#issues)的自動關閉和追溯都會斷 |
 | 禁止 force push、禁止刪除 | 要 | 歷史不能被改寫 |
 | 管理員也要遵守 | 要 | 不然自己身為管理員，照樣能直推，等於沒設。真的緊急時改走 [Hotfix 流程](#hotfix)，一樣開 PR |
 
@@ -152,4 +158,4 @@ AI 的修改直接 commit 到 `master`，沒有經過 PR，審查只發生在對
 <a id="dora"></a>
 ### 交付指標（DORA） ❌
 
-沒有量部署頻率、變更前置時間、變更失敗率和復原時間。DORA 2025 的研究指出，用了 AI 之後產出變快，但交付的穩定度常常下降；不量就不知道自己是哪一種。變更前置時間要有 [Jira](#jira) 的 issue 時間點才量得出來。
+沒有量部署頻率、變更前置時間、變更失敗率和復原時間。DORA 2025 的研究指出，用了 AI 之後產出變快，但交付的穩定度常常下降；不量就不知道自己是哪一種。變更前置時間要有 [issue](#issues) 的開立和關閉時間點才量得出來。
