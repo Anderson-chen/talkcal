@@ -18,9 +18,9 @@ Alloy 或 Mimir 停掉的時候，dashboard 只會變成一片空白，沒有人
 告警響了之後該做什麼，沒有寫下來。
 
 <a id="postmortem"></a>
-### Postmortem ❌
+### Postmortem ✅
 
-還沒有任何一份事故檢討。
+[2026-10-12 部署時處理中的請求被砍斷](../postmortems/2026-10-12-deploy-cuts-in-flight-requests.md)：本機演練，用 k6 邊壓邊部署重現、修正、再用同樣的條件驗證。照 blameless 的寫法，記時間軸、根因、修正的代價和後續行動。
 
 <a id="user-report-trace"></a>
 ### 從使用者回報追到 trace ❌

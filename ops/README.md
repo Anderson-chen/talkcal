@@ -201,6 +201,10 @@ Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](..
 儀表板 **`talkcal — 壓測（k6）`**：上排是 k6 看到的（VU、請求速率、延遲、失敗率），下排是同一段時間 server 那頭的
 （app 和 k6 的 p95 疊在同一張、模型處理中 vs 排隊中、5xx、生成速度）。人數一加，哪一條先動、動多少，對照著看。
 
+部署時間點畫成直線（annotation），k6 和 talkcal-app 兩個儀表板都有：從 Loki 裡 app 自己印的 log 抓，紅線是收到 SIGTERM
+（`Commencing graceful shutdown`）、紫線是關機時還有請求沒做完（`Graceful shutdown aborted`）、綠線是新版起好（`Started Application`）。
+不另外記部署事件：app 本來就會印這幾行，用它最不會漏。
+
 | 選擇 | 為什麼 |
 |------|--------|
 | 經過 Alloy，不讓 k6 直接寫 Mimir | 收集器只有一個這條規則不破例；Mimir 也不必為 k6 多開一個對主機的入口 |
