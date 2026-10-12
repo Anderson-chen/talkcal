@@ -58,6 +58,9 @@ prometheus.scrape "llama_cpp" {
 prometheus.remote_write "mimir" {
   endpoint {
     url = "http://mimir:9009/api/v1/push"
+    // native histogram 也送：k6 的延遲用 exponential histogram 送進來（見下面「壓測」那一段），
+    // 不開的話 remote_write 會把它們整批丟掉、不留任何錯誤訊息
+    send_native_histograms = true
   }
 }
 
@@ -143,14 +146,16 @@ otelcol.receiver.otlp "default" {
     endpoint = "0.0.0.0:4318"
   }
   output {
-    traces = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.batch.default.input]
+    metrics = [otelcol.processor.batch.default.input]   // k6 壓測的指標，見下面「壓測」那一段
   }
 }
 
 // 攢一批再送：一個 span 送一次太浪費連線，湊一批（或等一小段時間）再一次送出
 otelcol.processor.batch "default" {
   output {
-    traces = [otelcol.exporter.otlp.tempo.input]
+    traces  = [otelcol.exporter.otlp.tempo.input]
+    metrics = [otelcol.exporter.prometheus.k6.input]
   }
 }
 
@@ -163,4 +168,21 @@ otelcol.exporter.otlp "tempo" {
       insecure = true
     }
   }
+}
+
+
+// ═══ 壓測（k6）══════════════════════════════════════════════════════
+//
+//   k6 ──OTLP/HTTP──▶ otelcol.receiver.otlp（跟 trace 同一個入口）──▶ batch ──▶ otelcol.exporter.prometheus ──▶ Mimir
+//
+// k6 是短命的程式：跑完就結束，沒有 /metrics 可以等人來拉，所以跟 trace 一樣由它「推」過來。
+// 走 Alloy 而不是讓 k6 直接 remote-write 進 Mimir：收集器只有一個這條規則不破例，
+// 之後換儲存只改這裡；也不必為了 k6 在 Mimir 上多開一個對主機的入口。
+// 用 k6 的 opentelemetry 輸出而不是 experimental-prometheus-rw：前者在 k6 v2 已經是正式版，後者還掛著 experimental。
+//
+// 收進來是 OpenTelemetry 的指標，Mimir 只吃 Prometheus 格式，這個元件負責翻譯：
+// 名稱裡的點換成底線、單位接在名稱後面（例如 k6_http_req_duration_milliseconds）、
+// resource 上的 service.name（k6）變成 job 標籤。實際的名稱以 Mimir 裡查到的為準，dashboard 照那個寫。
+otelcol.exporter.prometheus "k6" {
+  forward_to = [prometheus.remote_write.mimir.receiver]
 }

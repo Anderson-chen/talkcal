@@ -11,6 +11,7 @@
               產生                          收集             儲存          查詢/畫圖
 指標 metrics  Micrometer → /actuator/prometheus ◀─抓(15s)─┐
               llama-server --metrics → /metrics ◀─抓──────┤
+              k6（壓測時）→ OTLP ─────────────推──────────┤
                                                           ├ Alloy ─▶ Mimir ─┐
 日誌 logs     SLF4J/Logback → stdout(ECS JSON) ◀─讀───────┤       ─▶ Loki  ─┼─▶ Grafana
                                                           │       ─▶ Tempo ─┘
@@ -19,7 +20,7 @@
 
 | 訊號 | 一筆資料長什麼樣 | 回答的問題 | 收集方式 | 存在 | 查詢語言 |
 |------|------------------|------------|----------|------|----------|
-| 指標 | 標籤 + 一個數字 | 有沒有問題、多嚴重（p95 變慢了） | Alloy **拉** | Mimir | PromQL |
+| 指標 | 標籤 + 一個數字 | 有沒有問題、多嚴重（p95 變慢了） | Alloy **拉**（k6 例外，由它**推**） | Mimir | PromQL |
 | 日誌 | 一行文字（JSON） | 發生了什麼事（那個請求問了什麼） | Alloy **讀** stdout | Loki | LogQL |
 | 追蹤 | 一棵 span 樹 | 時間花在哪一段（助理叫了幾次模型、各多久） | app **推**給 Alloy | Tempo | TraceQL |
 
@@ -27,7 +28,7 @@
 
 | 服務 | 做什麼 | 對外埠 | 看它 |
 |------|--------|--------|------|
-| **Alloy** | 唯一的收集器：抓指標、讀容器 log、接 app 推來的 trace，分送給下面三個 | 12345、4318 | <http://localhost:12345>（管線圖）|
+| **Alloy** | 唯一的收集器：抓指標、讀容器 log、接 app 推來的 trace 和 k6 推來的指標，分送給下面三個 | 12345、4318 | <http://localhost:12345>（管線圖）|
 | **Mimir** | 存**指標**，講 Prometheus 的查詢 API（PromQL） | 9009（只開本機） | 靠 Grafana 查 |
 | **Loki** | 存**日誌**，只替標籤建索引 | 3100 | 靠 Grafana 查 |
 | **Tempo** | 存**追蹤**，靠 trace id 找 | 不對外 | 靠 Grafana 查 |
@@ -192,6 +193,23 @@ llama.cpp 本身不產生 span，所以樹只到 app 呼叫出去的那一層。
 本機 bootRun 的 app 也會送 trace（走主機的 `127.0.0.1:4318`），只要 ops/ 有起來。
 ops/ 沒起時 trace 送不出去，app 只會在 log 印 warning，請求照常處理。
 
+## 壓測：k6 的指標也進 Mimir
+
+k6 跑完就結束，沒有 `/metrics` 可以等 Alloy 來抓，所以跟 trace 一樣由它用 OTLP 推給 Alloy 的 4318，
+Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](../perf/README.md)（`perf/run-to-grafana.sh`）。
+
+儀表板 **`talkcal — 壓測（k6）`**：上排是 k6 看到的（VU、請求速率、延遲、失敗率），下排是同一段時間 server 那頭的
+（app 和 k6 的 p95 疊在同一張、模型處理中 vs 排隊中、5xx、生成速度）。人數一加，哪一條先動、動多少，對照著看。
+
+| 選擇 | 為什麼 |
+|------|--------|
+| 經過 Alloy，不讓 k6 直接寫 Mimir | 收集器只有一個這條規則不破例；Mimir 也不必為 k6 多開一個對主機的入口 |
+| k6 的 `opentelemetry` 輸出，不用 `experimental-prometheus-rw` | 前者在 k6 v2 是正式版，後者還是 experimental；而且跟 trace 共用 4318，不必多開埠 |
+| 延遲用 exponential histogram（Mimir 存成 native histogram） | 預設的固定 bucket 最大 10 秒，模型一塞車 p95 就被壓在 10 秒。要 Alloy 的 remote_write 開 `send_native_histograms`，不開會整批被丟掉、不報錯 |
+| 名稱加 `k6_` 前綴 | k6 預設不加，會出現 `checks_total`、`vus` 這種跟別的服務分不清的名字 |
+
+驗過準不準：同一次 knee 壓測，Grafana 算出的 p95（792ms → 1572ms → 3360ms）跟 k6 收工印的表一致。
+
 ## 三種訊號之間怎麼跳
 
 | 從 | 到 | 怎麼點 | 靠什麼接起來 |
@@ -221,5 +239,5 @@ ops/
 ├── tempo/tempo.yaml                          # 追蹤：單機最小設定
 └── grafana/provisioning/
     ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
-    └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces（trace）
+    └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces（trace）、talkcal-k6（壓測）
 ```

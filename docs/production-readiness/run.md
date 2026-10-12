@@ -85,7 +85,7 @@ compose 的 healthcheck 打 `/actuator/health`。目前只有一種檢查，還�
 <a id="capacity"></a>
 ### 壓測與容量 ✅
 
-[perf/](../../perf/README.md) 有 smoke、load、knee 三種壓測，用 Little's Law 驗算過。k6 的指標還沒接進 Grafana，壓測曲線不能跟 app、模型的指標疊在同一張圖上看。
+[perf/](../../perf/README.md) 有 smoke、load、knee 三種壓測，用 Little's Law 驗算過。k6 的指標經 Alloy 送進 Mimir（`perf/run-to-grafana.sh`），Grafana 的 [talkcal — 壓測（k6）](../../ops/grafana/provisioning/dashboards/talkcal-k6.json) 把壓測曲線和 app、模型的指標放在同一個時間軸上；同一次壓測，Grafana 算出的 p95 跟 k6 自己印的表一致。
 
 <a id="slo"></a>
 ### SLO ❌
