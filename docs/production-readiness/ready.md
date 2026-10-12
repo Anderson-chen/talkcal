@@ -18,9 +18,17 @@
 [OpenApiDocumentationTest](../../backend/src/test/java/io/github/andersonchen/talkcal/OpenApiDocumentationTest.java)
 
 <a id="system-test"></a>
-### 整個應用接起來的系統測試 ❌
+### 整個應用接起來的系統測試 ✅
 
-以前有一支系統測試，對 `/api/chat` 起整個應用、打真的 HTTP、接真的模型，但那個端點拿掉時一起拿掉了。AI 助理目前只有元件層級的整合測試（`CalendarAssistantConversationTest`），還沒有從 HTTP 一路打到模型和資料庫的測試。
+[SystemTest](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/SystemTest.java)：起整個 Spring Boot（隨機埠），用 Testcontainers 接真的 PostgreSQL，啟動時 Flyway 照正式流程跑完所有 migration，再用真的 HTTP 打 API。其他測試各自只接一段真的東西，這一支抓的是「各段都對、接起來才壞」的問題：bean 組裝、設定檔、SQL 和 schema 對不上、JSON 序列化、例外對到哪個狀態碼。
+
+| 題目 | 需要模型 | 在哪裡跑 |
+|---|---|---|
+| 行程新增 → 讀得到 → 刪掉 → 讀不到，再刪一次是 404 | 不用 | 本機和 GitHub CI |
+| 不合規的行程回 400，而且一筆都沒存 | 不用 | 本機和 GitHub CI |
+| 問助理「明天晚上有什麼行程」：回答裡有資料庫裡那筆的標題，對話（含工具呼叫）存進資料庫、讀得回來 | 要 | 只有本機（GitHub 沒有 GPU，自動跳過） |
+
+只當黑箱用：送 JSON 字串、讀 JSON，不引用 controller 的 record，API 的形狀改了這裡會紅燈。
 
 <a id="frontend-test"></a>
 ### 前端測試 ❌
