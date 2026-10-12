@@ -63,7 +63,28 @@ $env:K6_WEB_DASHBOARD_EXPORT="perf/results/smoke-report.html"; k6 run -o web-das
 
 （報告是「跑出來的結果」不是原始碼，`perf/results/` 已被 `.gitignore` 擋掉，不會進版控。）
 這條路零設定、最快看到東西；要把壓測曲線跟 app／llama.cpp 的指標**疊在同一張圖**上看，
-才需要走下面「接進既有 Grafana」那條。
+走下面「接進 Grafana」那條。
+
+### 接進 Grafana：跟 app、模型的指標疊在同一個時間軸
+
+先起 `ops/`（`docker compose -f ops/compose.yaml up -d`），然後把 `k6 run` 換成這支（Git Bash）：
+
+```bash
+perf/run-to-grafana.sh perf/knee.js
+```
+
+腳本自己的參數照常用環境變數給，後面多的參數原樣交給 `k6 run`：
+
+```bash
+STEPS=1,2,4,8 HOLD_S=15 perf/run-to-grafana.sh perf/knee.js
+```
+
+開 Grafana 的 **talkcal — 壓測（k6）**（<http://localhost:3000/d/talkcal-k6>）：上排是 k6 看到的（VU、請求速率、延遲、失敗率），
+下排是同一段時間 app 和模型在做什麼。腳本只是幫你設好 k6 送 OTLP 給 Alloy 的那幾個環境變數，每一個為什麼要設寫在
+[run-to-grafana.sh](run-to-grafana.sh) 裡；指標怎麼從 Alloy 進到 Mimir 見 [ops/README.md](../ops/README.md) 的「壓測」那一段。
+
+注意 app 那條線只看得到 **docker 那台 app**（18090）：Alloy 只抓它的指標，本機 bootRun 的不會被抓。
+要對照 server 那頭，就壓 docker 那台（`concurrent.js`、`knee.js` 預設就是）。
 
 ### load：找併發上限
 
@@ -194,15 +215,6 @@ launch.json 的原生 llama-server 沒帶 `-np`，是 llama.cpp 的預設值（4
    那個端點已經拿掉。換成助理之後一輪要叫好幾次模型，膝蓋、p95 都會不一樣，要重跑 load、knee 再定門檻。
 2. **換 slot 數看膝蓋移動。** launch.json 加 `-np 2` 或 `-np 8` 重啟 llama-server，配 `SLOTS` 再跑一次，
    驗證「膝蓋 = slot 數」這個假設。注意 slot 多了每個請求分到的 GPU 算力會變少，單一請求可能反而變慢。
-3. **把 k6 指標接進既有的 Grafana。** k6 能把指標 remote-write 進 `ops/` 的 Mimir，
-   壓測曲線就能跟 app 的指標疊在同一張 Grafana 圖上看。Mimir 本來就只收 remote-write
-   （Alloy 抓到的指標也是這樣送進去的），所以 ops/ 那邊不必改設定，只要：
-   - 跑壓測時輸出改成：
-     ```bash
-     k6 run -o experimental-prometheus-rw perf/load.js
-     ```
-     （用 `K6_PROMETHEUS_RW_SERVER_URL` 指到 `http://localhost:9009/api/v1/push`。）
-   - app 那邊的指標已經在吐（Grafana 查 `up{job="talkcal-app"}` 是 1），接上後就能三層疊圖。
 
 ## 檔案結構
 
@@ -214,5 +226,6 @@ perf/
 ├── smoke.js        # 最小規模的契約 + 連通性驗證
 ├── load.js         # 三段平台找併發上限
 ├── concurrent.js   # 一波人在短時間內各說一句（尖峰）
-└── knee.js         # 同時數逐階往上加，找臨界值
+├── knee.js         # 同時數逐階往上加，找臨界值
+└── run-to-grafana.sh  # 跑任何一支腳本，指標同時送進 ops/ 的 Grafana
 ```
