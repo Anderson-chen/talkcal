@@ -48,7 +48,7 @@
 <a id="rate-limit"></a>
 ### 濫用防護（rate limit） ❌
 
-`/api/calendar/assistant` 每次都會占用 GPU，一輪還可能叫好幾次模型，所以一個人就能把服務塞滿（`LLM10`）。目前只限制了單次請求：`max-tokens=2048` 能擋住一次生成暴走，但沒有限制請求次數。
+`/api/calendar/assistant` 每次都會占用 GPU，一輪還可能叫好幾次模型，所以一個人就能把服務塞滿（`LLM10`）。目前只限制了單次請求：`max-tokens=2048` 能擋住一次生成暴走，但沒有限制請求次數。2026-10-12 量到每分鐘 60 個請求、問題隨機混合時，模型的 KV cache 就塞爆、回 502（見 [postmortem](../postmortems/2026-10-12-deploy-cuts-in-flight-requests.md) 的附帶發現），門檻要比這個低。
 
 <a id="agent-permissions"></a>
 ### Agent 權限範圍 ✅

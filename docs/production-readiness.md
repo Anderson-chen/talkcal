@@ -45,7 +45,7 @@
 | [一鍵部署](production-readiness/release.md#deploy) | 部署不靠記步驟，每次都一樣 | ✅ 是 |
 | [DB migration](production-readiness/release.md#migration) | schema 變更有版本、可重現，每個環境都一致 | ✅ 是 |
 | [零停機的 schema 變更](production-readiness/release.md#zero-downtime-schema) | 改資料表時服務不用停 | ❌ 否 |
-| [Graceful shutdown](production-readiness/release.md#graceful-shutdown) | 部署時正在處理的請求能做完，不被砍斷 | ❌ 否 |
+| [Graceful shutdown](production-readiness/release.md#graceful-shutdown) | 部署時正在處理的請求能做完，不被砍斷 | ✅ 是 |
 | [Rollback](production-readiness/release.md#rollback) | 新版出問題時，幾分鐘內退回上一版 | ❌ 否 |
 | [漸進式發布（canary）](production-readiness/release.md#canary) | 新版的問題只影響一小部分使用者 | ❌ 否 |
 | [需求與待辦追蹤（Jira）](production-readiness/release.md#jira) | 每個改動都追得到為什麼做、做到哪、何時上線 | ❌ 否 |
@@ -85,7 +85,7 @@
 | [告警](production-readiness/respond.md#alerting) | 出事時有人被叫起來，不是等使用者來說 | ❌ 否 |
 | [監控本身掛掉](production-readiness/respond.md#meta-monitoring) | 監控停了也會被發現，不會誤以為一切正常 | ❌ 否 |
 | [Runbook](production-readiness/respond.md#runbook) | 告警響了，照著做就能處理，不靠記性 | ❌ 否 |
-| [Postmortem](production-readiness/respond.md#postmortem) | 同一個問題不發生第二次 | ❌ 否 |
+| [Postmortem](production-readiness/respond.md#postmortem) | 同一個問題不發生第二次 | ✅ 是 |
 | [從使用者回報追到 trace](production-readiness/respond.md#user-report-trace) | 使用者說「剛剛怪怪的」時，找得到是哪一次 | ❌ 否 |
 | [失敗時的使用者體驗](production-readiness/respond.md#failure-ux) | 壞掉時使用者知道發生什麼事、可以怎麼做 | ❌ 否 |
 | [降級與熔斷](production-readiness/respond.md#degradation) | 模型掛了，其他功能照常可用 | ❌ 否 |

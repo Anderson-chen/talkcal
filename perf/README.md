@@ -151,6 +151,30 @@ $env:STEPS="1,4,8,16,32"; k6 run perf/knee.js         # 自訂要量哪幾階
 跟 `load.js` 的差別：load 只量三段（1、SLOTS、SLOTS×2），knee 每一階都量，看得到臨界值落在哪。
 跟 `concurrent.js` 的差別：concurrent 量「一瞬間湧進 N 個」，knee 量「持續有 N 個在用」的穩定狀態。
 
+### deploy：邊壓邊部署
+
+部署那幾十秒裡有幾個人受影響、怎麼受影響。每分鐘固定來 `RATE_PER_MIN` 個人（預設 20）、各說一句，
+app 掛了也不會因此多送，所以失敗數 ≈ 部署期間進來的人數。先起 ops/，然後：
+
+```bash
+perf/run-to-grafana.sh perf/deploy.js
+```
+
+大約 60 秒後，在另一個終端機部署：
+
+```bash
+cd backend && ./gradlew deployApp -x test
+```
+
+收工印一張表，把失敗分成「一送就失敗」（app 不收或還沒起來）、「等了一陣子才失敗」（連線被砍）、「拿到錯誤碼」。
+Grafana 的「talkcal — 壓測（k6）」上，紅線是舊 app 收到 SIGTERM、綠線是新版起好。
+
+**別拿 knee.js 壓部署**：它的人說完立刻再說，app 停掉的十幾秒裡每個請求幾毫秒就失敗、立刻重送，
+會刷出幾萬個失敗，數字只反映重送得多快。用這支量出來的結果和經過見
+[第一份 postmortem](../docs/postmortems/2026-10-12-deploy-cuts-in-flight-requests.md)。
+
+`RATE_PER_MIN` 要低於容量：每分鐘 60 人、問題隨機混合時模型的 KV cache 會塞爆、回 502，跟部署無關的失敗混進來就分不清了。
+
 ## 怎麼讀結果
 
 k6 收工時印一張表，看三個地方就夠：
@@ -227,5 +251,6 @@ perf/
 ├── load.js         # 三段平台找併發上限
 ├── concurrent.js   # 一波人在短時間內各說一句（尖峰）
 ├── knee.js         # 同時數逐階往上加，找臨界值
+├── deploy.js       # 邊壓邊部署：部署期間有幾個人受影響
 └── run-to-grafana.sh  # 跑任何一支腳本，指標同時送進 ops/ 的 Grafana
 ```

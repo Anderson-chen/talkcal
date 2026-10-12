@@ -208,6 +208,12 @@ services:
       retries: 3
       start_period: 30s
 
+    # 停容器時，送 SIGTERM 之後等多久才送 SIGKILL。預設 10 秒。
+    # app 收到 SIGTERM 會等手上的請求做完（最多 2 分鐘，application.properties 的 timeout-per-shutdown-phase），
+    # 這裡要比它長，不然 app 還在等，Docker 就先把它殺了。多 30 秒給其他關機步驟（關連線池、JVM 結束）。
+    # 代價：遇到很慢的請求時，部署最久會多等 2 分半。
+    stop_grace_period: 2m30s
+
     restart: unless-stopped
 
   # ── 前端：nginx 送 Vue 靜態檔，並把 /api 轉給 app ──────────────────

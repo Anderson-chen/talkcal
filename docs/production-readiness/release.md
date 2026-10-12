@@ -28,9 +28,13 @@
 沒演練過 expand/contract。改欄位的時候，新舊兩個版本會同時在線，schema 要兩邊都能用。
 
 <a id="graceful-shutdown"></a>
-### Graceful shutdown ❌（部分做到）
+### Graceful shutdown ✅
 
-JVM 收得到 SIGTERM，但三個等待時間對不上：LLM 呼叫的逾時是 2 分鐘，Spring 每個關機階段預設只等 30 秒，[compose](../../deploy/compose.yaml) 又沒設 `stop_grace_period`，Docker 只等 10 秒就送 SIGKILL。**推測**每次部署都會砍斷正在回答的請求，還要用 k6 邊壓邊部署來驗證。
+三個等待時間對齊了：一次叫模型最多 2 分鐘，Spring 關機時等手上的請求最多 2 分鐘（[application.properties](../../backend/src/main/resources/application.properties)），Docker 等 2 分 30 秒才送 SIGKILL（[compose](../../deploy/compose.yaml) 的 `stop_grace_period`）。
+
+以前 Docker 只等 10 秒。用 k6 邊壓邊部署驗證過：部署當下有慢的請求時，改之前被 SIGKILL（結束碼 137），處理中的 9 個請求被砍斷；改之後等它們做完才結束（143），0 個被砍。經過寫在 [postmortem](../postmortems/2026-10-12-deploy-cuts-in-flight-requests.md)。
+
+還沒解決的是部署期間的停機：只有一個 app、先關舊的再開新的，停機那十幾秒進來的請求一樣會失敗，見[漸進式發布](#canary)。
 
 <a id="rollback"></a>
 ### Rollback ❌
@@ -40,7 +44,7 @@ app 映像檔固定叫 `talkcal/app:local`，沒有版本 tag，退不回上一�
 <a id="canary"></a>
 ### 漸進式發布（canary） ❌
 
-只有一個 app 實例，新版一上線就承接全部流量。Google 和 Mercari 的清單都要求先放一小部分流量進來，看指標沒問題再全開。單機環境做不到，至少要先有 rollback。
+只有一個 app 實例，新版一上線就承接全部流量；部署也是先關舊的、再開新的，中間有一段沒人接的空窗（2026-10-12 量到 15–25 秒，見 [postmortem](../postmortems/2026-10-12-deploy-cuts-in-flight-requests.md)）。第一步是零停機部署：起兩個 app，先起新的、健康了再關舊的。Google 和 Mercari 的清單都要求先放一小部分流量進來，看指標沒問題再全開。單機環境做不到，至少要先有 rollback。
 
 <a id="jira"></a>
 ### 需求與待辦事項追蹤（Jira） ❌
@@ -51,14 +55,14 @@ app 映像檔固定叫 `talkcal/app:local`，沒有版本 tag，退不回上一�
 
 ```
 Jira issue      分支                 commit / PR                  CI        合併、部署       Jira 狀態
-TALK-42 ──────▶ TALK-42-graceful ──▶ 「TALK-42 加長 stop_grace」 ──▶ 綠燈 ──▶ master、deploy ──▶ To Do → In Progress → In Review → Done
+TALKCAL-42 ──────▶ TALKCAL-42-graceful ──▶ 「TALKCAL-42 加長 stop_grace」 ──▶ 綠燈 ──▶ master、deploy ──▶ To Do → In Progress → In Review → Done
 ```
 
 | 步驟 | 做法 | 為什麼 |
 |---|---|---|
 | 開 issue | 這份清單的五段各開一個 Epic，每個 ❌ 是一張 Story 或 Task；告警、postmortem 找到的問題開成 Bug | 待辦只放一個地方，文件裡只連到 issue |
-| 開分支 | 分支名稱以 issue key 開頭，例如 `TALK-42-graceful-shutdown` | 裝了 GitHub for Jira 之後，Jira 會自動把分支、commit、PR 掛回 issue |
-| commit 和 PR | 訊息和標題開頭帶 `TALK-42` | 半年後看到一行程式，可以追回當初的需求和討論 |
+| 開分支 | 分支名稱以 issue key 開頭，例如 `TALKCAL-42-graceful-shutdown` | 裝了 GitHub for Jira 之後，Jira 會自動把分支、commit、PR 掛回 issue |
+| commit 和 PR | 訊息和標題開頭帶 `TALKCAL-42` | 半年後看到一行程式，可以追回當初的需求和討論 |
 | 狀態流轉 | 開 PR 時轉成 In Review，合併並部署之後轉成 Done（用 Jira Automation 做，不靠人記得） | issue 的狀態就是真實的狀態 |
 | Hotfix | 開最高優先的 Bug，照上面同一條流程走，只是插隊 | 緊急不等於不留紀錄 |
 

@@ -8,7 +8,61 @@
   "editable": true,
   "refresh": "5s",
   "time": { "from": "now-15m", "to": "now" },
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": [
+      {
+        "name": "app 開始關機（收到 SIGTERM）",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "enable": true,
+        "iconColor": "red",
+        "expr": "{service=\"app\"} |= \"Commencing graceful shutdown\"",
+        "target": {
+          "refId": "Anno",
+          "expr": "{service=\"app\"} |= \"Commencing graceful shutdown\"",
+          "queryType": "range"
+        },
+        "titleFormat": "app 開始關機（收到 SIGTERM）",
+        "textFormat": "{{container}}"
+      },
+      {
+        "name": "app 關機時還有請求沒做完",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "enable": true,
+        "iconColor": "purple",
+        "expr": "{service=\"app\"} |= \"Graceful shutdown aborted\"",
+        "target": {
+          "refId": "Anno",
+          "expr": "{service=\"app\"} |= \"Graceful shutdown aborted\"",
+          "queryType": "range"
+        },
+        "titleFormat": "app 關機時還有請求沒做完",
+        "textFormat": "{{container}}"
+      },
+      {
+        "name": "app 啟動完成",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "enable": true,
+        "iconColor": "green",
+        "expr": "{service=\"app\"} |= \"Started Application\"",
+        "target": {
+          "refId": "Anno",
+          "expr": "{service=\"app\"} |= \"Started Application\"",
+          "queryType": "range"
+        },
+        "titleFormat": "app 啟動完成",
+        "textFormat": "{{container}}"
+      }
+    ]
+  },
   "templating": { "list": [] },
   "panels": [
     {
