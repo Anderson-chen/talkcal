@@ -48,7 +48,7 @@
 | [Graceful shutdown](production-readiness/release.md#graceful-shutdown) | 部署時正在處理的請求能做完，不被砍斷 | ✅ 是 |
 | [Rollback](production-readiness/release.md#rollback) | 新版出問題時，幾分鐘內退回上一版 | ❌ 否 |
 | [漸進式發布（canary）](production-readiness/release.md#canary) | 新版的問題只影響一小部分使用者 | ❌ 否 |
-| [需求與待辦追蹤（Jira）](production-readiness/release.md#jira) | 每個改動都追得到為什麼做、做到哪、何時上線 | ❌ 否 |
+| [需求與待辦追蹤（GitHub Issues）](production-readiness/release.md#issues) | 每個改動都追得到為什麼做、做到哪、何時上線 | ✅ 是 |
 | [分支策略](production-readiness/release.md#branching) | 大家用同一套方式改程式、合程式 | ✅ 是 |
 | [Branch protection](production-readiness/release.md#branch-protection) | 沒過 CI 的程式碼進不了 `master`，誰都跳不過 | ✅ 是 |
 | [程式碼格式與 lint](production-readiness/release.md#lint) | 風格自動統一，常見錯誤在編譯前就抓到 | ❌ 否 |
