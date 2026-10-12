@@ -49,8 +49,8 @@
 | [Rollback](production-readiness/release.md#rollback) | 新版出問題時，幾分鐘內退回上一版 | ❌ 否 |
 | [漸進式發布（canary）](production-readiness/release.md#canary) | 新版的問題只影響一小部分使用者 | ❌ 否 |
 | [需求與待辦追蹤（Jira）](production-readiness/release.md#jira) | 每個改動都追得到為什麼做、做到哪、何時上線 | ❌ 否 |
-| [分支策略](production-readiness/release.md#branching) | 大家用同一套方式改程式、合程式 | ❌ 否 |
-| [Branch protection](production-readiness/release.md#branch-protection) | 沒過 CI 的程式碼進不了 `master`，誰都跳不過 | ❌ 否 |
+| [分支策略](production-readiness/release.md#branching) | 大家用同一套方式改程式、合程式 | ✅ 是 |
+| [Branch protection](production-readiness/release.md#branch-protection) | 沒過 CI 的程式碼進不了 `master`，誰都跳不過 | ✅ 是 |
 | [程式碼格式與 lint](production-readiness/release.md#lint) | 風格自動統一，常見錯誤在編譯前就抓到 | ❌ 否 |
 | [測試覆蓋率](production-readiness/release.md#coverage) | 知道哪些程式碼完全沒被測到 | ❌ 否 |
 | [環境分層（staging）](production-readiness/release.md#staging) | 新版先在跟線上一樣的環境驗證過才上線 | ❌ 否 |

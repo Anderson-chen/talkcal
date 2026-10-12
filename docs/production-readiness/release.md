@@ -67,7 +67,7 @@ TALK-42 ──────▶ TALK-42-graceful ──▶ 「TALK-42 加長 stop_
 這條流程要靠 PR 才完整，[Branch protection](#branch-protection) 已決定選 B（一定走 PR）。
 
 <a id="branching"></a>
-### 分支策略 ❌（部分做到）
+### 分支策略 ✅
 
 做法是 trunk-based，2026-10-12 起加上 PR：
 
@@ -76,14 +76,14 @@ TALK-42 ──────▶ TALK-42-graceful ──▶ 「TALK-42 加長 stop_
 3. 開 PR 到 `master`，GitHub 上的 CI 綠燈、自己看過 diff 才合併
 4. 合併後刪掉分支，分支不活過幾天
 
-以前是每個 commit 直接進 `master`，沒有審查紀錄。這套規則寫下來了，但要等 [Branch protection](#branch-protection) 在 GitHub 上套用，才算真的擋得住，所以先算「否」。
+以前是每個 commit 直接進 `master`，沒有審查紀錄。現在由 [Branch protection](#branch-protection) 在 GitHub 上強制，不走這條路就進不了 `master`。
 
 **不選 Git Flow**：它的 `develop`、`release/*`、`hotfix/*` 是為了「同時維護好幾個發行版」設計的，例如桌面軟體或 SDK。連作者自己都在 2020 年補註說，持續部署的服務應該用更簡單的流程，而 talkcal 永遠只有線上那一版。
 
 <a id="branch-protection"></a>
-### Branch protection ❌
+### Branch protection ✅
 
-現在擋壞程式的只有本機的 pre-push，用 `git push --no-verify` 就能跳過，換一台沒設 hook 的電腦也擋不到。branch protection 是 GitHub 伺服器那一端的規則，誰都跳不過。私人 repo 在免費方案開不了，所以 repo 改回了公開。
+以前擋壞程式的只有本機的 pre-push，用 `git push --no-verify` 就能跳過，換一台沒設 hook 的電腦也擋不到。branch protection 是 GitHub 伺服器那一端的規則，誰都跳不過。私人 repo 在免費方案開不了，所以 repo 改回了公開。
 
 考慮過兩種：
 
@@ -101,7 +101,9 @@ TALK-42 ──────▶ TALK-42-graceful ──▶ 「TALK-42 加長 stop_
 | 禁止 force push、禁止刪除 | 要 | 歷史不能被改寫 |
 | 管理員也要遵守 | 要 | 不然自己身為管理員，照樣能直推，等於沒設。真的緊急時改走 [Hotfix 流程](#hotfix)，一樣開 PR |
 
-規則還沒在 GitHub 上套用，套用之後這一項才算完成。
+2026-10-12 已在 GitHub 上套用（ruleset `protect-master`）。證據：[Anderson-chen/talkcal#1](https://github.com/Anderson-chen/talkcal/pull/1) 是套用之後第一個照規則合併的 PR，CI 綠燈之前合併按鈕按不下去。
+
+規則只存在 GitHub 的設定裡，repo 裡沒有對應的檔案；要看目前的內容，到 repo 的 Settings → Rules → Rulesets，或用 `gh api repos/Anderson-chen/talkcal/rules/branches/master`。
 
 <a id="lint"></a>
 ### 程式碼格式與 lint ❌
