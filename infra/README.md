@@ -1,15 +1,16 @@
 # infra —— 搬上 AWS 的基礎設施
 
-狀態：**規劃中**，兩個階段都還沒動工。本機現在怎麼跑見 [docs/architecture.md](../docs/architecture.md)。
+狀態：階段一的 Terraform 寫好了、還沒 apply 過；階段二還在規劃。本機現在怎麼跑見 [docs/architecture.md](../docs/architecture.md)。
 
 ## 兩個階段，一個資料夾一個
 
 ```
 infra/
 ├── README.md          # 這份：階段怎麼分、共同的慣例
+├── bootstrap/         # 兩階段共用、整個帳號只跑一次：放 state 的 S3 bucket、花費告警
 └── envs/
-    ├── 1-ec2/         # 階段一：一台 GPU EC2 + Docker Compose（#57）
-    └── 2-eks/         # 階段二：EKS 叢集（#58）
+    ├── 1-ec2/         # 階段一：一台 GPU EC2 + Docker Compose（#57），Terraform 已寫好
+    └── 2-eks/         # 階段二：EKS 叢集（#58），只有規劃
 ```
 
 | 階段 | 資料夾 | 追蹤 | 換來什麼 | 代價 |
@@ -31,7 +32,7 @@ infra/
 | 機器上跑的 compose 沿用 [deploy/compose.yaml](../deploy/compose.yaml)，雲端才需要的差異放各階段資料夾（例如 compose override、Caddyfile） | 本機和雲端是同一份定義，不會分岔。cool-down 是另寫一份正式用的 compose，這裡不跟 |
 | 某個階段拆掉了，程式碼保留，README 開頭註明拆除日期 | 留著當參考；cool-down 的 `envs/learning` 就是這樣 |
 
-之後加上的共用部分（例如放 Terraform remote state 的 S3 bucket、花費告警）放 `infra/bootstrap/`，兩個階段共用。
+`bootstrap/` 用本機 state（state bucket 還不存在，沒地方放），所以只放這兩樣東西，其他資源一律放各階段的資料夾。
 
 ## 待決定
 

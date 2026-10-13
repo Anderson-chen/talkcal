@@ -1,0 +1,67 @@
+#!/bin/bash
+# 第一次開機時跑一次：確認 AMI 帶的東西都在、補齊缺的、clone repo、跑第一次部署。
+# 之後的部署都是重跑 deploy.sh，不再經過這裡。
+# 這是 Terraform 範本：$${...} 會被 Terraform 代換，所以下面的 bash 變數一律寫成 $VAR，不加大括號。
+set -euxo pipefail
+exec > >(tee /var/log/user-data.log | logger -t user-data) 2>&1
+
+# ── 1. GPU 和 Docker：Deep Learning AMI 應該都裝好了，這裡只驗證 ─────────────────
+# 印出驅動版本：llama-server 映像檔是 CUDA 13，驅動要 580 以上
+nvidia-smi
+command -v docker
+command -v nvidia-ctk
+
+# 讓 Docker 認得 GPU（AMI 通常已經設好；重跑一次無害，只會確保 daemon.json 有 nvidia runtime）
+nvidia-ctk runtime configure --runtime=docker
+
+# log 輪替：Docker 預設的 json-file 不輪替，log 會一直長到磁碟滿。
+# 用合併的方式寫進 daemon.json：上面 nvidia-ctk 寫的 runtime 設定不能被蓋掉。
+python3 - <<'PY'
+import json, os
+p = "/etc/docker/daemon.json"
+cfg = json.load(open(p)) if os.path.exists(p) else {}
+cfg["log-driver"] = "json-file"
+cfg["log-opts"] = {"max-size": "10m", "max-file": "3"}
+json.dump(cfg, open(p, "w"), indent=2)
+PY
+systemctl restart docker
+
+# compose 和 buildx 是 Docker CLI 的外掛。AMI 沒帶的話補裝固定版本：
+#   compose：deploy/ 和 ops/ 兩組都靠它
+#   buildx ：backend 的 Dockerfile 用了 RUN --mount=type=cache，要 BuildKit 才 build 得動
+PLUGINS=/usr/local/lib/docker/cli-plugins
+mkdir -p $PLUGINS
+if ! docker compose version; then
+  curl -fsSL -o $PLUGINS/docker-compose \
+    https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64
+  chmod +x $PLUGINS/docker-compose
+fi
+if ! docker buildx version; then
+  curl -fsSL -o $PLUGINS/docker-buildx \
+    https://github.com/docker/buildx/releases/download/v0.20.1/buildx-v0.20.1.linux-amd64
+  chmod +x $PLUGINS/docker-buildx
+fi
+docker compose version
+docker buildx version
+
+# ── 2. 部署設定：寫成檔案，之後手動重跑 deploy.sh 時自動讀 ────────────────────────
+mkdir -p /opt/${project}
+cat > /opt/${project}/deploy.env <<'ENV'
+PROJECT=${project}
+AWS_REGION=${region}
+GIT_REF=${git_ref}
+MODELS_BUCKET=${models_bucket}
+DOTENV_PARAM=${dotenv_param}
+ENV
+
+# ── 3. 原始碼 ────────────────────────────────────────────────────────────────
+if [ ! -d /opt/${project}/repo/.git ]; then
+  git clone ${repo_url} /opt/${project}/repo
+fi
+git -C /opt/${project}/repo fetch --depth 1 origin ${git_ref}
+git -C /opt/${project}/repo checkout --detach FETCH_HEAD
+
+# ── 4. 第一次部署 ────────────────────────────────────────────────────────────
+# 第一次要 build llama-server（編 CUDA，十幾分鐘）、拉映像檔、複製模型，會跑很久。
+# 進度看 /var/log/user-data.log。
+bash /opt/${project}/repo/infra/envs/1-ec2/deploy.sh
