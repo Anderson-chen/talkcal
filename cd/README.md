@@ -54,7 +54,7 @@ WAIT_TIMEOUT=600 cd/apply.sh local app   # 拉長等待
 master CI ✅ ──（GitHub 不做任何事）
                         ▲
                         │ 每 5 分鐘：最新一個綠燈的 commit 是哪個？
-             cd/triggers/watch.sh local（部署用的 clone，工作排程觸發）
+             .git/cd-watch.sh local（部署用的 clone 裡 watcher 的副本，工作排程觸發）
                         │ 沒試過 → checkout → 那個 commit 的 cd/apply.sh local
                         ▼
              結果寫回 GitHub Deployments（repo 頁面右側的 Deployments → local）
@@ -72,6 +72,9 @@ cd C:/talkcal-deploy
 .\cd\triggers\install-local.ps1           # 登記工作排程 talkcal-cd-local，每 5 分鐘一輪
 ```
 
+`install-local.ps1` 會把 watcher 複製一份到 `.git/cd-watch.sh`，排程跑的是這份：`cd/triggers/watch.sh` 會跟著 checkout 變，
+部署到還沒有 watcher 的舊版本時它就不見了（第一次設定時真的發生過，見 #68）。副本在部署成功後才換成新版。
+
 `.ps1` 被擋（Windows 預設不讓腳本執行）的話：`powershell -ExecutionPolicy Bypass -File .\cd\triggers\install-local.ps1`。
 它只在登記時跑一次，之後每 5 分鐘被叫起來的是 `watch.sh`。
 
@@ -83,7 +86,7 @@ cd C:/talkcal-deploy
 | 想做的事 | 怎麼做 |
 |---|---|
 | 看部署了什麼 | GitHub repo 頁面的 Deployments，或 `C:/talkcal-deploy/.git/cd-local.log` |
-| 立刻跑一輪，不等排程 | `/c/talkcal-deploy/cd/triggers/watch.sh local`（Git Bash） |
+| 立刻跑一輪，不等排程 | `/c/talkcal-deploy/.git/cd-watch.sh local`（Git Bash），或 `Start-ScheduledTask talkcal-cd-local` |
 | 失敗的版本修好了要重試 | 刪掉 `.git/cd-local.last` 再跑一輪。同一個 commit 只自動試一次：失敗要人來看，不該每 5 分鐘重 build |
 | 暫停 | `Disable-ScheduledTask talkcal-cd-local`（恢復：`Enable-`；整個拿掉：`Unregister-`） |
 | 關機、重開機 | 不用管。排程登記在 Windows 裡，登入後自己恢復，關機時錯過的那輪會補跑。Docker Desktop 還沒起來的那幾輪會跳過、不記成試過 |
