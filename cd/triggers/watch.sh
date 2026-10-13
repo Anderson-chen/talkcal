@@ -10,6 +10,10 @@
 # 這支腳本作用在「它自己所在的那個 clone」：會 checkout 別的 commit，所以要跑在專門部署用的 clone，
 # 不要跑在開發用的那份（有沒 commit 的改動會直接拒絕，見下面）。
 #
+# 排程跑的不是這個檔案，是 .git/cd-watch.sh 這份副本（install-local.ps1 放的）：
+# 這個檔案會跟著 checkout 變，部署到一個還沒有 watcher 的舊版本時，它就不見了，之後排程叫不到任何東西。
+# 副本只在部署成功後才換成新版，watcher 跟著綠燈版本升級，但不會被自己部署的東西刪掉。
+#
 # 一輪做的事：
 #   1. 問 GitHub：master 上最新一個 CI 綠燈的 commit 是哪個
 #   2. 跟上次試過的比，一樣就結束（成功或失敗都不重試：失敗要人來看，不該每五分鐘重 build 一次）
@@ -25,9 +29,11 @@ main() {
   local branch=master
   local workflow=ci.yml
 
-  cd "$(dirname "$0")/../.."
+  # 找 clone 的根目錄。自己可能在 cd/triggers/（手動跑），也可能在 .git/（排程跑的副本）
+  cd "$(dirname "$0")"
   local git_dir
   git_dir="$(git rev-parse --absolute-git-dir)"
+  cd "$git_dir/.."
   local state="$git_dir/cd-$env_name.last"   # 上次試過的 sha。放 .git 裡：不會被 checkout 動到，也不會被 commit
   local log="$git_dir/cd-$env_name.log"
   local lock="$git_dir/cd-$env_name.lock"
@@ -105,6 +111,10 @@ main() {
   if $ok; then
     set_status "$repo" "$deployment_id" success "部署完成"
     echo "✅ ${sha:0:7} 部署到 $env_name"
+    # 排程跑的副本換成這個版本的 watcher。這個版本沒有 watcher（部署了舊版）就留著原本的
+    if [ -f cd/triggers/watch.sh ]; then
+      cp cd/triggers/watch.sh "$git_dir/cd-watch.sh"
+    fi
   else
     # description 上限 140 字，放不下完整路徑
     set_status "$repo" "$deployment_id" failure "部署失敗，log 在部署機器的 .git/cd-$env_name.log"
@@ -130,5 +140,6 @@ set_status() {
     -f state="$state" -f description="$description" ${SITE_URL:+-f environment_url="$SITE_URL"} >/dev/null
 }
 
-main "$@"
-exit
+# 呼叫和 exit 寫在同一行：bash 讀到這一行就整行讀完才執行。main 裡會覆寫 .git/cd-watch.sh（可能就是這個檔案），
+# exit 放下一行的話，main 回來後 bash 會從原本的位置接著讀已經被換掉的檔案
+main "$@"; exit $?
