@@ -17,6 +17,44 @@
 
 `./gradlew deploy`，見 [deploy/README.md](../../deploy/README.md)。
 
+<a id="cloud-deploy"></a>
+### 部署到 AWS：單台 EC2 + compose ❌
+
+服務只在本機跑，「線上」是模擬的。第一步是一台有 GPU 的 EC2，`deploy/` 和 `ops/` 兩組 compose 原樣搬上去，上去的就是本機驗證過的那一套。架構和要改的地方見 [infra/envs/1-ec2](../../infra/envs/1-ec2/README.md)。
+
+開始之前要先有：
+- **GPU 配額**：新帳號 G 系列的配額預設是 0，要先申請，審核可能要等。
+- **對外只開一個入口**：ops/ 的 Grafana 3000、Loki 3100 現在沒綁位址，要改成 `127.0.0.1`；機器只開 80/443，登入用 SSM，不開 22。
+- [祕密管理](ready.md#secrets)：DB 密碼不能再寫在 compose 裡，改放 SSM Parameter Store。
+- [成本](run.md#cost)：GPU 按小時計費，先決定機型和要不要平常關機。
+
+代價是只有一台機器：掛了服務就停，部署時那十幾秒沒人接也還在。這些留給 [EKS](#eks)。
+
+<a id="k8s-local"></a>
+### 本機 k8s（kind） ❌
+
+現在只有 Docker Compose。[deploy/README.md](../../deploy/README.md) 有一張「對照雲端」的表，列了每個 compose 設定在 k8s 上對應什麼，但沒有真的跑過。
+
+要做的：
+- compose 翻成 k8s 設定：Deployment、Service、模型的 initContainer 和 PVC、GPU 用 `nvidia.com/gpu: 1`。
+- 健康檢查拆成兩種：liveness（卡死要重啟）和 readiness（暫時不收流量），現在只有一種（見[健康檢查](run.md#health)）。
+- 關機等待沿用 [graceful shutdown](#graceful-shutdown) 的結果：`terminationGracePeriodSeconds: 150`。
+- 觀測改成 Alloy 讀節點上的 log 檔，不再掛 `docker.sock`。
+
+做完順便解掉部署空窗：k8s 的 rolling update 本來就是先起新的、健康了再關舊的，就是[接下來的順序](next-steps.md)第 2.5 步要的零停機部署。
+
+<a id="eks"></a>
+### 部署到 EKS ❌
+
+階段一只有一台機器。階段二搬到 EKS：CloudFront + S3 送前端、ALB 進叢集、GPU 節點跑模型、RDS 存資料、Secrets Manager 管密碼、GitHub Actions 推映像檔到 ECR。架構見 [infra/envs/2-eks](../../infra/envs/2-eks/README.md)。
+
+開始之前要先有：
+- [部署到 AWS：單台 EC2](#cloud-deploy)：AWS 帳號、配額、網域、祕密這些已經處理過。
+- [本機 k8s（kind）](#k8s-local)：k8s 設定先在本機跑通。
+- [版本與 release tag](#release-tag)：映像檔現在固定叫 `:local`，推上 ECR 要有版本，才退得回去。
+
+架構圖裡「待決定」的幾項（EKS 或 ECS、觀測自架或託管、部署怎麼推）選好之後寫成 [ADR](evolve.md#adr)。上去之後，[staging](#staging)、[rollback](#rollback)、[canary](#canary) 才有地方練。
+
 <a id="migration"></a>
 ### DB migration ✅
 
@@ -59,6 +97,7 @@ issue #21 ──▶ 分支 21-issue-workflow ──▶ PR「Closes #21」──�
 | 步驟 | 做法 | 為什麼 |
 |---|---|---|
 | 開 issue | 這份清單的五段各是一張父 issue（#8、#17、#30、#38、#46），每個 ❌ 是底下的 sub-issue；告警、postmortem 找到的問題也開成 issue | 待辦只放一個地方。父 issue 上的進度條就是這一段做完幾成 |
+| 打 label | 兩種：**階段**每張正好一個（`stage: ready` … `stage: evolve`，跟它掛的父 issue 一致；父 issue 本身另標 `epic`），**領域**可以多個（`security`、`observability`、`ai`、`testing`、`ci`、`deploy`、`data`、`process`、`frontend`） | sub-issue 的分組在 issue 列表上看不到，階段 label 讓列表也能篩。領域會橫跨階段，例如資安散在 Ready、Run、Evolve 三段，篩 `security` 一次看完。優先順序不做成 label，寫在[接下來的順序](next-steps.md)，兩邊都寫遲早會對不上 |
 | 開分支 | 在 issue 頁按「Create a branch」，名稱是 `編號-描述`，例如 `21-issue-workflow` | 分支直接掛在 issue 的 Development 欄 |
 | 開 PR | 描述寫 `Closes #21`（[PR 範本](../../.github/pull_request_template.md)已經放好） | 合併時 GitHub 自動關 issue；半年後從 `git blame` → commit → PR → issue，一路點得回當初為什麼做 |
 | 擋住沒連 issue 的 PR | [pr-issue.yml](../../.github/workflows/pr-issue.yml) 問 GitHub「這個 PR 合併時會關哪些 issue」，一個都沒有就紅燈，並設成 [Branch protection](#branch-protection) 的必過檢查 | 連結一斷，上面全部失效；靠人記得一定會漏 |

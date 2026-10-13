@@ -14,3 +14,6 @@
 | 5 | AI eval | LLM 產品特有的品質把關 |
 | 6 | Rate limit、間接 prompt injection 的防線和測試 | 資安。agent 的權限已經收窄，剩下的是「塞爆 GPU」和「行程內容裡藏指令」 |
 | 7 | 備份還原演練、舊資料歸檔到物件儲存 | 資料生命週期 |
+| 8 | [部署到 AWS：單台 EC2 + compose](release.md#cloud-deploy)，規劃見 [infra/](../../infra/README.md) | compose 幾乎不用改就能上線，別人連得到。要先有 GPU 配額、祕密管理和成本試算 |
+| 9 | [本機 k8s（kind）](release.md#k8s-local) | 上 EKS 前先在本機把 k8s 設定跑通，不花錢。如果第 2.5 步還沒做，可以提前到這裡：rolling update 直接補上部署空窗 |
+| 10 | [部署到 EKS](release.md#eks) | 要等第 8、9 步和版本 tag；上去之後 staging、rollback、canary 才有地方練 |
