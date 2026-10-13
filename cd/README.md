@@ -89,6 +89,7 @@ cd C:/talkcal-deploy
 | 立刻跑一輪，不等排程 | `/c/talkcal-deploy/.git/cd-watch.sh local`（Git Bash），或 `Start-ScheduledTask talkcal-cd-local` |
 | 失敗的版本修好了要重試 | 刪掉 `.git/cd-local.last` 再跑一輪。同一個 commit 只自動試一次：失敗要人來看，不該每 5 分鐘重 build |
 | 暫停 | `Disable-ScheduledTask talkcal-cd-local`（恢復：`Enable-`；整個拿掉：`Unregister-`） |
+| watcher 本身有 bug（log 不再有新的一輪） | 副本會跟著部署換成新版，壞掉的 watcher 部署不到修好的版本，自己救不回來。修好、合併後手動放回：`cp cd/triggers/watch.sh .git/cd-watch.sh`（#70 就是這樣救回來的） |
 | 關機、重開機 | 不用管。排程登記在 Windows 裡，登入後自己恢復，關機時錯過的那輪會補跑。Docker Desktop 還沒起來的那幾輪會跳過、不記成試過 |
 
 開發用的 clone 照樣可以 `./gradlew deploy`：兩邊換的是同一組容器（compose 專案都叫 `talkcal-deploy`），
