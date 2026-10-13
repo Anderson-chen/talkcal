@@ -20,12 +20,12 @@
 <a id="cloud-deploy"></a>
 ### 部署到 AWS：單台 EC2 + compose ❌
 
-服務只在本機跑，「線上」是模擬的。第一步是一台有 GPU 的 EC2，`deploy/` 和 `ops/` 兩組 compose 原樣搬上去，上去的就是本機驗證過的那一套。架構和要改的地方見 [infra/envs/1-ec2](../../infra/envs/1-ec2/README.md)。
+服務只在本機跑，「線上」是模擬的。Terraform 已經寫好（[infra/envs/1-ec2](../../infra/envs/1-ec2/README.md)），還沒 apply 過。第一步是一台有 GPU 的 EC2，`deploy/` 和 `ops/` 兩組 compose 原樣搬上去，上去的就是本機驗證過的那一套。架構和要改的地方見 [infra/envs/1-ec2](../../infra/envs/1-ec2/README.md)。
 
 開始之前要先有：
 - **GPU 配額**：新帳號 G 系列的配額預設是 0，要先申請，審核可能要等。
-- **對外只開一個入口**：ops/ 的 Grafana 3000、Loki 3100 現在沒綁位址，要改成 `127.0.0.1`；機器只開 80/443，登入用 SSM，不開 22。
-- [祕密管理](ready.md#secrets)：DB 密碼不能再寫在 compose 裡，改放 SSM Parameter Store。
+- ~~**對外只開一個入口**~~：Grafana、Loki 已改成只綁 `127.0.0.1`，security group 只開 80/443，登入用 SSM。
+- ~~[祕密管理](ready.md#secrets)~~：雲端上的 DB 密碼由 Terraform 產生、放 SSM Parameter Store（本機還是寫死，所以 #14 還沒關）。
 - [成本](run.md#cost)：GPU 按小時計費，先決定機型和要不要平常關機。
 
 代價是只有一台機器：掛了服務就停，部署時那十幾秒沒人接也還在。這些留給 [EKS](#eks)。

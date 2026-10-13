@@ -7,3 +7,5 @@ docs/design/calendar/prototype.html -text -diff
 *.sh text eol=lf
 .githooks/* text eol=lf
 backend/gradlew text eol=lf
+# Terraform 範本裡的 user_data：Terraform 在 Windows 上讀檔、原樣送到 EC2 給 bash 跑，CRLF 一樣會壞
+*.tftpl text eol=lf

@@ -1,72 +1,156 @@
 # 1-ec2 — 階段一：單台 EC2 + Docker Compose
 
-狀態：**規劃中**，追蹤在 [#57](https://github.com/Anderson-chen/talkcal/issues/57)。整體的階段怎麼分見 [infra/README.md](../../README.md)。
+狀態：**IaC 寫好了，還沒 apply 過**。追蹤在 [#57](https://github.com/Anderson-chen/talkcal/issues/57)；整體的階段怎麼分見 [infra/README.md](../../README.md)。
+下面的步驟和指令都還沒在真的 AWS 帳號上跑過；第一次 apply 時遇到的問題補進「疑難排解」。
 
-一台有 GPU 的 EC2，裝好 Docker，`deploy/` 和 `ops/` 兩組 compose 原樣搬上去。
+一台有 GPU 的 EC2，`deploy/` 和 `ops/` 兩組 compose 原樣搬上去，前面加一個 Caddy 處理 HTTPS。
 
 ## 1. 使用者的請求怎麼走
 
 ```mermaid
 flowchart LR
-    user["使用者"] --> r53["Route 53<br/>網域，可選"]
-    r53 -->|"只開 80/443"| web["web<br/>nginx + HTTPS"]
+    user["使用者"] -->|"https://talkcal.IP.sslip.io<br/>security group 只開 80/443"| caddy["caddy<br/>自動拿憑證"]
+    caddy --> web["web<br/>nginx"]
     web -->|"/api/ 轉給 app"| app["app"]
-    app --> llm["llm-chat<br/>EC2 的 GPU"]
+    app --> llm["llm-chat<br/>L4 GPU"]
     app --> pg[("postgres<br/>EBS 上的 volume")]
 ```
 
-整條路跟本機一樣，全部在同一台機器的 Docker 網路裡。差別只在入口：security group 只放 80/443 進來。
+從 web 往後跟本機完全一樣。差別只在入口多了 Caddy。
 
-## 2. 程式、模型怎麼上機器
+## 2. 程式、模型、密碼怎麼上機器
 
 ```mermaid
 flowchart LR
-    dev["開發者"] -->|"SSM Session Manager<br/>不開 22 埠"| ec2["EC2<br/>git pull + compose build"]
-    s3m[("S3<br/>GGUF 模型檔")] -->|"aws s3 cp"| dir[("EC2 上的模型資料夾")]
-    dir --> seed["model-seed"]
-    seed --> vol[("volume models")]
+    gh["GitHub<br/>公開 repo"] -->|"git fetch 指定版本"| deploy["deploy.sh<br/>在 EC2 上跑"]
+    s3m[("S3<br/>GGUF 模型檔")] -->|"aws s3 sync"| deploy
+    ssm["SSM Parameter Store<br/>.env（DB 密碼、網址）"] -->|"get-parameter"| deploy
+    deploy -->|"compose up --build"| stack["deploy/ + ops/<br/>兩組容器"]
 ```
 
-觀測那組跟本機一模一樣，不另外畫。看 Grafana 用 SSM 的 port forwarding，不對外開 3000。
+觀測那組跟本機一模一樣。看 Grafana 用 SSM 的 port forwarding 接回本機，不對外開 3000。
 
-## 跟本機比，要改的地方
+## 檔案
 
-| 項目 | 本機 | EC2 上 |
-|---|---|---|
-| 機型 | RTX 12GB | GPU 機型：g4dn（T4 16GB）最便宜，Qwen3-8B Q4 放得下；g6（L4 24GB）較新較快 |
-| GPU 配額 | 不用 | 新帳號 G 系列的配額預設是 0，要先到 Service Quotas 申請，審核可能要等 |
-| 驅動 | Docker Desktop 處理 | 用 AWS 的 Deep Learning Base AMI（NVIDIA 驅動、Docker、container toolkit 都裝好）。llama-server 映像檔是 CUDA 13，開機後 `nvidia-smi` 確認驅動夠新 |
-| 模型檔 | `C:/llm/models` | 放 S3，開機時拉到 EC2 上的資料夾，model-seed 的來源改指那裡 |
-| 對外的埠 | 全部綁 `127.0.0.1` | 只有 web 開 80/443。**ops/ 的 Grafana 3000、Loki 3100 現在沒綁位址，要先改成 `127.0.0.1`** |
-| HTTPS | 沒有 | nginx 加憑證（certbot），或前面加 Caddy 自動拿；要有網域 |
-| 登入機器 | 本機 | SSM Session Manager，security group 不開 22 |
-| DB 密碼 | 寫在 compose | 放 SSM Parameter Store，部署時寫成 `.env`，不進版控（[#14](https://github.com/Anderson-chen/talkcal/issues/14)） |
-| 映像檔 | 本機 build | 先在 EC2 上 build；做 [版本 tag](https://github.com/Anderson-chen/talkcal/issues/25) 時再改成 CI 推到 ECR |
-| 資料庫備份 | volume | EBS 快照排程（Data Lifecycle Manager），[#45](https://github.com/Anderson-chen/talkcal/issues/45) 有地方演練 |
-| 記憶體 | 主機很大 | xlarge 只有 16GB，要塞 JVM、Postgres 和整組觀測，有點緊；不夠就換 2xlarge |
-| 費用 | 0 | GPU 按小時計費。平常關機、展示時才開，關機時只付 EBS（[#35](https://github.com/Anderson-chen/talkcal/issues/35)） |
+| 檔案 | 做什麼 |
+|---|---|
+| `backend.tf`、`backend.hcl.example` | state 放 bootstrap 建的 S3 bucket；bucket 名稱帶帳號 ID，放在 gitignore 掉的 `backend.hcl` |
+| `vpc.tf` | 一個公有子網，不建 NAT；可用區自動挑有這個 GPU 機型的 |
+| `security-groups.tf` | 只開 80/443（含 HTTP/3 的 UDP 443）；22 預設關 |
+| `ec2.tf` | Deep Learning Base AMI（Ubuntu 24.04）、g6.xlarge、Elastic IP、強制 IMDSv2 |
+| `iam.tf` | 機器的角色：SSM 連線、讀模型 bucket、讀 `.env` 參數，別的都碰不到 |
+| `s3.tf` | 模型檔的 bucket |
+| `secrets.tf` | 產生 DB 密碼，連同網址寫成一份 `.env` 存進 SSM |
+| `user-data.sh.tftpl` | 第一次開機：驗證 GPU 和 Docker、補 compose/buildx、clone、第一次部署 |
+| `deploy.sh` | 在機器上跑的部署：拉版本 → 拉模型 → 拉 `.env` → 兩組 compose up |
+| `compose.ec2.yaml` | 疊在 `deploy/compose.yaml` 上的雲端差異：模型來源、DB 密碼、app 記憶體上限、Caddy |
+| `Caddyfile` | HTTPS 入口，全部轉給 web |
+
+## 跟本機比，改了什麼
+
+| 項目 | 本機 | EC2 上 | 在哪裡改 |
+|---|---|---|---|
+| GPU | RTX（Ada） | g6.xlarge 的 L4（也是 Ada，sm_89）。llama-server 映像檔編的是 `CUDA_ARCH=89`，同一份直接跑；g4dn 的 T4 是 sm_75，要重編 | `variables.tf` |
+| 驅動 | Docker Desktop 處理 | Deep Learning Base AMI 裝好了；開機時印 `nvidia-smi`，CUDA 13 要驅動 580 以上 | `ec2.tf`、`user-data.sh.tftpl` |
+| 模型檔 | `C:/llm/models` | S3 → `/opt/talkcal/models` → model-seed 照舊驗 SHA256、複製進 volume | `s3.tf`、`deploy.sh`、`compose.ec2.yaml` |
+| HTTPS | 沒有 | Caddy + sslip.io：用 IP 推出網域，不必買網域也有 Let's Encrypt 憑證 | `compose.ec2.yaml`、`Caddyfile` |
+| 對外的埠 | 全部綁 `127.0.0.1` | 只有 Caddy 開 80/443；Grafana、Loki 原本沒綁位址，已改成 `127.0.0.1`（本機也一起改了） | `ops/compose.yaml`、`security-groups.tf` |
+| 登入機器 | 本機 | SSM Session Manager，不開 22 | `iam.tf` |
+| DB 密碼 | 寫死 `talkcal` | Terraform 隨機產生 → SSM → `deploy/.env`（[#14](https://github.com/Anderson-chen/talkcal/issues/14) 在雲端上解掉了，本機還是寫死） | `secrets.tf`、`compose.ec2.yaml` |
+| app 記憶體 | 沒上限 | `mem_limit: 2g`：沒設的話 JVM 的 75% 是算整台 16GB | `compose.ec2.yaml` |
+| 映像檔 | 本機 build | 在 EC2 上 build；做[版本 tag](https://github.com/Anderson-chen/talkcal/issues/25) 時再改成 CI 推到 ECR | `deploy.sh` |
+
+## 首次部署
+
+前提：AWS CLI 的 `DEV` profile 登入得了；**GPU 配額已經申請下來**（新帳號「Running On-Demand G and VT instances」預設是 0，g6.xlarge 要 4 vCPU）。
+
+```bash
+# 0. 共用的 state bucket 和花費告警（整個帳號只跑一次）
+cd infra/bootstrap
+terraform init
+terraform apply -var="alert_email=<你的信箱>"
+
+# 1. 基礎設施
+cd ../envs/1-ec2
+cp backend.hcl.example backend.hcl        # 填入上一步輸出的 state_bucket
+terraform init -backend-config=backend.hcl
+terraform apply
+
+# 2. 上傳模型檔（只要一次；SHA256SUMS 一起傳，model-seed 會驗）
+aws s3 cp C:/llm/models/Qwen3-8B-Q4_K_M.gguf "s3://$(terraform output -raw models_bucket)/" --profile DEV
+aws s3 cp C:/llm/models/SHA256SUMS            "s3://$(terraform output -raw models_bucket)/" --profile DEV
+```
+
+機器開機後 user_data 會自動跑第一次部署。如果模型檔是在機器開機**之後**才傳上去，第一次部署會停在「S3 裡沒有 .gguf」，傳好之後手動重跑一次：
+
+```bash
+aws ssm start-session --target "$(terraform output -raw instance_id)" --region ap-northeast-1 --profile DEV
+sudo bash /opt/talkcal/repo/infra/envs/1-ec2/deploy.sh
+```
+
+第一次要編 llama-server（CUDA，十幾分鐘）、build app、拉映像檔，會跑很久，進度看 `sudo tail -f /var/log/user-data.log`。
+好了之後開 `terraform output -raw app_url`。
+
+## 日常操作
+
+```bash
+# 部署新版：master 合併之後，到機器上重跑
+sudo bash /opt/talkcal/repo/infra/envs/1-ec2/deploy.sh
+# 先部署某個分支試試
+sudo GIT_REF=57-ec2 bash /opt/talkcal/repo/infra/envs/1-ec2/deploy.sh
+
+# 看狀態
+cd /opt/talkcal/repo
+sudo docker compose -f deploy/compose.yaml -f infra/envs/1-ec2/compose.ec2.yaml ps
+sudo docker stats --no-stream && free -h && nvidia-smi
+
+# 看 Grafana：在本機跑這行，再開 http://localhost:3000
+terraform output -raw grafana_tunnel
+```
+
+## 省錢
+
+GPU 機器按小時計費，平常關機、展示時才開。關機時還在收費的只有 EBS（150GB gp3）和沒掛在執行中機器上的 Elastic IP。
+
+```bash
+aws ec2 stop-instances  --instance-ids "$(terraform output -raw instance_id)" --region ap-northeast-1 --profile DEV
+aws ec2 start-instances --instance-ids "$(terraform output -raw instance_id)" --region ap-northeast-1 --profile DEV
+```
+
+容器都設了 `restart: unless-stopped`，開機後會自己起來，不必重跑 deploy.sh；但模型要重新載入，第一個請求會等比較久。
+徹底收攤用 `terraform destroy`：IP 釋出、網址跟著換，資料庫資料也會一起消失。
 
 ## 代價
 
 - 只有一台：機器掛了服務就停，部署時那十幾秒沒人接也還在。
-- rolling update、canary 在單機上做不太出來，這些留給階段二。
+- rolling update、canary 在單機上做不太出來，這些留給[階段二](../2-eks/README.md)。
+- 機器上 build 映像檔：第一次很慢，而且線上跑的映像檔沒有版本號，退版要重新 build 舊的 commit。
 
-## 待決定（階段一）
+## 已經決定的
+
+| 問題 | 選擇 | 理由 |
+|---|---|---|
+| 機型 | g6.xlarge | 映像檔是 sm_89，L4 不用重編；T4 便宜但要另外編一份 |
+| HTTPS | Caddy + sslip.io | 一個設定檔包辦憑證和續期，不必買網域；跟 cool-down 同一套做法 |
+| 觀測放哪 | 同一台，跟本機同一份 `ops/` | 最能證明「搬得動」；記憶體不夠再考慮 Grafana Cloud |
+| 映像檔從哪來 | 機器上 build | 不必先從家裡推幾 GB 的 CUDA 映像檔上 ECR；版本 tag 做了再改 |
+
+## 待決定
 
 | 問題 | 選項 | 目前傾向 |
 |---|---|---|
-| 機型 | g4dn.xlarge / g6.xlarge / 2xlarge | 先 g4dn 跑通，記憶體或速度不夠再換；以 AWS 定價頁和實測為準 |
-| Region | 東京 ap-northeast-1 / 台北 ap-east-2 | 要先確認該區有沒有這些 GPU 機型和配額 |
-| HTTPS 怎麼做 | nginx + certbot / Caddy / 前面加 CloudFront | Caddy 最省事；CloudFront 順便有快取和 WAF，但多一層 |
-| 開機策略 | 常駐 / 平常關機、展示才開 | 平常關機，第一個請求要等開機和載模型 |
-| 觀測放哪 | 同一台 / Grafana Cloud 免費額度 | 同一台，跟本機同一套；記憶體不夠再搬 |
+| Region | 東京 ap-northeast-1 / 台北 ap-east-2 | 預設東京（確定有 g6）。台北延遲低、比較便宜，確認有 GPU 機型後再換 |
+| 開機策略 | 常駐 / 平常關機、展示才開 | 平常關機 |
+| EBS 自動快照 | 現在沒有 / Data Lifecycle Manager 每天一次 | 跟 [#45 備份與還原](https://github.com/Anderson-chen/talkcal/issues/45) 一起做 |
 
-## 做完時這份 README 要補上的
+## 疑難排解
 
-照 cool-down 的 `infra/envs/ec2/README.md` 的段落，做 [#57](https://github.com/Anderson-chen/talkcal/issues/57) 時補：
+還沒實際跑過，先列預期會遇到的：
 
-- 首次部署：`terraform apply` → build 映像檔 → 到機器上跑部署腳本，一步一步的指令
-- 日常操作：改了 compose 怎麼推、換映像檔怎麼推、怎麼看狀態和 log
-- 記憶體預算：每個容器的 `mem_limit` 和實測用量
-- 省錢：開關機指令、關機時還在計費的項目
-- 疑難排解：症狀 → 檢查什麼
+| 症狀 | 檢查 |
+|---|---|
+| `terraform apply` 開不出機器，說 vCPU 上限 | GPU 配額還沒申請或還沒核准（Service Quotas → EC2 → Running On-Demand G and VT instances） |
+| user_data 沒跑完 | `sudo cat /var/log/user-data.log`。`nvidia-smi` 失敗是 AMI 驅動的問題；`docker compose` 失敗看 compose / buildx 有沒有裝上 |
+| llm-chat 起不來，log 說 CUDA 版本 | 驅動太舊，CUDA 13 要 580 以上：`nvidia-smi` 右上角的 CUDA Version |
+| 憑證拿不到 | security group 的 80 要對 0.0.0.0/0 開（Let's Encrypt 的 HTTP-01 驗證走這裡）；`docker logs talkcal-caddy` |
+| 容器被 OOM kill | `docker inspect <名稱> --format '{{.State.OOMKilled}}'`；先調 `mem_limit`，再考慮換 g6.2xlarge |

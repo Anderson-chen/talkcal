@@ -7,3 +7,15 @@ build/
 # IntelliJ：IDE 狀態不進版控，專案結構由 build.gradle 描述就夠了
 .idea/
 *.iml
+
+# Terraform：provider 快取、state、計畫檔、各自的變數值都不進版控。
+# .terraform.lock.hcl 要進：它釘住 provider 的版本和雜湊，換台電腦 init 拿到同一份。
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+*.tfvars
+backend.hcl
+
+# 雲端機器上 deploy.sh 從 SSM 拉下來的 .env（有 DB 密碼）
+deploy/.env
