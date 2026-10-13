@@ -42,8 +42,16 @@ main() {
   # shellcheck source=/dev/null
   source "$env_file"   # 這裡只用到 SITE_URL；部署本身由 apply.sh 讀 checkout 之後的版本
 
-  # 同時寫進 log：排程跑的時候沒有人看螢幕，事後要能查
-  exec > >(tee -a "$log") 2>&1
+  # 寫進 log：排程跑的時候沒有人看螢幕，事後要能查。
+  # 手動跑時畫面和 log 都要有，用 tee；排程（conhost --headless）底下 stdout 不是有效的 handle，
+  # tee 一啟動就失敗（Bad file descriptor），整支在寫下第一行 log 前就結束、排程器還顯示成功。
+  # 所以先讓 tee 對 stdout 空跑一次，成功才 tee，失敗就只寫 log。
+  # 不用 [ -t 1 ]：被管線接走（| tail）和 headless 它都回「不是 tty」，分不出來
+  if : | tee 2>/dev/null; then
+    exec > >(tee -a "$log") 2>&1
+  else
+    exec >>"$log" 2>&1
+  fi
   echo "══ $(date '+%F %T') watch $env_name"
 
   # 上一輪還在跑（build 映像檔可能要好幾分鐘）就這輪跳過。Git Bash 沒有 flock，用 mkdir：建資料夾是原子操作。
