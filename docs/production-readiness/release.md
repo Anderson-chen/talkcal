@@ -15,7 +15,9 @@
 <a id="deploy"></a>
 ### 一鍵部署 ✅
 
-`./gradlew deploy`，見 [deploy/README.md](../../deploy/README.md)。
+`./gradlew deploy`，見 [deploy/README.md](../../deploy/README.md)。部署步驟寫在 [cd/apply.sh](../../cd/README.md)，本機和 AWS 共用。
+
+master 的 CI 綠燈之後，本機會自動部署：[cd/triggers/watch.sh](../../cd/README.md#本機-cdmaster-綠燈就自動部署) 每 5 分鐘去 GitHub 看有沒有新的綠燈版本，有就部署，結果寫回 GitHub 的 Deployments。是機器自己去拉，GitHub 不必有連進來的權限；選 pull 不選 push 的理由也寫在那裡。還沒有的：watcher 自己掛掉時的告警、部署後的煙霧測試。
 
 <a id="cloud-deploy"></a>
 ### 部署到 AWS：單台 EC2 + compose ❌
