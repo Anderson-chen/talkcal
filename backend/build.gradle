@@ -176,77 +176,47 @@ application {
     mainClass = 'io.github.andersonchen.talkcal.Application'
 }
 
-// 一鍵部署 app 到本機 Docker：./gradlew deployApp
-// 趕時間跳過測試用 Gradle 內建的 -x：./gradlew deployApp -x test
+// ── 部署：步驟寫在 cd/apply.sh，這裡只是本機的快捷鍵 ──
+// 部署邏輯只寫一份，本機和雲端共用（見 cd/README.md）。Gradle 這層只多做一件事：deployApp 先跑測試。
 //
-// 為什麼要先跑測試：Dockerfile 刻意只打包、不跑測試，部署前「先驗過」這件事還沒有 CI 做，
-// 先掛在這裡。測試沒改過的話 Gradle 會判定 up-to-date 直接跳過，不會白跑。
-// 只動 app：模型重 build 要十分鐘、重啟期間所有請求都會失敗，不該跟著每次部署。
-//
-// --no-deps：不加的話，compose 會沿著 depends_on 走到 model-seed。它是跑完就結束的一次性容器，
-// compose 每次都把它重建，而 llm-chat 依賴它，就跟著被重建——部署 app 等於順便重啟模型
-// （2026-10-08 改名後第一次部署時從 compose 的輸出發現，`docker compose up --dry-run app` 可以重現）。
-// 代價：postgres 和 llm-chat 要先起好，第一次部署前先 `docker compose up -d postgres llm-chat`；
-// 沒起的話 app 連不上資料庫、啟動失敗，--wait 會等到逾時報錯，不會假裝成功。
-tasks.register('deployApp', Exec) {
-    group = 'deployment'
-    description = '跑測試、build app 映像檔、換掉 deploy/ 的 app 容器，等它 healthy'
-    dependsOn tasks.named('test')
+// 找 Git Bash 來跑 cd/ 底下的 script。不直接寫 'bash'：Windows 的 PATH 裡第一個 bash 是
+// C:\Windows\System32\bash.exe —— 那是 WSL，這台的 WSL 只有 docker-desktop 一個 distro，script 跑不起來；
+// 從 PowerShell、IntelliJ 跑 gradlew 都會撞到。Git 裝在哪也不一定（這台是 C:/install/Git），
+// 所以問 git 自己：--exec-path 是 <Git>/mingw64/libexec/git-core，往上三層就是安裝目錄。
+// 真的找不到時：./gradlew deploy -PbashPath=<bash.exe 的路徑>
+def bashPath = providers.gradleProperty('bashPath').orElse(providers.provider {
+    if (!System.getProperty('os.name').toLowerCase().contains('windows')) return 'bash'
+    def gitCore = providers.exec { commandLine 'git', '--exec-path' }.standardOutput.asText.get().trim()
+    new File(gitCore).parentFile.parentFile.parentFile.toPath().resolve('bin/bash.exe').toString()
+})
 
-    // 用專案目錄（backend/）推出旁邊的 deploy/，不寫死絕對路徑：換一台機器、換一個 clone 位置都能跑
-    workingDir = layout.projectDirectory.dir('../deploy')
+// 等 healthy 的上限（秒），不給就用 cd/apply.sh 裡各服務的預設：./gradlew deployApp -PdeployWaitTimeout=600
+def deployWaitTimeout = providers.gradleProperty('deployWaitTimeout')
 
-    // 等 healthy 的上限（秒）。預設 300，模型第一次載入太慢時：./gradlew deployApp -PdeployWaitTimeout=600
-    def waitTimeout = providers.gradleProperty('deployWaitTimeout').orElse('300').get()
-
-    // --build：映像檔有變就重 build；容器的映像檔換了才會被替換，沒變就什麼都不做。
-    // --wait：等到 compose 裡的 healthcheck 通過（/actuator/health 回 200）才結束。
-    //   沒有它的話，Spring 還在啟動、甚至啟動失敗，這個 task 都會顯示成功。
-    //   也因為交給 healthcheck 判斷，這裡不必再寫死主機埠去打一次。
-    commandLine 'docker', 'compose', 'up', '-d', '--build', '--no-deps', '--wait', '--wait-timeout', waitTimeout, 'app'
+def registerDeploy = { String name, String service, String desc ->
+    tasks.register(name, Exec) {
+        group = 'deployment'
+        description = desc
+        // 用專案目錄（backend/）推出 repo 根目錄，不寫死絕對路徑：換一台機器、換一個 clone 位置都能跑
+        workingDir = layout.projectDirectory.dir('..')
+        commandLine bashPath.get(), 'cd/apply.sh', 'local', service
+        if (deployWaitTimeout.present) environment 'WAIT_TIMEOUT', deployWaitTimeout.get()
+    }
 }
 
-// 一鍵部署前端到本機 Docker：./gradlew deployWeb
-//
-// 為什麼不像 deployApp 那樣 dependsOn 什麼：前端的檢查（vue-tsc 型別檢查）寫在 web/Dockerfile 的 npm run build 裡，
-// 型別錯映像檔就 build 不出來。Gradle 這邊不必裝 Node、也不必知道 npm 的存在，只負責叫 Docker。
-//
-// --no-deps：只動 web。不加的話 --build 會沿著 depends_on 把 app 也重 build、換掉——
-// 而且是沒跑過測試的 app，繞過了 deployApp 守的那道關。app 沒在跑也照樣部署得上去，
-// 只是頁面問問題會拿到 502，先 ./gradlew deployApp 就好。
-tasks.register('deployWeb', Exec) {
-    group = 'deployment'
-    description = 'build 前端映像檔（含型別檢查）、換掉 deploy/ 的 web 容器，等它 healthy'
+// ./gradlew deployApp（趕時間跳過測試：./gradlew deployApp -x test）
+// 為什麼先跑測試：Dockerfile 刻意只打包、不跑測試，手動部署前「先驗過」就掛在這裡。
+// 測試沒改過的話 Gradle 會判定 up-to-date 直接跳過，不會白跑。之後的 CD 用 CI 綠燈當這道關，不經過 Gradle。
+registerDeploy('deployApp', 'app', '跑測試、build app 映像檔、換掉 deploy/ 的 app 容器，等它 healthy')
+tasks.named('deployApp') { dependsOn tasks.named('test') }
 
-    workingDir = layout.projectDirectory.dir('../deploy')
+// ./gradlew deployWeb
+// 不必 dependsOn 什麼：前端的型別檢查寫在 web/Dockerfile 的 npm run build 裡，型別錯映像檔就 build 不出來。
+registerDeploy('deployWeb', 'web', 'build 前端映像檔（含型別檢查）、換掉 deploy/ 的 web 容器，等它 healthy')
 
-    // nginx 幾秒就起好，不像 app 要等模型，預設 60 秒就夠
-    def waitTimeout = providers.gradleProperty('deployWaitTimeout').orElse('60').get()
-
-    commandLine 'docker', 'compose', 'up', '-d', '--build', '--no-deps', '--wait', '--wait-timeout', waitTimeout, 'web'
-}
-
-// 只換模型：./gradlew deployModels
-// 升級 llama.cpp 版本、調 compose 裡的模型參數（-np、--temp…）之後用。
-//
-// 刻意不放進 deploy：模型很少改，換一次卻很貴——映像檔重 build 約十分鐘，
-// 換的期間所有請求都會失敗，直到模型重新載好。部署該是「改了什麼換什麼」，改程式碼不該順便付這個代價。
-//
-// --no-deps：model-seed 是 depends_on，不帶會跟著重跑一次播種。播種本身會跳過已經在 volume 裡的檔案，
-// 但沒理由多跑；模型檔要更新時（換 gguf），先單獨跑 docker compose up model-seed。
-tasks.register('deployModels', Exec) {
-    group = 'deployment'
-    description = '重 build llama-server 映像檔、換掉 deploy/ 的模型容器，等它載好模型（healthy）'
-
-    workingDir = layout.projectDirectory.dir('../deploy')
-
-    // 載 5GB 的 Qwen 要時間，預設 600 秒；比 compose 裡 llm-chat 的 start_period（120s）寬鬆得多，
-    // 因為這裡還包含映像檔重 build 的時間
-    def waitTimeout = providers.gradleProperty('deployWaitTimeout').orElse('600').get()
-
-    commandLine 'docker', 'compose', 'up', '-d', '--build', '--no-deps', '--wait', '--wait-timeout', waitTimeout,
-            'llm-chat'
-}
+// ./gradlew deployModels：升級 llama.cpp、調 compose 裡的模型參數（-np、--temp…）之後用。
+// 刻意不放進 deploy：映像檔重 build 約十分鐘，換的期間所有請求都會失敗。改程式碼不該順便付這個代價。
+registerDeploy('deployModels', 'llm-chat', '重 build llama-server 映像檔、換掉 deploy/ 的模型容器，等它載好模型（healthy）')
 
 // 前後端一起部署：./gradlew deploy
 // 順序靠 mustRunAfter 而不是 dependsOn：先換 app 再換 web，但單獨跑 deployWeb 時不會被迫連 app 一起部署
