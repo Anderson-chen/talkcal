@@ -59,6 +59,13 @@ main() {
     return 1
   fi
 
+  # Docker 沒起來就整輪跳過、什麼都不記：開機後排程常常比 Docker Desktop 先跑，
+  # 這時候部署一定失敗，但那是環境還沒好，不是這個版本壞了，不該記成「試過了」
+  if ! docker info >/dev/null 2>&1; then
+    echo "Docker 沒在跑，這輪跳過"
+    return 0
+  fi
+
   # 1. master 上最新一個 CI 綠燈的 commit。只看 push 事件：PR 的 run 跑的是合併前的版本
   local sha
   sha="$(gh run list --workflow "$workflow" --branch "$branch" --event push --status success \

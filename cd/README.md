@@ -72,6 +72,9 @@ cd C:/talkcal-deploy
 .\cd\triggers\install-local.ps1           # 登記工作排程 talkcal-cd-local，每 5 分鐘一輪
 ```
 
+`.ps1` 被擋（Windows 預設不讓腳本執行）的話：`powershell -ExecutionPolicy Bypass -File .\cd\triggers\install-local.ps1`。
+它只在登記時跑一次，之後每 5 分鐘被叫起來的是 `watch.sh`。
+
 要先有：`gh auth login`（watcher 用它查 CI、寫部署紀錄）、Docker Desktop 開著、
 `postgres` 和 `llm-chat` 已經起好（同[為什麼每個服務分開換](#為什麼每個服務分開換)）。
 
@@ -82,7 +85,8 @@ cd C:/talkcal-deploy
 | 看部署了什麼 | GitHub repo 頁面的 Deployments，或 `C:/talkcal-deploy/.git/cd-local.log` |
 | 立刻跑一輪，不等排程 | `/c/talkcal-deploy/cd/triggers/watch.sh local`（Git Bash） |
 | 失敗的版本修好了要重試 | 刪掉 `.git/cd-local.last` 再跑一輪。同一個 commit 只自動試一次：失敗要人來看，不該每 5 分鐘重 build |
-| 暫停 | `Disable-ScheduledTask talkcal-cd-local`（恢復：`Enable-`） |
+| 暫停 | `Disable-ScheduledTask talkcal-cd-local`（恢復：`Enable-`；整個拿掉：`Unregister-`） |
+| 關機、重開機 | 不用管。排程登記在 Windows 裡，登入後自己恢復，關機時錯過的那輪會補跑。Docker Desktop 還沒起來的那幾輪會跳過、不記成試過 |
 
 開發用的 clone 照樣可以 `./gradlew deploy`：兩邊換的是同一組容器（compose 專案都叫 `talkcal-deploy`），
 手動部署的版本會留到下一個綠燈的 commit 出現為止。
