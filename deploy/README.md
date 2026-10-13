@@ -148,7 +148,11 @@ docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新
 2. ~~模型檔改成 volume + 播種~~ ✅（bind mount 實測太慢，提前做了）
 3. ~~app 也進容器，分環境，容器間用服務名稱溝通~~ ✅
 4. ~~三個服務的 log 接進 Loki~~ ✅（見 `ops/README.md`）
-5. 換成本機 k8s（kind）跑同一套
+5. 搬上一台 AWS EC2，同樣用 compose（[#57](https://github.com/Anderson-chen/talkcal/issues/57)）
+6. 換成本機 k8s（kind）跑同一套（[#56](https://github.com/Anderson-chen/talkcal/issues/56)）
+7. 部署到 EKS（[#58](https://github.com/Anderson-chen/talkcal/issues/58)）
+
+5、7 的規劃見 [infra/](../infra/README.md)。
 
 ## 行程與對話記憶（PostgreSQL）
 

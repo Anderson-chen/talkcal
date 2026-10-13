@@ -5,7 +5,7 @@
 - 怎麼分類、對照了哪些業界清單：[分類方法與參考資料](production-readiness/sources.md)
 - 接下來先做哪些：[接下來的順序](production-readiness/next-steps.md)
 
-最後盤點：2026-10-12
+最後盤點：2026-10-13
 
 ```
 ① 能不能上線    ② 怎麼上線      ③ 跑起來之後     ④ 出事的時候     ⑤ 長期活下去
@@ -43,6 +43,9 @@
 | [原始碼放在 GitHub](production-readiness/release.md#github) | 程式碼有備份、有歷史，別人看得到 | ✅ 是 |
 | [CI](production-readiness/release.md#ci) | 每次改動都在乾淨環境自動驗證，不靠「我電腦上可以」 | ✅ 是 |
 | [一鍵部署](production-readiness/release.md#deploy) | 部署不靠記步驟，每次都一樣 | ✅ 是 |
+| [部署到 AWS：單台 EC2 + compose](production-readiness/release.md#cloud-deploy) | 服務真的在線上跑，別人連得到 | ❌ 否 |
+| [本機 k8s（kind）](production-readiness/release.md#k8s-local) | 同一套映像檔在 k8s 上跑得起來，上 EKS 前先在本機練 | ❌ 否 |
+| [部署到 EKS](production-readiness/release.md#eks) | 換版不停機、一台機器掛了不會全停 | ❌ 否 |
 | [DB migration](production-readiness/release.md#migration) | schema 變更有版本、可重現，每個環境都一致 | ✅ 是 |
 | [零停機的 schema 變更](production-readiness/release.md#zero-downtime-schema) | 改資料表時服務不用停 | ❌ 否 |
 | [Graceful shutdown](production-readiness/release.md#graceful-shutdown) | 部署時正在處理的請求能做完，不被砍斷 | ✅ 是 |
