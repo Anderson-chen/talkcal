@@ -1,7 +1,7 @@
 variable "region" {
   description = <<-DESC
-    部署區域。預設東京：確定有 g6（L4）機型。台北 ap-east-2 延遲更低、價格也比較便宜，
-    但還沒確認那裡有沒有 GPU 機型，確認之後再換（bootstrap 的 region 要一起換）。
+    部署區域。東京：2026-10-13 查過，台北 ap-east-2 沒有任何 G 系列 GPU 機型，
+    東京的 g6.xlarge 在 1a、1c 有。改區域的話 bootstrap 的 region 要一起換。
   DESC
   type        = string
   default     = "ap-northeast-1"

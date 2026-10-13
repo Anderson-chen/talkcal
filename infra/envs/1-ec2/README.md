@@ -62,7 +62,9 @@ flowchart LR
 
 ## 首次部署
 
-前提：AWS CLI 的 `DEV` profile 登入得了；**GPU 配額已經申請下來**（新帳號「Running On-Demand G and VT instances」預設是 0，g6.xlarge 要 4 vCPU）。
+前提：AWS CLI 的 `DEV` profile 登入得了；**GPU 配額已經申請下來**（「Running On-Demand G and VT instances」預設是 0，2026-10-13 查過東京也是 0；g6.xlarge 要 4 vCPU）。
+
+在 Git Bash 裡跑 AWS CLI 時，參數裡以 `/` 開頭的字串（例如 SSM 參數名稱 `/aws/service/...`）會被轉成 Windows 路徑，回 `ParameterNotFound`。前面加 `MSYS_NO_PATHCONV=1` 就好。
 
 ```bash
 # 0. 共用的 state bucket 和花費告警（整個帳號只跑一次）
@@ -134,12 +136,12 @@ aws ec2 start-instances --instance-ids "$(terraform output -raw instance_id)" --
 | HTTPS | Caddy + sslip.io | 一個設定檔包辦憑證和續期，不必買網域；跟 cool-down 同一套做法 |
 | 觀測放哪 | 同一台，跟本機同一份 `ops/` | 最能證明「搬得動」；記憶體不夠再考慮 Grafana Cloud |
 | 映像檔從哪來 | 機器上 build | 不必先從家裡推幾 GB 的 CUDA 映像檔上 ECR；版本 tag 做了再改 |
+| Region | 東京 ap-northeast-1 | 2026-10-13 查過：台北 ap-east-2 沒有任何 G 系列機型（g4dn、g5、g6 都沒有）；東京的 g6.xlarge 在 1a、1c 兩個可用區 |
 
 ## 待決定
 
 | 問題 | 選項 | 目前傾向 |
 |---|---|---|
-| Region | 東京 ap-northeast-1 / 台北 ap-east-2 | 預設東京（確定有 g6）。台北延遲低、比較便宜，確認有 GPU 機型後再換 |
 | 開機策略 | 常駐 / 平常關機、展示才開 | 平常關機 |
 | EBS 自動快照 | 現在沒有 / Data Lifecycle Manager 每天一次 | 跟 [#45 備份與還原](https://github.com/Anderson-chen/talkcal/issues/45) 一起做 |
 

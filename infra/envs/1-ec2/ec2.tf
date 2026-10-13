@@ -2,6 +2,7 @@
 # NVIDIA 驅動、Docker、NVIDIA Container Toolkit 都裝好了，不必自己在 user_data 裝驅動
 # （自己裝要對核心版本、要重開機，最容易壞）。
 # 用 SSM 公開參數抓最新版，不寫死 AMI ID：AMI 每幾週輪替，寫死的舊 ID 會下架。
+# 2026-10-13 在東京查過這個參數存在，指到的 AMI 根磁碟是 75GB（root_volume_size 不能比它小）。
 # 注意：llama-server 映像檔是 CUDA 13，驅動要 580 以上；開機後 user_data 會印 nvidia-smi 確認。
 data "aws_ssm_parameter" "dlami" {
   name = "/aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-24.04/latest/ami-id"
