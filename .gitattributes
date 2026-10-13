@@ -6,6 +6,7 @@ docs/design/calendar/prototype.html -text -diff
 # bash 讀到行尾的 \r 會報 "$'\r': command not found"（ci/run.sh、pre-push hook 都是在 Git Bash 裡跑）
 *.sh text eol=lf
 .githooks/* text eol=lf
+cd/envs/*.env text eol=lf
 backend/gradlew text eol=lf
 # Terraform 範本裡的 user_data：Terraform 在 Windows 上讀檔、原樣送到 EC2 給 bash 跑，CRLF 一樣會壞
 *.tftpl text eol=lf

@@ -20,7 +20,8 @@ app 的 18090 仍然開著，給 k6 和 curl 直接打，不多經過一層 ngin
 
 ## 一鍵部署
 
-Gradle 指令都在 `backend/` 裡跑：
+Gradle 指令都在 `backend/` 裡跑。它們只是快捷鍵：部署步驟寫在 [cd/apply.sh](../cd/README.md)，本機和 AWS 共用同一支，
+Gradle 只多做一件事 —— `deployApp` 先跑測試。
 
 ```bash
 ./gradlew deploy                                 # 前後端都部署：先 deployApp，再 deployWeb
@@ -33,8 +34,8 @@ Gradle 指令都在 `backend/` 裡跑：
 ./gradlew deployModels                           # 升級 llama.cpp、改了 compose 裡的模型參數之後用（預設等 600 秒）
 ```
 
-`deployWeb` 帶 `--no-deps`：不直接用 `docker compose up -d --build web`，是因為 `--build` 會沿著
-`depends_on` 把 app 也重 build、換掉，繞過 `deployApp` 先跑測試那道關。
+每個服務分開換、都帶 `--no-deps`：不帶的話 `--build` 會沿著 `depends_on` 把別的服務也重 build、換掉
+（部署 web 卻換上沒跑過測試的 app、部署 app 卻重啟模型）。理由見 [cd/README.md](../cd/README.md#為什麼每個服務分開換)。
 
 ## 一鍵部署 app
 
@@ -46,8 +47,8 @@ Gradle 指令都在 `backend/` 裡跑：
 ./gradlew deployApp -PdeployWaitTimeout=600      # 模型第一次載入比較慢時，拉長等待（預設 300 秒）
 ```
 
-只動 app（帶 `--no-deps`），不碰模型和資料庫，所以第一次部署前要先 `docker compose up -d postgres llm-chat`。
-以前沒帶 `--no-deps`，每次部署 app 都會順便重啟模型。定義在 `backend/build.gradle` 最後的 `deployApp`，每一步為什麼這樣做見那裡的註解。
+只動 app，不碰模型和資料庫，所以第一次部署前要先 `docker compose up -d postgres llm-chat`。
+前端也一樣：app 沒在跑的話，nginx 找不到 `app` 這個 upstream，web 起不來、會報 unhealthy。
 
 ## 兩種環境怎麼分
 
