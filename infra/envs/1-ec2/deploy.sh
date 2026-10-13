@@ -5,7 +5,8 @@
 #   sudo bash /opt/talkcal/repo/infra/envs/1-ec2/deploy.sh
 #   sudo GIT_REF=some-branch bash /opt/talkcal/repo/infra/envs/1-ec2/deploy.sh   # 部署別的分支
 #
-# 做的事跟本機一樣是兩組 compose，只多了三步：拉指定版本、從 S3 拉模型、從 SSM 拉 .env。
+# 做的事跟本機一樣是兩組 compose，只多了幾步：拉指定版本、（gpu）從 S3 拉模型、從 SSM 拉 .env。
+# MODEL_BACKEND 決定多疊哪一份 compose：compose.bedrock.yaml（模型走 Bedrock）或 compose.gpu.yaml（自己跑）。
 set -euo pipefail
 
 # user_data 寫好的設定；環境變數有給的話優先（例如臨時部署別的分支）
@@ -16,7 +17,9 @@ if [ -f "$DEPLOY_ENV" ]; then
   source "$DEPLOY_ENV"
   GIT_REF="${override_ref:-$GIT_REF}"
 fi
-: "${PROJECT:?}" "${AWS_REGION:?}" "${GIT_REF:?}" "${MODELS_BUCKET:?}" "${DOTENV_PARAM:?}"
+: "${PROJECT:?}" "${AWS_REGION:?}" "${GIT_REF:?}" "${DOTENV_PARAM:?}"
+# 舊版 user_data 寫的 deploy.env 沒有 MODEL_BACKEND：那時只有 gpu
+MODEL_BACKEND="${MODEL_BACKEND:-gpu}"
 
 ROOT="/opt/$PROJECT"
 REPO="$ROOT/repo"
@@ -29,14 +32,19 @@ git -C "$REPO" fetch --depth 1 origin "$GIT_REF"
 git -C "$REPO" checkout --detach FETCH_HEAD
 git -C "$REPO" log -1 --oneline
 
-echo "── 2. 模型檔：s3://$MODELS_BUCKET → $MODELS_DIR"
-# sync 只傳有變的檔案，模型沒換時幾秒就結束。
-# 接下來 model-seed 照本機的流程驗 SHA256（有上傳 SHA256SUMS 的話）、複製進 volume。
-mkdir -p "$MODELS_DIR"
-aws s3 sync "s3://$MODELS_BUCKET/" "$MODELS_DIR/" --region "$AWS_REGION" --no-progress
-if ! ls "$MODELS_DIR"/*.gguf >/dev/null 2>&1; then
-  echo "S3 裡沒有 .gguf 模型檔。先上傳：aws s3 cp <模型>.gguf s3://$MODELS_BUCKET/" >&2
-  exit 1
+if [ "$MODEL_BACKEND" = gpu ]; then
+  echo "── 2. 模型檔：s3://$MODELS_BUCKET → $MODELS_DIR"
+  # sync 只傳有變的檔案，模型沒換時幾秒就結束。
+  # 接下來 model-seed 照本機的流程驗 SHA256（有上傳 SHA256SUMS 的話）、複製進 volume。
+  : "${MODELS_BUCKET:?}"
+  mkdir -p "$MODELS_DIR"
+  aws s3 sync "s3://$MODELS_BUCKET/" "$MODELS_DIR/" --region "$AWS_REGION" --no-progress
+  if ! ls "$MODELS_DIR"/*.gguf >/dev/null 2>&1; then
+    echo "S3 裡沒有 .gguf 模型檔。先上傳：aws s3 cp <模型>.gguf s3://$MODELS_BUCKET/" >&2
+    exit 1
+  fi
+else
+  echo "── 2. 模型：$MODEL_BACKEND，機器上不放模型檔"
 fi
 
 echo "── 3. .env：SSM $DOTENV_PARAM"
@@ -59,5 +67,5 @@ echo "── 5. 觀測（ops/，跟本機同一份）"
 # 要在 deploy/ 之後：Alloy 要加入的網路是 deploy/ 建的
 docker compose -f ops/compose.yaml up -d
 
-docker compose -f deploy/compose.yaml -f infra/envs/1-ec2/compose.ec2.yaml ps
+docker compose "${compose_files[@]}" ps
 echo "完成。網址：https://$(grep '^SITE_ADDRESS=' deploy/.env | cut -d= -f2)"

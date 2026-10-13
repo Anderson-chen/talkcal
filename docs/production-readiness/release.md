@@ -22,13 +22,13 @@ master 的 CI 綠燈之後，本機會自動部署：[cd/triggers/watch.sh](../.
 <a id="cloud-deploy"></a>
 ### 部署到 AWS：單台 EC2 + compose ❌
 
-服務只在本機跑，「線上」是模擬的。Terraform 已經寫好（[infra/envs/1-ec2](../../infra/envs/1-ec2/README.md)），還沒 apply 過。第一步是一台有 GPU 的 EC2，`deploy/` 和 `ops/` 兩組 compose 原樣搬上去，上去的就是本機驗證過的那一套。架構和要改的地方見 [infra/envs/1-ec2](../../infra/envs/1-ec2/README.md)。
+服務只在本機跑，「線上」是模擬的。Terraform 已經寫好（[infra/envs/1-ec2](../../infra/envs/1-ec2/README.md)），還沒 apply 過。第一步是一台 EC2，`deploy/` 和 `ops/` 兩組 compose 搬上去。模型先走 Bedrock 的 Qwen3 32B（app 不用改，只換 OpenAI 相容 API 的位址和 key），GPU 配額下來後用 `model_backend=gpu` 切回跟本機一樣自己跑。架構和要改的地方見 [infra/envs/1-ec2](../../infra/envs/1-ec2/README.md)。
 
 開始之前要先有：
-- **GPU 配額**：新帳號 G 系列的配額預設是 0，要先申請，審核可能要等。
+- ~~**GPU 配額**~~：新帳號 G 系列的配額預設是 0，2026-10-13 申請被拒。先改走 Bedrock，不需要 GPU 配額（[#72](https://github.com/Anderson-chen/talkcal/issues/72)）。
 - ~~**對外只開一個入口**~~：Grafana、Loki 已改成只綁 `127.0.0.1`，security group 只開 80/443，登入用 SSM。
 - ~~[祕密管理](ready.md#secrets)~~：雲端上的 DB 密碼由 Terraform 產生、放 SSM Parameter Store（本機還是寫死，所以 #14 還沒關）。
-- [成本](run.md#cost)：GPU 按小時計費，先決定機型和要不要平常關機。
+- [成本](run.md#cost)：機器按小時計費（m7i-flex.large 約 0.1 USD/h），Bedrock 按 token；先決定要不要平常關機。花費告警已經設好（每月 50 USD）。
 
 代價是只有一台機器：掛了服務就停，部署時那十幾秒沒人接也還在。這些留給 [EKS](#eks)。
 

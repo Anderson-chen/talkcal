@@ -12,13 +12,17 @@ output "app_url" {
   value       = "https://${local.site_address}"
 }
 
+output "model_backend" {
+  value = var.model_backend
+}
+
 output "models_bucket" {
-  description = "GGUF 模型檔上傳到這裡"
-  value       = aws_s3_bucket.models.bucket
+  description = "（gpu）GGUF 模型檔上傳到這裡。bedrock 時沒有"
+  value       = local.gpu ? aws_s3_bucket.models[0].bucket : null
 }
 
 output "availability_zone" {
-  description = "機器開在哪個可用區（自動挑有這個 GPU 機型的）"
+  description = "機器開在哪個可用區（自動挑有這個機型的）"
   value       = local.availability_zone
 }
 
