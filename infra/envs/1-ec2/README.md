@@ -1,7 +1,8 @@
 # 1-ec2 — 階段一：單台 EC2 + Docker Compose
 
-狀態：**IaC 寫好了，還沒 apply 過**。追蹤在 [#57](https://github.com/Anderson-chen/talkcal/issues/57)；整體的階段怎麼分見 [infra/README.md](../../README.md)。
-第一次 apply 時遇到的問題補進「疑難排解」。
+狀態：**2026-10-14 部署上線**（`model_backend=bedrock`），從外部經 HTTPS 打 AI 助理、Grafana 看到三種訊號都驗證過。
+機器平常關機，展示前開機。追蹤在 [#57](https://github.com/Anderson-chen/talkcal/issues/57)；整體的階段怎麼分見 [infra/README.md](../../README.md)。
+第一次部署遇到的三個問題寫在「疑難排解」最前面。
 
 一台 EC2，`deploy/` 和 `ops/` 兩組 compose 搬上去，前面加一個 Caddy 處理 HTTPS。
 模型在哪裡跑由變數 `model_backend` 決定，其他（VPC、Caddy、DB、觀測）兩種共用：
@@ -180,7 +181,15 @@ aws ec2 start-instances --instance-ids "$(terraform output -raw instance_id)" --
 
 ## 疑難排解
 
-還沒實際跑過，先列預期會遇到的：
+**第一次部署（2026-10-14）真的遇到的**，都已經修掉；重建一台全新的機器驗證過，開機到部署完約 4 分鐘：
+
+| 症狀 | 原因 | 修正 |
+|---|---|---|
+| bedrock 模式卻在編 llama-server 的 CUDA，2 vCPU 編 25 分鐘才 45% | `deploy.sh` 第 4 步沒疊 `compose.bedrock.yaml`（改它的那次替換沒套上，只驗了 `bash -n`） | [#74](https://github.com/Anderson-chen/talkcal/issues/74)：改成 `compose_files` 陣列；用 `--dry-run` 確認只建 app、caddy、postgres、web |
+| 第 4 步報「缺 DB_PASSWORD」 | snap 版的 aws 輸出導向檔案時結束碼 0、寫出 0 bytes（導向管線才正常），`deploy/.env` 是空的 | [#74](https://github.com/Anderson-chen/talkcal/issues/74)：改用 AWS 官方安裝程式；`deploy.sh` 寫完 `.env` 先檢查有 `DB_PASSWORD` |
+| AI 助理回 502：`The model 'gpt-5-mini' does not exist` | Spring AI 2.0.1 看到請求自帶選項就整份照用、不補設定檔的預設，模型名稱從沒生效；本機 llama-server 不看名稱所以一直沒事 | [#76](https://github.com/Anderson-chen/talkcal/issues/76)：請求的選項從 `chatModel.getOptions()` 開始再蓋 |
+
+其他預期可能遇到的：
 
 | 症狀 | 檢查 |
 |---|---|
