@@ -65,6 +65,26 @@ git push --no-verify                    # 確定要跳過檢查時
 
 兩邊各守一道：本機補上 GitHub 跑不到的模型測試，GitHub 補上本機可以 `--no-verify` 繞過的那一道。
 
+## 祕密掃描
+
+`ci/secrets.sh` 用 gitleaks 掃 **git 歷史**，不是掃最新的檔案：key 在一個 commit 加進去、下一個刪掉，
+檔案看起來乾淨，推上去之後任何人 clone 都拿得到。所以它不在 `checks.sh` 裡 —— 那邊只有某個 commit 的檔案，沒有 `.git`。
+
+```bash
+ci/secrets.sh                        # 掃整個歷史
+ci/secrets.sh HEAD --not --remotes   # 只掃還沒推上去的（pre-push 用的就是這個）
+```
+
+| | pre-push | GitHub push protection | CI 的 `secrets` job |
+|---|---|---|---|
+| 掃哪些 commit | 這次要推的 | 這次推上來的 | 整個歷史 |
+| 認得什麼 | gitleaks 的規則（各家 key ＋通用 token） | 只認各家服務的 key 格式 | 同 pre-push |
+| 跳得過嗎 | `--no-verify` | 可以在 GitHub 上填理由放行 | 不行（必過檢查） |
+| 抓到時 | key 還在本機，改掉再推 | 被拒收 | **已經公開**，要作廢重發 |
+
+pre-push 先掃祕密、再跑測試：掃描只要幾秒，而且測試紅了可以再推一次修，key 送出去就收不回來。
+被誤判時（測試用的假 key），那一行加註解 `gitleaks:allow`，或把報告裡的 Fingerprint 寫進 `.gitleaksignore`。
+
 ## 刻意不做的
 
 - **k6 壓測**：要真模型，CI 量不出有意義的數字。見 [perf/README.md](../perf/README.md)。

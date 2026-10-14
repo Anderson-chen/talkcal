@@ -86,9 +86,19 @@
 沒有 Trivy 或 OWASP dependency-check 這類掃描。
 
 <a id="secret-scan"></a>
-### 祕密掃描 ❌
+### 祕密掃描 ✅
 
-沒有 gitleaks 這類工具，不小心把 API key commit 進去也不會被擋下來。現在 repo 裡只有假 key，換成雲端模型之後就會有真的 key。
+三道，由近到遠（細節見 [ci/README.md](../../ci/README.md#祕密掃描)）：
+
+| 關卡 | 掃什麼 | 擋住時 key 在哪 |
+|---|---|---|
+| pre-push 跑 [ci/secrets.sh](../../ci/secrets.sh)（gitleaks） | 這次要推的 commit，包括中間加了又刪的 | 還在本機，改掉再推就好 |
+| GitHub push protection（repo 設定，已開） | 各家服務的 key 格式（AWS、OpenAI…） | 送到 GitHub 但被拒收 |
+| CI 的 `secrets` job（同一支 script） | 整個歷史 | **已經公開**，要作廢重發 |
+
+證據：在暫存分支 commit 一把隨機產生的 GitHub token、下一個 commit 刪掉，`ci/secrets.sh HEAD --not --remotes` 1 秒內抓到（`github-pat`）、exit 1；完整歷史掃過一遍，沒有誤判。
+
+擋不住：寫死的低熵密碼。[application.properties](../../backend/src/main/resources/application.properties) 的資料庫密碼就沒被抓到 —— 那是[祕密管理](#secrets)要解決的事，不是掃描。
 
 <a id="supply-chain"></a>
 ### 第三方映像檔與模型檔的來源 ✅
