@@ -3,6 +3,8 @@
 把某個版本放上某台機器、等它 healthy。本機和 AWS 跑的是**同一支 script**，差別只在設定和誰來觸發。
 跟 [ci/](../ci/README.md) 同一個分法：做什麼只寫一次，平台和環境只是外面那一層。
 
+整條 CI → CD 的流程圖和每一關擋什麼，見 [docs/architecture.md](../docs/architecture.md#cicd從-commit-到線上)。
+
 ## 怎麼跑
 
 在 repo 根目錄（Git Bash）：
@@ -112,7 +114,11 @@ cd C:/talkcal-deploy
 
 ## 還沒做的
 
-- 「多久沒部署了」告警：master 有新的綠燈 commit，超過 N 分鐘還沒部署就告警（pull 型最大的盲點）
 - `verify.sh`：部署後打一次 health 和 `/api/calendar`，不只看容器的 healthcheck
 - `envs/ec2.env`：把 [infra/envs/1-ec2/deploy.sh](../infra/envs/1-ec2/deploy.sh) 收進來，EC2 也跑 `apply.sh` 和同一支 watcher
 - 現在部署的是 checkout 的程式碼、在機器上 `--build`，還不是 build once；等[版本 tag](../docs/production-readiness/release.md#release-tag) 有了，輸入改成映像檔 tag
+
+## 已知限制，決定不做
+
+- 「多久沒部署了」告警：pull 型最大的盲點是 watcher 自己安靜地掛掉（#68、#70 都是這樣，靠看 log 才發現）。
+  一個人的專案、本機部署壞了自己會看到，2026-10-14 決定先不做。
