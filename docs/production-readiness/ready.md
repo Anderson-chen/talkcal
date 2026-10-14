@@ -85,6 +85,8 @@
 
 CI 的 `vulns` job 會 build 出 app、web 映像檔，連同 postgres 用 [ci/vulns.sh](../../ci/vulns.sh)（Trivy）掃，結果貼在 Actions 結果頁。
 掃映像檔而不是 build.gradle：作業系統套件和 jar 裡的 Java 函式庫一次看得到，掃的就是會上線的東西。
+對應 OWASP Top 10:2025 的 `A03` Software Supply Chain Failures（2021 版的 A06 Vulnerable and Outdated Components）。
+沒用 OWASP 自己的 Dependency-Check：它只看 Java、npm 這些函式庫，看不到基底映像檔裡的 openssl、curl；Trivy 兩種都掃。
 
 第一次掃（2026-10-14，只算 HIGH、CRITICAL 而且有修補版本的）：
 
