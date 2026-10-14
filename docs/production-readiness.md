@@ -25,7 +25,7 @@
 | [前端測試](production-readiness/ready.md#frontend-test) | 改畫面時不會把既有功能弄壞 | ❌ 否 |
 | [AI 品質回歸（eval）](production-readiness/ready.md#ai-eval) | 改 prompt 或換模型之後，知道回答有沒有變差 | ❌ 否 |
 | [認證與授權](production-readiness/ready.md#auth) | 只有本人看得到、改得到自己的資料 | ❌ 否 |
-| [濫用防護（rate limit）](production-readiness/ready.md#rate-limit) | 一個人不能把 GPU 占滿，讓其他人都用不了 | ❌ 否 |
+| [濫用防護（rate limit）](production-readiness/ready.md#rate-limit) | 一個人不能把 GPU 占滿，讓其他人都用不了 | ✅ 是 |
 | [Agent 權限範圍](production-readiness/ready.md#agent-permissions) | 模型出錯或被誘導時，能造成的破壞有上限 | ✅ 是 |
 | [Prompt injection](production-readiness/ready.md#prompt-injection) | 藏在資料裡的指令不能操控模型 | ❌ 否 |
 | [模型輸出當成不可信資料](production-readiness/ready.md#output-handling) | 模型吐出的內容不能在使用者瀏覽器上執行 | ✅ 是 |

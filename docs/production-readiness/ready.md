@@ -46,9 +46,28 @@
 沒有登入功能，任何人只要知道 conversation id 就能讀那段對話。
 
 <a id="rate-limit"></a>
-### 濫用防護（rate limit） ❌
+### 濫用防護（rate limit） ✅
 
-`/api/calendar/assistant` 每次都會占用 GPU，一輪還可能叫好幾次模型，所以一個人就能把服務塞滿（`LLM10`）。目前只限制了單次請求：`max-tokens=2048` 能擋住一次生成暴走，但沒有限制請求次數。2026-10-12 量到每分鐘 60 個請求、問題隨機混合時，模型的 KV cache 就塞爆、回 502（見 [postmortem](../postmortems/2026-10-12-deploy-cuts-in-flight-requests.md) 的附帶發現），門檻要比這個低。
+AI 助理的發問（`POST /api/calendar/assistant`）每次都會叫模型，一輪還可能叫好幾次：本機是 GPU 塞滿，雲端是 Bedrock 按 token 計費（`LLM10` Unbounded Consumption）。
+[web/nginx.conf](../../web/nginx.conf) 用 nginx 內建的 `limit_req` 擋兩道，超過回 `429` 和 `{"error": ...}`，前端照常顯示訊息：
+
+| 限制 | 擋什麼 | 為什麼是這個數字 |
+|---|---|---|
+| 每個 IP 每分鐘 10 次（可多衝 5 次） | 一個人用腳本狂打 | 正常聊天約 10–20 秒問一次 |
+| 全站每分鐘 30 次（可多衝 10 次） | 換很多 IP 一起打：帳單和 GPU 的總上限 | 2026-10-12 量到每分鐘 60 次、問題隨機混合時模型就塞爆回 502（[postmortem](../postmortems/2026-10-12-deploy-cuts-in-flight-requests.md)），要比它低 |
+
+查行程、看對話紀錄很便宜，不限。單次請求另外有 `max-tokens=2048` 擋生成暴走。
+放在 nginx 而不是 Caddy 或 app：本機和雲端都經過它；`limit_req` 是內建的（Caddy 要另外編外掛）；被擋的請求進不到 app、碰不到模型。
+雲端上 nginx 前面是 Caddy，所以用 `X-Forwarded-For` 認出真正的使用者 IP —— 前提是 web 的埠只綁 127.0.0.1，外面只能經過 Caddy，而 Caddy 會覆寫使用者自己送的那一份。
+
+證據：連打 20 次，前 6 次放行、之後都是 429（帶 `Retry-After: 60`），同時查行程照常 200；
+換 20 個不同 IP 各打一次，前 11 次放行、之後被全站上限擋下，nginx log 記的是 `zone "assistant_all"` 和偽裝的那個 IP（真實 IP 有認對）。
+
+擋不住、或刻意接受的：
+- **全站上限會連累正常使用者**：有人換 IP 狂打時，其他人也會拿到 429。這是刻意的取捨 —— 寧可服務暫時不能用，也不要帳單失控
+- 同一個 NAT 後面的多個人（公司、宿舍）共用一個 IP 的額度
+- 計數在 nginx 的記憶體裡：重啟就歸零；之後變成多台時，每台各算各的
+- 沒有 AWS 的帳單告警：真的被打穿時，要等月底才知道花了多少
 
 <a id="agent-permissions"></a>
 ### Agent 權限範圍 ✅
