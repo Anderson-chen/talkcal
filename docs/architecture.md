@@ -97,8 +97,8 @@ flowchart TB
     hook -->|"過了才推得上去"| pr["GitHub PR<br/>描述寫 Closes #N"]
     pr --> ci["CI（ci.yml）<br/>同一支 ci/run.sh<br/>沒有 GPU：模型測試跳過"]
     pr --> prissue["PR issue（pr-issue.yml）<br/>沒連到 issue 就紅燈"]
-    ci -->|"必須綠"| merge["merge 進 master<br/>ruleset：一定走 PR、CI 必須綠"]
-    prissue -.->|"紅燈不擋合併"| merge
+    ci -->|"必須綠"| merge["merge 進 master<br/>ruleset：一定走 PR、兩個檢查都必須綠"]
+    prissue -->|"必須綠"| merge
     merge --> masterci["master 再跑一次 CI"]
     masterci -->|"綠燈"| green(["master 最新的綠燈 commit"])
     green -->|"每 5 分鐘自己來拉"| watch["本機 watcher<br/>cd/triggers/watch.sh local"]
@@ -116,8 +116,8 @@ EC2 目前是手動部署：機器平常關機，展示前開機、需要時用 
 |---|---|---|
 | pre-push（[ci/](../ci/README.md)） | 本機就會壞的，包括要 GPU 的模型測試 | `git push --no-verify` 可以跳過 |
 | CI（GitHub Actions） | 乾淨環境才會壞的：「我電腦上可以」 | 模型相關（沒有 GPU） |
-| PR issue | 會亮紅燈，提醒沒連到 issue | **擋不住合併**：ruleset 的必過檢查只有 CI，沒有它 |
-| ruleset（protect-master） | 直推 master、force push、刪 master、CI 沒綠就合併 | — |
+| PR issue | 沒連到 issue 的 PR：合併按鈕按不下去 | 連到的 issue 對不對（只檢查有沒有連） |
+| ruleset（protect-master） | 直推 master、force push、刪 master、CI 或 PR issue 沒綠就合併、分支落後 master | — |
 | `compose up --wait` | 起不來的容器（healthcheck 沒過） | 起得來但功能壞了：例如模型名稱送錯（[#76](https://github.com/Anderson-chen/talkcal/issues/76)），容器 healthy、第一個 AI 請求才 404 |
 | watcher 同一個 commit 只試一次 | 壞掉的版本每 5 分鐘重 build | watcher 自己掛掉（沒有「多久沒部署」告警，決定不做） |
 
