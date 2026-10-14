@@ -89,6 +89,10 @@
 跑完同步那一步之後 B 連得上、**A 被拒絕**，是真的換掉了。
 （第一次實驗從容器自己的 127.0.0.1 連，兩組都過 —— 官方映像檔對 loopback 是 trust，所以一定要像 app 一樣從別的容器連。）
 
+在 EC2 上實際換過一次（2026-10-14，`terraform apply -replace=random_password.db`）：
+1. 第一次部署跑的還是舊版 `deploy.sh`（bash 手上拿的是 git 換掉之前的檔案），沒有同步 —— app 一直重啟，log 裡 68 次 `password authentication failed`：缺口在線上重現
+2. 重跑一次（這次是新版）：app healthy；從 app 的網路連 postgres，新密碼 `ok`、**舊密碼 `password authentication failed`**
+
 刻意接受的：
 - **本機**的 DB 密碼寫死成 `talkcal`（[application.properties](../../backend/src/main/resources/application.properties)、[compose.yaml](../../deploy/compose.yaml)）：埠只綁 127.0.0.1，資料是假的，換來 clone 下來就能跑。雲端上 app 的密碼一定由環境變數蓋掉，`.env` 缺 `DB_PASSWORD` 時 compose 直接拒絕啟動
 - Grafana 關掉登入、匿名就是 Admin：只綁 127.0.0.1，雲端上要經 SSM port forwarding（先要有 AWS 權限）才連得到
