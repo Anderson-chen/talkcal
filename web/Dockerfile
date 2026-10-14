@@ -18,7 +18,13 @@ COPY . .
 RUN npm run build
 
 # ════════════════════════════════════════════════════════════════════
-FROM nginx:1.29-alpine AS runtime
+# 1.30 是 nginx 的 stable 線，只收安全和錯誤修補；原本的 1.29 是 mainline，已被 1.31 取代、不再更新（#85）。
+# 寫到小版本而不是 1.30.5：官方會用新的 Alpine 重 build 同一個 tag，重新 build 就拿到作業系統的修補
+FROM nginx:1.30-alpine AS runtime
+
+# 官方映像檔重 build 之前，Alpine 已經發了修補的套件（expat、pcre2、tiff…）先自己升。
+# 代價是同一份 Dockerfile 不同天 build 出的套件版本可能不同 —— 換來的是不必等上游
+RUN apk upgrade --no-cache
 
 # 官方映像檔會把 /etc/nginx/conf.d/*.conf 載入，蓋掉它附的 default.conf 就換成我們的設定
 COPY nginx.conf /etc/nginx/conf.d/default.conf

@@ -1,0 +1,110 @@
+# ci/vulns.sh 評估過、決定接受的漏洞。每一條都要寫理由，而且一定要有到期日：
+# 到期後掃描會重新報出來、CI 變紅，逼人再看一次，不會變成「忽略了就永遠忘了」。
+#
+# gosu（postgres 官方映像檔裡的小工具）的 Go 標準函式庫漏洞 —— 2026-10-14 評估：
+#   - 修不了：gosu 是上游編好放進去的，postgres 最新的 18 也一樣；我們沒有自己 build postgres
+#   - 碰不到：gosu 只在容器啟動時把 root 切成 postgres 使用者，接著就 exec 成 postgres 本身，
+#     不開網路、不讀外部輸入；標準函式庫的漏洞要被利用，得先有程式拿它去處理攻擊者給的資料
+#   - postgres 的埠只綁在 127.0.0.1（deploy/compose.yaml），外面連不到
+# paths 限定在 gosu：同一個 CVE 出現在別的地方（例如 app 自己的程式）照樣會報
+vulnerabilities:
+  - id: CVE-2025-61726
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2025-61729
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2025-68121
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-25679
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-27145
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-32280
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-32281
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-32283
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-33811
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-33814
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-33818
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-39820
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-39821
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-39822
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-39836
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-42499
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-42504
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-56853
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-56858
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-56859
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-56860
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-56862
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-78667
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-78669
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
+  - id: CVE-2026-97031
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    expired_at: 2027-01-14
