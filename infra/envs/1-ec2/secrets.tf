@@ -1,5 +1,5 @@
 # ── 密碼與部署設定 ───────────────────────────────────────────────────────────
-# 本機的 compose 把 DB 密碼寫死成 talkcal（#14 的缺口）。雲端上改由 Terraform 隨機產生，
+# 本機的 compose 把 DB 密碼寫死成 talkcal（只綁 127.0.0.1，刻意接受，見 ready.md 祕密管理）。雲端上改由 Terraform 隨機產生，
 # 存進 SSM Parameter Store（SecureString，用 AWS 代管的金鑰，免費）。
 # 機器部署時才拉下來寫成 deploy/.env，明碼不進 git、不進 user_data、不進映像檔。
 # 代價：密碼會出現在 Terraform state 裡，所以 bootstrap 的 state bucket 一定要加密、不公開。

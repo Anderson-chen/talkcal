@@ -71,9 +71,32 @@
 [application.properties](../../backend/src/main/resources/application.properties)：呼叫模型的逾時是 2 分鐘；SDK 預設的重試關掉了（`max-retries=0`）。理由寫在設定旁邊：本機模型塞爆的時候，重試只會讓它更塞。
 
 <a id="secrets"></a>
-### 祕密管理 ❌（部分做到）
+### 祕密管理 ✅
 
-[application.properties](../../backend/src/main/resources/application.properties) 直接寫著資料庫密碼。開發時可以這樣，上線時要改成從環境變數或 secrets 注入。
+雲端上的祕密由 Terraform 產生、存在 SSM Parameter Store（SecureString），部署時才拉下來寫成只有 root 能讀的 `deploy/.env`。明碼不進 git、不進 user_data、不進映像檔（[secrets.tf](../../infra/envs/1-ec2/secrets.tf)）。
+
+| 祕密 | 雲端存在哪 | 誰讀得到 | 怎麼換 |
+|---|---|---|---|
+| DB 密碼 | Terraform 隨機產生 → SSM → `deploy/.env` | EC2 的 IAM 角色、有 AWS 權限的人 | `terraform apply -replace=random_password.db` 再重跑 `deploy.sh` |
+| Bedrock API key | IAM 服務專用憑證，90 天到期 → SSM → `deploy/.env` | 同上 | `terraform apply -replace='aws_iam_service_specific_credential.bedrock[0]'` 再重跑 `deploy.sh` |
+| TLS 憑證私鑰 | Caddy 自己跟 Let's Encrypt 申請，存 volume | 只有機器上的 root | 自動續期 |
+| Terraform state（含上面的明碼） | S3，伺服器端加密、不公開 | 有 AWS 權限的人 | — |
+
+**DB 密碼原本換不了**：官方 postgres 映像檔只在資料庫第一次初始化時讀 `POSTGRES_PASSWORD`。換密碼再部署，app 拿新密碼、資料庫還是舊的，app 連不上、服務直接掛掉。
+[deploy.sh](../../infra/envs/1-ec2/deploy.sh) 改成先只起 postgres，透過容器裡的 local socket 把角色密碼同步成 `.env` 那一份，app 才起來。
+
+證據（反例）：同一份資料 volume，第一次用密碼 A 初始化、再用 B 重新起 —— 從另一個容器用 B 連是 `password authentication failed`、A 還連得上（重現了缺口）；
+跑完同步那一步之後 B 連得上、**A 被拒絕**，是真的換掉了。
+（第一次實驗從容器自己的 127.0.0.1 連，兩組都過 —— 官方映像檔對 loopback 是 trust，所以一定要像 app 一樣從別的容器連。）
+
+在 EC2 上實際換過一次（2026-10-14，`terraform apply -replace=random_password.db`）：
+1. 第一次部署跑的還是舊版 `deploy.sh`（bash 手上拿的是 git 換掉之前的檔案），沒有同步 —— app 一直重啟，log 裡 68 次 `password authentication failed`：缺口在線上重現
+2. 重跑一次（這次是新版）：app healthy；從 app 的網路連 postgres，新密碼 `ok`、**舊密碼 `password authentication failed`**
+
+刻意接受的：
+- **本機**的 DB 密碼寫死成 `talkcal`（[application.properties](../../backend/src/main/resources/application.properties)、[compose.yaml](../../deploy/compose.yaml)）：埠只綁 127.0.0.1，資料是假的，換來 clone 下來就能跑。雲端上 app 的密碼一定由環境變數蓋掉，`.env` 缺 `DB_PASSWORD` 時 compose 直接拒絕啟動
+- Grafana 關掉登入、匿名就是 Admin：只綁 127.0.0.1，雲端上要經 SSM port forwarding（先要有 AWS 權限）才連得到
+- 祕密不小心 commit 的情況由[祕密掃描](#secret-scan)擋
 
 <a id="container"></a>
 ### Container 加固 ✅

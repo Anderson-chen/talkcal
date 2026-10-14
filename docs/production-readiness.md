@@ -30,7 +30,7 @@
 | [Prompt injection](production-readiness/ready.md#prompt-injection) | 藏在資料裡的指令不能操控模型 | ❌ 否 |
 | [模型輸出當成不可信資料](production-readiness/ready.md#output-handling) | 模型吐出的內容不能在使用者瀏覽器上執行 | ✅ 是 |
 | [外部相依的逾時與重試](production-readiness/ready.md#timeouts) | 模型卡住時，app 不會跟著無限等下去 | ✅ 是 |
-| [祕密管理](production-readiness/ready.md#secrets) | 密碼和 key 不寫在程式碼裡，可以換、不會外流 | ❌ 否 |
+| [祕密管理](production-readiness/ready.md#secrets) | 密碼和 key 不寫在程式碼裡，可以換、不會外流 | ✅ 是 |
 | [Container 加固](production-readiness/ready.md#container) | 容器被攻破時權限最小，關機時能好好收尾 | ✅ 是 |
 | [相依套件與映像檔掃描](production-readiness/ready.md#dependency-scan) | 用到的套件有已知漏洞時會被發現 | ✅ 是 |
 | [祕密掃描](production-readiness/ready.md#secret-scan) | 不小心 commit 的 key 在推出去之前就被擋下來 | ✅ 是 |
