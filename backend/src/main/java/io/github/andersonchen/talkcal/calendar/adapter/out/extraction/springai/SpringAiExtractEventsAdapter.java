@@ -35,7 +35,7 @@ public final class SpringAiExtractEventsAdapter implements ExtractEventsPort {
     public List<CalendarEvent> extractEvents(EventDescription description, LocalDateTime now) {
         ChatResponse response;
         try {
-            response = chatModel.call(ExtractionRequest.prompt(description, now));
+            response = chatModel.call(ExtractionRequest.prompt(description, now, chatModel.getOptions()));
         } catch (RuntimeException e) {
             // port 的契約是失敗丟 IllegalStateException（CalendarController 翻成 502）。
             // ChatModel 失敗時丟的是 OpenAI SDK 自己的例外，而且型別隨失敗原因不同（連不上、逾時、HTTP 4xx/5xx），

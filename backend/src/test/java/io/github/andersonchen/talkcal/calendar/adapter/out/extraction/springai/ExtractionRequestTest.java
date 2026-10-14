@@ -28,11 +28,17 @@ class ExtractionRequestTest {
     // 2026-10-05 是星期一
     private static final LocalDateTime MONDAY_MORNING = LocalDateTime.of(2026, 10, 5, 9, 30);
 
+    // 設定檔（application.properties）給 ChatModel 的預設：模型名稱只寫在那裡
+    private static final OpenAiChatOptions DEFAULTS = OpenAiChatOptions.builder()
+            .model("qwen-from-properties")
+            .temperature(0.6)
+            .build();
+
     @Nested
     @DisplayName("Prompt")
     class PromptShape {
 
-        private final Prompt prompt = ExtractionRequest.prompt(new EventDescription("明天三點跟小明吃飯"), MONDAY_MORNING);
+        private final Prompt prompt = ExtractionRequest.prompt(new EventDescription("明天三點跟小明吃飯"), MONDAY_MORNING, DEFAULTS);
 
         @Test
         @DisplayName("第一則是帶著現在時間與日期表的 system，第二則是使用者原話")
@@ -57,6 +63,13 @@ class ExtractionRequestTest {
             assertEquals(0.0, options.getTemperature());
             assertEquals(OpenAiChatModel.ResponseFormat.Type.JSON_SCHEMA, options.getResponseFormat().getType());
             assertEquals(ExtractionRequest.SCHEMA, options.getResponseFormat().getJsonSchema());
+        }
+
+        @Test
+        @DisplayName("模型沿用設定檔的預設：Spring AI 2.0 不會替請求自帶的選項補上預設，沒帶就變成 gpt-5-mini")
+        void keepsDefaultModel() {
+            // 2026-10-14 雲端改打 Bedrock 才發現：本機的 llama-server 不看模型名稱，一直送 gpt-5-mini 也沒事（#76）
+            assertEquals("qwen-from-properties", prompt.getOptions().getModel());
         }
     }
 

@@ -156,7 +156,12 @@ public final class CalendarAssistant {
             List<String> userSaid = conversation.stream()
                     .filter(m -> m.getMessageType() == MessageType.USER).map(Message::getText).toList();
             CalendarTools tools = new CalendarTools(parseEvents, listEvents, findFreeSlots, userSaid);
-            OpenAiChatOptions options = OpenAiChatOptions.builder()
+            // 從 application.properties 的預設開始再蓋：Spring AI 2.0 看到請求自帶選項就整份照用、不補預設，
+            // 沒給模型名稱就送 gpt-5-mini（#76）。測試用的假 ChatModel 給的是通用的 ChatOptions，沒東西可以沿用
+            OpenAiChatOptions.Builder start = chatModel.getOptions() instanceof OpenAiChatOptions defaults
+                    ? defaults.mutate()
+                    : OpenAiChatOptions.builder();
+            OpenAiChatOptions options = start
                     .temperature(TEMPERATURE)
                     .maxTokens(MAX_TOKENS)
                     .toolCallbacks(ToolCallbacks.from(tools))
