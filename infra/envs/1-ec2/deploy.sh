@@ -53,15 +53,23 @@ umask 077
 aws ssm get-parameter --name "$DOTENV_PARAM" --with-decryption \
   --region "$AWS_REGION" --query Parameter.Value --output text > "$REPO/deploy/.env"
 umask 022
+# 寫出空檔案卻回 0 的事真的發生過（snap 版的 aws，#74）。不擋的話要到第 4 步 compose 才報「缺 DB_PASSWORD」，看不出原因
+if ! grep -q '^DB_PASSWORD=' "$REPO/deploy/.env"; then
+  echo "deploy/.env 是空的或缺 DB_PASSWORD：檢查 aws --version、SSM 參數 $DOTENV_PARAM" >&2
+  exit 1
+fi
 
 cd "$REPO"
 
-echo "── 4. 服務（deploy/ + 雲端的差異 compose.ec2.yaml）"
-# 第二個 -f 疊在第一個上面：同名欄位以後面的為準，本機的 compose.yaml 一行都不用改
-docker compose \
-  -f deploy/compose.yaml \
-  -f infra/envs/1-ec2/compose.ec2.yaml \
-  up -d --build --remove-orphans
+# 後面的 -f 疊在前面上面：同名欄位以後面的為準，本機的 compose.yaml 一行都不用改
+compose_files=(
+  -f deploy/compose.yaml                            # 本機和雲端共用
+  -f infra/envs/1-ec2/compose.ec2.yaml              # 雲端共用：DB 密碼、記憶體上限、Caddy
+  -f "infra/envs/1-ec2/compose.$MODEL_BACKEND.yaml" # 模型從哪來
+)
+
+echo "── 4. 服務（deploy/ + compose.ec2.yaml + compose.$MODEL_BACKEND.yaml）"
+docker compose "${compose_files[@]}" up -d --build --remove-orphans
 
 echo "── 5. 觀測（ops/，跟本機同一份）"
 # 要在 deploy/ 之後：Alloy 要加入的網路是 deploy/ 建的
