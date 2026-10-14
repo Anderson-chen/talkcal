@@ -3,6 +3,8 @@
 每次改動都在**乾淨的容器**裡自動檢查一遍：後端的單元測試、架構規則、整合測試，前端的型別檢查和打包。
 本機（push 之前）和 GitHub（push 之後）跑的是**同一支 script、同一個映像檔**，所以本機綠就代表 GitHub 綠。
 
+整條 CI → CD 的流程圖和每一關擋什麼，見 [docs/architecture.md](../docs/architecture.md#cicd從-commit-到線上)。
+
 ## 怎麼跑
 
 ```bash

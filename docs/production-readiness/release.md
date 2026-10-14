@@ -20,9 +20,9 @@
 master 的 CI 綠燈之後，本機會自動部署：[cd/triggers/watch.sh](../../cd/README.md#本機-cdmaster-綠燈就自動部署) 每 5 分鐘去 GitHub 看有沒有新的綠燈版本，有就部署，結果寫回 GitHub 的 Deployments。是機器自己去拉，GitHub 不必有連進來的權限；選 pull 不選 push 的理由也寫在那裡。還沒有的：watcher 自己掛掉時的告警、部署後的煙霧測試。
 
 <a id="cloud-deploy"></a>
-### 部署到 AWS：單台 EC2 + compose ❌
+### 部署到 AWS：單台 EC2 + compose ✅
 
-服務只在本機跑，「線上」是模擬的。Terraform 已經寫好（[infra/envs/1-ec2](../../infra/envs/1-ec2/README.md)），還沒 apply 過。第一步是一台 EC2，`deploy/` 和 `ops/` 兩組 compose 搬上去。模型先走 Bedrock 的 Qwen3 32B（app 不用改，只換 OpenAI 相容 API 的位址和 key），GPU 配額下來後用 `model_backend=gpu` 切回跟本機一樣自己跑。架構和要改的地方見 [infra/envs/1-ec2](../../infra/envs/1-ec2/README.md)。
+2026-10-14 部署上線：Terraform（[infra/envs/1-ec2](../../infra/envs/1-ec2/README.md)）apply 一次就有整套，從外部經 HTTPS 打 AI 助理、雲端的 Grafana 看得到 log、指標、trace。機器平常關機，展示前開機。第一步是一台 EC2，`deploy/` 和 `ops/` 兩組 compose 搬上去。模型先走 Bedrock 的 Qwen3 32B（app 不用改，只換 OpenAI 相容 API 的位址和 key），GPU 配額下來後用 `model_backend=gpu` 切回跟本機一樣自己跑。架構和要改的地方見 [infra/envs/1-ec2](../../infra/envs/1-ec2/README.md)。
 
 開始之前要先有：
 - ~~**GPU 配額**~~：新帳號 G 系列的配額預設是 0，2026-10-13 申請被拒。先改走 Bedrock，不需要 GPU 配額（[#72](https://github.com/Anderson-chen/talkcal/issues/72)）。

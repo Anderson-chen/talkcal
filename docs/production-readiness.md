@@ -43,7 +43,7 @@
 | [原始碼放在 GitHub](production-readiness/release.md#github) | 程式碼有備份、有歷史，別人看得到 | ✅ 是 |
 | [CI](production-readiness/release.md#ci) | 每次改動都在乾淨環境自動驗證，不靠「我電腦上可以」 | ✅ 是 |
 | [一鍵部署](production-readiness/release.md#deploy) | 部署不靠記步驟，每次都一樣 | ✅ 是 |
-| [部署到 AWS：單台 EC2 + compose](production-readiness/release.md#cloud-deploy) | 服務真的在線上跑，別人連得到 | ❌ 否 |
+| [部署到 AWS：單台 EC2 + compose](production-readiness/release.md#cloud-deploy) | 服務真的在線上跑，別人連得到 | ✅ 是 |
 | [本機 k8s（kind）](production-readiness/release.md#k8s-local) | 同一套映像檔在 k8s 上跑得起來，上 EKS 前先在本機練 | ❌ 否 |
 | [部署到 EKS](production-readiness/release.md#eks) | 換版不停機、一台機器掛了不會全停 | ❌ 否 |
 | [DB migration](production-readiness/release.md#migration) | schema 變更有版本、可重現，每個環境都一致 | ✅ 是 |

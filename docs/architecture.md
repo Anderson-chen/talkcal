@@ -1,11 +1,11 @@
 # 架構圖
 
-這份畫的是**現在跑得起來的**本機架構。搬上 AWS 的兩個階段還沒做，架構圖和規劃放在 `infra/` 各階段的資料夾裡，跟之後的部署設定放在一起：
+這份畫的是本機架構，和一個改動怎麼一路到線上（[CI/CD](#cicd從-commit-到線上)）。AWS 各階段的架構圖放在 `infra/` 各階段的資料夾裡，跟部署設定放在一起：
 
 | | 跑在哪 | 追蹤 | 換來什麼 |
 |---|---|---|---|
 | 本機（這份） | 自己的電腦，兩組 compose | 已完成 | 整套能一鍵起來、看得到三種訊號 |
-| [AWS 階段一](../infra/envs/1-ec2/README.md) | 一台 EC2，同樣兩組 compose；模型先走 Bedrock（GPU 配額被拒），配額下來可切回自己跑 | [#57](https://github.com/Anderson-chen/talkcal/issues/57) | 服務真的在線上，別人連得到；compose 幾乎不用改 |
+| [AWS 階段一](../infra/envs/1-ec2/README.md) | 一台 EC2，同樣兩組 compose；模型走 Bedrock（GPU 配額被拒）。2026-10-14 部署上線 | [#57](https://github.com/Anderson-chen/talkcal/issues/57) | 服務真的在線上，別人連得到；compose 幾乎不用改 |
 | [AWS 階段二](../infra/envs/2-eks/README.md) | EKS 叢集 | [#58](https://github.com/Anderson-chen/talkcal/issues/58)（前一步是本機 k8s，[#56](https://github.com/Anderson-chen/talkcal/issues/56)） | 換版不停機、一台掛了不會全停 |
 
 為什麼分兩個階段見 [infra/README.md](../infra/README.md)。
@@ -71,7 +71,7 @@ flowchart LR
 
 ### 主機上開了哪些埠
 
-全部只綁 `127.0.0.1`，區網的人連不到（Loki 3100、Grafana 3000 例外，沒有綁定位址）。
+全部只綁 `127.0.0.1`，區網的人連不到。Grafana 和 Loki 以前沒綁位址，搬上 EC2 前改掉了（Grafana 匿名就是 Admin）。
 
 | 埠 | 誰 | 給誰用 |
 |---|---|---|
@@ -86,3 +86,51 @@ flowchart LR
 | 12345 | alloy | 除錯頁，看管線圖 |
 
 細節（為什麼這樣設）寫在 [deploy/compose.yaml](../deploy/compose.yaml)、[ops/compose.yaml](../ops/compose.yaml) 的註解裡。
+
+## CI/CD：從 commit 到線上
+
+一個改動從開分支到跑在線上，經過的每一關。實線是自動發生的，虛線是人做的。
+
+```mermaid
+flowchart TB
+    dev["開分支、commit<br/>（每個分支對一個 issue）"] -->|"git push"| hook["pre-push hook<br/>ci/run.sh<br/>本機有 GPU：模型測試真的跑"]
+    hook -->|"過了才推得上去"| pr["GitHub PR<br/>描述寫 Closes #N"]
+    pr --> ci["CI（ci.yml）<br/>同一支 ci/run.sh<br/>沒有 GPU：模型測試跳過"]
+    pr --> prissue["PR issue（pr-issue.yml）<br/>沒連到 issue 就紅燈"]
+    ci -->|"必須綠"| merge["merge 進 master<br/>ruleset：一定走 PR、CI 必須綠"]
+    prissue -.->|"紅燈不擋合併"| merge
+    merge --> masterci["master 再跑一次 CI"]
+    masterci -->|"綠燈"| green(["master 最新的綠燈 commit"])
+    green -->|"每 5 分鐘自己來拉"| watch["本機 watcher<br/>cd/triggers/watch.sh local"]
+    watch --> applyl["cd/apply.sh local<br/>compose up --wait"]
+    applyl -->|"結果寫回"| deployments["GitHub Deployments<br/>環境 local：success／failure"]
+    green -.->|"SSM 連進去手動重跑"| ec2["EC2：deploy.sh<br/>compose.ec2.yaml + compose.bedrock.yaml"]
+```
+
+本機是 **pull**：GitHub 不必有任何連進這台電腦的權限，機器自己去看 CI 綠了沒（理由見 [cd/README.md](../cd/README.md#為什麼是-pull)）。
+EC2 目前是手動部署：機器平常關機，展示前開機、需要時用 SSM 重跑 `deploy.sh`。
+
+### 每一關擋什麼、擋不住什麼
+
+| 關卡 | 擋什麼 | 擋不住什麼 |
+|---|---|---|
+| pre-push（[ci/](../ci/README.md)） | 本機就會壞的，包括要 GPU 的模型測試 | `git push --no-verify` 可以跳過 |
+| CI（GitHub Actions） | 乾淨環境才會壞的：「我電腦上可以」 | 模型相關（沒有 GPU） |
+| PR issue | 會亮紅燈，提醒沒連到 issue | **擋不住合併**：ruleset 的必過檢查只有 CI，沒有它 |
+| ruleset（protect-master） | 直推 master、force push、刪 master、CI 沒綠就合併 | — |
+| `compose up --wait` | 起不來的容器（healthcheck 沒過） | 起得來但功能壞了：例如模型名稱送錯（[#76](https://github.com/Anderson-chen/talkcal/issues/76)），容器 healthy、第一個 AI 請求才 404 |
+| watcher 同一個 commit 只試一次 | 壞掉的版本每 5 分鐘重 build | watcher 自己掛掉（沒有「多久沒部署」告警，決定不做） |
+
+### 檔案
+
+| 層 | 回答的問題 | 檔案 |
+|---|---|---|
+| 檢查內容 | 要驗什麼 | `ci/checks.sh` |
+| 檢查環境 | 在什麼環境驗 | `ci/Dockerfile` |
+| CI 入口 | 什麼時候驗 | `.githooks/pre-push`、`.github/workflows/ci.yml`（都呼叫 `ci/run.sh`） |
+| 部署步驟 | 怎麼把版本放上機器 | `cd/apply.sh`（本機）、`infra/envs/1-ec2/deploy.sh`（EC2，還沒收進 `cd/`） |
+| 環境差異 | 本機和雲端差在哪 | `cd/envs/local.env`、`infra/envs/1-ec2/compose.*.yaml` |
+| CD 入口 | 什麼時候部署 | `cd/triggers/watch.sh` + 工作排程（本機）；手動（EC2） |
+| 生機器 | 機器從哪來 | `infra/`（Terraform） |
+
+原則只有一條：**做什麼只寫一次，入口可以很多個**。CI 和 CD 都是這樣分。
