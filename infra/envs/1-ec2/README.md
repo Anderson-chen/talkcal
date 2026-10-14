@@ -135,6 +135,8 @@ sudo docker stats --no-stream && free -h       # gpu 再加 nvidia-smi
 
 # Bedrock API key 到期前換新（預設 90 天），再到機器上重跑 deploy.sh
 terraform apply -replace='aws_iam_service_specific_credential.bedrock[0]'
+# 換 DB 密碼（例如懷疑外洩），再到機器上重跑 deploy.sh：它會把資料庫裡的密碼同步成新的那組
+terraform apply -replace=random_password.db
 
 # 看 Grafana：在本機跑這行，再開 http://localhost:3000
 terraform output -raw grafana_tunnel
