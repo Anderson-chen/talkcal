@@ -69,6 +69,19 @@ compose_files=(
 )
 
 echo "── 4. 服務（deploy/ + compose.ec2.yaml + compose.$MODEL_BACKEND.yaml）"
+# 先只起 postgres，把資料庫裡的密碼同步成 .env 這一份，app 才起來（#14）。
+# 為什麼要這步：官方 postgres 映像檔只在「資料庫第一次初始化」時讀 POSTGRES_PASSWORD，之後就不管了。
+# 不同步的話，在 Terraform 換了密碼再部署，app 拿新密碼、資料庫還是舊的 —— app 連不上，整個服務掛掉。
+# 每次部署都跑：密碼沒換時就是設成同一組，沒有副作用。
+docker compose "${compose_files[@]}" up -d --wait postgres
+# 走容器裡的 local socket（官方映像檔對它是 trust），不必知道舊密碼也改得了。
+# 密碼從 stdin 送進去，不放在指令參數裡：參數在 ps 看得到，stdin 看不到。
+# 只用英數字（secrets.tf 的 special = false），所以直接放進 SQL 字串不會有跳脫問題
+db_password="$(grep '^DB_PASSWORD=' deploy/.env | cut -d= -f2-)"
+printf "ALTER ROLE talkcal PASSWORD '%s';\n" "$db_password" \
+  | docker compose "${compose_files[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -q -U talkcal -d talkcal
+unset db_password
+
 docker compose "${compose_files[@]}" up -d --build --remove-orphans
 
 echo "── 5. 觀測（ops/，跟本機同一份）"
