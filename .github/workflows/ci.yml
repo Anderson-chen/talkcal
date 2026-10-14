@@ -76,7 +76,9 @@ jobs:
       - run: docker build --quiet --tag talkcal/web:local web
 
       # postgres 的版本從 compose 讀，不在這裡再寫一次：compose 升版時掃的就跟著換
-      - run: ci/vulns.sh talkcal/app:local talkcal/web:local "$(grep -oE 'image: postgres:[^ ]+' deploy/compose.yaml | cut -d' ' -f2)"
+      # 寫成 | 區塊：指令裡的「image: 」在 YAML 一行的寫法會被當成鍵值，整份 workflow 解析失敗
+      - run: |
+          ci/vulns.sh talkcal/app:local talkcal/web:local "$(grep -oE 'image: postgres:[^ ]+' deploy/compose.yaml | cut -d' ' -f2)"
 
       - name: 掃描結果貼到結果頁
         if: always()
