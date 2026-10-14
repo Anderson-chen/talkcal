@@ -53,6 +53,11 @@ umask 077
 aws ssm get-parameter --name "$DOTENV_PARAM" --with-decryption \
   --region "$AWS_REGION" --query Parameter.Value --output text > "$REPO/deploy/.env"
 umask 022
+# 寫出空檔案卻回 0 的事真的發生過（snap 版的 aws，#74）。不擋的話要到第 4 步 compose 才報「缺 DB_PASSWORD」，看不出原因
+if ! grep -q '^DB_PASSWORD=' "$REPO/deploy/.env"; then
+  echo "deploy/.env 是空的或缺 DB_PASSWORD：檢查 aws --version、SSM 參數 $DOTENV_PARAM" >&2
+  exit 1
+fi
 
 cd "$REPO"
 

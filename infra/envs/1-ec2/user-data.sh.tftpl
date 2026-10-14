@@ -30,8 +30,17 @@ apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
 # deploy.sh 要用 AWS CLI 讀 SSM 的 .env；Deep Learning AMI 有帶，一般 Ubuntu 沒有。
-# 用 snap 裝官方版（apt 的 awscli 是舊的 v1）
-command -v aws || snap install aws-cli --classic
+# 用 AWS 官方的安裝程式（apt 的 awscli 是舊的 v1）。不用 snap 版：2026-10-14 實測，
+# snap 的 aws 輸出導向檔案時（> deploy/.env）結束碼 0 但寫出 0 bytes，導向管線才正常 ——
+# .env 變成空的，compose 才在第 4 步報缺變數（#74）
+if ! command -v aws; then
+  apt-get install -y unzip
+  curl -fsSL -o /tmp/awscliv2.zip https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+  unzip -q /tmp/awscliv2.zip -d /tmp
+  /tmp/aws/install
+  rm -rf /tmp/aws /tmp/awscliv2.zip
+fi
+aws --version
 %{ endif ~}
 
 # log 輪替：Docker 預設的 json-file 不輪替，log 會一直長到磁碟滿。
