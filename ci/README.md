@@ -97,6 +97,22 @@ gitleaks 補的是邊界：
 
 被誤判時（測試用的假 key），那一行加註解 `gitleaks:allow`，或把報告裡的 Fingerprint 寫進 `.gitleaksignore`。
 
+## 漏洞掃描（目前只回報）
+
+`ci/vulns.sh` 用 Trivy 掃 build 好的映像檔：基底映像檔的作業系統套件、jar 裡的 Java 函式庫一次掃到。
+只列 HIGH、CRITICAL 而且已經有修補版本的 —— 上游還沒修的，我們也沒得升。
+
+```bash
+docker compose -f deploy/compose.yaml build app web
+ci/vulns.sh talkcal/app:local talkcal/web:local postgres:18.6-alpine
+```
+
+**為什麼現在不擋**：第一次掃就有幾十個現成的漏洞（清單見 [ready.md](../docs/production-readiness/ready.md#dependency-scan)），
+直接擋的話每個 PR 都紅。分兩步：先讓結果看得到，修完再改成擋。
+
+**為什麼不用 trivy-action**：Trivy 在 2026-03 被入侵過，v0.69.4 和 trivy-action 幾乎所有 tag 都被換成會偷 CI secret 的版本。
+這裡跟 gitleaks 一樣直接跑映像檔，版本和 digest 都釘死，用的是事件之後的版本。
+
 ## 刻意不做的
 
 - **k6 壓測**：要真模型，CI 量不出有意義的數字。見 [perf/README.md](../perf/README.md)。
