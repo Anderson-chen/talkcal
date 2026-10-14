@@ -8,6 +8,9 @@ build/
 .idea/
 *.iml
 
+# Claude 桌面版的預覽設定：寫的是這台電腦的路徑（C:\llm\...），跟 .idea/ 一樣是個人工具的設定
+.claude/launch.json
+
 # Terraform：provider 快取、state、計畫檔、各自的變數值都不進版控。
 # .terraform.lock.hcl 要進：它釘住 provider 的版本和雜湊，換台電腦 init 拿到同一份。
 .terraform/
