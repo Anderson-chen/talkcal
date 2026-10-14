@@ -81,9 +81,27 @@
 [Dockerfile](../../backend/Dockerfile)：兩段式 build、不用 root 執行、用 exec 形式啟動，讓 JVM 收得到 SIGTERM。
 
 <a id="dependency-scan"></a>
-### 相依套件與映像檔掃描 ❌
+### 相依套件與映像檔掃描 ❌（只回報、還不擋）
 
-沒有 Trivy 或 OWASP dependency-check 這類掃描。
+CI 的 `vulns` job 會 build 出 app、web 映像檔，連同 postgres 用 [ci/vulns.sh](../../ci/vulns.sh)（Trivy）掃，結果貼在 Actions 結果頁。
+掃映像檔而不是 build.gradle：作業系統套件和 jar 裡的 Java 函式庫一次看得到，掃的就是會上線的東西。
+對應 OWASP Top 10:2025 的 `A03` Software Supply Chain Failures（2021 版的 A06 Vulnerable and Outdated Components）。
+沒用 OWASP 自己的 Dependency-Check：它只看 Java、npm 這些函式庫，看不到基底映像檔裡的 openssl、curl；Trivy 兩種都掃。
+
+證據（反例）：`alpine:3.24` 本身掃出 0 個；同一個基底只多放一個 `log4j-core-2.14.1.jar`，就抓到 Log4Shell（`CVE-2021-44228`，CRITICAL）等 3 個。
+兩個都是 exit 0 —— 只回報的階段，有 CRITICAL 也照樣綠燈。
+
+第一次掃（2026-10-14，只算 HIGH、CRITICAL 而且有修補版本的）：
+
+| 映像檔 | 數量 | 在哪 | 怎麼修 |
+|---|---|---|---|
+| app | 13 | Tomcat 11.0.24（1 個 CRITICAL）、Jackson 2.22.1 | Spring Boot 4.1.1 已是最新，要在 Gradle 手動拉高版本 |
+| app | 2 | openssl | 重新 build，最新的 temurin 基底已經是 0 |
+| web | 44 | 基底 `nginx:1.29-alpine`（curl、expat…） | 1.29 已不再更新，換 1.30 剩 3 個 |
+| postgres | 25 | `gosu` 的 Go 標準函式庫 | 上游問題，最新版也一樣；gosu 只在啟動時切換使用者，碰不到外部輸入 |
+
+還沒做完的：修掉上面這些、把 gosu 寫進忽略清單並附理由，然後把 `vulns` 改成會擋、加進必過檢查，再加每天的排程掃描（新漏洞會在程式碼沒變的時候冒出來）。
+只回報的階段沒有人會被通知 —— 要有人去看結果頁才知道。
 
 <a id="secret-scan"></a>
 ### 祕密掃描 ✅

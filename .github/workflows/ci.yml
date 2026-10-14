@@ -62,3 +62,24 @@ jobs:
       # 本機 pre-push 只掃要推的那幾個 commit；這裡掃整個歷史，補上 --no-verify 跳過的那些。
       # 在這裡才抓到代表已經推上 GitHub 了：key 要當成外洩，作廢重發，刪 commit 不夠
       - run: ci/secrets.sh
+
+  # 漏洞掃描：build 出會上線的映像檔再掃。目前只回報、不擋 —— 結果貼在結果頁，綠燈不代表沒有漏洞。
+  # 不在 ruleset 的必過檢查裡；現有的漏洞修完之後再改成擋（#15）
+  vulns:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # 跟 deploy/compose.yaml 同樣的 context，標成同樣的名字
+      - run: docker build --quiet --tag talkcal/app:local backend
+      - run: docker build --quiet --tag talkcal/web:local web
+
+      # postgres 的版本從 compose 讀，不在這裡再寫一次：compose 升版時掃的就跟著換
+      # 寫成 | 區塊：指令裡的「image: 」在 YAML 一行的寫法會被當成鍵值，整份 workflow 解析失敗
+      - run: |
+          ci/vulns.sh talkcal/app:local talkcal/web:local "$(grep -oE 'image: postgres:[^ ]+' deploy/compose.yaml | cut -d' ' -f2)"
+
+      - name: 掃描結果貼到結果頁
+        if: always()
+        run: cat ci/build/vulns.md >> "$GITHUB_STEP_SUMMARY" || true
