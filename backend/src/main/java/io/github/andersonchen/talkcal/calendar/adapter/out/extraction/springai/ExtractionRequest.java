@@ -5,6 +5,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.EventDes
 
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -90,25 +91,32 @@ final class ExtractionRequest {
     private ExtractionRequest() {
     }
 
-    static Prompt prompt(EventDescription description, LocalDateTime now) {
+    static Prompt prompt(EventDescription description, LocalDateTime now, ChatOptions defaults) {
         Objects.requireNonNull(description, "description 不可為 null");
         Objects.requireNonNull(now, "now 不可為 null");
 
         return new Prompt(
                 List.of(new SystemMessage(instruction(now)), new UserMessage(description.text())),
-                options());
+                options(defaults));
     }
 
     /**
-     * 這個請求自己的選項，蓋過 application.properties 裡替聊天設的預設（spring.ai.openai.chat.options.*）。
-     * 三個都是這件工作專屬的：max_tokens 是失控保險、response_format 是輸出約束、
+     * 這個請求自己的選項：從 application.properties 的預設（spring.ai.openai.chat.options.*，傳進來的 defaults）開始，
+     * 再蓋掉這件工作專屬的三個：max_tokens 是失控保險、response_format 是輸出約束、
      * temperature 是「這個請求要確定性」。聊天沒有理由跟 server 的取樣設定不同，這裡有，而且只屬於這種請求。
+     *
+     * 一定要從預設開始：Spring AI 2.0 的 OpenAiChatModel 看到請求自帶選項就整份照用，不會補上預設，
+     * 沒給模型名稱就送 gpt-5-mini（#76）。本機的 llama-server 不看名稱所以一直沒事，換到 Bedrock 就 404。
      *
      * 用的是 OpenAiChatOptions 而不是通用的 ChatOptions：通用的那份沒有 response_format。
      * 這也是這個 adapter 唯一綁在「OpenAI 協定」上的地方 —— 換成 Claude，要改的就是這個方法。
      */
-    static OpenAiChatOptions options() {
-        return OpenAiChatOptions.builder()
+    static OpenAiChatOptions options(ChatOptions defaults) {
+        // 測試用的假 ChatModel 給的是通用的 ChatOptions，沒有 OpenAI 的欄位可以沿用
+        OpenAiChatOptions.Builder start = defaults instanceof OpenAiChatOptions openAi
+                ? openAi.mutate()
+                : OpenAiChatOptions.builder();
+        return start
                 .temperature(TEMPERATURE)
                 .maxTokens(MAX_TOKENS)
                 .responseFormat(OpenAiChatModel.ResponseFormat.builder()
