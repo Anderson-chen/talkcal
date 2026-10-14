@@ -56,12 +56,15 @@ umask 022
 
 cd "$REPO"
 
-echo "── 4. 服務（deploy/ + 雲端的差異 compose.ec2.yaml）"
-# 第二個 -f 疊在第一個上面：同名欄位以後面的為準，本機的 compose.yaml 一行都不用改
-docker compose \
-  -f deploy/compose.yaml \
-  -f infra/envs/1-ec2/compose.ec2.yaml \
-  up -d --build --remove-orphans
+# 後面的 -f 疊在前面上面：同名欄位以後面的為準，本機的 compose.yaml 一行都不用改
+compose_files=(
+  -f deploy/compose.yaml                            # 本機和雲端共用
+  -f infra/envs/1-ec2/compose.ec2.yaml              # 雲端共用：DB 密碼、記憶體上限、Caddy
+  -f "infra/envs/1-ec2/compose.$MODEL_BACKEND.yaml" # 模型從哪來
+)
+
+echo "── 4. 服務（deploy/ + compose.ec2.yaml + compose.$MODEL_BACKEND.yaml）"
+docker compose "${compose_files[@]}" up -d --build --remove-orphans
 
 echo "── 5. 觀測（ops/，跟本機同一份）"
 # 要在 deploy/ 之後：Alloy 要加入的網路是 deploy/ 建的
