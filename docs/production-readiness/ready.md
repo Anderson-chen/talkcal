@@ -88,7 +88,9 @@
 <a id="secret-scan"></a>
 ### 祕密掃描 ✅
 
-三道，由近到遠（細節見 [ci/README.md](../../ci/README.md#祕密掃描)）：
+GitHub 自己的 push protection 已經擋住大部分情況；gitleaks 補的是本機就擋、通用規則、不綁平台（取捨見 [ci/README.md](../../ci/README.md#github-已經會擋為什麼還要-gitleaks)）。
+
+三道，由近到遠：
 
 | 關卡 | 掃什麼 | 擋住時 key 在哪 |
 |---|---|---|

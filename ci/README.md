@@ -83,6 +83,18 @@ ci/secrets.sh HEAD --not --remotes   # 只掃還沒推上去的（pre-push 用�
 | 抓到時 | key 還在本機，改掉再推 | 被拒收 | **已經公開**，要作廢重發 |
 
 pre-push 先掃祕密、再跑測試：掃描只要幾秒，而且測試紅了可以再推一次修，key 送出去就收不回來。
+### GitHub 已經會擋，為什麼還要 gitleaks
+
+老實說：這個 repo 用到的 key（AWS、OpenAI 這類）GitHub 都認得，公開 repo 的 push protection 和背景掃描已經擋住大部分會發生的事。
+gitleaks 補的是邊界：
+
+- **在本機就擋**：GitHub 擋的時候 key 已經送出這台電腦；pre-push 擋的時候還沒
+- **通用規則**：自己系統發的 token、私鑰檔，GitHub 不認得
+- **放行要留痕跡**：GitHub 被擋時在網頁上填個理由就能放行；這裡的 CI 是必過檢查，跳不過
+- **不綁平台**：私人 repo 要付費才有 GitHub 這套；換到 GitLab、公司內部的 Git 也照樣有效
+
+代價是 pre-push 多約 1 秒、CI 多一個並行的 job，所以留著。
+
 被誤判時（測試用的假 key），那一行加註解 `gitleaks:allow`，或把報告裡的 Fingerprint 寫進 `.gitleaksignore`。
 
 ## 刻意不做的
