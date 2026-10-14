@@ -29,6 +29,19 @@ dependencies {
     // BOM 座標直接取自上面套用的 Boot 外掛版本，不必再寫一次版號，改版只改一個地方。
     implementation platform(SpringBootPlugin.BOM_COORDINATES)
 
+    // 安全修補：Boot 4.1.1（目前最新）帶的 Tomcat、Jackson 有已知漏洞（ci/vulns.sh 掃到的，#85）。
+    // 同一個套件有兩個版本要求時，Gradle 挑高的那個 —— 所以這裡寫較高的版本就蓋過 BOM，不必動 Boot 本身。
+    // 只升 patch、不換小版本線，行為不會變。等 Boot 的 BOM 追上這些版本，這一段就整段刪掉。
+    // Jackson 2、3 都有：Boot 4 自己用 3（tools.jackson），Spring AI、springdoc 還在用 2（com.fasterxml）
+    implementation platform('com.fasterxml.jackson:jackson-bom:2.22.3')
+    implementation platform('tools.jackson:jackson-bom:3.1.7')
+    constraints {
+        // Tomcat 沒有發 BOM，三個模組各自寫，版本要一致
+        ['tomcat-embed-core', 'tomcat-embed-el', 'tomcat-embed-websocket'].each {
+            implementation("org.apache.tomcat.embed:${it}:11.0.27")
+        }
+    }
+
     // web starter：嵌入式 Tomcat + Spring MVC + Jackson（JSON 序列化）。
     // Boot 4 把原本的 starter-web 改名成 starter-webmvc：名字直接講出是哪一套 web 堆疊（對比 webflux），
     // 舊名字還留著但已標為 deprecated。Jackson 也跟著換成 3.x，套件從 com.fasterxml.jackson 搬到 tools.jackson。
