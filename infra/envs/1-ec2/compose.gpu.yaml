@@ -1,0 +1,10 @@
+# model_backend = gpu：跟本機一樣自己跑 llama-server，只有模型檔的來源不同。
+# 疊在 deploy/compose.yaml、compose.ec2.yaml 上面（deploy.sh 依 MODEL_BACKEND 選這份）。
+# 用到的 MODELS_DIR 在 deploy/.env（Terraform 的 secrets.tf 產生）。
+
+services:
+  # 模型來源：本機是 C:/llm/models，這裡換成 deploy.sh 從 S3 拉下來的資料夾。
+  # 容器裡的路徑一樣是 /seed，所以這行會蓋掉 compose.yaml 那行，播種的腳本不用動。
+  model-seed:
+    volumes:
+      - ${MODELS_DIR:?缺 MODELS_DIR}:/seed:ro

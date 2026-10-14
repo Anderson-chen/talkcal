@@ -5,7 +5,7 @@
 | | 跑在哪 | 追蹤 | 換來什麼 |
 |---|---|---|---|
 | 本機（這份） | 自己的電腦，兩組 compose | 已完成 | 整套能一鍵起來、看得到三種訊號 |
-| [AWS 階段一](../infra/envs/1-ec2/README.md) | 一台 GPU EC2，同樣兩組 compose | [#57](https://github.com/Anderson-chen/talkcal/issues/57) | 服務真的在線上，別人連得到；compose 幾乎不用改 |
+| [AWS 階段一](../infra/envs/1-ec2/README.md) | 一台 EC2，同樣兩組 compose；模型先走 Bedrock（GPU 配額被拒），配額下來可切回自己跑 | [#57](https://github.com/Anderson-chen/talkcal/issues/57) | 服務真的在線上，別人連得到；compose 幾乎不用改 |
 | [AWS 階段二](../infra/envs/2-eks/README.md) | EKS 叢集 | [#58](https://github.com/Anderson-chen/talkcal/issues/58)（前一步是本機 k8s，[#56](https://github.com/Anderson-chen/talkcal/issues/56)） | 換版不停機、一台掛了不會全停 |
 
 為什麼分兩個階段見 [infra/README.md](../infra/README.md)。

@@ -9,8 +9,16 @@ locals {
   # 代價是 IP 一換網址就換，所以配了 Elastic IP。
   site_address = "${var.project}.${replace(aws_eip.main.public_ip, ".", "-")}.sslip.io"
 
-  # 模型檔在機器上的位置：deploy.sh 從 S3 sync 到這裡，compose.ec2.yaml 把它掛給 model-seed
+  # 模型檔在機器上的位置（gpu）：deploy.sh 從 S3 sync 到這裡，compose.gpu.yaml 把它掛給 model-seed
   models_dir = "/opt/${var.project}/models"
+
+  # .env 裡依 model_backend 不同的那幾行
+  backend_env = local.gpu ? "MODELS_DIR=${local.models_dir}" : join("\n", [
+    # mantle 的 OpenAI 相容端點。帶 /v1：OpenAI client 在後面直接接 /chat/completions
+    "BEDROCK_BASE_URL=https://bedrock-mantle.${var.region}.api.aws/v1",
+    "BEDROCK_MODEL=${var.bedrock_model}",
+    "BEDROCK_API_KEY=${aws_iam_service_specific_credential.bedrock[0].service_credential_secret}",
+  ])
 }
 
 resource "random_password" "db" {
@@ -26,9 +34,9 @@ resource "aws_ssm_parameter" "dotenv" {
 
   value = <<-ENV
     # 由 Terraform 產生，不要手改：下次 apply 會蓋掉。
-    # compose.ec2.yaml 用到的變數都在這裡。
+    # compose.ec2.yaml、compose.${var.model_backend}.yaml 用到的變數都在這裡。
     SITE_ADDRESS=${local.site_address}
-    MODELS_DIR=${local.models_dir}
     DB_PASSWORD=${random_password.db.result}
+    ${local.backend_env}
   ENV
 }

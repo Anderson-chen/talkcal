@@ -1,21 +1,18 @@
 # 疊在 deploy/compose.yaml 上面的雲端差異。只寫「EC2 跟本機不一樣」的地方，其他全部沿用。
 #
-#   docker compose -f deploy/compose.yaml -f infra/envs/1-ec2/compose.ec2.yaml up -d
+#   docker compose -f deploy/compose.yaml -f infra/envs/1-ec2/compose.ec2.yaml \
+#                  -f infra/envs/1-ec2/compose.<bedrock|gpu>.yaml up -d
+#
+# 這份是兩種 model_backend 共用的部分；模型從哪來寫在 compose.bedrock.yaml / compose.gpu.yaml。
 #
 # 為什麼不另寫一份完整的正式版 compose：兩份遲早會不一樣，本機驗證過的就不等於雲端上跑的。
 # 疊加的規則：同名的 key 以這份為準；volumes 依容器裡的路徑合併，environment 依變數名合併。
 # 注意：這份裡的相對路徑是相對於第一個檔案（deploy/）解析的，不是這個檔案所在的資料夾。
 #
-# 用到的變數（SITE_ADDRESS、MODELS_DIR、DB_PASSWORD）在 deploy/.env，
+# 用到的變數（SITE_ADDRESS、DB_PASSWORD）在 deploy/.env，
 # 由 deploy.sh 從 SSM Parameter Store 拉下來（Terraform 在 secrets.tf 產生）。
 
 services:
-  # 模型來源：本機是 C:/llm/models，這裡換成 deploy.sh 從 S3 拉下來的資料夾。
-  # 容器裡的路徑一樣是 /seed，所以這行會蓋掉 compose.yaml 那行，播種的腳本不用動。
-  model-seed:
-    volumes:
-      - ${MODELS_DIR:?缺 MODELS_DIR}:/seed:ro
-
   # DB 密碼：本機寫死 talkcal，這裡換成 Terraform 隨機產生的。
   # 只在 volume 第一次初始化時生效；之後要換密碼得進資料庫改，光改這裡沒用。
   postgres:
@@ -26,7 +23,7 @@ services:
     environment:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?缺 DB_PASSWORD}
     # 本機沒設記憶體上限，JVM 的 MaxRAMPercentage=75 是「整台主機的 75%」。
-    # 本機記憶體大不覺得，這台只有 16GB，還要給 Postgres 和整組觀測，app 一吃就是 12GB。
+    # 本機記憶體大不覺得，這台只有 8GB（gpu 是 16GB），還要給 Postgres 和整組觀測，不設的話 app 一吃就是大半台。
     # 設了上限之後，75% 改成以 2GB 算（約 1.5GB heap）。
     mem_limit: 2g
 

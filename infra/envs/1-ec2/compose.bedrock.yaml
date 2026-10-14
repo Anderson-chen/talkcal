@@ -1,0 +1,25 @@
+# model_backend = bedrock：模型不在這台機器上跑，app 改呼叫 Bedrock。
+# 疊在 deploy/compose.yaml、compose.ec2.yaml 上面（deploy.sh 依 MODEL_BACKEND 選這份）。
+# 用到的 BEDROCK_* 在 deploy/.env（Terraform 的 secrets.tf 產生，API key 來自 bedrock.tf）。
+#
+# app 的程式一行都不用改：本機打 llama-server、這裡打 Bedrock，兩邊都是 OpenAI 的 Chat Completions，
+# 只有位址、key、模型名稱不同，用環境變數蓋掉 application(-docker).properties 的值。
+
+services:
+  # 模型那兩個服務不起：放進一個不會被打開的 profile。
+  # 不在 deploy/compose.yaml 裡刪：本機還要用，而且 model_backend 切回 gpu 時不用改任何東西
+  model-seed:
+    profiles: [gpu]
+  llm-chat:
+    profiles: [gpu]
+
+  app:
+    environment:
+      SPRING_AI_OPENAI_CHAT_BASEURL: ${BEDROCK_BASE_URL:?缺 BEDROCK_BASE_URL}
+      SPRING_AI_OPENAI_APIKEY: ${BEDROCK_API_KEY:?缺 BEDROCK_API_KEY}
+      SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL: ${BEDROCK_MODEL:?缺 BEDROCK_MODEL}
+    # 原本的 depends_on 有 llm-chat，它不起的話 compose 會報錯。
+    # !override 整個換掉 depends_on（不帶的話是合併，llm-chat 還在），只放回資料庫。compose 2.24.4 起支援
+    depends_on: !override
+      postgres:
+        condition: service_healthy

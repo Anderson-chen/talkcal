@@ -19,25 +19,63 @@ variable "project" {
   default     = "talkcal"
 }
 
-variable "instance_type" {
+variable "model_backend" {
   description = <<-DESC
-    EC2 機型，要有 NVIDIA GPU。
-    預設 g6.xlarge（L4 24GB、4 vCPU、16GB RAM）：llama-server 的映像檔編的是 CUDA_ARCH=89（Ada），
-    L4 剛好是 sm_89，跟本機同一份映像檔直接能跑。
-    g4dn（T4）比較便宜，但 T4 是 sm_75，要改 deploy/llama-server/Dockerfile 的 CUDA_ARCH 重新編。
-    記憶體不夠時改 g6.2xlarge（32GB RAM），換機型是 stop → modify → start，EBS 上的資料不動。
+    模型在哪裡跑：
+      bedrock：一般機型，app 呼叫 Bedrock 的 Qwen3（OpenAI 相容 API）。不需要 GPU 配額。
+      gpu    ：GPU 機型，跟本機一樣自己跑 llama-server，模型從 S3 拉。
+    預設 bedrock：2026-10-13 申請東京 G 系列配額被拒（新帳號預設 0）。配額下來後改成 gpu 就能切回去，
+    其他設定（VPC、Caddy、DB、觀測）兩邊共用。理由見 README「為什麼先走 Bedrock」。
   DESC
   type        = string
-  default     = "g6.xlarge"
+  default     = "bedrock"
+
+  validation {
+    condition     = contains(["bedrock", "gpu"], var.model_backend)
+    error_message = "model_backend 只能是 bedrock 或 gpu。"
+  }
+}
+
+variable "instance_type" {
+  description = <<-DESC
+    EC2 機型。不給就依 model_backend 選：
+      bedrock：m7i-flex.large（2 vCPU、8GB）。app、Postgres、Caddy、整組觀測放得下；符合免費方案資格。
+      gpu    ：g6.xlarge（L4 24GB、4 vCPU、16GB）。llama-server 映像檔編的是 CUDA_ARCH=89（Ada），
+               L4 剛好是 sm_89；g4dn（T4）是 sm_75，要改 deploy/llama-server/Dockerfile 重新編。
+    換機型是 stop → modify → start，EBS 上的資料不動。
+  DESC
+  type        = string
+  default     = null
 }
 
 variable "root_volume_size" {
   description = <<-DESC
-    根磁碟 GB。Deep Learning AMI 本身就佔幾十 GB；再加上 CUDA devel 的 build 階段（約 10GB）、
-    模型檔兩份（S3 拉下來一份、model-seed 複製進 volume 一份，各約 5GB）、Postgres 和觀測資料。
+    根磁碟 GB。不給就依 model_backend 選：
+      bedrock：30。Ubuntu 本身幾 GB，加上 build 映像檔、Postgres 和觀測資料。
+      gpu    ：150。Deep Learning AMI 本身就佔幾十 GB（不能小於 AMI 的 75GB），再加上 CUDA devel 的
+               build 階段（約 10GB）、模型檔兩份（S3 拉下來一份、model-seed 複製進 volume 一份，各約 5GB）。
   DESC
   type        = number
-  default     = 150
+  default     = null
+}
+
+variable "bedrock_model" {
+  description = <<-DESC
+    model_backend = bedrock 時用的模型。Qwen3 32B：跟本機的 Qwen3-8B 同一家族，
+    2026-10-13 在東京實測過 bedrock-mantle 端點的 json_schema 輸出和工具呼叫都能用。
+  DESC
+  type        = string
+  default     = "qwen.qwen3-32b"
+}
+
+variable "bedrock_key_days" {
+  description = <<-DESC
+    Bedrock API key 幾天後過期。到期前重跑 apply 換新的：
+      terraform apply -replace=aws_iam_service_specific_credential.bedrock[0]
+    設上限是為了 key 萬一外流，最多也只能用到這天。
+  DESC
+  type        = number
+  default     = 90
 }
 
 variable "repo_url" {

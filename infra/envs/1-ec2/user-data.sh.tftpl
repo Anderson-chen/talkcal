@@ -5,7 +5,9 @@
 set -euxo pipefail
 exec > >(tee /var/log/user-data.log | logger -t user-data) 2>&1
 
-# ── 1. GPU 和 Docker：Deep Learning AMI 應該都裝好了，這裡只驗證 ─────────────────
+# ── 1. Docker（gpu 時還有 GPU）──────────────────────────────────────────────────
+%{ if model_backend == "gpu" ~}
+# Deep Learning AMI 應該都裝好了，這裡只驗證。
 # 印出驅動版本：llama-server 映像檔是 CUDA 13，驅動要 580 以上
 nvidia-smi
 command -v docker
@@ -13,9 +15,27 @@ command -v nvidia-ctk
 
 # 讓 Docker 認得 GPU（AMI 通常已經設好；重跑一次無害，只會確保 daemon.json 有 nvidia runtime）
 nvidia-ctk runtime configure --runtime=docker
+%{ else ~}
+# 一般的 Ubuntu 沒帶 Docker，從 Docker 官方的 apt 套件庫裝（Ubuntu 自己的 docker.io 版本舊、沒有 compose 外掛）。
+# 步驟照 https://docs.docker.com/engine/install/ubuntu/ ，compose 和 buildx 外掛一起裝。
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y ca-certificates curl git python3
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+. /etc/os-release
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $VERSION_CODENAME stable"   > /etc/apt/sources.list.d/docker.list
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# deploy.sh 要用 AWS CLI 讀 SSM 的 .env；Deep Learning AMI 有帶，一般 Ubuntu 沒有。
+# 用 snap 裝官方版（apt 的 awscli 是舊的 v1）
+command -v aws || snap install aws-cli --classic
+%{ endif ~}
 
 # log 輪替：Docker 預設的 json-file 不輪替，log 會一直長到磁碟滿。
-# 用合併的方式寫進 daemon.json：上面 nvidia-ctk 寫的 runtime 設定不能被蓋掉。
+# 用合併的方式寫進 daemon.json：gpu 時上面 nvidia-ctk 寫的 runtime 設定不能被蓋掉。
 python3 - <<'PY'
 import json, os
 p = "/etc/docker/daemon.json"
@@ -26,7 +46,7 @@ json.dump(cfg, open(p, "w"), indent=2)
 PY
 systemctl restart docker
 
-# compose 和 buildx 是 Docker CLI 的外掛。AMI 沒帶的話補裝固定版本：
+# compose 和 buildx 是 Docker CLI 的外掛。沒有的話（AMI 沒帶）補裝固定版本：
 #   compose：deploy/ 和 ops/ 兩組都靠它
 #   buildx ：backend 的 Dockerfile 用了 RUN --mount=type=cache，要 BuildKit 才 build 得動
 PLUGINS=/usr/local/lib/docker/cli-plugins
@@ -50,6 +70,7 @@ cat > /opt/${project}/deploy.env <<'ENV'
 PROJECT=${project}
 AWS_REGION=${region}
 GIT_REF=${git_ref}
+MODEL_BACKEND=${model_backend}
 MODELS_BUCKET=${models_bucket}
 DOTENV_PARAM=${dotenv_param}
 ENV
@@ -62,6 +83,6 @@ git -C /opt/${project}/repo fetch --depth 1 origin ${git_ref}
 git -C /opt/${project}/repo checkout --detach FETCH_HEAD
 
 # ── 4. 第一次部署 ────────────────────────────────────────────────────────────
-# 第一次要 build llama-server（編 CUDA，十幾分鐘）、拉映像檔、複製模型，會跑很久。
+# 第一次要 build 映像檔、拉映像檔，會跑很久（gpu 還要編 llama-server 的 CUDA、複製模型，十幾分鐘）。
 # 進度看 /var/log/user-data.log。
 bash /opt/${project}/repo/infra/envs/1-ec2/deploy.sh

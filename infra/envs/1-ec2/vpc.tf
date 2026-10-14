@@ -20,19 +20,19 @@ resource "aws_internet_gateway" "main" {
   }
 }
 
-# GPU 機型不是每個可用區都有，寫死 "<region>a" 可能開不出機器。
+# 機型不是每個可用區都有（GPU 機型尤其少），寫死 "<region>a" 可能開不出機器。
 # 改問 AWS 這個機型在哪些可用區有，挑第一個（排序過，每次 plan 結果一樣）。
-data "aws_ec2_instance_type_offerings" "gpu" {
+data "aws_ec2_instance_type_offerings" "instance" {
   location_type = "availability-zone"
 
   filter {
     name   = "instance-type"
-    values = [var.instance_type]
+    values = [local.instance_type]
   }
 }
 
 locals {
-  availability_zone = sort(data.aws_ec2_instance_type_offerings.gpu.locations)[0]
+  availability_zone = sort(data.aws_ec2_instance_type_offerings.instance.locations)[0]
 }
 
 resource "aws_subnet" "public" {

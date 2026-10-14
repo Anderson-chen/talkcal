@@ -9,7 +9,7 @@ infra/
 ├── README.md          # 這份：階段怎麼分、共同的慣例
 ├── bootstrap/         # 兩階段共用、整個帳號只跑一次：放 state 的 S3 bucket、花費告警
 └── envs/
-    ├── 1-ec2/         # 階段一：一台 GPU EC2 + Docker Compose（#57），Terraform 已寫好
+    ├── 1-ec2/         # 階段一：一台 EC2 + Docker Compose（#57），模型先走 Bedrock，Terraform 已寫好
     └── 2-eks/         # 階段二：EKS 叢集（#58），只有規劃
 ```
 
