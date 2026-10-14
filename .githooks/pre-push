@@ -18,5 +18,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     # 刪除遠端分支時本機 sha 是全 0，沒有東西要測
     [ "$local_sha" = "$zero" ] && continue
     echo "pre-push：檢查 ${local_ref#refs/heads/} ($(git rev-parse --short "$local_sha"))"
+    # 祕密先掃：幾秒就好，而且推上去就收不回來了 —— 測試紅了可以再推一次修，key 外洩只能作廢重發。
+    # 範圍是「還不在任何遠端分支上的 commit」，也就是這次真的會送出去的那些；新分支、舊分支都適用
+    ci/secrets.sh "$local_sha" --not --remotes </dev/null
     ci/run.sh "$local_sha" </dev/null
 done

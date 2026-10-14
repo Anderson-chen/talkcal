@@ -48,3 +48,17 @@ jobs:
         with:
           name: test-reports
           path: ci/build/reports/
+
+  # 祕密掃描。跟 checks 分開成兩個 job：並行跑，而且在 PR 上各自一個燈，一眼看出是哪一關紅
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # fetch-depth: 0 —— 要整個歷史。預設只抓最新一個 commit，中間 commit 加了又刪的 key 會看不到
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # 本機 pre-push 只掃要推的那幾個 commit；這裡掃整個歷史，補上 --no-verify 跳過的那些。
+      # 在這裡才抓到代表已經推上 GitHub 了：key 要當成外洩，作廢重發，刪 commit 不夠
+      - run: ci/secrets.sh
