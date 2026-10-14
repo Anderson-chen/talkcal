@@ -88,6 +88,9 @@ CI 的 `vulns` job 會 build 出 app、web 映像檔，連同 postgres 用 [ci/v
 對應 OWASP Top 10:2025 的 `A03` Software Supply Chain Failures（2021 版的 A06 Vulnerable and Outdated Components）。
 沒用 OWASP 自己的 Dependency-Check：它只看 Java、npm 這些函式庫，看不到基底映像檔裡的 openssl、curl；Trivy 兩種都掃。
 
+證據（反例）：`alpine:3.24` 本身掃出 0 個；同一個基底只多放一個 `log4j-core-2.14.1.jar`，就抓到 Log4Shell（`CVE-2021-44228`，CRITICAL）等 3 個。
+兩個都是 exit 0 —— 只回報的階段，有 CRITICAL 也照樣綠燈。
+
 第一次掃（2026-10-14，只算 HIGH、CRITICAL 而且有修補版本的）：
 
 | 映像檔 | 數量 | 在哪 | 怎麼修 |
