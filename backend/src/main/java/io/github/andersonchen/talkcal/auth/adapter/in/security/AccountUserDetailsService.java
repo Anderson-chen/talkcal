@@ -16,7 +16,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
  *
  * 回給 Spring Security 的「username」放的是帳號 ID，不是帳號名稱：
  * 登入之後 Authentication.getName() 拿到的就是 ID —— 授權（#104）比對擁有者、
- * 之後 Google／GitHub 登入（#105）對應到同一個人，用的都是這個值。帳號名稱只是登入時打的字。
+ * Google／GitHub 登入（#105，見 AccountPrincipals）對應到同一個人，用的都是這個值。帳號名稱只是登入時打的字。
  */
 public final class AccountUserDetailsService implements UserDetailsService {
 
@@ -31,9 +31,12 @@ public final class AccountUserDetailsService implements UserDetailsService {
         // 查不到時的訊息不會給使用者看到：Spring Security 會把它跟密碼錯一樣處理（BadCredentials），不透露是哪一欄錯
         Account account = findAccount.byUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("沒有這個帳號"));
+        // 用帳號名稱查到的一定有密碼（V10 的 CHECK：帳號名稱和密碼雜湊一起有、一起沒有）
+        Account.PasswordLogin login = account.password()
+                .orElseThrow(() -> new UsernameNotFoundException("這個帳號不能用密碼登入"));
         return User.withUsername(account.id().toString())
-                .password(account.passwordHash())
-                .authorities("USER")
+                .password(login.passwordHash())
+                .authorities(AccountPrincipals.AUTHORITY)
                 .build();
     }
 }

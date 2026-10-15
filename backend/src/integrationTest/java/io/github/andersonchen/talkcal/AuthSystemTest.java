@@ -78,6 +78,7 @@ class AuthSystemTest {
         HttpResponse<String> me = amy.get("/api/auth/me");
         assertEquals(200, me.statusCode());
         assertEquals("amy", JSON.readTree(me.body()).at("/username").asString());
+        assertEquals("amy", JSON.readTree(me.body()).at("/name").asString(), "帳密登入的顯示名稱就是帳號名稱");
         assertEquals(200, amy.get("/api/calendar/events?from=2030-01-01&to=2030-02-01").statusCode());
 
         assertEquals(204, amy.logout().statusCode());
@@ -139,5 +140,15 @@ class AuthSystemTest {
         amy.login("amy", PASSWORD);
 
         assertNotEquals(before, amy.cookie("JSESSIONID").orElseThrow());
+    }
+
+    @Test
+    @DisplayName("反例：沒設定 Google、GitHub 的 client id 時，登入方式是空的、OAuth2 的網址也不存在 —— 跟 #105 之前一樣只有帳密")
+    void noExternalProvidersByDefault() throws Exception {
+        HttpResponse<String> providers = browser().get("/api/auth/providers");
+        assertEquals(200, providers.statusCode());
+        assertEquals("[]", JSON.readTree(providers.body()).at("/providers").toString());
+
+        assertEquals(401, browser().get("/api/auth/oauth2/authorization/google").statusCode());
     }
 }

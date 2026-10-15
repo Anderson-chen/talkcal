@@ -88,7 +88,7 @@ GitHub 上不跑（沒有模型），只確定它編得過（`evalClasses`）。
 |---|---|---|
 | [#103](https://github.com/Anderson-chen/talkcal/issues/103) | 認證：auth 模組、本機帳密（自己的 `account` 表、BCrypt）、登入註冊頁 | ✅ |
 | [#104](https://github.com/Anderson-chen/talkcal/issues/104) | 授權：行程、對話依使用者分開（現在登入了，但大家還是看到同一本行事曆） | ❌ |
-| [#105](https://github.com/Anderson-chen/talkcal/issues/105) | 本機加 Google、GitHub 登入 | ❌ |
+| [#105](https://github.com/Anderson-chen/talkcal/issues/105) | 本機加 Google、GitHub 登入 | 程式完成，還沒用真的 OAuth 應用程式走過一次 |
 | [#106](https://github.com/Anderson-chen/talkcal/issues/106) | AWS 上改用 Amazon Cognito | ❌ |
 
 **#103 的做法**：
@@ -111,6 +111,30 @@ GitHub 上不跑（沒有模型），只確定它編得過（`evalClasses`）。
 - k6 smoke 對開了認證的後端跑：setup 登入一次、所有 VU 共用，13 個檢查全過（只在第一次迭代放 cookie 的版本，第二次迭代起都失敗 —— k6 每次迭代會清空 cookie）
 
 **已知限制**：session 存在 app 的記憶體裡（重啟就全部登出、多台時要改存共用的地方）；沒有忘記密碼、沒有 email 驗證；授權還沒做（#104）。
+
+**#105 的做法**：
+- Spring Security 的 `oauth2Login`：Google 走 OIDC（ID token 裡就有使用者 ID `sub`），GitHub 是純 OAuth2（沒有 ID token，要拿 access token 另外打 `/user`，欄位是 GitHub 自己的格式）。兩邊各一個 user service（`AccountOidcUserService`、`AccountOAuth2UserService`），把對方的使用者對到我們的帳號，session 裡記的身分跟帳密登入一樣是帳號 ID
+- 第一次登入時建帳號：`account_identity` 表用 provider ＋ provider 的使用者 ID（Google 的 `sub`、GitHub 的數字 `id`）對應帳號。不用 email、不用 GitHub 帳號名稱：使用者改得掉。也不靠 email 把 Google、GitHub 自動合併：別人在 GitHub 填了你的 email 就能登進你的帳號
+- 這樣建的帳號沒有帳號名稱和密碼（`account` 表加 CHECK：兩個欄位一起有、一起沒有），多一個給人看的 `display_name`
+- 兩個分頁同時第一次登入：帳號和 identity 在同一個交易裡插入，identity 撞主鍵就整筆撤掉、改用另一邊建好的帳號
+- client id、secret 從環境變數讀（`GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`），不寫進程式碼和 repo；有設 client id 的 provider 才開，都沒設就跟以前一樣只有帳密，app 照常啟動。前端問 `GET /api/auth/providers` 決定畫哪些按鈕
+- 授權、回呼網址都放在 `/api/auth/oauth2/*`（nginx 只轉 `/api`）；成功、失敗都轉回首頁，失敗原因只記 log，網址上只有 `?login_error=oauth`
+- 沒登入的 API 照樣回 401 JSON：開了 `oauth2Login` 之後 Spring Security 預設會把沒登入的請求轉址到 provider，所以 entry point 明寫
+
+**過程中修掉的問題**：nginx 轉給 app 的 `Host` 原本是 `$host`，它會去掉埠號：經過 `18080` 進來時，回呼網址會被組成 `http://localhost/api/...`，跟在 Google 登記的對不上。改成 `$http_host`。
+
+**證據（含反例）**：
+- [OAuth2LoginSystemTest](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/OAuth2LoginSystemTest.java)：按鈕連過去轉到 Google、GitHub，帶著 client id、`/api` 底下的回呼網址、`openid` scope 和 `state`，網址上沒有 secret；偽造的回呼（state 對不上）和使用者按取消都轉回 `/?login_error=oauth`，之後 `/me` 還是 401；反例：開了之後沒登入的 API 還是 401 JSON、沒設定的 provider 不能登入
+- [AuthSystemTest](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/AuthSystemTest.java) 的反例：沒設 client id 時 `/providers` 是空陣列、OAuth2 的網址不存在
+- [JdbcAccountAdapterTest](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/auth/adapter/out/persistence/postgres/JdbcAccountAdapterTest.java)（真的 PostgreSQL）：identity 撞了回 false、剛插入的帳號不留下；只有帳號名稱沒有密碼的列塞不進去；刪帳號時 identity 跟著刪
+- 前端 E2E：有開才出現「用 Google 登入」連結；`?login_error=oauth` 顯示訊息、網址參數拿掉；側欄顯示 Google 給的名字（故意改回顯示 `username`，這題變紅）
+
+**已知限制**：同一個人用 Google 和 GitHub 登入是兩個帳號（要等「已登入時綁定」）；帳密帳號不能綁 Google。EC2 上沒開（#106 改走 Cognito）：nginx 送給 app 的 `X-Forwarded-Proto` 是 `http`，在 Caddy 後面組出來的回呼網址會是 `http://`。
+
+**在本機開起來**：
+1. Google Cloud Console → APIs & Services → Credentials → 建 OAuth client ID（Web application），Authorized redirect URI 填 `http://localhost:5173/api/auth/oauth2/callback/google`（vite）；要從 `deploy/` 的 nginx 進來就再加一條 `http://localhost:18080/...`
+2. GitHub → Settings → Developer settings → OAuth Apps → New，Authorization callback URL 填 `http://localhost:5173/api/auth/oauth2/callback/github`（GitHub 的 OAuth App 只能填一個）
+3. 把 client id、secret 設成上面四個環境變數再啟動 app（bootRun 或 `deploy/` 的 compose 都會讀）
 
 <a id="rate-limit"></a>
 ### 濫用防護（rate limit） ✅

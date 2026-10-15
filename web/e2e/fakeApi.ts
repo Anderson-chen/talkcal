@@ -7,7 +7,7 @@
 //   - 會改東西的請求（POST、DELETE）要帶 X-XSRF-TOKEN header，而且要跟發出去的 XSRF-TOKEN cookie 一樣，不然 403
 //     —— 這樣才測得出前端真的有帶 token，而不是假後端照單全收
 // 測試可以：
-//   - 預先放幾筆行程（events）、決定一開始有沒有登入（loggedIn）
+//   - 預先放幾筆行程（events）、決定一開始有沒有登入（loggedIn）、開了哪些 Google／GitHub 登入（providers）
 //   - 讓下一次存檔失敗（failNextSave）：模擬後端掛了
 //   - 讓登入在下一個請求失效（expireSession）：模擬 session 過期
 //   - 事後檢查前端送了什麼（saved）
@@ -27,6 +27,10 @@ interface Options {
   events?: FakeEvent[]
   // 預設已經登入成 amy：測行事曆的那些測試不必每個都先登入
   loggedIn?: boolean
+  // 後端開了哪些 Google、GitHub 登入（預設沒有，跟沒設定 client id 的後端一樣）
+  providers?: string[]
+  // 已經用 Google、GitHub 登入的人：/me 回這個名字，沒有帳號名稱（跟後端一樣）
+  externalName?: string
 }
 
 const CSRF_TOKEN = 'fake-csrf-token'
@@ -42,6 +46,7 @@ export async function fakeApi(page: Page, options: Options = {}) {
     me: (options.loggedIn ?? true) ? 'amy' : null as string | null,
     // 被 403 擋下的請求（沒帶或帶錯 CSRF token）：測試可以檢查它是空的
     csrfRejected: [] as string[],
+    providers: [...(options.providers ?? [])],
   }
 
   const json = (route: Route, status: number, body: unknown) => route.fulfill({ status, json: body })
@@ -61,9 +66,16 @@ export async function fakeApi(page: Page, options: Options = {}) {
 
     // ── 帳號 ──
     if (url.pathname === '/api/auth/me') {
+      if (options.externalName && state.me) {
+        return route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: 'id-external', name: options.externalName, username: null } })
+      }
       return state.me
-        ? route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: `id-${state.me}`, username: state.me } })
+        ? route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: `id-${state.me}`, name: state.me, username: state.me } })
         : route.fulfill({ status: 401, headers: withCsrfCookie, json: { error: '請先登入' } })
+    }
+    if (url.pathname === '/api/auth/providers') {
+      // 跟後端一樣：沒設定 Google、GitHub 時是空陣列
+      return json(route, 200, { providers: state.providers })
     }
     if (url.pathname === '/api/auth/login') {
       // 登入是表單格式（跟 Spring Security 的 formLogin 一樣），不是 JSON
@@ -78,7 +90,7 @@ export async function fakeApi(page: Page, options: Options = {}) {
       const username = body.username.trim().toLowerCase()
       if (state.accounts.has(username)) return json(route, 409, { error: `帳號名稱「${username}」已經有人用了，換一個試試` })
       state.accounts.set(username, body.password)
-      return json(route, 201, { id: `id-${username}`, username })
+      return json(route, 201, { id: `id-${username}`, name: username, username })
     }
     if (url.pathname === '/api/auth/logout') {
       state.me = null

@@ -2,32 +2,44 @@ package io.github.andersonchen.talkcal.app.config;
 
 import io.github.andersonchen.talkcal.auth.adapter.out.persistence.postgres.JdbcAccountAdapter;
 import io.github.andersonchen.talkcal.auth.application.domain.service.FindAccountService;
+import io.github.andersonchen.talkcal.auth.application.domain.service.SignInExternallyService;
 import io.github.andersonchen.talkcal.auth.application.port.in.FindAccountUseCase;
+import io.github.andersonchen.talkcal.auth.application.port.in.SignInExternallyUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.out.LoadAccountPort;
+import io.github.andersonchen.talkcal.auth.application.port.out.SaveAccountPort;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * auth 模組裡不管用哪種方式登入都需要的接線：帳號存在哪、怎麼查。
+ * auth 模組裡不管用哪種方式登入都需要的接線：帳號存在哪、怎麼查、別人驗過的身分怎麼對到帳號。
  *
  * 「怎麼登入」是另一回事，看 talkcal.auth.provider 組裝其中一套：
- * - local：本機帳密（LocalAuthConfiguration）
+ * - local：本機帳密，再加上有設定的 Google、GitHub（LocalAuthConfiguration）
  * - cognito：AWS 上的 Amazon Cognito（#106）
  * 一次只會有一套 SecurityFilterChain，兩套的規則（哪些路徑要登入、沒登入回什麼）要保持一致。
  */
 @Configuration(proxyBeanMethods = false)
 class AuthConfiguration {
 
-    // 一個實作同時是 Save / LoadAccountPort：碰的是同一張表
+    // 一個實作同時是 Save / LoadAccountPort：碰的是同一組表。
+    // 交易用在「第一次用 Google 登入」：帳號和它的 identity 要一起存進去或一起不算
     @Bean
-    JdbcAccountAdapter accountStore(JdbcClient jdbcClient) {
-        return new JdbcAccountAdapter(jdbcClient);
+    JdbcAccountAdapter accountStore(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
+        return new JdbcAccountAdapter(jdbcClient, new TransactionTemplate(transactionManager));
     }
 
     @Bean
     FindAccountUseCase findAccount(LoadAccountPort loadAccountPort) {
         return new FindAccountService(loadAccountPort);
+    }
+
+    // 「Google 的這個人是哪個帳號」：Google、GitHub 用它，之後的 Cognito（#106）一樣是別人驗過身分、這裡對帳號
+    @Bean
+    SignInExternallyUseCase signInExternally(LoadAccountPort loadAccountPort, SaveAccountPort saveAccountPort) {
+        return new SignInExternallyService(loadAccountPort, saveAccountPort);
     }
 }
