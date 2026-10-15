@@ -27,7 +27,7 @@
 | [認證與授權](production-readiness/ready.md#auth) | 只有本人看得到、改得到自己的資料 | ❌ 否 |
 | [濫用防護（rate limit）](production-readiness/ready.md#rate-limit) | 一個人不能把 GPU 占滿，讓其他人都用不了 | ✅ 是 |
 | [Agent 權限範圍](production-readiness/ready.md#agent-permissions) | 模型出錯或被誘導時，能造成的破壞有上限 | ✅ 是 |
-| [Prompt injection](production-readiness/ready.md#prompt-injection) | 藏在資料裡的指令不能操控模型 | ❌ 否 |
+| [Prompt injection](production-readiness/ready.md#prompt-injection) | 藏在資料裡的指令不能操控模型 | ✅ 是（有已知限制） |
 | [模型輸出當成不可信資料](production-readiness/ready.md#output-handling) | 模型吐出的內容不能在使用者瀏覽器上執行 | ✅ 是 |
 | [外部相依的逾時與重試](production-readiness/ready.md#timeouts) | 模型卡住時，app 不會跟著無限等下去 | ✅ 是 |
 | [祕密管理](production-readiness/ready.md#secrets) | 密碼和 key 不寫在程式碼裡，可以換、不會外流 | ✅ 雲端（本機延後） |
