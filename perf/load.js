@@ -20,7 +20,7 @@
 // 邊跑邊開 Grafana 的 llama.cpp 與 talkcal app 兩張 dashboard 對照看，最有感。
 
 import { sleep } from 'k6';
-import { MESSAGES, say } from './lib/assistant.js';
+import { MESSAGES, say, signIn, useSession } from './lib/assistant.js';
 
 const SLOTS = Number(__ENV.SLOTS || 4);
 // 每段平台維持多久。一個請求要好幾秒，太短的話每段只收到幾筆，p95 會很不準
@@ -78,7 +78,13 @@ export const options = {
   },
 };
 
-export function talk() {
+// 登入一次，所有 VU 共用（理由見 lib/assistant.js 的 signIn）
+export function setup() {
+  return signIn();
+}
+
+export function talk(session) {
+  useSession(session);
   // 隨機挑而不是照順序：多個 VU 同時跑時，照順序會讓大家在同一刻說同一句
   say(MESSAGES[Math.floor(Math.random() * MESSAGES.length)]);
 

@@ -39,9 +39,12 @@ export const MESSAGES = [
 // extra 讓個別請求疊加自己的設定（例如 smoke 標記「這個請求回 400 才對」），
 // 共用的部分不必每支腳本重寫。
 export function jsonParams(extra) {
+  const headers = { 'Content-Type': 'application/json' };
+  // 登入之後（#103）：會改東西的請求要帶 CSRF token，見下面的 signIn / useSession
+  if (csrfToken) headers['X-XSRF-TOKEN'] = csrfToken;
   return Object.assign(
     {
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       // app 叫一次模型最多等 2 分鐘，k6 這端也要放寬到同等級。
       // 不設的話 k6 預設 60 秒就自己斷線，會把「模型還在想」誤判成「app 掛了」。
       // 助理一輪可能叫好幾次模型，這個上限擋的是「卡死」，不保證每輪都在 2 分鐘內。
@@ -71,4 +74,50 @@ function field(res, name) {
   } catch (e) {
     return '';
   }
+}
+
+// ── 登入（#103）────────────────────────────────────────────────────────
+// /api 要登入才用得了。在 setup() 裡只登入一次，把 session cookie 和 CSRF token 分給所有 VU 共用：
+// nginx 對登入限流（每個 IP 每分鐘 5 次），上千個 VU 各自登入會被 429 擋下；
+// 這裡要測的是助理，不是登入流程，大家共用一個帳號就好。
+// 帳號用 PERF_USER、PERF_PASSWORD 指定；沒有就自動註冊一個（已經有了就直接登入）。
+const PERF_USER = __ENV.PERF_USER || 'perf-user';
+const PERF_PASSWORD = __ENV.PERF_PASSWORD || 'perf-password-1';
+
+// 這個 VU 手上的 CSRF token（k6 每個 VU 各自一份模組變數）
+let csrfToken = null;
+
+function cookie(name) {
+  const values = http.cookieJar().cookiesForURL(BASE_URL)[name];
+  return values && values.length ? values[0] : null;
+}
+
+/** 在 setup() 裡呼叫：註冊（已經有就略過）、登入，回傳要分給每個 VU 的 { session, csrf }。 */
+export function signIn() {
+  // 先 GET 一次，讓後端發 XSRF-TOKEN cookie 過來（還沒登入，回 401 是正常的）
+  http.get(`${BASE_URL}/api/auth/me`, { responseCallback: http.expectedStatuses(200, 401) });
+  http.post(`${BASE_URL}/api/auth/register`, JSON.stringify({ username: PERF_USER, password: PERF_PASSWORD }), {
+    headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': cookie('XSRF-TOKEN') },
+    responseCallback: http.expectedStatuses(201, 409),
+  });
+  // 登入是表單格式（Spring Security 的 formLogin）：k6 的 body 給物件就會送成表單
+  const res = http.post(`${BASE_URL}/api/auth/login`, { username: PERF_USER, password: PERF_PASSWORD }, {
+    headers: { 'X-XSRF-TOKEN': cookie('XSRF-TOKEN') },
+  });
+  if (!check(res, { '登入成功（204）': (r) => r.status === 204 })) {
+    throw new Error(`登入失敗：${res.status} ${res.body}`);
+  }
+  // 登入之後 CSRF token 會換新，再 GET 一次拿新的
+  http.get(`${BASE_URL}/api/auth/me`);
+  return { session: cookie('JSESSIONID'), csrf: cookie('XSRF-TOKEN') };
+}
+
+/**
+ * 在每一次迭代的開頭呼叫：把 setup 給的登入狀態放進這個 VU 的 cookie jar。
+ * 每次都要放：k6 預設每次迭代開始時會清空 cookie jar（實測只放一次的話，第二次迭代起都是 401）。
+ */
+export function useSession(session) {
+  http.cookieJar().set(BASE_URL, 'JSESSIONID', session.session);
+  http.cookieJar().set(BASE_URL, 'XSRF-TOKEN', session.csrf);
+  csrfToken = session.csrf;
 }

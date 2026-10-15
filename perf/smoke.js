@@ -11,7 +11,7 @@
 
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { ASSISTANT_URL, MESSAGES, say, jsonParams } from './lib/assistant.js';
+import { ASSISTANT_URL, MESSAGES, say, jsonParams, signIn, useSession } from './lib/assistant.js';
 
 export const options = {
   // 最小規模：一個人、說幾輪。smoke 要的是「快、確定」，不是「多」。
@@ -32,7 +32,13 @@ export const options = {
   },
 };
 
-export default function () {
+// 登入一次，所有 VU 共用（理由見 lib/assistant.js 的 signIn）
+export function setup() {
+  return signIn();
+}
+
+export default function (session) {
+  useSession(session);
   contractRejectsBlankMessage();
   // 契約的另一半：正常訊息該回 200、reply 要有東西（檢查寫在 lib/assistant.js 的 say）。
   // 照順序輪流說池子裡的前幾句 —— smoke 要可重現，不要隨機。

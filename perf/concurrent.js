@@ -21,7 +21,7 @@
 
 // lib/assistant.js 在 import 時就讀 BASE_URL，所以預設值要在這裡、import 之前補上
 import './lib/docker-target.js';
-import { MESSAGES, say } from './lib/assistant.js';
+import { MESSAGES, say, signIn, useSession } from './lib/assistant.js';
 
 const USERS = Number(__ENV.USERS || 1000);
 const WINDOW_S = Number(__ENV.WINDOW_S || 60);
@@ -53,9 +53,14 @@ export const options = {
 
 // 暖身：第一個請求常特別慢（暖 KV cache 等）。在 setup 裡跑掉，不算進這一波的數字
 export function setup() {
+  // 登入一次，所有 VU 共用（理由見 lib/assistant.js 的 signIn）
+  const session = signIn();
+  useSession(session);
   say(MESSAGES[0]);
+  return session;
 }
 
-export default function () {
+export default function (session) {
+  useSession(session);
   say(MESSAGES[Math.floor(Math.random() * MESSAGES.length)]);
 }
