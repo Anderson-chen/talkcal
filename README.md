@@ -123,6 +123,7 @@ CI 在每次 push、PR 時於 GitHub 上跑，本機則由 pre-push hook 在推�
 | 想知道 | 看哪裡 |
 |---|---|
 | 整體架構圖：本機兩組 compose 怎麼接 | [docs/architecture.md](docs/architecture.md) |
+| AWS 階段一互動架構圖：每個元件由哪個檔案哪幾行決定、為什麼這樣選、業界怎麼做 | [https://anderson-chen.github.io/talkcal/](https://anderson-chen.github.io/talkcal/)（原始檔 [docs/architecture/index.html](docs/architecture/index.html)） |
 | 搬上 AWS 的兩個階段（EC2、EKS） | [infra/README.md](infra/README.md) |
 | 怎麼部署、容器之間怎麼溝通、對照雲端是什麼 | [deploy/README.md](deploy/README.md) |
 | 怎麼觀測、三種訊號怎麼互跳 | [ops/README.md](ops/README.md) |

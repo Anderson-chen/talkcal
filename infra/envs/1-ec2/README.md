@@ -4,6 +4,8 @@
 機器平常關機，展示前開機。追蹤在 [#57](https://github.com/Anderson-chen/talkcal/issues/57)；整體的階段怎麼分見 [infra/README.md](../../README.md)。
 第一次部署遇到的三個問題寫在「疑難排解」最前面。
 
+**互動架構圖**：[https://anderson-chen.github.io/talkcal/](https://anderson-chen.github.io/talkcal/)——點任一元件看它由這個資料夾哪個檔案、哪幾行決定，選擇理由、業界做法和查證來源。
+
 一台 EC2，`deploy/` 和 `ops/` 兩組 compose 搬上去，前面加一個 Caddy 處理 HTTPS。
 模型在哪裡跑由變數 `model_backend` 決定，其他（VPC、Caddy、DB、觀測）兩種共用：
 
