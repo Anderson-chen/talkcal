@@ -5,6 +5,7 @@
 // - 行程詳情、新增表單都是整頁；AI 助理和主題選擇是從底部滑上來的面板
 // - 右下角兩顆浮動按鈕：AI 助理、新增行程
 import { computed, ref } from 'vue'
+import { logOut, me } from '../auth'
 import type { Category, SavedEvent } from '../calendar'
 import { dayLabel, monthDayLabel, timeOf, weekdayName, weekOf } from '../monthGrid'
 import AssistantChat from './AssistantChat.vue'
@@ -198,6 +199,11 @@ const dotColor = (category: Category) => theme.colors.value[category].color
           <button type="button" class="done" @click="themeOpen = false">完成</button>
         </div>
         <ThemePicker large />
+        <!-- 目前是誰、登出（#103）：手機版頁首放不下，跟主題一起放在這個面板 -->
+        <div v-if="me" class="account">
+          <span class="account-name">{{ me.username }}</span>
+          <button type="button" class="logout" @click="logOut()">登出</button>
+        </div>
       </div>
     </div>
   </div>
@@ -271,4 +277,7 @@ h1.small { font-size: 22px; line-height: 1.3; white-space: nowrap; }
 .theme-head { display: flex; align-items: center; justify-content: space-between; }
 .theme-head h2 { margin: 0; font-size: 18px; font-weight: 700; }
 .done { height: 44px; padding: 0 8px; border: 0; background: transparent; color: var(--accent); font-size: 16px; font-weight: 600; }
+.account { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.account-name { font-size: 15px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logout { height: 40px; padding: 0 16px; border: 1px solid var(--field); border-radius: 10px; background: transparent; color: var(--ink); font-size: 15px; }
 </style>

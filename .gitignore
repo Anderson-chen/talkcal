@@ -1,4 +1,8 @@
-out/
+# IntelliJ 自己編譯時的輸出資料夾。開頭加 / 錨定在那一層：原本寫 out/ 會忽略「任何一層」叫 out 的資料夾，
+# 連六角架構的 application/port/out/、adapter/out/ 原始碼也被忽略 —— #103 新寫的 5 個檔案因此從沒進 git，
+# 移除 worktree 時被當成可以丟的檔案一起刪掉（calendar 的 out/ 是這條規則加之前就追蹤了，才沒出事）
+/out/
+/backend/out/
 
 # Gradle
 build/

@@ -58,6 +58,27 @@ class AccessLogFilterTest {
     }
 
     @Test
+    @DisplayName("註冊、登入的請求內容不記：裡面有密碼（JSON 和表單兩種都試），log 會被收進 Loki")
+    void doesNotLogCredentials(CapturedOutput output) throws Exception {
+        FilterChain readsBody = (req, res) -> req.getInputStream().readAllBytes();
+
+        MockHttpServletRequest register = new MockHttpServletRequest("POST", "/api/auth/register");
+        register.setContentType("application/json");
+        register.setContent("{\"username\":\"amy\",\"password\":\"secret-pass-1\"}".getBytes(StandardCharsets.UTF_8));
+        filter.doFilter(register, new MockHttpServletResponse(), readsBody);
+
+        MockHttpServletRequest login = new MockHttpServletRequest("POST", "/api/auth/login");
+        login.setContentType("application/x-www-form-urlencoded");
+        login.setContent("username=amy&password=secret-pass-2".getBytes(StandardCharsets.UTF_8));
+        filter.doFilter(login, new MockHttpServletResponse(), readsBody);
+
+        assertFalse(output.getOut().contains("secret-pass"), output.getOut());
+        // 請求本身照樣有紀錄（誰在試登入要看得到），只是內容換成說明
+        assertTrue(output.getOut().contains("/api/auth/login"), output.getOut());
+        assertTrue(output.getOut().contains("不記：可能有密碼"), output.getOut());
+    }
+
+    @Test
     @DisplayName("記下回應的 body，而且照樣送到客戶端")
     void logsResponseBodyAndStillSendsIt(CapturedOutput output) throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/calendar/assistant");

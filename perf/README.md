@@ -14,6 +14,9 @@ app 也不知道有人在壓它。
 | llama.cpp server | 你平常那台常駐的 | 8080 |
 | PostgreSQL | `docker compose -f deploy/compose.yaml up -d postgres` | 5432 |
 | talkcal app | `backend/` 裡 `./gradlew bootRun` | 8090 |
+
+/api 要登入（#103）：每支腳本的 `setup()` 會先註冊（已經有就略過）、登入一次，所有 VU 共用那個 session
+（nginx 對登入限流，每個 VU 各自登入會被 429 擋下）。帳號預設是 `perf-user`，要換就設 `PERF_USER`、`PERF_PASSWORD`。
 | k6（打壓的工具） | 見下方安裝 | — |
 
 llama.cpp 沒開也能跑 smoke，只是「正常訊息回 200」那條會紅、「空白訊息回 400」那條照樣綠

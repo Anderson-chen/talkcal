@@ -59,6 +59,10 @@ dependencies {
     // 改由 Spring AI 自己的 gen_ai.* 觀測（每次呼叫一個 span，外加 token 用量指標）。
     implementation 'org.springframework.ai:spring-ai-starter-model-openai'
 
+    // 認證與授權（#11）：沒登入就用不了 /api。登入方式是可以換的 adapter（本機帳密、之後的 Google／GitHub、AWS 上的 Cognito），
+    // 由 app.config 依 talkcal.auth.provider 組裝其中一套 SecurityFilterChain。auth 模組的規則（帳號名稱、密碼長度）不碰 Spring
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+
     // 行程和 AI 助理的對話記憶存 PostgreSQL。用 JDBC（JdbcClient）而不是 JPA：
     // 只有兩張表，SQL 自己寫一眼看得懂；JPA 要在 domain 物件上加 @Entity，
     // 或另外維護一套 entity 再對映，對這個大小是多出來的一層。交易用 TransactionTemplate（也在這包裡）。
@@ -116,6 +120,8 @@ dependencies {
     // Boot 4 把測試切片拆進各自的模組：@WebMvcTest、@AutoConfigureMockMvc 不再附在 starter-test 裡，
     // 用到哪一層的切片就引哪一層的 test starter，對應 main 的 starter-webmvc。
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    // MockMvc 裡模擬「已經登入的使用者」、帶上 CSRF token（with(user(...))、with(csrf())）。跟 webmvc-test 一樣，Boot 4 拆成自己的 test starter
+    testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
     // 測試裡照樣產生 trace id、但不往外匯出：沒有它的話，起整個容器的測試會一直嘗試送 span 到 localhost:4318。
     // AccessLogTraceIdTest 靠它在不開 ops/ 的情況下驗「access log 帶著 traceId」。
     testImplementation 'org.springframework.boot:spring-boot-micrometer-tracing-test'

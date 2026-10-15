@@ -19,7 +19,7 @@
 //   PowerShell:  $env:MESSAGE="這週末有空嗎？"; k6 run perf/knee.js
 
 import './lib/docker-target.js';
-import { say } from './lib/assistant.js';
+import { say, signIn, useSession } from './lib/assistant.js';
 
 // 每個請求都說同一句，不隨機挑。這支要量的是「同時人數」的影響，
 // 而各句的成本差很多（查行程叫兩次模型，提議新行程還要多抽一次行程），
@@ -57,10 +57,15 @@ export const options = { scenarios, thresholds };
 
 // 暖身：第一個請求常特別慢，在 setup 裡跑掉，不算進任何一階
 export function setup() {
+  // 登入一次，所有 VU 共用（理由見 lib/assistant.js 的 signIn）
+  const session = signIn();
+  useSession(session);
   say(MESSAGE);
+  return session;
 }
 
-export default function () {
+export default function (session) {
+  useSession(session);
   say(MESSAGE);
 }
 

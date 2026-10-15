@@ -23,7 +23,7 @@
 import './lib/docker-target.js';
 import http from 'k6/http';
 import { Counter } from 'k6/metrics';
-import { ASSISTANT_URL, MESSAGES, jsonParams } from './lib/assistant.js';
+import { ASSISTANT_URL, MESSAGES, jsonParams, signIn, useSession } from './lib/assistant.js';
 
 // 每分鐘來幾個人。要低於容量：量的是部署的影響，不是過載。
 // 2026-10-12 用每秒 1 人（60）跑，問題隨機混合時模型同時處理到 20 幾個，KV cache 塞爆、回 502，
@@ -53,7 +53,13 @@ export const options = {
   },
 };
 
-export default function () {
+// 登入一次，所有 VU 共用（理由見 lib/assistant.js 的 signIn）
+export function setup() {
+  return signIn();
+}
+
+export default function (session) {
+  useSession(session);
   const res = http.post(ASSISTANT_URL, JSON.stringify({
     message: MESSAGES[Math.floor(Math.random() * MESSAGES.length)],
   }), jsonParams());

@@ -22,6 +22,8 @@ services:
   app:
     environment:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?缺 DB_PASSWORD}
+      # 登入的 session cookie 只走 HTTPS（#103）。雲端前面有 Caddy 做 HTTPS 才能開；本機是 http，開了瀏覽器就不送回來
+      SERVER_SERVLET_SESSION_COOKIE_SECURE: "true"
     # 本機沒設記憶體上限，JVM 的 MaxRAMPercentage=75 是「整台主機的 75%」。
     # 本機記憶體大不覺得，這台只有 8GB（gpu 是 16GB），還要給 Postgres 和整組觀測，不設的話 app 一吃就是大半台。
     # 設了上限之後，75% 改成以 2GB 算（約 1.5GB heap）。

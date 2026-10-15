@@ -10,6 +10,7 @@
 // 讀回來的舊訊息不帶卡片：卡片當時是加入還是取消，後端沒有記，顯示可能已過時的卡片不如不顯示。
 
 import { inject, ref, type InjectionKey } from 'vue'
+import { me } from '../auth'
 import { assistantHistory, talkToAssistant, type EventFields } from '../calendar'
 import { message, type CalendarState } from './useCalendar'
 
@@ -36,11 +37,13 @@ const GREETING = '嗨！我是你的行事曆助理。可以幫你新增行程�
 
 // conversationId 存在這台瀏覽器：跟主題一樣是個人的東西，不必存到後端。
 // 私密視窗、被封鎖的網站資料都可能讓 localStorage 丟例外，一律吞掉 —— 最壞就是重新整理後開新對話
-const STORAGE_KEY = 'talkcal.calendar.assistant.conversation'
+// 每個人各存各的（key 帶著登入者的 id，#103）：換人登入不會接回上一個人的對話。
+// 真正擋住「讀別人的對話」的是後端的授權（#104），這裡只是前端不主動去要
+const storageKey = () => `talkcal.calendar.assistant.conversation.${me.value?.id ?? 'anonymous'}`
 
 function loadConversationId(): string | undefined {
   try {
-    return localStorage.getItem(STORAGE_KEY) ?? undefined
+    return localStorage.getItem(storageKey()) ?? undefined
   } catch {
     return undefined
   }
@@ -48,8 +51,8 @@ function loadConversationId(): string | undefined {
 
 function saveConversationId(id: string | undefined) {
   try {
-    if (id) localStorage.setItem(STORAGE_KEY, id)
-    else localStorage.removeItem(STORAGE_KEY)
+    if (id) localStorage.setItem(storageKey(), id)
+    else localStorage.removeItem(storageKey())
   } catch {
     // 存不了就算了，這次的對話在記憶體裡照樣接得上
   }
