@@ -4,14 +4,39 @@
 // 前端要知道「有沒有登入、是誰」，就問 GET /api/auth/me。
 //
 // 登入、登出走 Spring Security 的 /api/auth/login、/api/auth/logout：登入要送表單格式（不是 JSON），成功回 204。
+//
+// 用 Google、GitHub 登入（#105）不經過這裡的 fetch：那是整頁轉址（到 Google 同意、再轉回首頁），
+// 回到首頁時 session 已經是登入的，App 照常 loadMe() 就知道是誰。
 
 import { ref } from 'vue'
 import { onUnauthorized, send } from './http'
 
-/** 目前登入的人。id 是行程、對話的擁有者；username 是給人看的。 */
+/** 目前登入的人。id 是行程、對話的擁有者；name 是給人看的。 */
 export interface Me {
   id: string
-  username: string
+  // 帳密登入的是帳號名稱，Google、GitHub 登入的是對方給的名字
+  name: string
+  // 只用 Google、GitHub 登入的帳號沒有帳號名稱
+  username: string | null
+}
+
+/** 除了帳密之外開了的登入方式（後端有設定 client id 的才有）。 */
+export type Provider = 'google' | 'github'
+
+/** 開了哪些登入方式。問不到（後端沒開、網路斷了）就當成沒有：只顯示帳密，不擋住登入頁。 */
+export async function loadProviders(): Promise<Provider[]> {
+  try {
+    const res = await send('/api/auth/providers', { method: 'GET' }, { notifyUnauthorized: false })
+    const body = (await res.json()) as { providers: string[] }
+    return body.providers.filter((p): p is Provider => p === 'google' || p === 'github')
+  } catch {
+    return []
+  }
+}
+
+/** 「用 Google 登入」按鈕連到哪裡：整頁轉過去，後端再轉到 Google。 */
+export function providerLoginUrl(provider: Provider): string {
+  return `/api/auth/oauth2/authorization/${provider}`
 }
 
 /**
