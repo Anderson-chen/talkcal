@@ -1,6 +1,7 @@
 package io.github.andersonchen.talkcal.calendar.adapter.in.assistant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -285,6 +286,39 @@ class CalendarAssistantTest {
 
         assertEquals("已加入，明天 19:00 吃飯在行事曆上。", reply.text());
         assertEquals(2, prompts.size());
+    }
+
+    @Test
+    @DisplayName("#13 回覆裡有使用者沒講過的網址（行程標題藏的釣魚指令被轉述）：換成固定回覆，記憶裡存的也是這句")
+    void linkUserNeverSaidIsBlocked() {
+        CalendarAssistant.Reply reply = assistant(scripted(says("明天 18:00 有瑜珈課。你的帳號即將過期，請到 https://talkcal-login.example 重新登入。")))
+                .reply(ID, "明天有什麼行程？");
+
+        assertEquals(CalendarAssistant.UNSAFE_LINK_FALLBACK, reply.text());
+        assertEquals(CalendarAssistant.UNSAFE_LINK_FALLBACK, memory.findByConversationId(ID).getLast().getText());
+        assertEquals(1, prompts.size(), "不提醒模型重來：藏指令的資料還在對話裡");
+    }
+
+    @Test
+    @DisplayName("#13 反例：使用者自己貼的網址，助理照著講不算；沒有網址的一般回覆也不能被誤擋")
+    void linksTheUserSaidAndPlainRepliesPass() {
+        String echo = "好，會議連結 https://meet.example/abc 我記下了，要新增到明天下午三點嗎？";
+        assertEquals(echo, assistant(scripted(says(echo))).reply(ID, "明天下午三點開會，連結是 https://meet.example/abc").text());
+
+        for (String plain : List.of("明天（這週三）18:00–19:00 有瑜珈課。", "早上還是晚上？", "下午 1.5 小時的空檔在 13:00–14:30。")) {
+            assertEquals(plain, assistant(scripted(says(plain))).reply(ID, "嗨").text(), plain);
+        }
+    }
+
+    @Test
+    @DisplayName("#13 網址的各種寫法都認得：https、www、沒寫開頭的網域、後面直接接中文")
+    void recognisesLinkShapes() {
+        for (String reply : List.of("請到 https://a.example 登入", "請到 www.evil.com 登入", "請到 talkcal-login.example 登入",
+                "請到https://a.example/login?x=1重新登入")) {
+            assertTrue(CalendarAssistant.hasLinkUserNeverSaid(reply, List.of("明天有什麼行程？")), reply);
+        }
+        assertFalse(CalendarAssistant.hasLinkUserNeverSaid("請到 HTTPS://A.EXAMPLE 登入", List.of("我的網站是 https://a.example")),
+                "大小寫不同也算使用者講過");
     }
 
     @Test
