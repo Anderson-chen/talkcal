@@ -61,7 +61,7 @@ docker create --name "$container" \
     --volume talkcal-ci-npm:/cache/npm \
     --add-host host.docker.internal:host-gateway \
     --env TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
-    --env SPRING_AI_OPENAI_CHAT_BASEURL="${SPRING_AI_OPENAI_CHAT_BASEURL:-http://host.docker.internal:8080/v1}" \
+    --env RUN_EVAL="${RUN_EVAL:-0}"     --env SPRING_AI_OPENAI_CHAT_BASEURL="${SPRING_AI_OPENAI_CHAT_BASEURL:-http://host.docker.internal:8080/v1}" \
     "$image" ci/checks.sh >/dev/null
 
 echo "── 複製 $(git rev-parse --short "$commit") 的程式碼進容器 ──"
@@ -75,6 +75,7 @@ rm -rf "$out"
 mkdir -p "$out"
 docker cp "$container:/work/ci/build/summary.md" "$out/summary.md" >/dev/null 2>&1 || true
 docker cp "$container:/work/backend/build/reports" "$out/reports" >/dev/null 2>&1 || true
+docker cp "$container:/work/backend/build/eval" "$out/eval" >/dev/null 2>&1 || true
 
 if [ $status -eq 0 ]; then
     echo "── CI 通過 ──"

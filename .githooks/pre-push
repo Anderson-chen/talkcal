@@ -14,6 +14,9 @@ set -euo pipefail
 # git 從 stdin 給「每個要推的 ref」：<本機 ref> <本機 sha> <遠端 ref> <遠端 sha>。
 # 測的是要推上去的那個 commit，不一定是 HEAD（例如推別的分支時）
 zero=0000000000000000000000000000000000000000
+# 改到這些就要跑 AI eval：助理和工具（system prompt 在這裡）、抽取（它也有 prompt）、eval 自己的題目和評分、
+# application.properties（用哪個模型、溫度、max-tokens）
+EVAL_PATHS='^backend/src/main/java/io/github/andersonchen/talkcal/calendar/adapter/(in/assistant|out/extraction)/|^backend/src/eval/|^backend/src/main/resources/application[^/]*\.properties$'
 while read -r local_ref local_sha remote_ref remote_sha; do
     # 刪除遠端分支時本機 sha 是全 0，沒有東西要測
     [ "$local_sha" = "$zero" ] && continue
@@ -21,5 +24,12 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     # 祕密先掃：幾秒就好，而且推上去就收不回來了 —— 測試紅了可以再推一次修，key 外洩只能作廢重發。
     # 範圍是「還不在任何遠端分支上的 commit」，也就是這次真的會送出去的那些；新分支、舊分支都適用
     ci/secrets.sh "$local_sha" --not --remotes </dev/null
-    ci/run.sh "$local_sha" </dev/null
+    # AI eval 只在改到 prompt 或模型相關的檔案時跑（一分多鐘，每次都跑太慢；但改了 prompt 卻忘了跑，就是 #13 那種退化沒人發現）。
+    # 看的是這次真的會送出去的 commit 改了哪些檔案
+    if git log --name-only --format= "$local_sha" --not --remotes | grep -qE "$EVAL_PATHS"; then
+        echo "pre-push：改到 prompt 或模型相關的檔案，這次也跑 AI eval"
+        RUN_EVAL=1 ci/run.sh "$local_sha" </dev/null
+    else
+        ci/run.sh "$local_sha" </dev/null
+    fi
 done
