@@ -80,9 +80,37 @@ GitHub 上不跑（沒有模型），只確定它編得過（`evalClasses`）。
 - pre-push 自動跑靠路徑判斷：prompt 搬到別的檔案、或 `--no-verify` 跳過，就不會跑
 
 <a id="auth"></a>
-### 認證與授權 ❌
+### 認證與授權 ❌（認證做了本機帳密，授權還沒做）
 
-沒有登入功能，任何人只要知道 conversation id 就能讀那段對話。
+分成四步（[#11](https://github.com/Anderson-chen/talkcal/issues/11) 底下）：
+
+| 步驟 | 內容 | 狀態 |
+|---|---|---|
+| [#103](https://github.com/Anderson-chen/talkcal/issues/103) | 認證：auth 模組、本機帳密（自己的 `account` 表、BCrypt）、登入註冊頁 | ✅ |
+| [#104](https://github.com/Anderson-chen/talkcal/issues/104) | 授權：行程、對話依使用者分開（現在登入了，但大家還是看到同一本行事曆） | ❌ |
+| [#105](https://github.com/Anderson-chen/talkcal/issues/105) | 本機加 Google、GitHub 登入 | ❌ |
+| [#106](https://github.com/Anderson-chen/talkcal/issues/106) | AWS 上改用 Amazon Cognito | ❌ |
+
+**#103 的做法**：
+- 登入方式是可以換的 adapter：`app.config` 依 `talkcal.auth.provider` 組裝其中一套 SecurityFilterChain（現在只有 `local`，#106 加 `cognito`），業務程式不知道是哪一套
+- 瀏覽器只拿 HttpOnly 的 session cookie，前端不碰 token；登入、登出交給 Spring Security 的 filter，只回狀態碼和 JSON，不轉址
+- CSRF 用 Spring Security 的 `csrf.spa()`：寫入要把 `XSRF-TOKEN` cookie 放進 `X-XSRF-TOKEN` header；session cookie 是 `SameSite=Lax`，EC2 上加 `Secure`
+- 密碼：存 `{bcrypt}` 雜湊；長度以 bytes 算、上限 72（BCrypt 只看前 72 bytes，後面的會被默默忽略）
+- 登入失敗不分「帳號不存在」還是「密碼錯」，訊息一模一樣；註冊撞名回 409（會透露帳號存在，靠限流讓試探變慢）
+- nginx 對登入、註冊限流：每個 IP 每分鐘 5 次
+
+**過程中修掉的問題**：
+- access log 原本排在 Spring Security 裡面：被擋下的 401、403 不會留下紀錄，暴力試密碼完全看不見。移到它外面
+- access log 原本會記請求內容：註冊、登入的**密碼明文**會被寫進 log、收進 Loki。`/api/auth/` 底下一律不記
+- `.gitignore` 的 `out/` 會忽略任何一層叫 out 的資料夾，連六角架構的 `port/out/`、`adapter/out/` 原始碼都被忽略（新寫的 5 個檔案因此沒進 git）。改成只忽略根目錄和 `backend/` 的
+
+**證據（含反例）**：
+- [AuthSystemTest](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/AuthSystemTest.java)（真的 SecurityFilterChain、真的 PostgreSQL）：沒登入 401；已登入但沒帶 CSRF header 的 POST 403、一筆都沒存，帶了就 201；密碼錯和帳號不存在回一模一樣的訊息；資料庫裡是 `{bcrypt}` 雜湊；登入前後 session id 不同（防 session fixation）
+- 前端 E2E：假後端照規則擋沒帶 CSRF token 的寫入。故意拿掉 `http.ts` 帶 header 的那行，6 個測試變紅；拿掉「401 通知 App」，剛好是「登入過期」那題變紅
+- nginx：同一個 IP 連續登入 12 次，前 6 次放行、之後 429「嘗試太多次了」；同時查行程照常 200、AI 發問被擋時訊息照舊
+- k6 smoke 對開了認證的後端跑：setup 登入一次、所有 VU 共用，13 個檢查全過（只在第一次迭代放 cookie 的版本，第二次迭代起都失敗 —— k6 每次迭代會清空 cookie）
+
+**已知限制**：session 存在 app 的記憶體裡（重啟就全部登出、多台時要改存共用的地方）；沒有忘記密碼、沒有 email 驗證；授權還沒做（#104）。
 
 <a id="rate-limit"></a>
 ### 濫用防護（rate limit） ✅
