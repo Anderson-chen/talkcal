@@ -15,7 +15,9 @@ status=0
 echo "── 後端：單元測試、架構規則、整合測試 ──"
 # 整合測試裡要 PostgreSQL 的那幾支用 Testcontainers 開在旁邊（run.sh 把主機的 Docker 接進來了）；
 # 要真模型的那幾支，連不到 llama-server 就自動跳過（Assumptions），下面的摘要會列出來
-(cd backend && ./gradlew --no-daemon test integrationTest) || status=1
+# evalClasses：AI eval（./gradlew eval）不在這裡跑（要真模型、跑一分多鐘），但至少要編得過，
+# 不然改了 CalendarAssistant 的方法簽名，eval 壞了沒人知道，直到下次有人想跑它
+(cd backend && ./gradlew --no-daemon test integrationTest evalClasses) || status=1
 
 echo "── 前端：型別檢查、打包 ──"
 # npm ci：照 package-lock.json 原樣裝，lock 跟 package.json 對不上就直接失敗
