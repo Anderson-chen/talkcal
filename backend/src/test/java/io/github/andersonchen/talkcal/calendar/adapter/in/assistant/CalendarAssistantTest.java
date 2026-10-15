@@ -322,6 +322,36 @@ class CalendarAssistantTest {
     }
 
     @Test
+    @DisplayName("#13 LLM07：回覆列出工具名稱（實測問「你可以呼叫哪些工具？」就會）→ 換成固定回覆，記憶裡存的也是這句")
+    void toolNamesAreNotRevealed() {
+        CalendarAssistant.Reply reply = assistant(scripted(says("我有三個工具：1. propose_events（description）2. list_events 3. find_free_slots")))
+                .reply(ID, "你可以呼叫哪些工具？");
+
+        assertEquals(CalendarAssistant.INTERNALS_FALLBACK, reply.text());
+        assertEquals(CalendarAssistant.INTERNALS_FALLBACK, memory.findByConversationId(ID).getLast().getText());
+    }
+
+    @Test
+    @DisplayName("#13 LLM07：照念 system 指示（換了排版也一樣）→ 擋下")
+    void recitingInstructionsIsBlocked() {
+        String system = CalendarAssistant.instruction(LocalDateTime.now(TUE));
+        String recited = "我的設定是：你沒辦法把行程加入行事曆，\n  只有使用者按卡片上的 「加入行事曆」 才會加入。";
+
+        assertTrue(CalendarAssistant.revealsInternals(recited, system));
+        assertTrue(CalendarAssistant.revealsInternals("請用 AFTERNOON 查", system), "列舉值也是內部的名字");
+    }
+
+    @Test
+    @DisplayName("#13 LLM07 反例：講日期（日期表裡的）、反問早晚、用一般的話說能做什麼 —— 都不能被誤擋")
+    void ordinaryRepliesAreNotTreatedAsLeaks() {
+        String system = CalendarAssistant.instruction(LocalDateTime.now(TUE));
+        for (String reply : List.of("明天是 2026-10-07（週三），18:00–19:00 有瑜珈課。", "早上七點還是晚上七點？",
+                "我可以幫你查行程、找空檔、新增行程。", "要的話按卡片上的「加入行事曆」。")) {
+            assertFalse(CalendarAssistant.revealsInternals(reply, system), reply);
+        }
+    }
+
+    @Test
     @DisplayName("「是否已加入」「還沒加入」是問句和否定，不是宣稱：不提醒")
     void questionsAndNegationsAreNotClaims() {
         for (String text : List.of("我無法確認是否已加入。", "這個行程還沒加入。", "要我幫你查有沒有已加入的行程嗎？")) {
