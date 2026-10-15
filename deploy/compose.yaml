@@ -186,6 +186,12 @@ services:
       # 打開 docker profile：application-docker.properties 蓋掉預設值——
       # 模型位址改成服務名稱、log 改成 JSON。本機 bootRun 沒開這個 profile，所以還是 127.0.0.1、彩色文字。
       SPRING_PROFILES_ACTIVE: docker
+      # Google、GitHub 登入（#105）：從主機的環境變數帶進來（例如 export GOOGLE_CLIENT_ID=...，或寫在不進 git 的 deploy/.env），
+      # 沒設就是空的 → 登入頁只有帳密。secret 不寫進這個檔案
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
 
     ports:
       # 主機的 18090 → 容器的 8090。只綁 127.0.0.1，跟模型一樣不對區網開放。

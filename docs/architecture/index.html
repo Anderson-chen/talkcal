@@ -299,7 +299,7 @@ const F={
 "infra/envs/1-ec2/compose.bedrock.yaml":[["11–12","model-seed 不起","seed"],["13–14","llm-chat 不起","llm"],["16–25","app 改打 Bedrock","app"]],
 "infra/envs/1-ec2/compose.gpu.yaml":[["8–10","model-seed 改掛 S3 拉下來的資料夾","seed"]],
 "infra/envs/1-ec2/Caddyfile":[["3–10","網域、encode、reverse_proxy","caddy"]],
-"deploy/compose.yaml":[["22–25","x-llama-server","llm"],["29","x-gpu","llm"],["50–84","model-seed","seed"],["86–151","llm-chat","llm"],["154–175","postgres","postgres"],["178–217","app","app"],["221–245","web","web"],["247–253","volumes","postgres"]],
+"deploy/compose.yaml":[["22–25","x-llama-server","llm"],["29","x-gpu","llm"],["50–84","model-seed","seed"],["86–151","llm-chat","llm"],["154–175","postgres","postgres"],["178–223","app","app"],["227–251","web","web"],["253–259","volumes","postgres"]],
 "web/nginx.conf":[["27–28","兩道限流 zone（每 IP、全站）","web"],["32–37","登入、註冊的限流 zone（每 IP）","web"],["44","超過回 429","web"],["52–53","真實 IP 取自 X-Forwarded-For","web"],["66","resolver","web"],["81","proxy_read_timeout","web"],["84–87","限流套到 /api","web"]],
 "ops/compose.yaml":[["22","mimir","obs"],["40","loki","obs"],["54","tempo","obs"],["67–74","grafana","obs"],["98","alloy","obs"]]
 };
@@ -327,8 +327,8 @@ buser:{"CallWithBearerToken":E+"bedrock.tf:31","CreateInference":E+"bedrock.tf:4
 bkey:{"service_name":E+"bedrock.tf:56","credential_age_days":E+"bedrock.tf:58"},
 budget:{"limit_amount":B+"variables.tf:19","80% ACTUAL / 100% FORECASTED":B+"main.tf:76"},
 caddy:{"image":E+"compose.ec2.yaml:37","ports":E+"compose.ec2.yaml:39","caddy-data:/data":E+"compose.ec2.yaml:48","reverse_proxy":E+"Caddyfile:9"},
-web:{"ports":D+":230","limit_req":"web/nginx.conf:27","set_real_ip_from":"web/nginx.conf:52","resolver":"web/nginx.conf:66","proxy_read_timeout":"web/nginx.conf:81"},
-app:{"mem_limit":E+"compose.ec2.yaml:30","SESSION_COOKIE_SECURE":E+"compose.ec2.yaml:26","SPRING_AI_OPENAI_*":{bedrock:E+"compose.bedrock.yaml:18",gpu:"backend/src/main/resources/application-docker.properties:8"},"depends_on":{bedrock:E+"compose.bedrock.yaml:23",gpu:D+":194"},"stop_grace_period":D+":215"},
+web:{"ports":D+":236","limit_req":"web/nginx.conf:27","set_real_ip_from":"web/nginx.conf:52","resolver":"web/nginx.conf:66","proxy_read_timeout":"web/nginx.conf:81"},
+app:{"mem_limit":E+"compose.ec2.yaml:30","SESSION_COOKIE_SECURE":E+"compose.ec2.yaml:26","SPRING_AI_OPENAI_*":{bedrock:E+"compose.bedrock.yaml:18",gpu:"backend/src/main/resources/application-docker.properties:8"},"depends_on":{bedrock:E+"compose.bedrock.yaml:23",gpu:D+":200"},"stop_grace_period":D+":221"},
 postgres:{"image":D+":155","POSTGRES_PASSWORD":E+"compose.ec2.yaml:20","密碼同步":E+"deploy.sh:81"},
 llm:{"-ngl":D+":101","-c / -np":D+":103","--kv-unified":D+":110"},
 seed:{"sha256sum -c":D+":74"},
