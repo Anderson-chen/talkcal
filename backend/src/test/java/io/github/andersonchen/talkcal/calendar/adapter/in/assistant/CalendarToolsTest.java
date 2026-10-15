@@ -202,6 +202,34 @@ class CalendarToolsTest {
         }
 
         @Test
+        @DisplayName("名字裡剛好有 am、pm（Amy、Pam、Sam、James）不算講了時段 → 照樣請模型先問（2026-10-15 實際被 Amy 騙過）")
+        void namesContainingAmOrPmAreNotPeriods() {
+            parse = description -> List.of(at(19));
+            for (String said : List.of("明天七點和 Amy 見面", "明天七點找 Pam", "明天七點跟 Sam 吃飯", "明天七點和 James 開會")) {
+                userSaid = List.of(said);
+                CalendarTools tools = tools();
+
+                tools.proposeEvents("明天晚上七點見面");
+
+                assertTrue(tools.proposals().isEmpty(), said);
+            }
+        }
+
+        @Test
+        @DisplayName("反例：數字後面直接接 am、pm（7am、7 a.m.、7AM、7pm）還是算講了時段 → 照常提議")
+        void amPmAfterDigitsStillCounts() {
+            parse = description -> List.of(at(19));
+            for (String said : List.of("明天 7am 跑步", "明天 7 a.m. 跑步", "明天 7AM 跑步", "明天 7pm 吃飯", "和 Amy 7pm 見面")) {
+                userSaid = List.of(said);
+                CalendarTools tools = tools();
+
+                tools.proposeEvents("明天七點");
+
+                assertEquals(1, tools.proposals().size(), said);
+            }
+        }
+
+        @Test
         @DisplayName("使用者講過時段（晚上、晚餐、晨跑、宵夜、19點、7pm），或在之後回答了「晚上」→ 照常提議")
         void periodSaidSomewhereInTheConversation() {
             parse = description -> List.of(at(19));
