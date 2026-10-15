@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -26,24 +27,28 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 帳號的 HTTP 入口：註冊、看「目前是誰」。
+ * 帳號的 HTTP 入口：註冊、看「目前是誰」、有哪些登入方式。
  *
- * 登入、登出不在這裡：交給 Spring Security 的 filter（POST /api/auth/login、/api/auth/logout，設定在 app.config），
+ * 登入、登出不在這裡：交給 Spring Security 的 filter（POST /api/auth/login、/api/auth/logout，
+ * Google、GitHub 的 /api/auth/oauth2/*，設定在 app.config），
  * 它們會處理 session、CSRF token 換新、防 session fixation 這些細節，自己寫 controller 很容易漏掉。
  */
 @RestController
 @RequestMapping("/api/auth")
-@Tag(name = "auth", description = "帳號：註冊、目前登入的是誰（登入、登出是 Spring Security 的 /api/auth/login、/api/auth/logout）")
+@Tag(name = "auth", description = "帳號：註冊、目前登入的是誰、有哪些登入方式（登入、登出是 Spring Security 的 /api/auth/login、/api/auth/logout）")
 public final class AuthController {
 
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
     private final RegisterAccountUseCase registerAccount;
     private final FindAccountUseCase findAccount;
+    private final LoginProviders loginProviders;
 
-    public AuthController(RegisterAccountUseCase registerAccount, FindAccountUseCase findAccount) {
+    public AuthController(RegisterAccountUseCase registerAccount, FindAccountUseCase findAccount,
+                          LoginProviders loginProviders) {
         this.registerAccount = Objects.requireNonNull(registerAccount, "registerAccount 不可為 null");
         this.findAccount = Objects.requireNonNull(findAccount, "findAccount 不可為 null");
+        this.loginProviders = Objects.requireNonNull(loginProviders, "loginProviders 不可為 null");
     }
 
     /** 註冊用的帳密。 */
@@ -55,7 +60,14 @@ public final class AuthController {
     /** 目前登入的是誰。 */
     public record Me(
             @Schema(description = "帳號 ID：行程、對話的擁有者就是它") String id,
-            @Schema(description = "帳號名稱") String username) {
+            @Schema(description = "給人看的名字：帳密登入的是帳號名稱，Google、GitHub 登入的是對方給的名字") String name,
+            @Schema(description = "帳號名稱；只用 Google、GitHub 登入的帳號沒有，是 null", nullable = true) String username) {
+    }
+
+    /** 除了帳密之外還能怎麼登入。 */
+    public record Providers(
+            @Schema(description = "開了的登入方式，前端照這個畫按鈕；按鈕連到 /api/auth/oauth2/authorization/{id}",
+                    example = "[\"google\", \"github\"]") List<String> providers) {
     }
 
     /** 失敗時的回應；欄位名稱跟 calendar 的錯誤一樣是 error，前端用同一套方式顯示。 */
@@ -69,6 +81,12 @@ public final class AuthController {
         AccountId id = registerAccount.register(request.username(), request.password());
         // 回傳的名字照資料庫裡存的（轉過小寫），不是使用者打的原樣
         return me(id).orElseThrow(() -> new IllegalStateException("剛註冊的帳號查不到：" + id));
+    }
+
+    @GetMapping("/providers")
+    @Operation(summary = "除了帳密之外還能怎麼登入（沒登入也能問）；沒設定 Google、GitHub 的 client id 時是空陣列")
+    public Providers providers() {
+        return new Providers(loginProviders.ids());
     }
 
     @GetMapping("/me")
@@ -86,7 +104,8 @@ public final class AuthController {
     }
 
     private static Me toMe(Account account) {
-        return new Me(account.id().toString(), account.username().value());
+        String username = account.password().map(login -> login.username().value()).orElse(null);
+        return new Me(account.id().toString(), account.displayName(), username);
     }
 
     @ExceptionHandler(UsernameTakenException.class)

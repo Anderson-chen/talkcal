@@ -68,7 +68,7 @@ const noEventsToday = computed(() => calendar.view.value === 'day' && calendar.e
       </div>
       <!-- 目前是誰、登出（#103）。推到側欄最下面，跟上面的行事曆操作分開 -->
       <div v-if="me" class="account">
-        <span class="account-name">{{ me.username }}</span>
+        <span class="account-name">{{ me.name }}</span>
         <button type="button" class="logout" @click="logOut()">登出</button>
       </div>
     </aside>
