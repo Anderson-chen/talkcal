@@ -90,7 +90,7 @@ AI 助理的發問（`POST /api/calendar/assistant`）每次都會叫模型，�
 [application.properties](../../backend/src/main/resources/application.properties)：呼叫模型的逾時是 2 分鐘；SDK 預設的重試關掉了（`max-retries=0`）。理由寫在設定旁邊：本機模型塞爆的時候，重試只會讓它更塞。
 
 <a id="secrets"></a>
-### 祕密管理 ✅
+### 祕密管理 ✅（雲端）
 
 雲端上的祕密由 Terraform 產生、存在 SSM Parameter Store（SecureString），部署時才拉下來寫成只有 root 能讀的 `deploy/.env`。明碼不進 git、不進 user_data、不進映像檔（[secrets.tf](../../infra/envs/1-ec2/secrets.tf)）。
 
@@ -113,7 +113,7 @@ AI 助理的發問（`POST /api/calendar/assistant`）每次都會叫模型，�
 2. 重跑一次（這次是新版）：app healthy；從 app 的網路連 postgres，新密碼 `ok`、**舊密碼 `password authentication failed`**
 
 刻意接受的：
-- **本機**的 DB 密碼寫死成 `talkcal`（[application.properties](../../backend/src/main/resources/application.properties)、[compose.yaml](../../deploy/compose.yaml)）：埠只綁 127.0.0.1，資料是假的，換來 clone 下來就能跑。雲端上 app 的密碼一定由環境變數蓋掉，`.env` 缺 `DB_PASSWORD` 時 compose 直接拒絕啟動
+- **本機還沒做（延後）**：DB 密碼仍寫死成 `talkcal`（[application.properties](../../backend/src/main/resources/application.properties)、[compose.yaml](../../deploy/compose.yaml)），還沒達到「不寫在程式碼裡」。做法是改讀 `deploy/.env`（不進 git）、repo 只放範本；代價是 clone 下來要先建 `.env` 才能跑。雲端上 app 的密碼一定由環境變數蓋掉，`.env` 缺 `DB_PASSWORD` 時 compose 直接拒絕啟動
 - Grafana 關掉登入、匿名就是 Admin：只綁 127.0.0.1，雲端上要經 SSM port forwarding（先要有 AWS 權限）才連得到
 - 祕密不小心 commit 的情況由[祕密掃描](#secret-scan)擋
 
