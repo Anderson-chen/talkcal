@@ -7,7 +7,7 @@
 <meta name="description" content="talkcal AWS 階段一的互動架構圖：每個元件由哪個檔案、哪幾行決定，為什麼這樣選，業界怎麼做。">
 <!--
   維護規則（也寫在專案 CLAUDE.md）：改到 infra/、deploy/、ops/ 或 web/nginx.conf 時，檢查這份圖的
-  元件（R）、檔案行號（F）、依賴、參數值還對不對，跟程式碼放同一個 PR，並更新 #checked 的日期。
+  元件（R）、檔案行號（F）、參數位置（L）、依賴、參數值還對不對，跟程式碼放同一個 PR，並更新 #checked 的日期。
   行號以 master 為準；連結會開到 GitHub 上那幾行。
 -->
 <style>
@@ -151,6 +151,7 @@ tr.row{cursor:pointer}tr.row:hover td{background:var(--surface-1)}tr.row.on td{b
 // ── 資料 ─────────────────────────────────────────────────────────────────────
 // R：圖上每一格。deps = 它用到誰（Terraform 參照、compose 的 depends_on 或讀 .env）。
 // F：每個檔案的每一段行號對應到哪一格（null = 不在圖上）。改程式碼時主要改這張表。
+// L：每個關鍵參數設在哪個檔案哪一行（key 是 R 裡的參數名稱；依 model_backend 不同的寫成 {bedrock, gpu}）。
 // S：業界說法的查證來源。
 const REPO="https://github.com/Anderson-chen/talkcal/blob/master/";
 const S={tfs3:["Terraform S3 backend 文件","https://developer.hashicorp.com/terraform/language/backend/s3"],wo:["Terraform 1.11 write-only 參數","https://www.hashicorp.com/blog/terraform-1-11-ephemeral-values-managed-resources-write-only-arguments"],eph:["Ephemeral values 文件","https://developer.hashicorp.com/terraform/language/manage-sensitive-data/ephemeral"],hcp:["HCP Terraform 免費層公告","https://www.hashicorp.com/blog/continuing-hcp-terraform-s-enhanced-free-tier-experience"],tofu:["OpenTofu vs Terraform 2026","https://jorijn.com/en/blog/opentofu-vs-terraform-2026-the-fork-finally-diverged/"],oidc:["GitHub Actions OIDC for AWS","https://oneuptime.com/blog/post/2026-02-02-github-actions-oidc-aws/view"],ingx:["Kubernetes：Ingress NGINX 退役","https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/"],ingx2:["Kubernetes 2026-01 聲明","https://www.kubernetes.io/blog/2026/01/29/ingress-nginx-statement/"],lbc:["InfoQ：AWS LBC Gateway API GA","https://www.infoq.com/news/2026/03/aws-gateway-api-ga"],brk:["Bedrock API keys 文件","https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html"],pod:["EKS Pod Identity vs IRSA","https://hidekazu-konishi.com/entry/amazon_eks_pod_identity_and_irsa_decision_guide.html"],imds:["EC2 新機器的 IMDS 預設","https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-IMDS-new-instances.html"],imds2:["AWS Blog：IMDSv2 by default","https://aws.amazon.com/blogs/aws/amazon-ec2-instance-metadata-service-imdsv2-by-default/"],rds:["re:Post：RDS 密碼交給 Secrets Manager","https://www.repost.aws/articles/ARkjRajxCGTBKvyZS1iTghWA/secure-your-amazon-rds-aurora-admin-passwords-with-aws-secrets-manager"],mp:["EKS AI/ML 儲存最佳實務","https://docs.aws.amazon.com/eks/latest/best-practices/aiml-storage.html"],nat:["NAT Gateway 價格整理（第三方）","https://cloudburn.io/blog/aws-nat-gateway-pricing"],gwe:["re:Post：NAT vs VPC Endpoint","https://repost.aws/questions/QUmfyiKedjTd225PQS7MlHQQ/vpc-nat-gateway-vs-vpc-endpoint-pricing"],alb:["ALB 文件（至少兩個 AZ）","https://docs.aws.amazon.com/elasticloadbalancing/latest/application/application-load-balancers.html"],amg:["Amazon Managed Grafana / Prometheus","https://techoral.com/aws/aws-managed-grafana-prometheus.html"],sm:["Parameter Store vs Secrets Manager","https://barkingiguana.com/writing/choosing-between-parameter-store-and-secrets-manager/"],bud:["Budget Actions 自動控管","https://oneuptime.com/blog/post/2026-02-12-create-aws-budget-actions-automatic-cost-control/view"],cad:["AWS Cost Anomaly Detection","https://aws.amazon.com/aws-cost-management/aws-cost-anomaly-detection/"],cf:["CloudFront 多 origin 路由","https://advancedweb.hu/how-to-route-to-multiple-origins-with-cloudfront"],cf2:["CloudFront OAC 與 ALB 防繞過","https://barkingiguana.com/writing/stopping-people-bypassing-your-cdn/"],vllm:["vLLM 2026 quickstart","https://www.glukhov.org/post/2026/01/vllm-quickstart/"],pk:["EC2 Image Builder vs Packer","https://barkingiguana.com/writing/ec2-image-builder-vs-packer/"],caddy:["Caddy 版本紀錄","https://releasebot.io/updates/caddy"],le:["Let's Encrypt 重複憑證上限","https://letsencrypt.org/docs/duplicate-certificate-limit/"],ecs:["ECS vs EKS 小團隊成本","https://www.qovery.com/blog/ecs-vs-eks-cost-operational-overhead-team-of-ten"]};
@@ -209,6 +210,38 @@ const F={
 "web/nginx.conf":[["52","resolver","web"],["67","proxy_read_timeout","web"]],
 "ops/compose.yaml":[["22","mimir","obs"],["40","loki","obs"],["54","tempo","obs"],["67–74","grafana","obs"],["98","alloy","obs"]]
 };
+const E="infra/envs/1-ec2/",B="infra/bootstrap/",D="deploy/compose.yaml";
+const L={
+provider:{"region":E+"providers.tf:2","profile":E+"providers.tf:3","default_tags":E+"providers.tf:5"},
+backend:{"required_version":E+"backend.tf:2","key":E+"backend.tf:10","use_lockfile":E+"backend.tf:11","bucket":E+"backend.hcl.example:3"},
+pwd:{"length":E+"secrets.tf:25","special":E+"secrets.tf:26"},
+region:{"var.region":E+"variables.tf:1"},
+vpc:{"cidr_block":E+"vpc.tf:6","enable_dns_support":E+"vpc.tf:7","enable_dns_hostnames":E+"vpc.tf:8"},
+igw:{"vpc_id":E+"vpc.tf:16"},
+az:{"location_type":E+"vpc.tf:26","sort()[0]":E+"vpc.tf:35"},
+subnet:{"cidr_block":E+"vpc.tf:40","availability_zone":E+"vpc.tf:41","map_public_ip_on_launch":E+"vpc.tf:42"},
+rt:{"route":E+"vpc.tf:52","association":E+"vpc.tf:62"},
+sg:{"80/tcp":E+"security-groups.tf:14","443/tcp、443/udp":E+"security-groups.tf:23","22/tcp":E+"security-groups.tf:43","egress":E+"security-groups.tf:62"},
+eip:{"domain":E+"ec2.tf:34","association":E+"ec2.tf:86"},
+ec2:{"instance_type":E+"ec2.tf:5","root_volume_size":E+"ec2.tf:6","http_tokens":E+"ec2.tf:55","hop_limit":E+"ec2.tf:59","user_data_replace_on_change":E+"ec2.tf:74","ignore_changes":E+"ec2.tf:78"},
+ami:{"dlami":E+"ec2.tf:20","ubuntu":E+"ec2.tf:27"},
+dotenv:{"site_address":E+"secrets.tf:10","name":E+"secrets.tf:31","type":E+"secrets.tf:33"},
+bsvc:{"BEDROCK_BASE_URL":E+"secrets.tf:18","BEDROCK_MODEL":E+"variables.tf:68"},
+s3m:{"count":E+"s3.tf:8","bucket":E+"s3.tf:9"},
+tfstate:{"bucket":B+"main.tf:33","prevent_destroy":B+"main.tf:36","versioning":B+"main.tf:44","sse_algorithm":B+"main.tf:53"},
+role:{"assume_role":E+"iam.tf:8","SSM attachment":E+"iam.tf:20","ReadDotenv":E+"iam.tf:32","ReadModels":E+"iam.tf:41"},
+profile:{"role":E+"iam.tf:59"},
+buser:{"CallWithBearerToken":E+"bedrock.tf:31","CreateInference":E+"bedrock.tf:41"},
+bkey:{"service_name":E+"bedrock.tf:56","credential_age_days":E+"bedrock.tf:58"},
+budget:{"limit_amount":B+"main.tf:72","80% ACTUAL / 100% FORECASTED":B+"main.tf:76"},
+caddy:{"image":E+"compose.ec2.yaml:35","ports":E+"compose.ec2.yaml:37","caddy-data:/data":E+"compose.ec2.yaml:46","reverse_proxy":E+"Caddyfile:9"},
+web:{"ports":D+":227","resolver":"web/nginx.conf:52","proxy_read_timeout":"web/nginx.conf:67"},
+app:{"mem_limit":E+"compose.ec2.yaml:28","SPRING_AI_OPENAI_*":{bedrock:E+"compose.bedrock.yaml:18",gpu:"backend/src/main/resources/application-docker.properties:8"},"depends_on":{bedrock:E+"compose.bedrock.yaml:23",gpu:D+":194"},"stop_grace_period":D+":215"},
+postgres:{"image":D+":155","POSTGRES_PASSWORD":E+"compose.ec2.yaml:20","密碼同步":E+"deploy.sh:81"},
+llm:{"-ngl":D+":101","-c / -np":D+":103","--kv-unified":D+":110"},
+seed:{"sha256sum -c":D+":74"},
+obs:{"Alloy / Mimir / Loki / Tempo / Grafana":"ops/compose.yaml:22","Grafana":"ops/compose.yaml:74"}
+};
 // ── 互動 ─────────────────────────────────────────────────────────────────────
 const CHK={ok:["查證相符","ok"],fix:["查證後已修正","fix"],na:["基本概念，未另查","na"]};
 let mode="bedrock",sel="ec2",view="aws",file="";
@@ -250,7 +283,8 @@ function draw(){
   h+=`<div style="font:500 14px var(--font-mono)">${esc(r.n)}${off(sel)?' <span style="font:12px var(--font-sans);color:var(--text-warning)">（目前不建 / 不啟動）</span>':""}</div><p style="font-size:14px;margin:4px 0 8px">${r.d}</p>`;
   const fl=filesOf(sel);
   h+=`<div class="h">定義在哪些檔案（${fl.length} 個）</div><div class="flist">${fl.length?fl.map(([f,rs])=>`<div><button class="pick" data-f="${f}">${f}</button>　${rs.map(x=>`<a href="${gh(f,x[0])}" target="_blank" rel="noopener"><code>${x[0]}</code></a> ${esc(x[1])}`).join("；")}</div>`).join(""):"<span style='color:var(--text-muted)'>不是由檔案定義（例如 Bedrock 是 AWS 代管服務）</span>"}</div>`;
-  h+=`<div class="h">關鍵參數</div><table><tr><th style="width:34%">參數</th><th style="width:36%">值</th><th>為什麼</th></tr>${r.p.map(([a,b,cc])=>`<tr><td><code>${esc(a)}</code></td><td>${esc(val(b))}</td><td style="color:var(--text-secondary)">${cc}</td></tr>`).join("")}</table>`;
+  const loc=a=>{const l=val((L[sel]||{})[a]);if(!l)return'<span style="color:var(--text-muted)">—</span>';const i=l.lastIndexOf(":"),f=l.slice(0,i),n=l.slice(i+1);return`<a href="${gh(f,n)}" target="_blank" rel="noopener"><code>${esc(f.split("/").pop())}:${n}</code></a>`};
+  h+=`<div class="h">關鍵參數</div><table><tr><th style="width:26%">參數</th><th style="width:27%">值</th><th style="width:25%">為什麼</th><th>位置</th></tr>${r.p.map(([a,b,cc])=>`<tr><td><code>${esc(a)}</code></td><td>${esc(val(b))}</td><td style="color:var(--text-secondary)">${cc}</td><td>${loc(a)}</td></tr>`).join("")}</table>`;
   h+=`<div class="h">依賴</div><div style="font-size:13px;line-height:1.8"><span style="color:var(--text-warning)">用到：</span>${deps.length?deps.map(k=>esc(NM(k))).join("、"):"（無）"}<br><span style="color:var(--text-success)">被用到：</span>${us.length?us.map(k=>esc(NM(k))).join("、"):"（無）"}</div>`;
   h+=`<div class="cmp"><div><b>業界常見做法 <span class="badge ${c[1]}">${c[0]}</span></b>${r.ind}${r.fix?`<div style="margin-top:6px;color:var(--text-warning)">更正：${r.fix}</div>`:""}</div><div><b>什麼時候該換</b>${r.when}</div></div>${r.src.length?`<div class="src">來源：${r.src.map(s=>`<a href="${S[s][1]}" target="_blank" rel="noopener">${S[s][0]}</a>`).join("　")}</div>`:""}`;
   $("panel").innerHTML=h;
