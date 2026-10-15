@@ -1,16 +1,13 @@
 """從 git 產生「commit 脈絡圖」HTML：每個 commit 的原因（commit 訊息），每個檔案的用途（那個版本的檔案開頭註解）＋連結。
 
-用法：python .claude/hooks/commit_map.py [分支，預設目前分支] [基準，預設 origin/master]
-輸出到 build/commit-map/<分支>.html（build/ 被 gitignore）。內容全部來自 git，不需要手寫，所以每次重跑都是最新的。
---hook：給 .claude/settings.json 的 PostToolUse hook 用（開 PR 之後自動跑），輸出改成 hook 的 JSON，把檔案路徑回報給 Claude。
+用法：python .claude/skills/commit-map/commit_map.py [分支，預設目前分支] [基準，預設 origin/master]
+輸出到 build/commit-map/<分支>.html（build/ 被 gitignore），最後一行印出檔案路徑。
+內容全部來自 git，不需要手寫，所以每次重跑都是最新的。由 /commit-map 這個 skill 呼叫（見同一個資料夾的 SKILL.md）。
 """
-import html, json, re, subprocess, sys
+import html, re, subprocess, sys
 from pathlib import Path
 
-hook = '--hook' in sys.argv
-args = [a for a in sys.argv[1:] if a != '--hook']
-if hook:
-    sys.stdin.read()  # hook 的輸入（這次的 Bash 指令）用不到；要不要跑已經由 settings.json 的 if 決定
+args = sys.argv[1:]
 
 def git(*args):
     return subprocess.run(['git', '-C', str(repo), *args], capture_output=True, text=True, encoding='utf-8', errors='replace').stdout
@@ -197,7 +194,7 @@ nav{{position:sticky;top:0;z-index:1;background:var(--bg);display:flex;flex-wrap
 .ov .cell{{text-align:center;color:#7C9BFF;font-weight:500}} .ov th{{white-space:nowrap}} .go{{cursor:pointer}} .go:hover{{background:#253158}}
 .tag{{color:#fff;border-radius:4px;padding:0 6px;font-size:12px;white-space:nowrap}} .n{{color:var(--muted);white-space:nowrap}}
 </style><h1>{html.escape(branch)}：{len(cards)} 個 commit（相對 {html.escape(base)}）</h1>
-<p><small>第一頁是總覽，後面每個分頁是一個 commit（←→ 切換）；橘色＝修問題（commit 訊息的 [fix]）；檔案用途取自該版本的檔案開頭註解。重新產生：python .claude/hooks/commit_map.py {html.escape(branch)}</small></p>
+<p><small>第一頁是總覽，後面每個分頁是一個 commit（←→ 切換）；橘色＝修問題（commit 訊息的 [fix]）；檔案用途取自該版本的檔案開頭註解。重新產生：/commit-map {html.escape(branch)}</small></p>
 <nav>{"".join(tabs)}</nav>
 {"".join(cards)}
 <script>
@@ -208,8 +205,4 @@ document.querySelectorAll('.go').forEach(r=>r.onclick=()=>show(r.dataset.go));
 document.onkeydown=e=>{{const c=+location.hash.slice(1)||0;if(e.key=='ArrowRight')show(Math.min(c+1,secs.length-1));if(e.key=='ArrowLeft')show(Math.max(c-1,0))}};
 show(+location.hash.slice(1)||0);
 </script>''', encoding='utf-8')
-if hook:
-    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'PostToolUse',
-                      'additionalContext': f'已產生這個分支的 commit 脈絡圖：{out.resolve()}，用 SendUserFile 傳給使用者。'}}))
-else:
-    print(out.resolve())
+print(out.resolve())
