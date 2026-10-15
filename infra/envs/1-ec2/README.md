@@ -190,6 +190,7 @@ aws ec2 start-instances --instance-ids "$(terraform output -raw instance_id)" --
 | bedrock 模式卻在編 llama-server 的 CUDA，2 vCPU 編 25 分鐘才 45% | `deploy.sh` 第 4 步沒疊 `compose.bedrock.yaml`（改它的那次替換沒套上，只驗了 `bash -n`） | [#74](https://github.com/Anderson-chen/talkcal/issues/74)：改成 `compose_files` 陣列；用 `--dry-run` 確認只建 app、caddy、postgres、web |
 | 第 4 步報「缺 DB_PASSWORD」 | snap 版的 aws 輸出導向檔案時結束碼 0、寫出 0 bytes（導向管線才正常），`deploy/.env` 是空的 | [#74](https://github.com/Anderson-chen/talkcal/issues/74)：改用 AWS 官方安裝程式；`deploy.sh` 寫完 `.env` 先檢查有 `DB_PASSWORD` |
 | AI 助理回 502：`The model 'gpt-5-mini' does not exist` | Spring AI 2.0.1 看到請求自帶選項就整份照用、不補設定檔的預設，模型名稱從沒生效；本機 llama-server 不看名稱所以一直沒事 | [#76](https://github.com/Anderson-chen/talkcal/issues/76)：請求的選項從 `chatModel.getOptions()` 開始再蓋 |
+| 部署成功、首頁 200，但 `/api` 全部 502；nginx log 是 `connect() failed` 連到舊 IP | 這次只重建了 app、web 沒重建：nginx 只在啟動時把 `app` 解析一次，app 換了 IP 它還連舊的 | [#90](https://github.com/Anderson-chen/talkcal/issues/90)：`web/nginx.conf` 改成執行期問 Docker DNS（`resolver 127.0.0.11 valid=10s`）；本機用「佔掉舊 IP、重建 app」重現，舊版 502、新版 200 |
 
 其他預期可能遇到的：
 
