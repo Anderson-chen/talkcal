@@ -1,3 +1,8 @@
+import { send } from './http'
+
+// 404 的錯誤型別搬到 http.ts（每個 API 共用），這裡轉出去，useCalendar 照舊從這裡 import
+export { NotFoundError } from './http'
+
 // 跟後端 /api/calendar/* 的契約。形狀照抄 CalendarController 的巢狀 record，
 // 後端那邊改了欄位，這裡要跟著改，而且同一個 commit 一起改：兩邊沒有共用的型別，不一起改就會悄悄對不上。
 //
@@ -24,10 +29,6 @@ export interface EventFields {
 /** 已經存起來的行程，多了 id。 */
 export interface SavedEvent extends EventFields {
   id: string
-}
-
-interface Failure {
-  error: string
 }
 
 /** AI 助理一輪的回覆：助理說的話，以及這一輪提議的行程（確認後送 addEvents 才存）。 */
@@ -85,21 +86,4 @@ export async function removeEvent(id: string): Promise<void> {
  */
 function normalize<T extends EventFields>(event: T): T {
   return { ...event, category: event.category ?? 'PERSONAL', location: event.location ?? null, note: event.note ?? null }
-}
-
-/** 404：要的東西不存在。跟其他錯誤分開，呼叫端才能決定「重新讀一次」而不是只顯示錯誤。 */
-export class NotFoundError extends Error {}
-
-/**
- * 錯誤處理：非 2xx 一律丟 Error，訊息優先用後端的 CalendarFailure.error，
- * 拿不到（proxy 連不上 app，回的不是 JSON）就退回 HTTP 狀態碼。
- */
-async function send(url: string, init: RequestInit): Promise<Response> {
-  const res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json' } })
-  if (!res.ok) {
-    const failure = (await res.json().catch(() => null)) as Failure | null
-    const message = failure?.error ?? `HTTP ${res.status}`
-    throw res.status === 404 ? new NotFoundError(message) : new Error(message)
-  }
-  return res
 }

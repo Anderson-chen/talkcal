@@ -2,6 +2,7 @@
 // 桌面版：左側欄（新增、小月曆、分類篩選、主題）＋ 中間的月／週／日視圖 ＋ 右側 AI 助理。
 // 行程詳情是從右邊滑出的抽屜，新增表單是對話框。版面照設計稿的「桌面 Web」畫板。
 import { computed, ref } from 'vue'
+import { logOut, me } from '../auth'
 import { CATEGORIES } from '../calendar'
 import { monthDayLabel, weekdayName, weekOf } from '../monthGrid'
 import AssistantChat from './AssistantChat.vue'
@@ -64,6 +65,11 @@ const noEventsToday = computed(() => calendar.view.value === 'day' && calendar.e
       <div class="section">
         <span class="section-title">主題</span>
         <ThemePicker />
+      </div>
+      <!-- 目前是誰、登出（#103）。推到側欄最下面，跟上面的行事曆操作分開 -->
+      <div v-if="me" class="account">
+        <span class="account-name">{{ me.username }}</span>
+        <button type="button" class="logout" @click="logOut()">登出</button>
       </div>
     </aside>
 
@@ -197,4 +203,7 @@ h1 { margin: 0; font-size: 24px; font-weight: 700; flex: 1; min-width: 200px; }
 @media (max-width: 1180px) {
   .assistant { position: absolute; top: 0; right: 0; bottom: 0; z-index: 4; box-shadow: -12px 0 32px rgba(0, 0, 0, 0.14); }
 }
+.account { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.account-name { font-size: 14px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logout { height: 32px; padding: 0 12px; border: 1px solid var(--field); border-radius: 8px; background: transparent; color: var(--ink); font-size: 13px; }
 </style>
