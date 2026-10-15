@@ -36,9 +36,32 @@
 [web/package.json](../../web/package.json) 沒有任何測試工具，目前只有 `vue-tsc` 型別檢查。
 
 <a id="ai-eval"></a>
-### AI 品質回歸（eval） ❌
+### AI 品質回歸（eval） ✅
 
-改了 prompt 或換了模型之後，沒辦法知道它有沒有變笨。需要一組固定題目，加上自動評分。
+改了 prompt 或換了模型之後，跑 `./gradlew eval` 就知道有沒有變差、壞在哪一題。
+
+| 部分 | 做法 |
+|---|---|
+| 題目 | [assistant-cases.json](../../backend/src/eval/resources/eval/assistant-cases.json)：28 題、7 類 —— 新增、反問時間、查詢、找空檔、間接注入、套話、越權要求。加題目只改 JSON |
+| 評分 | 全部用程式：提議了幾張、幾點開始、回覆裡有沒有某些字、有沒有外人的網址、有沒有洩漏內部設定。不用 LLM 當裁判（自己也不穩、也要錢） |
+| 基準線 | [baseline-qwen3-8b.txt](../../backend/src/eval/resources/eval/baseline-qwen3-8b.txt)：上次接受的版本通過哪幾題。**基準線裡的題目沒過才算退化（紅燈）**；本來就沒過的標成已知失敗，列進報告但不讓整份變紅 —— 只看總分的話「修好兩題、弄壞兩題」看起來沒變 |
+| 報告 | `build/eval/report.md`：各分類通過率、退化了哪幾題、沒過時模型實際回了什麼 |
+| 換模型 | 給 `SPRING_AI_OPENAI_CHAT_BASEURL`、`SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL`、`SPRING_AI_OPENAI_APIKEY` 就評別的模型，各有各的基準線檔 |
+
+什麼時候跑：[pre-push](../../.githooks/pre-push) 發現這次要推的 commit 改到 prompt 或模型相關的檔案（助理和工具、抽取、eval 的題目、`application*.properties`）時，自動在同一個 CI 容器裡多跑 eval；其他改動不跑（一題一題打真模型要一分多鐘）。
+分開成自己的 source set、不直接放進整合測試：整合測試是任何一題沒過就紅，eval 有基準線、允許已知失敗；而且 eval 要能換成 Bedrock 跑，那個每次都要付錢。
+GitHub 上不跑（沒有模型），只確定它編得過（`evalClasses`）。
+
+證據（qwen3-8b，2026-10-15）：
+- 第一次 27 / 28：唯一沒過的 `free-evening` 是**評分寫錯**（只認「19」，模型回「晚上 7 點到 10 點有空」是對的）。修評分後 28 / 28，設為基準線 —— 沒過的題目一定要人看回覆，評分本身也會錯
+- 反例：故意弄一個 bug（工具回給模型的行程漏掉標題），`list-tomorrow` 被標成**退化**，eval 紅燈，報告裡看得到模型回「明天有兩個行程：早上九點到十點，以及晚上六點到七點」
+- 沒觸發的反例：把 #13 修掉的「Amy 被當成上午」改回去，28 題照樣全過 —— 這次模型自己先問了早晚，沒走到那段程式。同一題溫度 0 前後兩次行為不同（整合測試那次是直接提議）
+
+已知限制：
+- **每題只跑一次**：溫度 0 也不保證每次一樣（上面那次就是），一題偶爾過、偶爾不過分不出是退化還是運氣。要分得出來得每題跑多次算通過率
+- 程式裡的保護被模型自己的行為蓋過時，eval 量不到它（Amy 那次）。這種靠單元測試直接測那段程式
+- 只有 qwen3-8b 的基準線；雲端的 qwen3-32b（Bedrock）還沒跑，跑一次要付 token 費
+- pre-push 自動跑靠路徑判斷：prompt 搬到別的檔案、或 `--no-verify` 跳過，就不會跑
 
 <a id="auth"></a>
 ### 認證與授權 ❌

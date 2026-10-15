@@ -173,16 +173,52 @@ testing {
     }
 }
 
+// AI 品質回歸（#10）：一整組固定題目跑真模型、計分，跟基準線比，看改了 prompt 或換了模型之後有沒有變差。
+// 跟整合測試分開成自己的 source set（src/eval），理由同上：題目多、跑一次好幾分鐘，不能拖慢 pre-push。
+// 改 prompt、換模型時手動跑：./gradlew eval；報告在 build/eval/report.md
+testing {
+    suites {
+        eval(JvmTestSuite) {
+            dependencies {
+                implementation project()
+            }
+            targets.configureEach {
+                testTask.configure {
+                    shouldRunAfter tasks.named('integrationTest')
+                    // 模型在外面，程式沒變結果也可能變（換了模型檔、換了雲端模型），所以每次都真的跑，不沿用上次的結果
+                    outputs.upToDateWhen { false }
+                    // 跑哪個模型：沒給就是本機 llama-server 的 qwen3-8b。要評雲端的就給這三個（名字跟 Spring 認得的一樣）
+                    ['SPRING_AI_OPENAI_CHAT_BASEURL': 'spring.ai.openai.chat.base-url',
+                     'SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL': 'spring.ai.openai.chat.options.model',
+                     'SPRING_AI_OPENAI_APIKEY': 'spring.ai.openai.api-key'].each { env, property ->
+                        def value = providers.environmentVariable(env)
+                        if (value.isPresent()) {
+                            systemProperty property, value.get()
+                        }
+                    }
+                    systemProperty 'eval.reportDir', layout.buildDirectory.dir('eval').get().asFile.absolutePath
+                    testLogging {
+                        events 'passed', 'skipped', 'failed'
+                    }
+                }
+            }
+        }
+    }
+}
+
 configurations {
     // JUnit、Spring Boot Test、BOM 這些跟單元測試一樣，直接沿用而不是再抄一份
     integrationTestImplementation.extendsFrom testImplementation
     integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
+    evalImplementation.extendsFrom testImplementation
+    evalRuntimeOnly.extendsFrom testRuntimeOnly
 }
 
 tasks.named('check') {
     // ./gradlew build 不跑整合測試（要真 server、又慢），但至少要編得過：
     // 否則改了某個方法的簽名，只有整合測試用到的地方壞了也沒人發現，直到下次有人想跑它
     dependsOn tasks.named('integrationTestClasses')
+    dependsOn tasks.named('evalClasses')
 }
 
 application {
