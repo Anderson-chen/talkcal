@@ -22,7 +22,7 @@
 | [整合測試用真的資料庫](production-readiness/ready.md#real-db-tests) | 測試通過就代表在真的 PostgreSQL 上也會通過 | ✅ 是 |
 | [API 契約文件](production-readiness/ready.md#api-contract) | 前端和其他呼叫方知道 API 長什麼樣，改了會被發現 | ✅ 是 |
 | [整個應用接起來的系統測試](production-readiness/ready.md#system-test) | 確認從 HTTP 到模型、資料庫整條路是通的 | ✅ 是 |
-| [前端測試](production-readiness/ready.md#frontend-test) | 改畫面時不會把既有功能弄壞 | ❌ 否 |
+| [前端測試](production-readiness/ready.md#frontend-test) | 改畫面時不會把既有功能弄壞 | ✅ 是 |
 | [AI 品質回歸（eval）](production-readiness/ready.md#ai-eval) | 改 prompt 或換模型之後，知道回答有沒有變差 | ✅ 是 |
 | [認證與授權](production-readiness/ready.md#auth) | 只有本人看得到、改得到自己的資料 | ❌ 否 |
 | [濫用防護（rate limit）](production-readiness/ready.md#rate-limit) | 一個人不能把 GPU 占滿，讓其他人都用不了 | ✅ 是 |

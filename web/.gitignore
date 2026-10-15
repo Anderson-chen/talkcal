@@ -1,2 +1,6 @@
 node_modules/
 dist/
+
+# Playwright 的輸出：失敗時的截圖、trace、HTML 報告。每次跑都會重產，不進版控
+test-results/
+playwright-report/

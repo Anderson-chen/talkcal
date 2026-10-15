@@ -1,14 +1,12 @@
 <script setup lang="ts">
 // 手動新增行程。桌面版是對話框、手機版是整頁（variant）。從 AI 卡片按「修改」過來時，欄位帶著草稿。
 //
-// 存檔走同一個 POST /events，所以規則還是後端的 CalendarEvent 說了算；
-// 這裡先擋最常見的幾種（沒標題、結束等於開始），讓使用者不必等一趟來回才知道。
-//
-// 跟設計稿不同的地方：結束時間早於開始時間時，不當成錯誤，而是當成「結束在隔天」（並且標示出來）。
-// 不然「晚上十點到凌晨一點」這種行程在表單裡根本填不出來 —— 而 AI 解析得出來。
+// 這裡只管畫面和接線：欄位怎麼驗證、怎麼變成送出的資料，在 eventDraft.ts（純函式，有單元測試）。
+// 跟設計稿不同的地方：結束時間早於開始時間時，當成「結束在隔天」並標示出來（理由見 isOvernight）。
 import { computed, onMounted, reactive, ref } from 'vue'
-import { CATEGORIES, type Category, type EventFields } from '../calendar'
-import { addDays, timeOf } from '../monthGrid'
+import { CATEGORIES, type Category } from '../calendar'
+import { timeOf } from '../monthGrid'
+import { isOvernight, toDraft, type FormFields } from './eventDraft'
 import Icon from './Icon.vue'
 import { message, useCalendarState } from './useCalendar'
 import { useThemeState } from './useTheme'
@@ -19,7 +17,7 @@ const theme = useThemeState()
 
 const request = calendar.form.value!
 const initial = request.initial
-const form = reactive({
+const form = reactive<FormFields>({
   title: initial.title,
   date: initial.start.slice(0, 10),
   start: timeOf(initial.start),
@@ -34,7 +32,7 @@ const titleInput = ref<HTMLInputElement | null>(null)
 
 onMounted(() => titleInput.value?.focus())
 
-const overnight = computed(() => form.start !== '' && form.end !== '' && form.end < form.start)
+const overnight = computed(() => isOvernight(form.start, form.end))
 
 function close() {
   calendar.form.value = null
@@ -42,23 +40,13 @@ function close() {
 
 async function save() {
   if (saving.value) return
-  if (!form.title.trim()) return fail('請輸入行程標題')
-  if (!form.date) return fail('請選擇日期')
-  if (!form.start || !form.end) return fail('請選擇開始與結束時間')
-  if (form.end === form.start) return fail('結束時間不能跟開始時間一樣')
+  const result = toDraft(form)
+  if ('error' in result) return fail(result.error)
 
-  const draft: EventFields = {
-    title: form.title.trim(),
-    start: `${form.date}T${form.start}`,
-    end: `${overnight.value ? addDays(form.date, 1) : form.date}T${form.end}`,
-    category: form.category,
-    location: form.location.trim() || null,
-    note: form.note.trim() || null,
-  }
   saving.value = true
   error.value = null
   try {
-    const [saved] = await calendar.add([draft])
+    const [saved] = await calendar.add([result.draft])
     request.onSaved?.(saved)
     close()
     // 存好直接打開它的詳情（照設計稿），使用者看得到存進去的樣子

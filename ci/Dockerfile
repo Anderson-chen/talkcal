@@ -42,5 +42,16 @@ COPY backend/gradlew ./
 COPY backend/gradle/wrapper/ gradle/wrapper/
 RUN ./gradlew --version --no-daemon
 
+# Playwright 的瀏覽器（前端 E2E，web/e2e/）。版本要跟 web/package.json 的 @playwright/test 一模一樣：
+# 每一版 Playwright 只認得自己那一版的瀏覽器，對不上就直接報「找不到瀏覽器」。
+# 所以版本不在這裡另外寫一次，直接從 package.json 讀 —— 升級 Playwright 時這一層自動重建，不會忘了改。
+# 代價：package.json 任何一行改了，這層都會重建（重新下載瀏覽器，約一兩分鐘）；它不常改，划得來。
+# --with-deps：順便用 apt 裝 Chromium 需要的系統函式庫（字型、libnss 等），Ubuntu 基底映像檔裡沒有。
+# 瀏覽器放在固定位置、烤進映像檔：跟 Gradle 本體同一個道理，很少變，不必每次 CI 都下載
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+WORKDIR /opt/playwright
+COPY web/package.json ./
+RUN npx --yes "playwright@$(node -p "require('./package.json').devDependencies['@playwright/test']")" install --with-deps chromium
+
 # 程式碼由 run.sh 用 git archive 複製到這裡（只有要測的那個 commit，沒有沒 commit 的檔案）
 WORKDIR /work

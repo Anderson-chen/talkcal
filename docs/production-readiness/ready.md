@@ -31,9 +31,25 @@
 只當黑箱用：送 JSON 字串、讀 JSON，不引用 controller 的 record，API 的形狀改了這裡會紅燈。
 
 <a id="frontend-test"></a>
-### 前端測試 ❌
+### 前端測試 ✅
 
-[web/package.json](../../web/package.json) 沒有任何測試工具，目前只有 `vue-tsc` 型別檢查。
+兩層，各測一件事（細節見 [web/README.md](../../web/README.md#測試)）：
+
+| 層 | 工具 | 測什麼 | 現況 |
+|---|---|---|---|
+| 純函式 | Vitest（Node，不模擬瀏覽器） | 規則和運算：月曆格子、新增表單的驗證和整理（[eventDraft.ts](../../web/src/calendar/eventDraft.ts)） | 17 個，不到 1 秒 |
+| 元件、整頁 | Playwright（真的 Chromium，桌面 1280px、手機 Pixel 7） | 接線：表單打得開、送出去的資料對、錯誤顯示、存好之後畫面跟著變 | 5 個，約 8 秒 |
+
+刻意沒有「模擬 DOM 的元件測試」（happy-dom + @vue/test-utils）：元件裡的規則先抽成純函式用 Vitest 測透，元件只剩畫面和接線，接線在真的瀏覽器裡看才準（模擬的 DOM 沒有版面、CSS，也分不出桌面和手機版）。
+E2E 的 API 用 `page.route` 換成假的：不需要後端和模型，GitHub 上也能跑，「存檔失敗」一行就造得出來；前後端格式對不對得上是後端 [SystemTest](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/SystemTest.java) 的事。
+兩層都在 CI 裡（本機 pre-push 和 GitHub 同一支 `ci/checks.sh`）。
+
+證據（反例）：
+- Vitest：`toDraft` 的跨夜判斷 `<` 改成 `<=`、地點不去空白、拿掉標題檢查，各自有測試變紅
+- Playwright：`EventForm` 驗證沒過時不顯示錯誤、存檔失敗後按鈕沒恢復，各自剛好是對應的那個測試變紅
+- 寫手機版 E2E 前先用瀏覽器打開頁面看：手機版有兩個名字一模一樣的「新增行程」、表單是整頁、按鈕叫「儲存」—— 照桌面版寫會撞到 strict mode
+
+還沒涵蓋：AI 助理的畫面、刪除、週和日視圖、主題切換；只測 Chromium（沒有 Safari、Firefox）。
 
 <a id="ai-eval"></a>
 ### AI 品質回歸（eval） ✅

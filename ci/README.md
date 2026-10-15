@@ -1,6 +1,6 @@
 # ci —— 持續整合（CI）
 
-每次改動都在**乾淨的容器**裡自動檢查一遍：後端的單元測試、架構規則、整合測試，前端的型別檢查和打包。
+每次改動都在**乾淨的容器**裡自動檢查一遍：後端的單元測試、架構規則、整合測試，前端的單元測試（Vitest）、型別檢查、打包、E2E（Playwright 開真的 Chromium）。
 本機（push 之前）和 GitHub（push 之後）跑的是**同一支 script、同一個映像檔**，所以本機綠就代表 GitHub 綠。
 
 整條 CI → CD 的流程圖和每一關擋什麼，見 [docs/architecture.md](../docs/architecture.md#cicd從-commit-到線上)。
@@ -28,7 +28,7 @@ git push --no-verify                    # 確定要跳過檢查時
 | 檔案 | 回答的問題 | 換平台時 |
 |---|---|---|
 | `checks.sh` | **要檢查什麼** | 不動 |
-| `Dockerfile` | **在什麼環境檢查**（JDK 25、Node 22、Gradle 本體） | 不動 |
+| `Dockerfile` | **在什麼環境檢查**（JDK 25、Node 22、Gradle 本體、Playwright 的 Chromium） | 不動 |
 | `run.sh` | 怎麼把程式碼放進容器、跑完怎麼拿回結果 | 不動 |
 | `.github/workflows/ci.yml` | **什麼時候、在哪台機器跑**，結果貼到哪 | 換成 `.gitlab-ci.yml`、`bitbucket-pipelines.yml`、`Jenkinsfile` |
 
