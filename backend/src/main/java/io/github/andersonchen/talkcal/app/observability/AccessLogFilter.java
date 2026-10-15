@@ -6,7 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.servlet.filter.OrderedFilter;
+import org.springframework.boot.security.autoconfigure.web.servlet.SecurityFilterProperties;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -32,17 +32,17 @@ import java.util.concurrent.TimeUnit;
  * 在 Loki 查一筆就看得完整，不必再拿時間去對另一行 log。
  */
 @Component
-// 排序照 Spring Boot 官方文件對「會包裝 request 的 filter」的規定：order 不可大於 REQUEST_WRAPPER_FILTER_MAX_ORDER（0），
-// 我們用 ContentCachingRequestWrapper 包了 request，所以就站在這條線上。這個位置同時滿足另外兩件事：
-// - 在 characterEncodingFilter（HIGHEST_PRECEDENCE）裡面：官方也明講會讀 body 的 filter 別放在 HIGHEST_PRECEDENCE，
-//   會跟編碼設定打架。
-// - 在 Spring 開 trace 的 ServerHttpObservationFilter 裡面：它排在最外層附近，trace id 只在它的範圍內放進 MDC。
-//   排在它外面的話，這行 access log 印出來時 trace 已經結束，ECS JSON 裡就沒有 traceId，
+// 排序：緊貼在 Spring Security 外面（它是 SecurityFilterProperties.DEFAULT_FILTER_ORDER = -100，這裡是 -101）。
+// - 在 Spring Security 外面：被它擋下的請求（沒登入 401、沒帶 CSRF token 403）也要留下紀錄 ——
+//   有人在暴力試密碼、或拿別人的 cookie 亂打，最需要被看到。排在它裡面的話，這些請求在 log 裡完全隱形
+//   （#103 加上 Spring Security 時 AccessLogTraceIdTest 就是這樣失敗的：沒帶 CSRF 的 POST 被擋下，一行 log 都沒有）
+// - 在 Spring 開 trace 的 ServerHttpObservationFilter 裡面：它排在最外層附近（HIGHEST_PRECEDENCE + 1），
+//   trace id 只在它的範圍內放進 MDC。排在它外面的話，這行 access log 印出來時 trace 已經結束，ECS JSON 裡就沒有 traceId，
 //   Loki 上那顆「到 Tempo 看這個請求」的按鈕也就不會出現。AccessLogTraceIdTest 守著這件事。
-// 不寫成 HIGHEST_PRECEDENCE + 2 這種「緊貼在它後面」的數字：那得知道 Spring 把它排在 +1，Spring 一改就悄悄失效。
-// 代價：耗時少算了 formContentFilter、requestContextFilter 這兩層（微秒級），跟 http.server.requests 指標差距可忽略。
-// 之後加了 Spring Security（-100）要重新想：它會排在這裡外面，被它擋下的 401 就不會出現在 access log。
-@Order(OrderedFilter.REQUEST_WRAPPER_FILTER_MAX_ORDER)
+// - 在 characterEncodingFilter（HIGHEST_PRECEDENCE）裡面：官方文件說會讀 body 的 filter 別放在 HIGHEST_PRECEDENCE，會跟編碼設定打架。
+// - 會包裝 request 的 filter，官方規定 order 不可大於 REQUEST_WRAPPER_FILTER_MAX_ORDER（0）：-101 在這條線以內。
+// 用常數算、不寫死 -101：Spring Security 的位置改了，這裡跟著動。
+@Order(SecurityFilterProperties.DEFAULT_FILTER_ORDER - 1)
 final class AccessLogFilter extends OncePerRequestFilter {
 
     // logger 名字固定成 "access"，不用類別全名：查詢時好篩（Loki 裡 log_logger="access"），
@@ -52,6 +52,9 @@ final class AccessLogFilter extends OncePerRequestFilter {
     // body 最多記這麼多 byte。使用者的話是一兩句、助理的回覆是幾段文字加幾張提議卡片，8 KB 綽綽有餘；
     // 設上限是怕一大包進出時，log 一行就爆掉。超過的部分照樣傳遞，只是不記。
     private static final int MAX_BODY_BYTES = 8 * 1024;
+
+    // 這個路徑底下的請求內容不記：註冊、登入會帶著密碼
+    private static final String CREDENTIAL_PATHS = "/api/auth/";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
@@ -71,7 +74,11 @@ final class AccessLogFilter extends OncePerRequestFilter {
             // 寫在 finally：就算後面丟出例外，這個請求也要留下紀錄——出事的請求最需要被看到
             long elapsedNanos = System.nanoTime() - start;
             long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(elapsedNanos);
-            String requestBody = bodyOf(cachingRequest.getContentType(), cachingRequest.getContentAsByteArray());
+            // 註冊、登入的請求裡有密碼（JSON 或表單），一律不記：log 會被 Alloy 收進 Loki，
+            // 寫進去就等於明碼存在另一個地方、看 log 的人都看得到。回應照記（裡面沒有密碼）
+            String requestBody = request.getRequestURI().startsWith(CREDENTIAL_PATHS)
+                    ? "（不記：可能有密碼）"
+                    : bodyOf(cachingRequest.getContentType(), cachingRequest.getContentAsByteArray());
             // 先取內容再 copy：copyBodyToResponse() 送出之後會把攔下的 buffer 清掉
             String responseBody = bodyOf(cachingResponse.getContentType(), cachingResponse.getContentAsByteArray());
             int status = cachingResponse.getStatus();
