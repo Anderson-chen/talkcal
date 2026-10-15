@@ -25,6 +25,30 @@ npm run dev      # http://localhost:5173，/api 轉給 bootRun 的 8090（設 EA
 npm run build    # 先 vue-tsc 型別檢查，再輸出 dist/
 ```
 
+## 測試
+
+都在 `web/` 裡跑，**用 `npm run`、不要用 `npx`**：在別的資料夾打 `npx vitest`，npx 找不到這裡裝的版本，會悄悄從網路下載另一版來跑（實際踩過兩次）。
+
+```
+npm test            # Vitest：純函式（src/**/*.test.ts），不到 1 秒
+npm run test:watch  # 同上，存檔就重跑
+npm run e2e         # Playwright：真的 Chromium，桌面、手機兩種版面（e2e/）
+npm run e2e:ui      # 同上，開視窗一步一步看每個動作前後的畫面、網路請求
+```
+
+| | Vitest | Playwright |
+|---|---|---|
+| 測什麼 | 純函式：規則、運算 | 元件和整頁：接線、畫面、桌面和手機版 |
+| 檔名 | `src/**/*.test.ts` | `e2e/*.desktop.spec.ts`、`e2e/*.mobile.spec.ts` |
+| 瀏覽器 | 不需要 | 真的 Chromium（第一次要 `npx playwright install chromium`） |
+| API | 不碰 | `e2e/fakeApi.ts` 用 `page.route` 攔下來回假資料，不需要後端 |
+
+- **沒有模擬 DOM 的元件測試**：元件裡的規則先抽成純函式（例如 `src/calendar/eventDraft.ts`）用 Vitest 測透，元件只剩畫面和接線，交給 Playwright 在真的瀏覽器裡看。
+- **找元素用使用者看得到的東西**：role、label、按鈕上的字，不用 CSS class。名字撞到時用範圍限定（在某一塊裡找），不用 `.first()`、`.last()` —— 那是靠順序，版面一改就點錯而且不會報錯。
+- **寫 E2E 之前先打開頁面看**：只看原始碼會猜錯畫面上實際有什麼（手機版有兩個同名的「新增行程」）。
+- **時間固定在 2026-10-06 11:30**（`page.clock`）：行事曆到處用到「今天」。
+- 版本都釘死（`--save-exact`），挑發布超過兩週的版本。CI 映像檔裡的 Chromium 版本從 `package.json` 讀（`ci/Dockerfile`）。
+
 部署：在 `backend/` 裡 `./gradlew deployWeb`，開 http://localhost:18080。
 映像檔是 `Dockerfile` 兩段式（Node build → nginx），nginx 的設定在 `nginx.conf`。
 
