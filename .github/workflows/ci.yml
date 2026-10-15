@@ -55,7 +55,9 @@ jobs:
         if: failure()
         with:
           name: test-reports
-          path: ci/build/reports/
+          path: |
+            ci/build/reports/
+            ci/build/playwright-report/
 
   # 祕密掃描。跟 checks 分開成兩個 job：並行跑，而且在 PR 上各自一個燈，一眼看出是哪一關紅
   secrets:

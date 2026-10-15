@@ -41,7 +41,7 @@ fi
 echo "── 準備 CI 映像檔 ──"
 # build context 也從那個 commit 取：只要 Dockerfile 和 Gradle wrapper 那幾個檔案，不送整個資料夾給 Docker。
 # 這幾個檔案沒變時整個映像檔直接用快取，幾秒就好；升級 Gradle 後的第一次才會重新下載 Gradle 本體
-git archive "$commit" ci/Dockerfile backend/gradlew backend/gradle/wrapper \
+git archive "$commit" ci/Dockerfile backend/gradlew backend/gradle/wrapper web/package.json \
     | docker build --quiet --tag "$image" --file ci/Dockerfile - >/dev/null
 
 # 不管成功、失敗、中途 Ctrl+C，容器都要刪掉
@@ -76,6 +76,8 @@ mkdir -p "$out"
 docker cp "$container:/work/ci/build/summary.md" "$out/summary.md" >/dev/null 2>&1 || true
 docker cp "$container:/work/backend/build/reports" "$out/reports" >/dev/null 2>&1 || true
 docker cp "$container:/work/backend/build/eval" "$out/eval" >/dev/null 2>&1 || true
+# 前端 E2E 失敗時的 HTML 報告（每一步的截圖、trace）：npx playwright show-report ci/build/playwright-report
+docker cp "$container:/work/web/playwright-report" "$out/playwright-report" >/dev/null 2>&1 || true
 
 if [ $status -eq 0 ]; then
     echo "── CI 通過 ──"
