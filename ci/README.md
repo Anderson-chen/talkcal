@@ -121,7 +121,7 @@ ci/vulns.sh talkcal/app:local talkcal/web:local postgres:18.6-alpine
 
 ## 刻意不做的
 
-- **AI eval（`./gradlew eval`）**：28 題打真模型要一分多鐘，GitHub 上又沒有模型；改 prompt、換模型時手動跑。見 [ready.md](../docs/production-readiness/ready.md#ai-eval)。
+- **GitHub 上跑 AI eval（`./gradlew eval`）**：沒有模型。本機的 pre-push 改到 prompt 或模型相關的檔案時才跑（`RUN_EVAL=1`），GitHub 上只確定它編得過。見 [ready.md](../docs/production-readiness/ready.md#ai-eval)。
 - **k6 壓測**：要真模型，CI 量不出有意義的數字。見 [perf/README.md](../perf/README.md)。
 - **GitHub 上的依賴快取**：每次都是新機器、重新下載，比較慢。先求跟本機一致，嫌慢再把 `/cache` 接上 `actions/cache`。
 - **自架 runner 讓 GitHub 也跑模型測試**：公開 repo 接自架 runner，別人的 PR 會在這台電腦上執行程式碼；

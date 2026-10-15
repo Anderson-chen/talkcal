@@ -48,7 +48,9 @@
 | 報告 | `build/eval/report.md`：各分類通過率、退化了哪幾題、沒過時模型實際回了什麼 |
 | 換模型 | 給 `SPRING_AI_OPENAI_CHAT_BASEURL`、`SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL`、`SPRING_AI_OPENAI_APIKEY` 就評別的模型，各有各的基準線檔 |
 
-不放進 pre-push：28 題要一分多鐘，而且模型相關的整合測試已經在 pre-push 裡。改 prompt、換模型時手動跑。
+什麼時候跑：[pre-push](../../.githooks/pre-push) 發現這次要推的 commit 改到 prompt 或模型相關的檔案（助理和工具、抽取、eval 的題目、`application*.properties`）時，自動在同一個 CI 容器裡多跑 eval；其他改動不跑（一題一題打真模型要一分多鐘）。
+分開成自己的 source set、不直接放進整合測試：整合測試是任何一題沒過就紅，eval 有基準線、允許已知失敗；而且 eval 要能換成 Bedrock 跑，那個每次都要付錢。
+GitHub 上不跑（沒有模型），只確定它編得過（`evalClasses`）。
 
 證據（qwen3-8b，2026-10-15）：
 - 第一次 27 / 28：唯一沒過的 `free-evening` 是**評分寫錯**（只認「19」，模型回「晚上 7 點到 10 點有空」是對的）。修評分後 28 / 28，設為基準線 —— 沒過的題目一定要人看回覆，評分本身也會錯
@@ -59,6 +61,7 @@
 - **每題只跑一次**：溫度 0 也不保證每次一樣（上面那次就是），一題偶爾過、偶爾不過分不出是退化還是運氣。要分得出來得每題跑多次算通過率
 - 程式裡的保護被模型自己的行為蓋過時，eval 量不到它（Amy 那次）。這種靠單元測試直接測那段程式
 - 只有 qwen3-8b 的基準線；雲端的 qwen3-32b（Bedrock）還沒跑，跑一次要付 token 費
+- pre-push 自動跑靠路徑判斷：prompt 搬到別的檔案、或 `--no-verify` 跳過，就不會跑
 
 <a id="auth"></a>
 ### 認證與授權 ❌
