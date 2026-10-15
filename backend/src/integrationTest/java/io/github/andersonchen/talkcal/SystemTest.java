@@ -72,10 +72,15 @@ class SystemTest {
     JdbcClient jdbc;
 
     @BeforeEach
-    void clean() {
+    void clean() throws Exception {
         jdbc.sql("DELETE FROM calendar_event").update();
         jdbc.sql("DELETE FROM calendar_assistant_message").update();
+        jdbc.sql("DELETE FROM account").update();
+        // /api 要登入才用得了（#103）：每一題先註冊、登入，之後的請求都帶著這個 session
+        user = new BrowserSession(port).signUpAndLogIn("system-test", "system-test-pass");
     }
+
+    private BrowserSession user;
 
     @Test
     @DisplayName("行程：新增 → 讀得到 → 刪掉 → 讀不到，再刪一次是 404")
@@ -164,23 +169,14 @@ class SystemTest {
     }
 
     private HttpResponse<String> post(String path, String json) throws Exception {
-        return send(request(path).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(json)));
+        return user.postJson(path, json);
     }
 
     private HttpResponse<String> get(String path) throws Exception {
-        return send(request(path).GET());
+        return user.get(path);
     }
 
     private HttpResponse<String> delete(String path) throws Exception {
-        return send(request(path).DELETE());
-    }
-
-    // 助理那一題會等模型（thinking 加工具呼叫），給到跟 app 呼叫模型一樣的兩分鐘
-    private HttpRequest.Builder request(String path) {
-        return HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).timeout(Duration.ofMinutes(2));
-    }
-
-    private static HttpResponse<String> send(HttpRequest.Builder request) throws Exception {
-        return HTTP.send(request.build(), HttpResponse.BodyHandlers.ofString());
+        return user.delete(path);
     }
 }

@@ -1,5 +1,8 @@
 package io.github.andersonchen.talkcal.calendar.adapter.in.web;
 
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -27,6 +30,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -41,7 +46,21 @@ class CalendarAssistantControllerTest {
     private static final String UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
     @Autowired
+    WebApplicationContext context;
+
     MockMvc mockMvc;
+
+    /**
+     * 這裡測的是 controller 本身（路由、JSON、狀態碼），不是認證：每個請求預設都是「已經登入、帶著 CSRF token」。
+     * 沒登入回 401、沒帶 CSRF 回 403 這些規則，在 SecurityTest 對真的 SecurityFilterChain 測。
+     */
+    @BeforeEach
+    void signedIn() {
+        mockMvc = MockMvcBuilders.webAppContextSetup(context)
+                .apply(springSecurity())
+                .defaultRequest(get("/").with(user("3f1c8a2e-0000-4000-8000-000000000001")).with(csrf()))
+                .build();
+    }
 
     @Autowired
     AtomicReference<RuntimeException> failure;
