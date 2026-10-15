@@ -28,7 +28,7 @@ public final class RegisterAccountService implements RegisterAccountUseCase {
         Username name = Username.of(username);
         Account.checkNewPassword(password);
 
-        Account account = new Account(AccountId.newId(), name, hashPasswordPort.hash(password));
+        Account account = Account.withPassword(AccountId.newId(), name, hashPasswordPort.hash(password));
         if (!saveAccountPort.saveIfUsernameFree(account)) {
             throw new UsernameTakenException(name);
         }
