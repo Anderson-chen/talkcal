@@ -5,7 +5,7 @@
 #
 # 為什麼要 Pages：GitHub 在 repo 裡點開 .html 只會顯示原始碼，要能互動得有地方把它當網頁送出去。
 #
-# 改了 infra/ 或 deploy/ 要不要重新發佈：不用。這頁不讀那些檔案，行號是寫死在 index.html 裡的，
+# 改了 infra/、deploy/、ops/、web/nginx.conf 要不要重新發佈：不用。這頁不讀那些檔案，行號是寫死在 index.html 裡的，
 # 有變就改 index.html（規則寫在 CLAUDE.md），改了它這裡才會跑。
 
 name: Pages
