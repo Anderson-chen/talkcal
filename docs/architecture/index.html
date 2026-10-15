@@ -255,15 +255,30 @@ function draw(){
   h+=`<div class="cmp"><div><b>業界常見做法 <span class="badge ${c[1]}">${c[0]}</span></b>${r.ind}${r.fix?`<div style="margin-top:6px;color:var(--text-warning)">更正：${r.fix}</div>`:""}</div><div><b>什麼時候該換</b>${r.when}</div></div>${r.src.length?`<div class="src">來源：${r.src.map(s=>`<a href="${S[s][1]}" target="_blank" rel="noopener">${S[s][0]}</a>`).join("　")}</div>`:""}`;
   $("panel").innerHTML=h;
   document.querySelectorAll("tr.row").forEach(tr=>tr.onclick=e=>{if(e.target.closest("a"))return;const k=F[file][+tr.dataset.i][2];if(!k)return;sel=k;if(!inView(k,view))view=inView(k,"aws")?"aws":"ec2";draw()});
-  document.querySelectorAll(".pick").forEach(a=>a.onclick=()=>{file=a.dataset.f;$("file").value=file;draw()});
+  document.querySelectorAll(".pick").forEach(a=>a.onclick=()=>{setFile(a.dataset.f);draw()});
 }
-$("file").onchange=()=>{file=$("file").value;if(file){const hs=F[file].map(r=>r[2]).filter(Boolean);if(hs.length&&!hs.some(k=>inView(k,view)))view=view==="aws"?"ec2":"aws"}draw()};
+// 檔案表和元件說明要講同一件事：選中的元件一定在篩選的檔案裡，不在就取消篩選
+const inFile=(f,k)=>F[f].some(r=>r[2]===k);
+function pick(k){sel=k;if(file&&!inFile(file,k)){file="";$("file").value=""}}
+function setFile(f){
+  file=f;$("file").value=f;if(!f)return;
+  const hs=F[f].map(r=>r[2]).filter(Boolean);
+  if(hs.length&&!hs.includes(sel))sel=hs.find(k=>inView(k,view))||hs[0];
+  if(!inView(sel,view))view=inView(sel,"aws")?"aws":"ec2";
+}
+// 切換圖層時，優先留在篩選檔案裡、這一層看得到的元件
+function switchView(v,fallback){
+  view=v;if(inView(sel,v))return;
+  const h=file&&F[file].map(r=>r[2]).find(k=>k&&inView(k,v));
+  h?sel=h:pick(fallback);
+}
+$("file").onchange=()=>{setFile($("file").value);draw()};
 document.querySelectorAll(".nd").forEach(g=>{
-  g.addEventListener("click",e=>{e.stopPropagation();sel=g.dataset.k;draw()});
-  g.addEventListener("dblclick",e=>{e.stopPropagation();if(g.dataset.k==="ec2"&&view==="aws"){view="ec2";sel="caddy";draw()}});
+  g.addEventListener("click",e=>{e.stopPropagation();pick(g.dataset.k);draw()});
+  g.addEventListener("dblclick",e=>{e.stopPropagation();if(g.dataset.k==="ec2"&&view==="aws"){view="ec2";pick("caddy");draw()}});
 });
-$("v-aws").onclick=()=>{view="aws";if(!inView(sel,"aws"))sel="ec2";draw()};
-$("v-ec2").onclick=()=>{view="ec2";if(!inView(sel,"ec2"))sel="caddy";draw()};
+$("v-aws").onclick=()=>{switchView("aws","ec2");draw()};
+$("v-ec2").onclick=()=>{switchView("ec2","caddy");draw()};
 function setMode(m){mode=m;$("b-bedrock").classList.toggle("on",m==="bedrock");$("b-gpu").classList.toggle("on",m==="gpu");draw()}
 $("b-bedrock").onclick=()=>setMode("bedrock");$("b-gpu").onclick=()=>setMode("gpu");
 draw();
