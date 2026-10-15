@@ -1,0 +1,44 @@
+# 把 docs/architecture/ 發佈成 GitHub Pages：https://anderson-chen.github.io/talkcal/
+#
+# 為什麼只發佈這個資料夾、不用「從 master 的 docs/ 發佈」：docs/ 裡還有上線準備清單、事後檢討這些
+# 給自己看的文件，用資料夾模式會全部變成公開網站。這裡只上傳互動架構圖那一頁。
+#
+# 為什麼要 Pages：GitHub 在 repo 裡點開 .html 只會顯示原始碼，要能互動得有地方把它當網頁送出去。
+#
+# 改了 infra/ 或 deploy/ 要不要重新發佈：不用。這頁不讀那些檔案，行號是寫死在 index.html 裡的，
+# 有變就改 index.html（規則寫在 CLAUDE.md），改了它這裡才會跑。
+
+name: Pages
+
+on:
+  push:
+    branches: [master]
+    paths: ['docs/architecture/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+# deploy-pages 要的權限：寫 Pages、用 OIDC 證明「這次部署來自這個 repo 的這個 workflow」
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一時間只留一個部署；新的進來不取消正在跑的，避免發佈到一半被切斷
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/architecture
+      - id: deploy
+        uses: actions/deploy-pages@v5

@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>talkcal 架構圖</title>
+<meta name="description" content="talkcal AWS 階段一的互動架構圖：每個元件由哪個檔案、哪幾行決定，為什麼這樣選，業界怎麼做。">
+<!--
+  維護規則（也寫在專案 CLAUDE.md）：改到 infra/ 或 deploy/ 時，檢查這份圖的
+  元件（R）、檔案行號（F）、依賴、參數值還對不對，跟程式碼放同一個 PR，並更新 #checked 的日期。
+  行號以 master 為準；連結會開到 GitHub 上那幾行。
+-->
+<style>
+:root{
+  --bg:#ffffff;--surface-1:#f5f4ef;--text-primary:#1f1e1d;--text-secondary:#5f5e5a;--text-muted:#888780;
+  --border:rgba(0,0,0,.12);--border-strong:rgba(0,0,0,.22);--border-stronger:rgba(0,0,0,.38);
+  --bg-accent:#E6F1FB;--border-accent:#185FA5;--text-accent:#0C447C;
+  --bg-warning:#FAEEDA;--border-warning:#BA7517;--text-warning:#633806;
+  --bg-success:#EAF3DE;--border-success:#3B6D11;--text-success:#27500A;
+  --radius:8px;--font-sans:system-ui,-apple-system,"Segoe UI","Noto Sans TC","Microsoft JhengHei",sans-serif;
+  --font-mono:ui-monospace,"Cascadia Code",Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#1f1e1d;--surface-1:#2c2c2a;--text-primary:#f1efe8;--text-secondary:#b4b2a9;--text-muted:#888780;
+  --border:rgba(255,255,255,.12);--border-strong:rgba(255,255,255,.24);--border-stronger:rgba(255,255,255,.4);
+  --bg-accent:#0C447C;--border-accent:#85B7EB;--text-accent:#B5D4F4;
+  --bg-warning:#633806;--border-warning:#EF9F27;--text-warning:#FAC775;
+  --bg-success:#27500A;--border-success:#97C459;--text-success:#C0DD97;
+}}
+*{box-sizing:border-box}
+body{margin:0 auto;max-width:780px;padding:24px 16px 48px;background:var(--bg);color:var(--text-primary);font:15px/1.7 var(--font-sans)}
+h1{font-size:22px;font-weight:500;margin:0 0 4px}
+header p{margin:0 0 4px;color:var(--text-secondary);font-size:14px}
+a{color:var(--text-accent)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+svg text{font-family:var(--font-sans)}
+.t{font-size:14px;fill:var(--text-primary)}.ts{font-size:12px;fill:var(--text-secondary)}.th{font-size:14px;font-weight:500;fill:var(--text-primary)}
+.box{fill:var(--surface-1);stroke:var(--border-strong)}
+.arr{stroke:var(--text-secondary);stroke-width:1.2;fill:none}
+.nd{cursor:pointer}.nd rect.b{fill:var(--surface-1);stroke:var(--border-strong);stroke-width:.5}
+.nd rect.c{fill:transparent;stroke:var(--border-stronger);stroke-width:.6}
+.nd.sel rect{stroke:var(--border-accent);stroke-width:2}.nd.sel rect.b{fill:var(--bg-accent)}.nd.sel text{fill:var(--text-accent)}
+.nd.dep rect{stroke:var(--border-warning);stroke-width:1.5}.nd.dep rect.b{fill:var(--bg-warning)}.nd.dep text{fill:var(--text-warning)}
+.nd.use rect{stroke:var(--border-success);stroke-width:1.5}.nd.use rect.b{fill:var(--bg-success)}.nd.use text{fill:var(--text-success)}
+.nd.off{opacity:.3}
+.ring{fill:none;stroke:var(--text-primary);stroke-width:1.6;stroke-dasharray:5 3;pointer-events:none}
+.seg{display:inline-flex}.seg button{font:13px var(--font-sans);padding:4px 12px;border:0.5px solid var(--border-strong);background:var(--surface-1);color:var(--text-secondary);cursor:pointer}
+.seg button:first-child{border-radius:var(--radius) 0 0 var(--radius)}.seg button:last-child{border-radius:0 var(--radius) var(--radius) 0}
+.seg button.on{background:var(--bg-accent);color:var(--text-accent);border-color:var(--border-accent)}
+select{font:13px var(--font-sans);padding:5px 8px;border-radius:var(--radius);border:0.5px solid var(--border-strong);background:var(--surface-1);color:var(--text-primary);max-width:100%}
+.legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 14px;font-size:12px;color:var(--text-secondary);border:0.5px solid var(--border);border-radius:12px;padding:10px 12px;margin:16px 0 10px}
+.legend div{display:flex;gap:8px;align-items:flex-start;line-height:1.5}.legend b{font-weight:500;color:var(--text-primary)}
+.sw{flex:none;width:22px;height:14px;border-radius:3px;margin-top:2px}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 10px;font-size:13px;color:var(--text-secondary)}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;vertical-align:top;padding:6px 8px;border-top:0.5px solid var(--border)}th{font-weight:500;color:var(--text-secondary)}code{font:12px var(--font-mono)}
+tr.row{cursor:pointer}tr.row:hover td{background:var(--surface-1)}tr.row.on td{background:var(--bg-accent)}
+.pill{font-size:12px;padding:1px 8px;border-radius:999px;background:var(--surface-1);border:0.5px solid var(--border-strong)}.pill.none{color:var(--text-muted);border-color:var(--border)}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.cmp>div{border:0.5px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;line-height:1.6}.cmp b{display:block;font-weight:500;font-size:12px;color:var(--text-secondary);margin-bottom:2px}
+.badge{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;margin-left:6px}.ok{background:var(--bg-success);color:var(--text-success)}.fix{background:var(--bg-warning);color:var(--text-warning)}.na{color:var(--text-secondary);border:0.5px solid var(--border)}
+.src{font-size:12px;color:var(--text-secondary);margin-top:8px;line-height:1.8}
+.h{font-size:12px;font-weight:500;color:var(--text-secondary);margin:14px 0 4px}
+.flist{font-size:13px;line-height:1.9}.flist .pick{cursor:pointer;color:var(--text-accent);text-decoration:underline;background:none;border:0;padding:0;font:inherit}
+#panel{border:0.5px solid var(--border-strong);border-radius:12px;padding:12px 14px;margin-top:8px}
+@media (max-width:560px){.cmp{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+<h1>talkcal 架構圖（AWS 階段一）</h1>
+<p>每個元件由哪個檔案、哪幾行決定，為什麼這樣選，業界怎麼做。點方塊看細節，或從「檔案」反查它畫在哪裡；行號會開到 GitHub 上那幾行。</p>
+<p id="checked">最後核對：2026-10-15（行號以 master 為準；業界說法於同日查證，來源附在每個元件下）</p>
+<p><a href="https://github.com/Anderson-chen/talkcal">原始碼</a> · <a href="https://github.com/Anderson-chen/talkcal/blob/master/infra/envs/1-ec2/README.md">階段一說明</a></p>
+</header>
+<h2 class="sr-only">互動架構圖：點元件看參數、依賴、所有相關檔案與行號、業界對比與查證來源；選檔案時以虛線外框標出它定義的元件</h2>
+<div class="legend">
+<div><span class="sw" style="background:var(--bg-accent);border:2px solid var(--border-accent)"></span><span><b>藍底</b>：你選中的元件</span></div>
+<div><span class="sw" style="background:var(--bg-warning);border:1.5px solid var(--border-warning)"></span><span><b>橘底</b>：選中元件用到的（它依賴誰）</span></div>
+<div><span class="sw" style="background:var(--bg-success);border:1.5px solid var(--border-success)"></span><span><b>綠底</b>：用到選中元件的（誰依賴它）</span></div>
+<div><span class="sw" style="border:1.6px dashed var(--text-primary)"></span><span><b>虛線外框</b>：上方選的檔案有定義或影響的元件</span></div>
+<div><span class="sw" style="background:var(--surface-1);border:0.5px solid var(--border-strong);opacity:.3"></span><span><b>半透明</b>：目前 model_backend 下不建 / 不啟動</span></div>
+<div><span class="sw" style="background:var(--surface-1);border:0.5px solid var(--border-strong)"></span><span>一般：跟選中元件沒有直接依賴</span></div>
+</div>
+<div class="bar">
+<span class="seg"><button id="v-aws" class="on">AWS 層</button><button id="v-ec2">EC2 內部</button></span>
+<span>model_backend</span><span class="seg"><button id="b-bedrock" class="on">bedrock</button><button id="b-gpu">gpu</button></span>
+<span>檔案</span><select id="file"></select><span id="other"></span>
+</div>
+<svg id="svg-aws" width="100%" viewBox="0 0 680 672" role="img"><title>AWS 層</title><desc>本機 Terraform、東京區域 VPC 與 EC2、區域服務、帳號層級 IAM 與 Budgets</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="20" y="20" width="420" height="78" rx="12" fill="none" stroke="var(--border-strong)" stroke-width="0.5" stroke-dasharray="5 4"/>
+<text class="ts" x="34" y="38">你的電腦（terraform apply）</text>
+<g class="nd" data-k="provider"><rect class="b" x="36" y="50" width="120" height="36" rx="6"/><text class="t" x="96" y="68" text-anchor="middle" dominant-baseline="central">provider</text></g>
+<g class="nd" data-k="backend"><rect class="b" x="166" y="50" width="120" height="36" rx="6"/><text class="t" x="226" y="68" text-anchor="middle" dominant-baseline="central">backend</text></g>
+<g class="nd" data-k="pwd"><rect class="b" x="296" y="50" width="128" height="36" rx="6"/><text class="t" x="360" y="68" text-anchor="middle" dominant-baseline="central">random_password</text></g>
+<g><rect class="box" x="480" y="40" width="160" height="40" rx="8" stroke-width="0.5"/><text class="th" x="560" y="60" text-anchor="middle" dominant-baseline="central">使用者瀏覽器</text></g>
+<g class="nd" data-k="region"><rect class="c" x="20" y="118" width="640" height="416" rx="18" stroke-dasharray="6 4"/><text class="th" x="34" y="138">region 東京</text></g>
+<g class="nd" data-k="vpc"><rect class="c" x="36" y="148" width="388" height="372" rx="14"/><text class="th" x="50" y="168">VPC 10.0.0.0/16</text></g>
+<g class="nd" data-k="igw"><rect class="b" x="170" y="178" width="160" height="36" rx="6"/><text class="t" x="250" y="196" text-anchor="middle" dominant-baseline="central">Internet Gateway</text></g>
+<g class="nd" data-k="az"><rect class="c" x="52" y="232" width="356" height="272" rx="12" stroke-dasharray="4 4"/><text class="ts" x="66" y="250">AZ（data 查詢）</text></g>
+<g class="nd" data-k="subnet"><rect class="c" x="66" y="262" width="328" height="228" rx="10"/><text class="th" x="80" y="284">公有子網 /24</text></g>
+<g class="nd" data-k="rt"><rect class="b" x="276" y="270" width="106" height="30" rx="6"/><text class="t" x="329" y="285" text-anchor="middle" dominant-baseline="central">路由表</text></g>
+<g class="nd" data-k="sg"><rect class="c" x="82" y="316" width="296" height="158" rx="8" stroke-dasharray="5 3"/><text class="th" x="96" y="336">Security group</text></g>
+<g class="nd" data-k="eip"><rect class="b" x="264" y="344" width="100" height="28" rx="6"/><text class="t" x="314" y="358" text-anchor="middle" dominant-baseline="central">Elastic IP</text></g>
+<g class="nd" data-k="ec2"><rect class="b" x="110" y="392" width="250" height="60" rx="8"/><text class="th" x="235" y="412" text-anchor="middle" dominant-baseline="central">EC2 instance</text><text class="ts" x="235" y="432" text-anchor="middle" dominant-baseline="central">點兩下展開內部</text></g>
+<g class="nd" data-k="ami"><rect class="b" x="440" y="148" width="204" height="40" rx="6"/><text class="t" x="542" y="168" text-anchor="middle" dominant-baseline="central">SSM 公開參數（AMI）</text></g>
+<g class="nd" data-k="dotenv"><rect class="b" x="440" y="198" width="204" height="40" rx="6"/><text class="t" x="542" y="218" text-anchor="middle" dominant-baseline="central">SSM 參數 .env</text></g>
+<g class="nd" data-k="bsvc"><rect class="b" x="440" y="248" width="204" height="40" rx="6"/><text class="t" x="542" y="268" text-anchor="middle" dominant-baseline="central">Bedrock 端點</text></g>
+<g class="nd" data-k="s3m"><rect class="b" x="440" y="298" width="204" height="40" rx="6"/><text class="t" x="542" y="318" text-anchor="middle" dominant-baseline="central">S3 模型 bucket</text></g>
+<g class="nd" data-k="tfstate"><rect class="b" x="440" y="470" width="204" height="40" rx="6"/><text class="t" x="542" y="490" text-anchor="middle" dominant-baseline="central">S3 tfstate（bootstrap）</text></g>
+<rect x="20" y="554" width="640" height="98" rx="14" fill="none" stroke="var(--border-strong)" stroke-width="0.5" stroke-dasharray="5 4"/>
+<text class="ts" x="34" y="574">帳號層級（IAM、Budgets 不分區域）</text>
+<g class="nd" data-k="role"><rect class="b" x="36" y="590" width="112" height="40" rx="6"/><text class="t" x="92" y="610" text-anchor="middle" dominant-baseline="central">IAM role</text></g>
+<g class="nd" data-k="profile"><rect class="b" x="158" y="590" width="112" height="40" rx="6"/><text class="t" x="214" y="610" text-anchor="middle" dominant-baseline="central">Profile</text></g>
+<g class="nd" data-k="buser"><rect class="b" x="280" y="590" width="112" height="40" rx="6"/><text class="t" x="336" y="610" text-anchor="middle" dominant-baseline="central">Bedrock user</text></g>
+<g class="nd" data-k="bkey"><rect class="b" x="402" y="590" width="112" height="40" rx="6"/><text class="t" x="458" y="610" text-anchor="middle" dominant-baseline="central">API key</text></g>
+<g class="nd" data-k="budget"><rect class="b" x="524" y="590" width="112" height="40" rx="6"/><text class="t" x="580" y="610" text-anchor="middle" dominant-baseline="central">Budgets</text></g>
+<path d="M560 80 V106 H250 V176" class="arr" marker-end="url(#arrow)"/>
+<line x1="250" y1="214" x2="250" y2="390" class="arr" marker-end="url(#arrow)"/>
+<g stroke="var(--text-secondary)" stroke-width="0.7" stroke-dasharray="4 3" fill="none">
+<line x1="362" y1="404" x2="438" y2="172" marker-end="url(#arrow)"/>
+<line x1="362" y1="414" x2="438" y2="222" marker-end="url(#arrow)"/>
+<line x1="362" y1="424" x2="438" y2="272" marker-end="url(#arrow)"/>
+<line x1="362" y1="434" x2="438" y2="322" marker-end="url(#arrow)"/>
+<line x1="214" y1="588" x2="214" y2="454" marker-end="url(#arrow)"/>
+</g>
+</svg>
+<svg id="svg-ec2" width="100%" viewBox="0 0 680 470" role="img" style="display:none"><title>EC2 內部</title><desc>Caddy、nginx、app、postgres、觀測、模型容器</desc>
+<defs><marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<text class="ts" x="160" y="16" text-anchor="middle">從 SG 的 80 / 443 進來</text>
+<g class="nd" data-k="ec2"><rect class="c" x="20" y="30" width="480" height="420" rx="16"/><text class="th" x="36" y="52">EC2 instance（docker compose）</text></g>
+<g class="nd" data-k="caddy"><rect class="b" x="60" y="70" width="200" height="56" rx="8"/><text class="th" x="160" y="88" text-anchor="middle" dominant-baseline="central">Caddy</text><text class="ts" x="160" y="108" text-anchor="middle" dominant-baseline="central">TLS 終止 :80 / :443</text></g>
+<g class="nd" data-k="web"><rect class="b" x="60" y="160" width="200" height="56" rx="8"/><text class="th" x="160" y="178" text-anchor="middle" dominant-baseline="central">web（nginx）</text><text class="ts" x="160" y="198" text-anchor="middle" dominant-baseline="central">靜態檔、轉 /api</text></g>
+<g class="nd" data-k="app"><rect class="b" x="60" y="260" width="200" height="56" rx="8"/><text class="th" x="160" y="278" text-anchor="middle" dominant-baseline="central">app（Spring）</text><text class="ts" x="160" y="298" text-anchor="middle" dominant-baseline="central">mem_limit 2g</text></g>
+<g class="nd" data-k="postgres"><rect class="b" x="60" y="370" width="200" height="56" rx="8"/><text class="th" x="160" y="388" text-anchor="middle" dominant-baseline="central">postgres</text><text class="ts" x="160" y="408" text-anchor="middle" dominant-baseline="central">postgres-data volume</text></g>
+<g class="nd" data-k="obs"><rect class="b" x="296" y="70" width="184" height="146" rx="8"/><text class="th" x="388" y="100" text-anchor="middle" dominant-baseline="central">觀測（ops/）</text><text class="ts" x="388" y="126" text-anchor="middle" dominant-baseline="central">Alloy 收集</text><text class="ts" x="388" y="146" text-anchor="middle" dominant-baseline="central">Mimir / Loki / Tempo</text><text class="ts" x="388" y="166" text-anchor="middle" dominant-baseline="central">Grafana 127.0.0.1:3000</text></g>
+<g class="nd" data-k="llm"><rect class="b" x="296" y="260" width="184" height="56" rx="8"/><text class="th" x="388" y="278" text-anchor="middle" dominant-baseline="central">llm-chat</text><text class="ts" x="388" y="298" text-anchor="middle" dominant-baseline="central">llama-server（gpu）</text></g>
+<g class="nd" data-k="seed"><rect class="b" x="296" y="370" width="184" height="56" rx="8"/><text class="th" x="388" y="388" text-anchor="middle" dominant-baseline="central">model-seed</text><text class="ts" x="388" y="408" text-anchor="middle" dominant-baseline="central">跑完就結束（gpu）</text></g>
+<g class="nd" data-k="bsvc"><rect class="b" x="520" y="260" width="140" height="56" rx="8"/><text class="th" x="590" y="278" text-anchor="middle" dominant-baseline="central">Bedrock</text><text class="ts" x="590" y="298" text-anchor="middle" dominant-baseline="central">EC2 外面</text></g>
+<g class="nd" data-k="s3m"><rect class="b" x="520" y="370" width="140" height="56" rx="8"/><text class="th" x="590" y="388" text-anchor="middle" dominant-baseline="central">S3 模型</text><text class="ts" x="590" y="408" text-anchor="middle" dominant-baseline="central">deploy.sh sync</text></g>
+<line x1="160" y1="22" x2="160" y2="66" class="arr" marker-end="url(#arrow2)"/>
+<line x1="160" y1="126" x2="160" y2="156" class="arr" marker-end="url(#arrow2)"/>
+<line x1="160" y1="216" x2="160" y2="256" class="arr" marker-end="url(#arrow2)"/>
+<line x1="160" y1="316" x2="160" y2="366" class="arr" marker-end="url(#arrow2)"/>
+<line x1="262" y1="296" x2="292" y2="296" class="arr" marker-end="url(#arrow2)"/>
+<path d="M262 274 H280 V238 H590 V256" class="arr" marker-end="url(#arrow2)"/>
+<line x1="388" y1="368" x2="388" y2="320" class="arr" marker-end="url(#arrow2)"/>
+<line x1="518" y1="398" x2="484" y2="398" class="arr" marker-end="url(#arrow2)"/>
+</svg>
+<div id="panel"></div>
+<script>
+// ── 資料 ─────────────────────────────────────────────────────────────────────
+// R：圖上每一格。deps = 它用到誰（Terraform 參照、compose 的 depends_on 或讀 .env）。
+// F：每個檔案的每一段行號對應到哪一格（null = 不在圖上）。改程式碼時主要改這張表。
+// S：業界說法的查證來源。
+const REPO="https://github.com/Anderson-chen/talkcal/blob/master/";
+const S={tfs3:["Terraform S3 backend 文件","https://developer.hashicorp.com/terraform/language/backend/s3"],wo:["Terraform 1.11 write-only 參數","https://www.hashicorp.com/blog/terraform-1-11-ephemeral-values-managed-resources-write-only-arguments"],eph:["Ephemeral values 文件","https://developer.hashicorp.com/terraform/language/manage-sensitive-data/ephemeral"],hcp:["HCP Terraform 免費層公告","https://www.hashicorp.com/blog/continuing-hcp-terraform-s-enhanced-free-tier-experience"],tofu:["OpenTofu vs Terraform 2026","https://jorijn.com/en/blog/opentofu-vs-terraform-2026-the-fork-finally-diverged/"],oidc:["GitHub Actions OIDC for AWS","https://oneuptime.com/blog/post/2026-02-02-github-actions-oidc-aws/view"],ingx:["Kubernetes：Ingress NGINX 退役","https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/"],ingx2:["Kubernetes 2026-01 聲明","https://www.kubernetes.io/blog/2026/01/29/ingress-nginx-statement/"],lbc:["InfoQ：AWS LBC Gateway API GA","https://www.infoq.com/news/2026/03/aws-gateway-api-ga"],brk:["Bedrock API keys 文件","https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html"],pod:["EKS Pod Identity vs IRSA","https://hidekazu-konishi.com/entry/amazon_eks_pod_identity_and_irsa_decision_guide.html"],imds:["EC2 新機器的 IMDS 預設","https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-IMDS-new-instances.html"],imds2:["AWS Blog：IMDSv2 by default","https://aws.amazon.com/blogs/aws/amazon-ec2-instance-metadata-service-imdsv2-by-default/"],rds:["re:Post：RDS 密碼交給 Secrets Manager","https://www.repost.aws/articles/ARkjRajxCGTBKvyZS1iTghWA/secure-your-amazon-rds-aurora-admin-passwords-with-aws-secrets-manager"],mp:["EKS AI/ML 儲存最佳實務","https://docs.aws.amazon.com/eks/latest/best-practices/aiml-storage.html"],nat:["NAT Gateway 價格整理（第三方）","https://cloudburn.io/blog/aws-nat-gateway-pricing"],gwe:["re:Post：NAT vs VPC Endpoint","https://repost.aws/questions/QUmfyiKedjTd225PQS7MlHQQ/vpc-nat-gateway-vs-vpc-endpoint-pricing"],alb:["ALB 文件（至少兩個 AZ）","https://docs.aws.amazon.com/elasticloadbalancing/latest/application/application-load-balancers.html"],amg:["Amazon Managed Grafana / Prometheus","https://techoral.com/aws/aws-managed-grafana-prometheus.html"],sm:["Parameter Store vs Secrets Manager","https://barkingiguana.com/writing/choosing-between-parameter-store-and-secrets-manager/"],bud:["Budget Actions 自動控管","https://oneuptime.com/blog/post/2026-02-12-create-aws-budget-actions-automatic-cost-control/view"],cad:["AWS Cost Anomaly Detection","https://aws.amazon.com/aws-cost-management/aws-cost-anomaly-detection/"],cf:["CloudFront 多 origin 路由","https://advancedweb.hu/how-to-route-to-multiple-origins-with-cloudfront"],cf2:["CloudFront OAC 與 ALB 防繞過","https://barkingiguana.com/writing/stopping-people-bypassing-your-cdn/"],vllm:["vLLM 2026 quickstart","https://www.glukhov.org/post/2026/01/vllm-quickstart/"],pk:["EC2 Image Builder vs Packer","https://barkingiguana.com/writing/ec2-image-builder-vs-packer/"],caddy:["Caddy 版本紀錄","https://releasebot.io/updates/caddy"],le:["Let's Encrypt 重複憑證上限","https://letsencrypt.org/docs/duplicate-certificate-limit/"],ecs:["ECS vs EKS 小團隊成本","https://www.qovery.com/blog/ecs-vs-eks-cost-operational-overhead-team-of-ten"]};
+const R={
+provider:{n:"provider \"aws\"",d:"所有資源預設的區域、帳號、標籤。",deps:[],p:[["region","ap-northeast-1","台北沒有 G 系列"],["profile","DEV","本機 CLI 設定檔"],["default_tags","Project / Environment / ManagedBy","自動貼標"]],ind:"Terraform 與 OpenTofu 並存：HashiCorp 2025-02 被 IBM 併購、BSL 授權；OpenTofu 2025-04 進 CNCF、MPL 授權。CI 跑 apply 用 GitHub OIDC 換臨時憑證。",when:"apply 改由 CI 跑時。",chk:"ok",src:["tofu","oidc"]},
+backend:{n:"backend \"s3\"",d:"state 存哪、怎麼上鎖。",deps:["tfstate"],p:[["required_version",">= 1.10","use_lockfile 需要"],["key","1-ec2/terraform.tfstate","帶階段名"],["use_lockfile","true","S3 原生鎖"],["bucket","backend.hcl","帳號 ID 不進 repo"]],ind:"新專案用 use_lockfile，dynamodb_table 已標 deprecated。PR 審 plan：HCP Terraform（舊免費方案 2026-03-31 結束，新免費層 500 資源上限）、Atlantis、Digger 等。",when:"多人協作時。",chk:"ok",src:["tfs3","hcp"]},
+pwd:{n:"random_password.db",d:"Terraform 產生的值，只存在 state。",deps:[],p:[["length","32",""],["special","false","避開跳脫問題"]],ind:"Terraform 1.11 起有 write-only 參數（如 password_wo）＋ ephemeral，明碼不進 state；或 RDS 的 manage_master_user_password。",when:"要 state 裡完全沒秘密時。",chk:"ok",src:["wo","eph","rds"]},
+region:{n:"provider.region",d:"區域是 provider 的設定，不是資源。",deps:[],p:[["var.region","ap-northeast-1","台北 ap-east-2 沒有 G 系列"]],ind:"選近、服務齊全、合法規的區域。",when:"台北補上服務時。",chk:"na",src:[]},
+vpc:{n:"aws_vpc.main",d:"自家網路的圍牆。",deps:[],p:[["cidr_block","10.0.0.0/16",""],["enable_dns_support","true",""],["enable_dns_hostnames","true",""]],ind:"多用社群 module terraform-aws-modules/vpc。",when:"多 AZ 時。",chk:"na",src:[]},
+igw:{n:"aws_internet_gateway.main",d:"VPC 唯一對外的門。",deps:["vpc"],p:[["vpc_id","aws_vpc.main.id",""]],ind:"基本元件。",when:"—",chk:"na",src:[]},
+az:{n:"data.aws_ec2_instance_type_offerings.instance",d:"查這個機型在哪些 AZ 有。",deps:[],p:[["location_type","availability-zone",""],["sort()[0]","挑第一個","plan 穩定"]],ind:"多半寫死 2–3 個 AZ 或交給 ASG。",when:"多 AZ 時。",chk:"na",src:[]},
+subnet:{n:"aws_subnet.public",d:"機器住的巷子。",deps:["vpc","az"],p:[["cidr_block","cidrsubnet(…, 8, 0) = /24",""],["availability_zone","local.availability_zone",""],["map_public_ip_on_launch","true",""]],ind:"公有子網只放 ALB / NAT；ALB 至少兩個 AZ、每個子網至少 /27。",when:"加 ALB 時。",chk:"ok",src:["alb"]},
+rt:{n:"aws_route_table.public + association",d:"有 0.0.0.0/0 → IGW 才叫公有子網。",deps:["vpc","igw","subnet"],p:[["route","0.0.0.0/0 → IGW",""],["association","subnet ↔ route table",""]],ind:"私有子網走 NAT：東京約 $0.062/小時（約 $45/月，第三方整理）＋每 GB 費用；S3 Gateway Endpoint 免費。",when:"搬進私有子網時。",chk:"fix",fix:"NAT 不是二、三十美金，東京約 $45/月起。",src:["nat","gwe"]},
+sg:{n:"aws_security_group.app + rules",d:"有狀態防火牆，只放 Caddy。",deps:["vpc"],p:[["80/tcp","0.0.0.0/0","轉址＋HTTP-01"],["443/tcp、443/udp","0.0.0.0/0","HTTPS、HTTP/3"],["22/tcp","count = allow_ssh","預設不開"],["egress","全部",""]],ind:"ALB 的 SG 對外，app 的 SG 只收 ALB 的 SG；CloudFront 前置時 ALB 限 prefix list＋密鑰標頭。",when:"有 ALB 時。",chk:"ok",src:["cf2"]},
+eip:{n:"aws_eip.main + association",d:"固定公有 IP，網址從它算。",deps:[],p:[["domain","vpc",""],["association","拆開","開機前就算好網址"]],ind:"ALB＋Route 53 alias，機器 IP 不重要。",when:"有 ALB 或自有網域時。",chk:"na",src:[]},
+ec2:{n:"aws_instance.app",d:"唯一一台機器，跑整組 compose。",deps:["ami","subnet","sg","profile","dotenv","s3m"],p:[["instance_type",{bedrock:"m7i-flex.large",gpu:"g6.xlarge"},""],["root_volume_size",{bedrock:"30GB",gpu:"150GB"},""],["http_tokens","required","IMDSv2"],["hop_limit","1","容器碰不到 IMDS"],["user_data_replace_on_change","false","不重建"],["ignore_changes","[ami]",""]],ind:"IMDSv2 是基線；AWS 帳號層級預設的 hop limit 是 2（讓容器拿角色），talkcal 刻意設 1。小團隊跑容器多選 ECS Fargate。",when:"要水平擴展時。",chk:"ok",src:["imds","imds2","ecs"]},
+ami:{n:"data.aws_ssm_parameter.ubuntu / dlami",d:"查最新 AMI，不寫死。",deps:[],p:[["dlami","…/deeplearning/…/latest/ami-id","gpu"],["ubuntu","…/ubuntu/server/24.04/…","bedrock"]],ind:"golden AMI：只用 AWS 選 EC2 Image Builder，跨雲選 Packer。",when:"開機安裝太慢時。",chk:"ok",src:["pk"]},
+dotenv:{n:"aws_ssm_parameter.dotenv",d:"整份 .env 存成 SecureString。",deps:["eip","pwd","bkey"],p:[["site_address","talkcal.<IP>.sslip.io","Caddy 的網址"],["name","/talkcal/dotenv",""],["type","SecureString",""]],ind:"要輪替放 Secrets Manager（$0.40/個/月），不輪替放 Parameter Store（標準層免費）。",when:"需要輪替時。",chk:"ok",src:["sm"]},
+bsvc:{n:"Bedrock（mantle 端點）",only:"bedrock",d:"AWS 代管模型，不是 Terraform 建的。",deps:["bkey"],p:[["BEDROCK_BASE_URL","bedrock-mantle.ap-northeast-1.api.aws/v1",""],["BEDROCK_MODEL","qwen.qwen3-32b",""]],ind:"Mantle 提供 OpenAI 相容端點。AWS：長期 key 只建議探索用，正式環境用短期 key（≤12 小時）或 IAM 角色。",when:"上正式前（#72）。",chk:"fix",fix:"AWS 自己就把長期 key 定位為探索用途。",src:["brk"]},
+s3m:{n:"aws_s3_bucket.models",only:"gpu",d:"GGUF 模型來源。",deps:[],p:[["count","gpu 才建",""],["bucket","talkcal-models-<帳號ID>",""]],ind:"EKS 上可用 Mountpoint for S3 CSI driver 掛載。",when:"多台共用模型時。",chk:"ok",src:["mp"]},
+tfstate:{n:"aws_s3_bucket.tfstate（+ versioning / 加密 / 公開封鎖）",d:"所有階段的 state。",deps:[],p:[["bucket","talkcal-tfstate-<帳號ID>",""],["prevent_destroy","true",""],["versioning","Enabled",""],["sse_algorithm","AES256",""]],ind:"一樣；use_lockfile 需要對 .tflock 的 get / put / delete 權限。",when:"—",chk:"ok",src:["tfs3"]},
+role:{n:"aws_iam_role.ec2 + policies",d:"EC2 的身分。",deps:["dotenv","s3m"],p:[["assume_role","ec2.amazonaws.com",""],["SSM attachment","AmazonSSMManagedInstanceCore",""],["ReadDotenv","ssm:GetParameter",""],["ReadModels",{bedrock:"（無）",gpu:"s3:GetObject / ListBucket"},""]],ind:"一樣；上 EKS 時新的 EC2 節點叢集多用 Pod Identity，Fargate / Windows 用 IRSA。",when:"上容器平台時。",chk:"ok",src:["pod"]},
+profile:{n:"aws_iam_instance_profile.ec2",d:"把角色裝進 EC2。",deps:["role"],p:[["role","aws_iam_role.ec2.name",""]],ind:"一樣。",when:"—",chk:"na",src:[]},
+buser:{n:"aws_iam_user.bedrock + policy",only:"bedrock",d:"唯一憑證是 Bedrock key 的專用 user。",deps:[],p:[["CallWithBearerToken","LONG_TERM",""],["CreateInference","限東京",""]],ind:"與 AWS 文件一致：Mantle 有自己的 CallWithBearerToken 動作，可用 SHORT_TERM / LONG_TERM 條件鍵。",when:"改 SigV4 後刪。",chk:"ok",src:["brk"]},
+bkey:{n:"aws_iam_service_specific_credential.bedrock",only:"bedrock",d:"Bedrock API key。",deps:["buser"],p:[["service_name","bedrock.amazonaws.com",""],["credential_age_days","90",""]],ind:"可用 iam:ServiceSpecificCredentialAgeDays 強制上限。",when:"同上。",chk:"ok",src:["brk"]},
+budget:{n:"aws_budgets_budget.monthly",d:"花費保險絲。",deps:[],p:[["limit_amount","var.budget_limit_usd",""],["80% ACTUAL / 100% FORECASTED","寄信",""]],ind:"Budget Actions 能跑 SSM 停 EC2 / RDS；Anomaly Detection 只通知。",when:"要自動關機時。",chk:"ok",src:["bud","cad"]},
+caddy:{n:"services.caddy",d:"雲端才有的 HTTPS 入口。",deps:["web","dotenv","sg"],p:[["image","caddy:2.10.0-alpine",""],["ports","80、443、443/udp",""],["caddy-data:/data","憑證存 volume",""],["reverse_proxy","web:80",""]],ind:"ALB＋ACM；k8s 改用 Gateway API（AWS LBC 2026-03 GA）＋cert-manager。ingress-nginx 已於 2026-03 退役。Let's Encrypt 同組網域一週最多 5 張重複憑證。",when:"有 ALB 或上 EKS 時。",chk:"fix",fix:"不再建議 Ingress controller；Caddy 已到 2.11.x。",src:["lbc","ingx","ingx2","le","caddy"]},
+web:{n:"services.web（nginx）",d:"送靜態檔、轉 /api。",deps:["app"],p:[["ports","127.0.0.1:18080:80",""],["resolver","127.0.0.11 valid=10s",""],["proxy_read_timeout","180s",""]],ind:"CloudFront：預設行為指 S3（OAC），/api/* 指 ALB，同源免 CORS。",when:"要 CDN 時。",chk:"ok",src:["cf","cf2"]},
+app:{n:"services.app（Spring）",d:"talkcal 本體。",deps:["postgres","bsvc","llm"],p:[["mem_limit","2g",""],["SPRING_AI_OPENAI_*",{bedrock:"Bedrock",gpu:"llm-chat:8080"},""],["depends_on",{bedrock:"!override 只留 postgres",gpu:"llm-chat、postgres"},""],["stop_grace_period","2m30s",""]],ind:"ECS service / k8s Deployment，多副本、probe、ECR。",when:"要多副本時。",chk:"ok",src:["ecs"]},
+postgres:{n:"services.postgres",d:"行程與對話記憶。",deps:["dotenv"],p:[["image","postgres:18.6-alpine",""],["POSTGRES_PASSWORD","${DB_PASSWORD}",""],["密碼同步","ALTER ROLE",""]],ind:"RDS / Aurora；manage_master_user_password（replica、Blue/Green 不支援）。",when:"需要備份 SLA 時。",chk:"ok",src:["rds"]},
+llm:{n:"services.llm-chat",only:"gpu",d:"自己跑的 llama-server。",deps:["seed"],p:[["-ngl","99",""],["-c / -np","32768 / 200",""],["--kv-unified","開",""]],ind:"多人 API 多選 vLLM；llama.cpp 強在 GGUF 與單人延遲。",when:"GPU 配額下來時。",chk:"ok",src:["vllm"]},
+seed:{n:"services.model-seed",only:"gpu",d:"複製模型並驗 SHA256。",deps:["s3m"],p:[["sha256sum -c","驗證",""]],ind:"k8s initContainer 或 Mountpoint for S3。",when:"上 EKS 時。",chk:"ok",src:["mp"]},
+obs:{n:"ops/compose.yaml",d:"觀測堆疊。",deps:["app"],p:[["Alloy / Mimir / Loki / Tempo / Grafana","v1.11.0 / 3.2.1 / 3.3.0 / 3.1.0 / 11.4.0",""],["Grafana","127.0.0.1:3000","走 SSM tunnel"]],ind:"放在被觀測系統之外：Amazon Managed Prometheus / Grafana、Grafana Cloud、CloudWatch、Datadog。",when:"上正式環境時。",chk:"ok",src:["amg"]}
+};
+const F={
+"infra/bootstrap/main.tf":[["5–14","terraform 區塊（無 backend → 本機 state）",null],["16–26","bootstrap 自己的 provider（不是圖上那個）",null],["28","data aws_caller_identity（拼 bucket 名）","tfstate"],["32–38","aws_s3_bucket.tfstate","tfstate"],["40–46","versioning","tfstate"],["48–56","加密","tfstate"],["58–65","公開封鎖","tfstate"],["69–91","aws_budgets_budget.monthly","budget"]],
+"infra/bootstrap/variables.tf":[["1–5","region",null],["7–11","aws_profile",null],["13–20","budget_limit_usd","budget"],["24–27","alert_email","budget"]],
+"infra/bootstrap/outputs.tf":[["1–4","state_bucket（抄進 backend.hcl）","backend"]],
+"infra/envs/1-ec2/backend.tf":[["2","required_version","backend"],["9–12","backend \"s3\"","backend"],["14–24","required_providers","backend"]],
+"infra/envs/1-ec2/providers.tf":[["1–12","provider \"aws\"","provider"],["14","data aws_caller_identity（拼 bucket 名）","s3m"]],
+"infra/envs/1-ec2/variables.tf":[["1–8","region","region"],["10–14","aws_profile","provider"],["16–20","project","provider"],["22–37","model_backend（上方切換）",null],["39–49","instance_type","ec2"],["51–60","root_volume_size","ec2"],["62–69","bedrock_model","bsvc"],["71–79","bedrock_key_days","bkey"],["81–85","repo_url","ec2"],["87–91","git_ref","ec2"],["93–100","allow_ssh","sg"],["102–106","ssh_cidr","sg"]],
+"infra/envs/1-ec2/outputs.tf":[["1–4","instance_id","ec2"],["6–8","public_ip","eip"],["10–13","app_url","caddy"],["15–17","model_backend",null],["19–22","models_bucket","s3m"],["24–27","availability_zone","az"],["29–32","grafana_tunnel","obs"]],
+"infra/envs/1-ec2/vpc.tf":[["5–13","aws_vpc.main","vpc"],["15–21","aws_internet_gateway.main","igw"],["25–32","data instance_type_offerings","az"],["34–36","locals.availability_zone","az"],["38–47","aws_subnet.public","subnet"],["49–60","aws_route_table.public","rt"],["62–65","route_table_association","rt"]],
+"infra/envs/1-ec2/security-groups.tf":[["3–11","aws_security_group.app","sg"],["14–21","ingress 80/tcp","sg"],["23–30","ingress 443/tcp","sg"],["33–40","ingress 443/udp","sg"],["43–59","ingress 22（count）","sg"],["62–67","egress all","sg"]],
+"infra/envs/1-ec2/ec2.tf":[["2–8","locals（gpu、機型、磁碟、ami）","ec2"],["18–21","data dlami","ami"],["25–28","data ubuntu","ami"],["33–39","aws_eip.main","eip"],["41–84","aws_instance.app","ec2"],["86–89","aws_eip_association","eip"]],
+"infra/envs/1-ec2/iam.tf":[["5–16","aws_iam_role.ec2","role"],["18–21","SSM attachment","role"],["24–55","role_policy.deploy","role"],["57–60","instance_profile","profile"]],
+"infra/envs/1-ec2/bedrock.tf":[["13–17","aws_iam_user.bedrock","buser"],["19–49","aws_iam_user_policy.bedrock","buser"],["54–59","service_specific_credential","bkey"]],
+"infra/envs/1-ec2/secrets.tf":[["6–22","locals（site_address、backend_env）","dotenv"],["10","site_address（也是 Caddy 的網址）","caddy"],["24–27","random_password.db","pwd"],["30–42","aws_ssm_parameter.dotenv","dotenv"]],
+"infra/envs/1-ec2/s3.tf":[["7–10","aws_s3_bucket.models","s3m"],["12–21","加密","s3m"],["23–31","公開封鎖","s3m"]],
+"infra/envs/1-ec2/user-data.sh.tftpl":[["全檔","第一次開機腳本","ec2"]],
+"infra/envs/1-ec2/deploy.sh":[["53","從 SSM 拉 .env","dotenv"],["65","疊三份 compose","ec2"],["76–82","起 postgres、ALTER ROLE","postgres"],["85","up -d --build","app"],["89","起觀測","obs"]],
+"infra/envs/1-ec2/compose.ec2.yaml":[["18–20","postgres 密碼","postgres"],["22–28","app 密碼、mem_limit","app"],["34–51","caddy","caddy"],["53–55","caddy volumes","caddy"]],
+"infra/envs/1-ec2/compose.bedrock.yaml":[["11–12","model-seed 不起","seed"],["13–14","llm-chat 不起","llm"],["16–25","app 改打 Bedrock","app"]],
+"infra/envs/1-ec2/Caddyfile":[["3–10","網域、encode、reverse_proxy","caddy"]],
+"deploy/compose.yaml":[["22–25","x-llama-server","llm"],["29","x-gpu","llm"],["50–84","model-seed","seed"],["86–151","llm-chat","llm"],["154–175","postgres","postgres"],["178–217","app","app"],["221–245","web","web"],["247–253","volumes","postgres"]],
+"web/nginx.conf":[["52","resolver","web"],["67","proxy_read_timeout","web"]],
+"ops/compose.yaml":[["22","mimir","obs"],["40","loki","obs"],["54","tempo","obs"],["67–74","grafana","obs"],["98","alloy","obs"]]
+};
+// ── 互動 ─────────────────────────────────────────────────────────────────────
+const CHK={ok:["查證相符","ok"],fix:["查證後已修正","fix"],na:["基本概念，未另查","na"]};
+let mode="bedrock",sel="ec2",view="aws",file="";
+const $=id=>document.getElementById(id);
+const NM=k=>R[k].n;
+const off=k=>R[k].only&&R[k].only!==mode;
+const users=k=>Object.keys(R).filter(x=>R[x].deps.includes(k));
+const val=v=>typeof v==="object"?v[mode]:v;
+const inView=(k,v)=>!!document.querySelector(`#svg-${v} [data-k="${k}"]`);
+const filesOf=k=>Object.keys(F).map(f=>[f,F[f].filter(r=>r[2]===k)]).filter(x=>x[1].length);
+// "5–14" → #L5-L14、"53" → #L53、"全檔" → 不帶錨點
+const gh=(f,lines)=>{const m=lines.match(/^(\d+)(?:–(\d+))?$/);return REPO+f+(m?`#L${m[1]}${m[2]?`-L${m[2]}`:""}`:"")};
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+$("file").innerHTML='<option value="">（不篩選檔案）</option>'+Object.keys(F).map(f=>`<option value="${f}">${f}</option>`).join("");
+function rings(hits){
+  document.querySelectorAll(".ring").forEach(e=>e.remove());
+  hits.forEach(k=>document.querySelectorAll(`.nd[data-k="${k}"]`).forEach(g=>{
+    const r=g.querySelector("rect"),o=document.createElementNS("http://www.w3.org/2000/svg","rect");
+    o.setAttribute("class","ring");o.setAttribute("rx",8);
+    o.setAttribute("x",+r.getAttribute("x")-4);o.setAttribute("y",+r.getAttribute("y")-4);
+    o.setAttribute("width",+r.getAttribute("width")+8);o.setAttribute("height",+r.getAttribute("height")+8);
+    g.ownerSVGElement.appendChild(o);
+  }));
+}
+function draw(){
+  $("svg-aws").style.display=view==="aws"?"block":"none";
+  $("svg-ec2").style.display=view==="ec2"?"block":"none";
+  $("v-aws").classList.toggle("on",view==="aws");$("v-ec2").classList.toggle("on",view==="ec2");
+  const deps=R[sel].deps,us=users(sel);
+  document.querySelectorAll(".nd").forEach(g=>{const k=g.dataset.k;
+    g.classList.toggle("sel",k===sel);g.classList.toggle("dep",k!==sel&&deps.includes(k));
+    g.classList.toggle("use",k!==sel&&!deps.includes(k)&&us.includes(k));g.classList.toggle("off",!!off(k))});
+  const hits=file?[...new Set(F[file].map(r=>r[2]).filter(Boolean))]:[];
+  rings(hits);
+  const ov=view==="aws"?"ec2":"aws",n=hits.filter(k=>inView(k,ov)&&!inView(k,view)).length;
+  $("other").textContent=n?`（${ov==="ec2"?"EC2 內部":"AWS 層"}還有 ${n} 格有虛線框）`:"";
+  const r=R[sel],c=CHK[r.chk];let h="";
+  if(file){h+=`<div style="font:500 13px var(--font-mono)"><a href="${gh(file,"")}" target="_blank" rel="noopener">${file}</a></div><table style="margin:6px 0 10px"><tr><th style="width:16%">行</th><th style="width:44%">內容</th><th>圖上位置</th></tr>${F[file].map((x,i)=>`<tr class="row ${x[2]===sel?"on":""}" data-i="${i}"><td><a href="${gh(file,x[0])}" target="_blank" rel="noopener"><code>${x[0]}</code></a></td><td>${esc(x[1])}</td><td>${x[2]?`<span class="pill">${esc(NM(x[2]))}</span>`:'<span class="pill none">不在圖上</span>'}</td></tr>`).join("")}</table><div style="border-top:0.5px solid var(--border-strong);margin:4px 0 10px"></div>`;}
+  h+=`<div style="font:500 14px var(--font-mono)">${esc(r.n)}${off(sel)?' <span style="font:12px var(--font-sans);color:var(--text-warning)">（目前不建 / 不啟動）</span>':""}</div><p style="font-size:14px;margin:4px 0 8px">${r.d}</p>`;
+  const fl=filesOf(sel);
+  h+=`<div class="h">定義在哪些檔案（${fl.length} 個）</div><div class="flist">${fl.length?fl.map(([f,rs])=>`<div><button class="pick" data-f="${f}">${f}</button>　${rs.map(x=>`<a href="${gh(f,x[0])}" target="_blank" rel="noopener"><code>${x[0]}</code></a> ${esc(x[1])}`).join("；")}</div>`).join(""):"<span style='color:var(--text-muted)'>不是由檔案定義（例如 Bedrock 是 AWS 代管服務）</span>"}</div>`;
+  h+=`<div class="h">關鍵參數</div><table><tr><th style="width:34%">參數</th><th style="width:36%">值</th><th>為什麼</th></tr>${r.p.map(([a,b,cc])=>`<tr><td><code>${esc(a)}</code></td><td>${esc(val(b))}</td><td style="color:var(--text-secondary)">${cc}</td></tr>`).join("")}</table>`;
+  h+=`<div class="h">依賴</div><div style="font-size:13px;line-height:1.8"><span style="color:var(--text-warning)">用到：</span>${deps.length?deps.map(k=>esc(NM(k))).join("、"):"（無）"}<br><span style="color:var(--text-success)">被用到：</span>${us.length?us.map(k=>esc(NM(k))).join("、"):"（無）"}</div>`;
+  h+=`<div class="cmp"><div><b>業界常見做法 <span class="badge ${c[1]}">${c[0]}</span></b>${r.ind}${r.fix?`<div style="margin-top:6px;color:var(--text-warning)">更正：${r.fix}</div>`:""}</div><div><b>什麼時候該換</b>${r.when}</div></div>${r.src.length?`<div class="src">來源：${r.src.map(s=>`<a href="${S[s][1]}" target="_blank" rel="noopener">${S[s][0]}</a>`).join("　")}</div>`:""}`;
+  $("panel").innerHTML=h;
+  document.querySelectorAll("tr.row").forEach(tr=>tr.onclick=e=>{if(e.target.closest("a"))return;const k=F[file][+tr.dataset.i][2];if(!k)return;sel=k;if(!inView(k,view))view=inView(k,"aws")?"aws":"ec2";draw()});
+  document.querySelectorAll(".pick").forEach(a=>a.onclick=()=>{file=a.dataset.f;$("file").value=file;draw()});
+}
+$("file").onchange=()=>{file=$("file").value;if(file){const hs=F[file].map(r=>r[2]).filter(Boolean);if(hs.length&&!hs.some(k=>inView(k,view)))view=view==="aws"?"ec2":"aws"}draw()};
+document.querySelectorAll(".nd").forEach(g=>{
+  g.addEventListener("click",e=>{e.stopPropagation();sel=g.dataset.k;draw()});
+  g.addEventListener("dblclick",e=>{e.stopPropagation();if(g.dataset.k==="ec2"&&view==="aws"){view="ec2";sel="caddy";draw()}});
+});
+$("v-aws").onclick=()=>{view="aws";if(!inView(sel,"aws"))sel="ec2";draw()};
+$("v-ec2").onclick=()=>{view="ec2";if(!inView(sel,"ec2"))sel="caddy";draw()};
+function setMode(m){mode=m;$("b-bedrock").classList.toggle("on",m==="bedrock");$("b-gpu").classList.toggle("on",m==="gpu");draw()}
+$("b-bedrock").onclick=()=>setMode("bedrock");$("b-gpu").onclick=()=>setMode("gpu");
+draw();
+</script>
+</body>
+</html>
