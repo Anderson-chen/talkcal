@@ -16,3 +16,6 @@
   不要開在專案裡面（包括 `.claude/` 底下）：開在裡面會變成主資料夾 `git status` 裡沒追蹤的資料夾，干擾其他 session。
   移除 worktree 之前先看 `git status --ignored`，確認沒有原始碼被 ignore：被 ignore 的檔案移除時會直接刪掉、不會警告
   （#103 就因為 `.gitignore` 的 `out/` 而掉過 5 個檔案）。PR 合併後刪掉資料夾和本機分支。
+- 開 PR（`gh pr create`）之後，`.claude/settings.json` 的 hook 會自動跑 `.claude/hooks/commit_map.py`，
+  產生這個分支的 commit 脈絡圖（`build/commit-map/<分支>.html`）；收到路徑就用 SendUserFile 傳給使用者。
+  手動重產：`python .claude/hooks/commit_map.py [分支] [基準]`。
