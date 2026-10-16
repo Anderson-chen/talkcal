@@ -3,6 +3,7 @@
 # 本機和雲端跑的都是這一支；兩邊的差異寫在 cd/envs/<env>.env，不寫在這裡。
 #
 #   cd/apply.sh local                 部署 app、web（預設，不含模型）
+#   cd/apply.sh staging               部署到 staging（預設多一個 postgres，見 cd/envs/staging.env）
 #   cd/apply.sh local web             只部署前端
 #   cd/apply.sh local llm-chat        只換模型（很貴，刻意不在預設裡）
 #   WAIT_TIMEOUT=600 cd/apply.sh local app   拉長等待（例如模型第一次載入很慢時）
@@ -25,10 +26,16 @@ source "$env_file"
 
 compose_args=()
 for f in $COMPOSE_FILES; do compose_args+=(-f "$f"); done
+# 不設就是 compose 的預設：第一個 compose 檔旁邊的 .env。staging 指定自己那份，祕密不跟正式共用
+if [ -n "${COMPOSE_ENV_FILE:-}" ]; then
+  [ -f "$COMPOSE_ENV_FILE" ] || { echo "缺 $COMPOSE_ENV_FILE：cp deploy/.env.example $COMPOSE_ENV_FILE 再填值（見 deploy/README.md）" >&2; exit 1; }
+  compose_args+=(--env-file "$COMPOSE_ENV_FILE")
+fi
 
-# 沒指定就部署 app 再 web：先換後端，前端換上去時打的就是新的 API
+# 沒指定就部署 env 檔的 DEFAULT_SERVICES，再沒有就 app 再 web：先換後端，前端換上去時打的就是新的 API
 services=("$@")
-[ ${#services[@]} -gt 0 ] || services=(app web)
+# shellcheck disable=SC2206 # 空白分隔的清單，刻意讓它拆開
+[ ${#services[@]} -gt 0 ] || services=(${DEFAULT_SERVICES:-app web})
 
 # 每個服務等 healthy 的預設上限（秒）。app 要等模型連上，web 幾秒就好，
 # llm-chat 要重 build 映像檔加上載 5GB 的模型
