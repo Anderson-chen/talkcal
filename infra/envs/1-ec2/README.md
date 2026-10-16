@@ -49,7 +49,7 @@ flowchart LR
 flowchart LR
     gh["GitHub<br/>公開 repo"] -->|"git fetch 指定版本"| deploy["deploy.sh<br/>在 EC2 上跑"]
     s3m[("S3<br/>GGUF 模型檔")] -.->|"gpu：aws s3 sync"| deploy
-    ssm["SSM Parameter Store<br/>.env（DB 密碼、網址、<br/>bedrock：API key）"] -->|"get-parameter"| deploy
+    ssm["SSM Parameter Store<br/>.env（DB 密碼、網址、<br/>Google／GitHub 的 secret、<br/>bedrock：API key）"] -->|"get-parameter"| deploy
     deploy -->|"compose up --build"| stack["deploy/ + ops/<br/>兩組容器"]
 ```
 
@@ -60,14 +60,16 @@ flowchart LR
 | 檔案 | 做什麼 |
 |---|---|
 | `backend.tf`、`backend.hcl.example` | state 放 bootstrap 建的 S3 bucket；bucket 名稱帶帳號 ID，放在 gitignore 掉的 `backend.hcl` |
-| `variables.tf` | `model_backend` 和依它決定預設值的機型、磁碟 |
+| `variables.tf` | `model_backend` 和依它決定預設值的機型、磁碟；Google、GitHub 登入的 client id／secret（`sensitive`） |
+| `oauth.auto.tfvars.example` | 複製成 `oauth.auto.tfvars`（不進 git）填 Google、GitHub 的 client id／secret；沒填就只有帳密登入 |
+| `outputs.tf` | 網址、IP、instance id、Grafana 通道指令、要在 Google、GitHub 登記的回呼網址（`oauth_callback_urls`） |
 | `vpc.tf` | 一個公有子網，不建 NAT；可用區自動挑有這個機型的 |
 | `security-groups.tf` | 只開 80/443（含 HTTP/3 的 UDP 443）；22 預設關 |
 | `ec2.tf` | AMI（bedrock：Ubuntu 24.04；gpu：Deep Learning Base AMI）、機型、Elastic IP、強制 IMDSv2 |
 | `iam.tf` | 機器的角色：SSM 連線、讀 `.env` 參數，gpu 再加讀模型 bucket，別的都碰不到 |
 | `bedrock.tf` | （bedrock）只能呼叫模型的專用 IAM user，和它的 Bedrock API key（90 天過期） |
 | `s3.tf` | （gpu）模型檔的 bucket |
-| `secrets.tf` | 產生 DB 密碼，連同網址（和 Bedrock 的位址、key、模型）寫成一份 `.env` 存進 SSM |
+| `secrets.tf` | 產生 DB 密碼，連同網址（和 Bedrock 的位址、key、模型、Google／GitHub 的 secret）寫成一份 `.env` 存進 SSM |
 | `user-data.sh.tftpl` | 第一次開機：裝或驗證 Docker（gpu 再驗 GPU）、補 compose/buildx、clone、第一次部署 |
 | `deploy.sh` | 在機器上跑的部署：拉版本 →（gpu）拉模型 → 拉 `.env` → 兩組 compose up |
 | `compose.ec2.yaml` | 疊在 `deploy/compose.yaml` 上、兩種共用的雲端差異：DB 密碼、app 記憶體上限、Caddy |
@@ -85,7 +87,8 @@ flowchart LR
 | HTTPS | 沒有 | Caddy + sslip.io：用 IP 推出網域，不必買網域也有 Let's Encrypt 憑證 | `compose.ec2.yaml`、`Caddyfile` |
 | 對外的埠 | 全部綁 `127.0.0.1` | 只有 Caddy 開 80/443；Grafana、Loki 原本沒綁位址，已改成 `127.0.0.1`（本機也一起改了） | `ops/compose.yaml`、`security-groups.tf` |
 | 登入機器 | 本機 | SSM Session Manager，不開 22 | `iam.tf` |
-| DB 密碼 | 寫死 `talkcal` | Terraform 隨機產生 → SSM → `deploy/.env`（[#14](https://github.com/Anderson-chen/talkcal/issues/14) 在雲端上解掉了，本機還是寫死） | `secrets.tf`、`compose.ec2.yaml` |
+| DB 密碼 | 自己填在不進 git 的 `deploy/.env`（[#123](https://github.com/Anderson-chen/talkcal/issues/123)） | Terraform 隨機產生 → SSM → 同一個位置的 `deploy/.env`（[#14](https://github.com/Anderson-chen/talkcal/issues/14)） | `secrets.tf`、`compose.ec2.yaml` |
+| Google、GitHub 登入 | client id／secret 填在 `deploy/.env`，回呼網址 `http://localhost:5173/...` | `oauth.auto.tfvars` → SSM → `deploy/.env`；回呼網址 `https://<網站>/...`，nginx 照轉 Caddy 的 `X-Forwarded-Proto`、app 信任它才組得出 https（[#127](https://github.com/Anderson-chen/talkcal/issues/127)） | `variables.tf`、`secrets.tf`、`web/nginx.conf` |
 | app 記憶體 | 沒上限 | `mem_limit: 2g`：沒設的話 JVM 的 75% 是算整台（8GB 或 16GB） | `compose.ec2.yaml` |
 | 映像檔 | 本機 build | 在 EC2 上 build；做[版本 tag](https://github.com/Anderson-chen/talkcal/issues/25) 時再改成 CI 推到 ECR | `deploy.sh` |
 
@@ -105,6 +108,8 @@ terraform apply -var="alert_email=<你的信箱>"
 cd ../envs/1-ec2
 cp backend.hcl.example backend.hcl        # 填入上一步輸出的 state_bucket
 terraform init -backend-config=backend.hcl
+# （要開 Google、GitHub 登入才做）cp oauth.auto.tfvars.example oauth.auto.tfvars 再填值，
+#  先 apply 一次拿到網址，再到 Google、GitHub 登記 terraform output oauth_callback_urls 印出來的回呼網址
 terraform apply
 
 # 2.（只有 gpu）上傳模型檔（只要一次；SHA256SUMS 一起傳，model-seed 會驗）
@@ -139,6 +144,10 @@ sudo docker stats --no-stream && free -h       # gpu 再加 nvidia-smi
 terraform apply -replace='aws_iam_service_specific_credential.bedrock[0]'
 # 換 DB 密碼（例如懷疑外洩），再到機器上重跑 deploy.sh：它會把資料庫裡的密碼同步成新的那組
 terraform apply -replace=random_password.db
+# 換 Google、GitHub 的 secret（或第一次填）：改 oauth.auto.tfvars，apply 之後再到機器上重跑 deploy.sh
+terraform apply
+# Google、GitHub 要登記的回呼網址（Elastic IP 換了就會跟著換，要重新登記）
+terraform output oauth_callback_urls
 
 # 看 Grafana：在本機跑這行，再開 http://localhost:3000
 terraform output -raw grafana_tunnel

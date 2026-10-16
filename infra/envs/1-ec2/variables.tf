@@ -104,3 +104,32 @@ variable "ssh_cidr" {
   type        = string
   default     = null
 }
+
+# ── Google、GitHub 登入（#127）────────────────────────────────────────────
+# 值不寫在這裡也不進 git：複製 oauth.auto.tfvars.example 成 oauth.auto.tfvars（*.tfvars 已 gitignore）再填，
+# 或用環境變數 TF_VAR_google_client_secret 這類名字給。apply 時寫進 SSM 的 .env，部署時交給 app。
+# 沒給就是空字串 → 那個登入方式不開，雲端只有帳密（跟本機沒設時一樣）。
+# sensitive：plan、apply 的輸出不印值；但 state 裡還是明碼（跟 DB 密碼一樣），所以 state bucket 要加密、不公開
+variable "google_client_id" {
+  description = "Google OAuth client ID（雲端用的回呼網址要先登記，見 terraform output oauth_callback_urls）"
+  type        = string
+  default     = ""
+}
+
+variable "google_client_secret" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+
+variable "github_client_id" {
+  description = "GitHub OAuth App 的 client ID。GitHub 一個 App 只能填一個回呼網址，雲端要另外建一個，不能跟本機共用"
+  type        = string
+  default     = ""
+}
+
+variable "github_client_secret" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
