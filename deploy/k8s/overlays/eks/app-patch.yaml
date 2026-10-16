@@ -1,0 +1,37 @@
+# app 在 EKS 上多的設定。base 的探針、preStop、terminationGracePeriodSeconds 原樣沿用。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+spec:
+  template:
+    spec:
+      # 兩份盡量分在兩個可用區：一區掛了另一區還有一份（這是上 EKS 的目的，ADR 0001）。
+      # ScheduleAnyway：只剩一區有空間時照樣排，不要因為分不開就整個起不來
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: app
+      containers:
+        - name: app
+          # 資料庫位址、模型的位址／key／名稱：External Secrets 從 Secrets Manager 的 talkcal/app 同步（external-secrets.yaml）。
+          # 變數名稱就是 Spring 的設定鍵，蓋掉 application-docker.properties 裡的 postgres:5432、llm-chat:8080
+          envFrom:
+            - secretRef:
+                name: talkcal-runtime
+          env:
+            # 使用者是 http 還是 https：ALB 的 listener 是 HTTP，它帶的 X-Forwarded-Proto 永遠是 http，
+            # app 組出的 Google、GitHub 回呼網址會變成 http://。改看 CloudFront 帶的 CloudFront-Forwarded-Proto
+            # （cloudfront.tf 的 origin request policy 會轉它）。偽造不了：ALB 是私有的，只有 CloudFront 進得來（ADR 0005）
+            - name: SERVER_TOMCAT_REMOTEIP_PROTOCOL_HEADER
+              value: CloudFront-Forwarded-Proto
+          # 符合 Pod Security 的 restricted 等級（namespace 先 enforce baseline、對 restricted 只警告，見 addons.tf）
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault

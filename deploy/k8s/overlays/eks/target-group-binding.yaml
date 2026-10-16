@@ -1,0 +1,16 @@
+# 把 Service app 後面的 Pod IP 註冊進 Terraform 建的 target group（infra/envs/2-eks/alb.tf）。
+# Pod 換了（rolling update、節點掛掉）AWS Load Balancer Controller 會自己加減 target。
+# targetGroupARN 由 kustomization.yaml 的 replacements 從 params.env 填進來。
+#
+# namespace 有 elbv2.k8s.aws/pod-readiness-gate-inject=enabled（addons.tf）：新 Pod 要等 ALB 的健康檢查也過了才算 ready，
+# rolling update 才會去關下一份舊的 —— 只看 k8s 的 readinessProbe 的話，ALB 還沒開始送流量就把舊的關了
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: app
+spec:
+  serviceRef:
+    name: app
+    port: 8090
+  targetGroupARN: REPLACE-BY-WORKFLOW
+  targetType: ip

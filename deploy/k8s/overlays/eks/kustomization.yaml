@@ -1,0 +1,69 @@
+# EKS（#58）：base + 雲端才有的東西。模型走 Bedrock（ADR 0002）；GPU 版見 ../eks-gpu。
+# 叢集、ALB、RDS、祕密由 infra/envs/2-eks 的 Terraform 建好；這裡只放 talkcal namespace 裡的東西，
+# GitHub Actions 的部署角色只有這個 namespace 的權限（ADR 0004）。
+#
+# 跟 kind（../kind）比：
+#   postgres 容器        → 不放，app 連 RDS（位址在 Secret talkcal-runtime）
+#   llm-chat             → 不放，app 打 Bedrock（talkcal-runtime 蓋掉模型的位址、key、名稱）
+#   web（nginx）         → 刪掉：前端由 CloudFront + S3 送，/api 由 CloudFront → ALB 直接到 app（ADR 0005）
+#   NodePort             → TargetGroupBinding：AWS Load Balancer Controller 把 app Pod 的 IP 註冊進 Terraform 建的 target group
+#   手動建的 Secret      → External Secrets 從 Secrets Manager 同步
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: talkcal
+
+resources:
+  - ../../base
+  - external-secrets.yaml
+  - target-group-binding.yaml
+  - pdb.yaml
+
+patches:
+  # namespace 由 Terraform 建（addons.tf）：部署角色沒有 cluster 層級的權限，碰到 Namespace 物件 apply 會失敗
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: talkcal
+  - patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: web
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: web
+  - path: app-patch.yaml
+
+# 映像檔從 ECR 拉。registry 帶帳號 ID、版本號每次不同，由 .github/workflows/eks-deploy.yml 在部署當下改：
+#   kustomize edit set image talkcal/app=<帳號>.dkr.ecr.<區域>.amazonaws.com/talkcal/app:<cd/version.sh 的版本>
+# 這裡的值只是佔位，直接 apply 會拉不到映像檔（故意的：不該有人不經過 workflow 部署）
+images:
+  - name: talkcal/app
+    newName: REPLACE-BY-WORKFLOW/talkcal/app
+    newTag: REPLACE-BY-WORKFLOW
+
+# Terraform 才知道的值（target group 的 ARN、模型 bucket），workflow 部署前查好寫進 params.env，
+# 再用 replacements 填進需要它的欄位。git 裡的 params.env 是佔位
+configMapGenerator:
+  - name: eks-params
+    envs: [params.env]
+    options:
+      disableNameSuffixHash: true
+
+replacements:
+  - source:
+      kind: ConfigMap
+      name: eks-params
+      fieldPath: data.TARGET_GROUP_ARN
+    targets:
+      - select:
+          kind: TargetGroupBinding
+          name: app
+        fieldPaths: [spec.targetGroupARN]

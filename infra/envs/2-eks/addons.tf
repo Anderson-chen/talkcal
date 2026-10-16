@@ -50,8 +50,14 @@ resource "kubernetes_namespace_v1" "talkcal" {
     name = "talkcal"
     labels = {
       "app.kubernetes.io/part-of" = "talkcal"
-      # Pod Security Admission：不准 privileged、hostPath 之類的（app 本來就以非 root 跑）
-      "pod-security.kubernetes.io/enforce" = "restricted"
+      # Pod Security Admission：擋 privileged、hostPath 這類（baseline）；更嚴的 restricted 先只警告。
+      # app 在 overlay 裡已經符合 restricted，但 #56 的 llm-chat（gpu）的 initContainer 還沒驗過，先不直接擋
+      "pod-security.kubernetes.io/enforce" = "baseline"
+      "pod-security.kubernetes.io/warn"    = "restricted"
+      "pod-security.kubernetes.io/audit"   = "restricted"
+      # ALB controller 幫這個 namespace 的 Pod 加 readiness gate：新 Pod 要等 ALB 健康檢查也過了才算 ready，
+      # rolling update 才去關下一份舊的（overlays/eks/target-group-binding.yaml）
+      "elbv2.k8s.aws/pod-readiness-gate-inject" = "enabled"
     }
   }
 }
@@ -109,4 +115,22 @@ resource "kubernetes_role_binding_v1" "deployer_crds" {
     name      = "talkcal-deployers"
     api_group = "rbac.authorization.k8s.io"
   }
+}
+
+# gp3 的 StorageClass（EKS 預設只有 gp2）：gpu 時放模型檔的 PVC 用（overlays/eks-gpu）。
+# StorageClass 是 cluster 層級的，部署角色建不了，所以放這裡。gp3 比 gp2 便宜約 20%、IOPS 不綁容量
+resource "kubernetes_storage_class_v1" "gp3" {
+  metadata {
+    name = "gp3"
+  }
+  storage_provisioner    = "ebs.csi.aws.com"
+  reclaim_policy         = "Delete"
+  volume_binding_mode    = "WaitForFirstConsumer" # 等 Pod 排到哪一區再建 EBS，不然可能建在沒有 GPU 節點的那區
+  allow_volume_expansion = true
+  parameters = {
+    type      = "gp3"
+    encrypted = "true"
+  }
+
+  depends_on = [aws_eks_addon.ebs_csi]
 }
