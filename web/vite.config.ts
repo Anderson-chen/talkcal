@@ -9,7 +9,12 @@ export default defineConfig({
     // 部署時同一件事改由 nginx 做（deploy/ 那邊），程式碼裡的 /api 一個字都不用改。
     // 目標預設是 bootRun 的 8090；要接到別台（例如同時跑新舊兩版後端時）就設環境變數 EAT_API。
     proxy: {
-      '/api': process.env.EAT_API ?? 'http://localhost:8090',
+      '/api': {
+        target: process.env.EAT_API ?? 'http://localhost:8090',
+        // 保留瀏覽器送來的 Host（localhost:5173），不換成 8090。字串簡寫會把 changeOrigin 打開、Host 改成 target 的，
+        // 後端用 Host 組 Google、GitHub 的回呼網址，就變成 localhost:8090/...，跟登記的 5173 對不上（redirect_uri_mismatch）
+        changeOrigin: false,
+      },
     },
   },
 })
