@@ -135,6 +135,7 @@ GitHub 上不跑（沒有模型），只確定它編得過（`evalClasses`）。
 1. Google Cloud Console → APIs & Services → Credentials → 建 OAuth client ID（Web application），Authorized redirect URI 填 `http://localhost:5173/api/auth/oauth2/callback/google`（vite）；要從 `deploy/` 的 nginx 進來就再加一條 `http://localhost:18080/...`
 2. GitHub → Settings → Developer settings → OAuth Apps → New，Authorization callback URL 填 `http://localhost:5173/api/auth/oauth2/callback/github`（GitHub 的 OAuth App 只能填一個）
 3. 把 client id、secret 填進 `deploy/.env`（範本 `deploy/.env.example`），再啟動 app（bootRun 或 `deploy/` 的 compose 都會讀）
+4. 用瀏覽器開 `http://localhost:5173`（vite），不要直接開 bootRun 的 8090：回呼網址是用請求的 `Host` 組的，直接開 8090 送給 Google 的就是 `localhost:8090/...`，跟登記的對不上（`redirect_uri_mismatch`）。vite 轉發時要保留 `Host`（`changeOrigin: false`，見 `web/vite.config.ts`）
 
 **#104 的做法**：
 - 擁有者是 calendar 自己的型別 `OwnerId`，不用 auth 的 `AccountId`：兩個模組互不認識（ArchitectureTest 守著）。值就是登入者的帳號 ID，由 controller 從 `java.security.Principal` 取出來交給 use case —— calendar 不知道是怎麼登入的
