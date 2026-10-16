@@ -44,6 +44,8 @@ ci/        CI 要檢查什麼、在什麼環境檢查
 docs/      設計稿
 ```
 
+寫法和流程的規則（註解、分層、驗證、commit 與 PR）在 [AGENTS.md](AGENTS.md)，人和 AI 工具都照它。
+
 ## 程式結構
 
 後端（`backend/`）是六角架構（Hexagonal / Ports & Adapters），目錄照 BuckPal 的慣例：
