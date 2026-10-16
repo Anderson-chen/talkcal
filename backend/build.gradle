@@ -144,6 +144,23 @@ tasks.withType(JavaCompile).configureEach {
     }
 }
 
+// 版本（#25）：產生 META-INF/build-info.properties，actuator 的 /actuator/info 讀它回報「我是哪一版、哪個 commit」。
+// 值由外面傳進來（-PappVersion、-PgitCommit），不在這裡跑 git：映像檔 build 時 context 只有 backend/，看不到 .git。
+// 誰算、怎麼算見 cd/version.sh 和 docs/release.md。
+// 沒傳就是 local / unknown：代表「不是走部署流程 build 出來的」（bootRun、IDE、直接 docker build），一看就知道。
+// 不設 project.version：設了 bootJar 會變成 talkcal-<版本>.jar，Dockerfile 寫死複製 talkcal.jar。
+springBoot {
+    buildInfo {
+        // 不記 build 時間：每次 build 內容都不同，Gradle 的快取跟著失效，測試會每次重跑。
+        // 「什麼時候部署的」看 GitHub Deployments 或容器的建立時間
+        excludes = ['time']
+        properties {
+            version = providers.gradleProperty('appVersion').getOrElse('local')
+            additional = [commit: providers.gradleProperty('gitCommit').getOrElse('unknown')]
+        }
+    }
+}
+
 // 程式與註解都有中文，編碼一定要明寫。
 // 不寫的話 javac 會用平台預設，在 Windows 上是 cp950，中文註解會編成亂碼
 tasks.withType(JavaCompile).configureEach {
