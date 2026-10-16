@@ -241,7 +241,23 @@ ops/
 ├── mimir/mimir.yaml                          # 指標：單機最小設定（關掉多租戶、複製、物件儲存）
 ├── loki/loki-config.yaml                     # 日誌：單機最小設定
 ├── tempo/tempo.yaml                          # 追蹤：單機最小設定
-└── grafana/provisioning/
-    ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
-    └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces（trace）、talkcal-k6（壓測）
+├── grafana/provisioning/
+│   ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
+│   └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces（trace）、talkcal-k6（壓測）
+└── k8s/                                      # app 跑在 k8s 上時的收集端（#56）
+    ├── base/                                 # Alloy DaemonSet + 只讀 Pod 的 RBAC + config.alloy（讀節點上的 log 檔）
+    └── overlays/kind/                        # 送進主機上這組 compose 的 Mimir/Loki/Tempo
 ```
+
+### k8s 上的 Alloy：不掛 docker.sock
+
+app 跑在 k8s（[deploy/k8s](../deploy/k8s/README.md)）時，Alloy 改成 DaemonSet：每台節點一份，
+唯讀掛那台節點的 `/var/log/pods`，用 `discovery.kubernetes` 只找自己這台的 Pod。
+
+| | compose（`alloy/config.alloy`） | k8s（`k8s/base/config.alloy`） |
+|---|---|---|
+| 怎麼找到來源 | 問 `docker.sock` | 問 API server（RBAC 只給 Pod 的 get/list/watch） |
+| 讀 log | 經 `docker.sock` 讀 | 直接讀節點上的 log 檔，`stage.cri` 拆掉 CRI 前綴 |
+| 抓指標 | 寫死 `app:8090` | 依 Pod 的標籤找，換版、擴增自動跟上 |
+| 權限 | 整台主機 Docker 的控制權 | 只能讀 log 資料夾和列出 Pod |
+| 標籤 | `service`、`container`、`env=docker` | 同樣三個（`env=kind`），多 `namespace`、`pod` —— 儀表板查詢不用改 |
