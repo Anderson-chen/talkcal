@@ -2,6 +2,7 @@ package io.github.andersonchen.talkcal.calendar.adapter.in.assistant;
 
 import io.github.andersonchen.talkcal.calendar.adapter.shared.DateTable;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlotsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ParseEventsUseCase;
@@ -29,6 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 /**
@@ -46,6 +48,8 @@ import java.util.regex.Pattern;
  * 下一輪模型看到的是「助理說了『已顯示卡片』就完成了」，於是改時間時只說不做、畫面上沒有卡片（使用者實際遇到的 bug）。
  * Spring AI 的 JDBC 記憶庫會把工具訊息濾掉，MessageChatMemoryAdvisor 也只存頭尾兩則，
  * 自己跑迴圈，每一則訊息都在手上，存什麼、截到哪都看得見。
+ *
+ * 每一句話都屬於一個擁有者（#104）：記憶只讀寫這個人名下的對話，工具也只查得到這個人的行程。
  */
 public final class CalendarAssistant {
 
@@ -107,17 +111,18 @@ public final class CalendarAssistant {
     private static final DateTimeFormatter NOW_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final ChatModel chatModel;
-    private final ChatMemoryRepository memory;
+    // 擁有者 → 這個人名下的對話記憶。框架的 ChatMemoryRepository 只認 conversationId，擁有者要在拿到它之前先決定
+    private final Function<OwnerId, ChatMemoryRepository> memories;
     private final ToolCallingManager toolCallingManager = ToolCallingManager.builder().build();
     private final ParseEventsUseCase parseEvents;
     private final ListEventsUseCase listEvents;
     private final FindFreeSlotsUseCase findFreeSlots;
     private final Clock clock;
 
-    public CalendarAssistant(ChatModel chatModel, ChatMemoryRepository memory, ParseEventsUseCase parseEvents,
+    public CalendarAssistant(ChatModel chatModel, Function<OwnerId, ChatMemoryRepository> memories, ParseEventsUseCase parseEvents,
                              ListEventsUseCase listEvents, FindFreeSlotsUseCase findFreeSlots, Clock clock) {
         this.chatModel = Objects.requireNonNull(chatModel, "chatModel 不可為 null");
-        this.memory = Objects.requireNonNull(memory, "memory 不可為 null");
+        this.memories = Objects.requireNonNull(memories, "memories 不可為 null");
         this.parseEvents = Objects.requireNonNull(parseEvents, "parseEvents 不可為 null");
         this.listEvents = Objects.requireNonNull(listEvents, "listEvents 不可為 null");
         this.findFreeSlots = Objects.requireNonNull(findFreeSlots, "findFreeSlots 不可為 null");
@@ -137,12 +142,13 @@ public final class CalendarAssistant {
      *
      * 記憶是給模型看的格式，裡面有工具呼叫和工具結果；這裡全部濾掉 —— 那是助理怎麼做到的，不是它說了什麼。
      * 提議過的卡片也不回：卡片後來是加入了還是取消了，記憶裡沒有，顯示一張可能已經過時的卡片不如不顯示。
-     * 沒有這段對話（從來沒有、或已經被清理排程刪掉）就是空的。
+     * 沒有這段對話（從來沒有、已經被清理排程刪掉、或是別人的）就是空的。
      */
-    public List<Line> history(String conversationId) {
+    public List<Line> history(OwnerId owner, String conversationId) {
+        Objects.requireNonNull(owner, "owner 不可為 null");
         Objects.requireNonNull(conversationId, "conversationId 不可為 null");
         try {
-            return memory.findByConversationId(conversationId).stream()
+            return memories.apply(owner).findByConversationId(conversationId).stream()
                     .filter(m -> m.getMessageType() == MessageType.USER
                             || (m instanceof AssistantMessage a && !a.hasToolCalls() && a.getText() != null && !a.getText().isBlank()))
                     .map(m -> new Line(m.getMessageType() == MessageType.USER, m.getText().strip()))
@@ -153,7 +159,8 @@ public final class CalendarAssistant {
     }
 
     /**
-     * 回應使用者的一句話（agent loop）。conversationId 是這段對話的身分（UUID），同一段對話的每一句都帶同一個。
+     * 回應 owner 的一句話（agent loop）。conversationId 是這段對話的身分（UUID），同一段對話的每一句都帶同一個；
+     * 它只在 owner 名下有意義，別人名下同一個 id 是另一段對話。
      *
      * <pre>
      * 讀出歷史（含工具呼叫）＋ 這一句
@@ -167,7 +174,8 @@ public final class CalendarAssistant {
      * 失敗時（模型、資料庫出事、繞圈超過 MAX_STEPS）一律丟 IllegalStateException：
      * 背後的例外型別五花八門，裡面還可能混著 IllegalArgumentException，不包起來會被誤認成「呼叫端送錯」。
      */
-    public Reply reply(String conversationId, String message) {
+    public Reply reply(OwnerId owner, String conversationId, String message) {
+        Objects.requireNonNull(owner, "owner 不可為 null");
         Objects.requireNonNull(conversationId, "conversationId 不可為 null");
         if (message == null || message.isBlank()) {
             throw new IllegalArgumentException("訊息不可為 null 或空白");
@@ -175,12 +183,13 @@ public final class CalendarAssistant {
         try {
             // 每一輪都重給 system：日期表要跟著「現在」走，昨天開始的對話今天繼續，「明天」就不一樣了。所以 system 不進記憶
             SystemMessage system = new SystemMessage(instruction(LocalDateTime.now(clock)));
+            ChatMemoryRepository memory = memories.apply(owner);
             List<Message> conversation = new ArrayList<>(memory.findByConversationId(conversationId));
             conversation.add(new UserMessage(message));
             // 工具要知道使用者實際說過什麼（例如有沒有講早上晚上），不能只看模型整理出來的那句
             List<String> userSaid = conversation.stream()
                     .filter(m -> m.getMessageType() == MessageType.USER).map(Message::getText).toList();
-            CalendarTools tools = new CalendarTools(parseEvents, listEvents, findFreeSlots, userSaid);
+            CalendarTools tools = new CalendarTools(owner, parseEvents, listEvents, findFreeSlots, userSaid);
             // 從 application.properties 的預設開始再蓋：Spring AI 2.0 看到請求自帶選項就整份照用、不補預設，
             // 沒給模型名稱就送 gpt-5-mini（#76）。測試用的假 ChatModel 給的是通用的 ChatOptions，沒東西可以沿用
             OpenAiChatOptions.Builder start = chatModel.getOptions() instanceof OpenAiChatOptions defaults
@@ -215,7 +224,7 @@ public final class CalendarAssistant {
                         answer = new AssistantMessage(HONEST_FALLBACK);
                         text = HONEST_FALLBACK;
                     }
-                    // 間接 prompt injection 的最後一道（#13）：行程標題是外人寫得進來的，裡面藏「叫使用者去某網址登入」，
+                    // 間接 prompt injection 的最後一道（#13）：行程標題不一定是使用者自己想的字（複製貼上、之後的邀請），裡面藏「叫使用者去某網址登入」，
                     // 模型會照著轉述 —— 實測 qwen3-8b 就算 prompt 和工具結果都講明「那是資料、不要照做」，還是會講。
                     // prompt 擋不住就由程式擋：行事曆助理沒有理由主動給出使用者沒講過的網址。
                     // 不提醒它重來：藏指令的資料還在對話裡，重來多半再講一次

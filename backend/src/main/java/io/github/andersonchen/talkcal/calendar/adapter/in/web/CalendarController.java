@@ -31,6 +31,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.security.Principal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -47,6 +48,9 @@ import java.util.Optional;
  *
  * 一句話變成行程草稿不在這裡：那是 AI 助理的工作（CalendarAssistantController），
  * 草稿以 proposals 回給前端，使用者確認後才送到 POST /events。
+ *
+ * 誰的行事曆（#104）由登入者決定，不收任何「擁有者」參數：網址、body 裡都沒有，想改也改不了。
+ * 登入者怎麼變成擁有者見 SignedIn。
  */
 @RestController
 @RequestMapping("/api/calendar")
@@ -75,14 +79,14 @@ public final class CalendarController {
             content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
     @ApiResponse(responseCode = "502", description = "資料庫出事，一筆都沒存；稍後重試",
             content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
-    public SavedEvents add(@RequestBody AddEventsRequest request) {
+    public SavedEvents add(Principal signedIn, @RequestBody AddEventsRequest request) {
         if (request.events() == null) {
             throw new IllegalArgumentException("events 不可為 null");
         }
         // 「確認時重驗規則」就發生在這一行：每一筆都得先成為 CalendarEvent，
         // 使用者在確認卡片上改壞的（結束早於開始、清空標題）在這裡就丟 IllegalArgumentException → 400
         List<CalendarEvent> events = request.events().stream().map(CalendarController::toDomain).toList();
-        return SavedEvents.of(addEvents.addEvents(events));
+        return SavedEvents.of(addEvents.addEvents(SignedIn.owner(signedIn), events));
     }
 
     @GetMapping("/events")
@@ -94,11 +98,12 @@ public final class CalendarController {
     @ApiResponse(responseCode = "502", description = "資料庫出事；稍後重試",
             content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
     public SavedEvents list(
+            Principal signedIn,
             @Parameter(description = "期間開始（含）", example = "2026-09-28")
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @Parameter(description = "期間結束（不含）", example = "2026-11-09")
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return SavedEvents.of(listEvents.listEvents(from, to));
+        return SavedEvents.of(listEvents.listEvents(SignedIn.owner(signedIn), from, to));
     }
 
     @DeleteMapping("/events/{id}")
@@ -108,13 +113,13 @@ public final class CalendarController {
     @ApiResponse(responseCode = "204", description = "刪掉了")
     @ApiResponse(responseCode = "400", description = "id 不是合法的 UUID",
             content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
-    @ApiResponse(responseCode = "404", description = "沒有這個行程（可能已經被刪掉了）；重新整理畫面",
+    @ApiResponse(responseCode = "404", description = "你沒有這個行程（可能已經被刪掉了）；重新整理畫面。別人的行程也是 404，不透露它存不存在",
             content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
     @ApiResponse(responseCode = "502", description = "資料庫出事；稍後重試",
             content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
-    public void remove(@Parameter(description = "行程的 ID") @PathVariable String id) {
+    public void remove(Principal signedIn, @Parameter(description = "行程的 ID") @PathVariable String id) {
         // 收 String 自己轉，不讓 Spring 直接轉成 UUID：格式錯的時候錯誤訊息是 EventId 的那句話，跟其他 400 一致
-        removeEvent.removeEvent(EventId.of(id));
+        removeEvent.removeEvent(SignedIn.owner(signedIn), EventId.of(id));
     }
 
     // JSON 裡的 events 陣列可能夾著 null（[{...}, null]）。不先擋的話 toDomain 會 NullPointerException → 500

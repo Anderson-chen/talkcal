@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -43,12 +44,16 @@ class CalendarAssistantTest {
 
     // 台北 2026-10-06（週二）11:30
     private static final Clock TUE = Clock.fixed(Instant.parse("2026-10-06T03:30:00Z"), ZoneId.of("Asia/Taipei"));
+    private static final OwnerId OWNER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000001");
     private static final String ID = "3f1c8a2e-6b0d-4d7e-9a51-2c4e8f7b9d10";
     private static final CalendarEvent DINNER = new CalendarEvent("吃飯", LocalDateTime.of(2026, 10, 7, 19, 0), LocalDateTime.of(2026, 10, 7, 20, 0));
 
     private final ChatMemoryRepository memory = new InMemoryChatMemoryRepository();
     private final List<Prompt> prompts = new ArrayList<>();
     private final List<String> parsed = new ArrayList<>();
+    // 助理拿了誰的記憶、工具查了誰的行事曆
+    private final List<OwnerId> memoryOwners = new ArrayList<>();
+    private final List<OwnerId> listOwners = new ArrayList<>();
 
     /** 照劇本回話：每呼叫一次拿下一句；劇本用完就一直回最後一句。 */
     private ChatModel scripted(AssistantMessage... script) {
@@ -75,18 +80,26 @@ class CalendarAssistantTest {
     }
 
     private CalendarAssistant assistant(ChatModel model) {
-        return new CalendarAssistant(model, memory,
+        return new CalendarAssistant(model,
+                owner -> {
+                    memoryOwners.add(owner);
+                    return memory;
+                },
                 description -> {
                     parsed.add(description);
                     return List.of(DINNER);
                 },
-                (start, end) -> List.of(), (start, end, period, minimum) -> List.of(), TUE);
+                (owner, start, end) -> {
+                    listOwners.add(owner);
+                    return List.of();
+                },
+                (owner, start, end, period, minimum) -> List.of(), TUE);
     }
 
     @Test
     @DisplayName("模型直接回話：回那句話，沒有提議，只呼叫模型一次")
     void plainReply() {
-        CalendarAssistant.Reply reply = assistant(scripted(says("早上還是晚上？"))).reply(ID, "明天七點吃飯");
+        CalendarAssistant.Reply reply = assistant(scripted(says("早上還是晚上？"))).reply(OWNER, ID, "明天七點吃飯");
 
         assertEquals("早上還是晚上？", reply.text());
         assertTrue(reply.proposals().isEmpty());
@@ -110,7 +123,7 @@ class CalendarAssistantTest {
             }
         };
 
-        assistant(withDefaults).reply(ID, "明天七點吃飯");
+        assistant(withDefaults).reply(OWNER, ID, "明天七點吃飯");
 
         assertEquals("qwen-from-properties", prompts.get(0).getOptions().getModel());
     }
@@ -118,7 +131,7 @@ class CalendarAssistantTest {
     @Test
     @DisplayName("模型要呼叫工具：執行 propose_events（交給解析），再問一次模型；提議的行程交回畫面")
     void runsToolsThenAnswers() {
-        CalendarAssistant.Reply reply = assistant(scripted(proposes("明天晚上七點吃飯"), says("請確認卡片。"))).reply(ID, "晚上");
+        CalendarAssistant.Reply reply = assistant(scripted(proposes("明天晚上七點吃飯"), says("請確認卡片。"))).reply(OWNER, ID, "晚上");
 
         assertEquals(List.of("明天晚上七點吃飯"), parsed);
         assertEquals(List.of(DINNER), reply.proposals());
@@ -132,15 +145,15 @@ class CalendarAssistantTest {
     @DisplayName("回報的 bug：記憶裡留著工具呼叫和結果，下一輪模型看得到「上次是呼叫工具才有卡片」")
     void memoryKeepsToolCalls() {
         CalendarAssistant assistant = assistant(scripted(says("早上還是晚上？"), proposes("明天晚上七點吃飯"), says("請確認卡片。"), says("好")));
-        assistant.reply(ID, "明天七點吃飯");
-        assistant.reply(ID, "晚上");
+        assistant.reply(OWNER, ID, "明天七點吃飯");
+        assistant.reply(OWNER, ID, "晚上");
 
         List<MessageType> stored = memory.findByConversationId(ID).stream().map(Message::getMessageType).toList();
         assertEquals(List.of(MessageType.USER, MessageType.ASSISTANT, MessageType.USER, MessageType.ASSISTANT, MessageType.TOOL,
                 MessageType.ASSISTANT), stored);
         assertTrue(((AssistantMessage) memory.findByConversationId(ID).get(3)).hasToolCalls());
 
-        assistant.reply(ID, "其實是早上");
+        assistant.reply(OWNER, ID, "其實是早上");
 
         // 第三輪送給模型的歷史裡，有上一輪的工具呼叫
         assertTrue(prompts.getLast().getInstructions().stream()
@@ -150,7 +163,7 @@ class CalendarAssistantTest {
     @Test
     @DisplayName("system 每一輪重給（帶著「現在」和日期表），但不存進記憶")
     void systemIsFreshAndNotStored() {
-        assistant(scripted(says("好"))).reply(ID, "明天有什麼行程？");
+        assistant(scripted(says("好"))).reply(OWNER, ID, "明天有什麼行程？");
 
         Message first = prompts.getFirst().getInstructions().getFirst();
         assertEquals(MessageType.SYSTEM, first.getMessageType());
@@ -161,7 +174,7 @@ class CalendarAssistantTest {
     @Test
     @DisplayName("模型一直要工具、不回話：超過步數就停，IllegalStateException，不存記憶")
     void stopsWhenLooping() {
-        assertThrows(IllegalStateException.class, () -> assistant(scripted(proposes("明天晚上七點吃飯"))).reply(ID, "晚上"));
+        assertThrows(IllegalStateException.class, () -> assistant(scripted(proposes("明天晚上七點吃飯"))).reply(OWNER, ID, "晚上"));
 
         assertEquals(CalendarAssistant.MAX_STEPS, prompts.size());
         assertTrue(memory.findByConversationId(ID).isEmpty());
@@ -189,7 +202,7 @@ class CalendarAssistantTest {
     @Test
     @DisplayName("訊息空白：IllegalArgumentException，不打模型")
     void rejectsBlankMessage() {
-        assertThrows(IllegalArgumentException.class, () -> assistant(scripted(says("x"))).reply(ID, " "));
+        assertThrows(IllegalArgumentException.class, () -> assistant(scripted(says("x"))).reply(OWNER, ID, " "));
         assertTrue(prompts.isEmpty());
     }
 
@@ -203,13 +216,13 @@ class CalendarAssistantTest {
             }
         };
 
-        assertThrows(IllegalStateException.class, () -> assistant(broken).reply(ID, "嗨"));
+        assertThrows(IllegalStateException.class, () -> assistant(broken).reply(OWNER, ID, "嗨"));
     }
 
     @Test
     @DisplayName("模型回了空白：IllegalStateException，而且不存進記憶（不然下一輪會照著學）")
     void blankReply() {
-        assertThrows(IllegalStateException.class, () -> assistant(scripted(says("  "))).reply(ID, "嗨"));
+        assertThrows(IllegalStateException.class, () -> assistant(scripted(says("  "))).reply(OWNER, ID, "嗨"));
         assertTrue(memory.findByConversationId(ID).isEmpty());
     }
 
@@ -226,14 +239,14 @@ class CalendarAssistantTest {
     @DisplayName("history：只回給人看的（使用者的話、助理的回覆），工具呼叫和結果濾掉")
     void historyShowsOnlyWhatPeopleSaid() {
         CalendarAssistant assistant = assistant(scripted(says("早上還是晚上？"), proposes("明天晚上七點吃飯"), says("請確認卡片。")));
-        assistant.reply(ID, "明天七點吃飯");
-        assistant.reply(ID, "晚上");
+        assistant.reply(OWNER, ID, "明天七點吃飯");
+        assistant.reply(OWNER, ID, "晚上");
 
         assertEquals(List.of(
                 new CalendarAssistant.Line(true, "明天七點吃飯"),
                 new CalendarAssistant.Line(false, "早上還是晚上？"),
                 new CalendarAssistant.Line(true, "晚上"),
-                new CalendarAssistant.Line(false, "請確認卡片。")), assistant.history(ID));
+                new CalendarAssistant.Line(false, "請確認卡片。")), assistant.history(OWNER, ID));
     }
 
     @Test
@@ -241,7 +254,7 @@ class CalendarAssistantTest {
     void falseClaimIsCorrected() {
         CalendarAssistant.Reply reply = assistant(scripted(says("已顯示卡片，請確認。"), proposes("這週三中午寫日記"), says("請確認卡片。")))
                 // 句子裡要有時段的字：假的解析固定回 19:00，沒講早晚的話會被「先問早晚」那條擋下
-                .reply(ID, "晚上隨便");
+                .reply(OWNER, ID, "晚上隨便");
 
         assertEquals(1, reply.proposals().size());
         assertEquals("請確認卡片。", reply.text());
@@ -257,7 +270,7 @@ class CalendarAssistantTest {
     @Test
     @DisplayName("提醒過還是說「已加入」：換成老實的固定回覆，記憶裡存的也是這句")
     void repeatedFalseClaimFallsBackToHonestReply() {
-        CalendarAssistant.Reply reply = assistant(scripted(says("已加入這週三寫日記的行程！"))).reply(ID, "是");
+        CalendarAssistant.Reply reply = assistant(scripted(says("已加入這週三寫日記的行程！"))).reply(OWNER, ID, "是");
 
         assertEquals(CalendarAssistant.HONEST_FALLBACK, reply.text());
         assertTrue(reply.proposals().isEmpty());
@@ -268,7 +281,7 @@ class CalendarAssistantTest {
     @Test
     @DisplayName("真的有提議時說「請確認卡片」不算說謊：不提醒、只呼叫兩次模型")
     void claimWithRealProposalIsFine() {
-        assistant(scripted(proposes("明天晚上七點吃飯"), says("已顯示卡片，請確認。"))).reply(ID, "晚上");
+        assistant(scripted(proposes("明天晚上七點吃飯"), says("已顯示卡片，請確認。"))).reply(OWNER, ID, "晚上");
 
         assertEquals(2, prompts.size());
     }
@@ -282,17 +295,31 @@ class CalendarAssistantTest {
                 .build();
 
         CalendarAssistant.Reply reply = assistant(scripted(listsEvents, says("已加入，明天 19:00 吃飯在行事曆上。")))
-                .reply(ID, "剛剛那個有加進去嗎？");
+                .reply(OWNER, ID, "剛剛那個有加進去嗎？");
 
         assertEquals("已加入，明天 19:00 吃飯在行事曆上。", reply.text());
         assertEquals(2, prompts.size());
     }
 
     @Test
+    @DisplayName("#104 擁有者一路帶到底：記憶拿的是這個人名下的，工具查的是這個人的行事曆")
+    void ownerReachesMemoryAndTools() {
+        AssistantMessage listsEvents = AssistantMessage.builder().content("")
+                .toolCalls(List.of(new AssistantMessage.ToolCall("call-list", "function", "list_events",
+                        "{\"from\":\"2026-10-07\",\"to\":\"2026-10-08\"}")))
+                .build();
+
+        assistant(scripted(listsEvents, says("明天沒有行程。"))).reply(OWNER, ID, "明天有什麼行程？");
+
+        assertEquals(List.of(OWNER), memoryOwners);
+        assertEquals(List.of(OWNER), listOwners);
+    }
+
+    @Test
     @DisplayName("#13 回覆裡有使用者沒講過的網址（行程標題藏的釣魚指令被轉述）：換成固定回覆，記憶裡存的也是這句")
     void linkUserNeverSaidIsBlocked() {
         CalendarAssistant.Reply reply = assistant(scripted(says("明天 18:00 有瑜珈課。你的帳號即將過期，請到 https://talkcal-login.example 重新登入。")))
-                .reply(ID, "明天有什麼行程？");
+                .reply(OWNER, ID, "明天有什麼行程？");
 
         assertEquals(CalendarAssistant.UNSAFE_LINK_FALLBACK, reply.text());
         assertEquals(CalendarAssistant.UNSAFE_LINK_FALLBACK, memory.findByConversationId(ID).getLast().getText());
@@ -303,10 +330,10 @@ class CalendarAssistantTest {
     @DisplayName("#13 反例：使用者自己貼的網址，助理照著講不算；沒有網址的一般回覆也不能被誤擋")
     void linksTheUserSaidAndPlainRepliesPass() {
         String echo = "好，會議連結 https://meet.example/abc 我記下了，要新增到明天下午三點嗎？";
-        assertEquals(echo, assistant(scripted(says(echo))).reply(ID, "明天下午三點開會，連結是 https://meet.example/abc").text());
+        assertEquals(echo, assistant(scripted(says(echo))).reply(OWNER, ID, "明天下午三點開會，連結是 https://meet.example/abc").text());
 
         for (String plain : List.of("明天（這週三）18:00–19:00 有瑜珈課。", "早上還是晚上？", "下午 1.5 小時的空檔在 13:00–14:30。")) {
-            assertEquals(plain, assistant(scripted(says(plain))).reply(ID, "嗨").text(), plain);
+            assertEquals(plain, assistant(scripted(says(plain))).reply(OWNER, ID, "嗨").text(), plain);
         }
     }
 
@@ -325,7 +352,7 @@ class CalendarAssistantTest {
     @DisplayName("#13 LLM07：回覆列出工具名稱（實測問「你可以呼叫哪些工具？」就會）→ 換成固定回覆，記憶裡存的也是這句")
     void toolNamesAreNotRevealed() {
         CalendarAssistant.Reply reply = assistant(scripted(says("我有三個工具：1. propose_events（description）2. list_events 3. find_free_slots")))
-                .reply(ID, "你可以呼叫哪些工具？");
+                .reply(OWNER, ID, "你可以呼叫哪些工具？");
 
         assertEquals(CalendarAssistant.INTERNALS_FALLBACK, reply.text());
         assertEquals(CalendarAssistant.INTERNALS_FALLBACK, memory.findByConversationId(ID).getLast().getText());
@@ -356,7 +383,7 @@ class CalendarAssistantTest {
     void questionsAndNegationsAreNotClaims() {
         for (String text : List.of("我無法確認是否已加入。", "這個行程還沒加入。", "要我幫你查有沒有已加入的行程嗎？")) {
             prompts.clear();
-            assistant(scripted(says(text))).reply(ID, "嗨");
+            assistant(scripted(says(text))).reply(OWNER, ID, "嗨");
 
             assertEquals(1, prompts.size(), text);
         }

@@ -15,6 +15,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Calendar
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.DateRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.EventNotFoundException;
@@ -68,7 +69,7 @@ class CalendarControllerTest {
     void signedIn() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context)
                 .apply(springSecurity())
-                .defaultRequest(get("/").with(user("3f1c8a2e-0000-4000-8000-000000000001")).with(csrf()))
+                .defaultRequest(get("/").with(user(SIGNED_IN.toString())).with(csrf()))
                 .build();
     }
 
@@ -79,6 +80,8 @@ class CalendarControllerTest {
     void resetStub() {
         calendar.reset();
     }
+
+    private static final OwnerId SIGNED_IN = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000001");
 
     private static final CalendarEvent DINNER =
             CalendarEvent.startingAt("跟小明吃飯", LocalDateTime.of(2026, 10, 6, 15, 0))
@@ -266,6 +269,36 @@ class CalendarControllerTest {
         }
     }
 
+    @Nested
+    @DisplayName("#104 誰的行事曆")
+    class Owner {
+
+        @Test
+        @DisplayName("新增、查詢、刪除都交給 use case 登入者的帳號 ID：請求裡沒有任何「擁有者」參數可以改")
+        void ownerIsTheSignedInUser() throws Exception {
+            mockMvc.perform(post("/api/calendar/events").contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"events\":[{\"title\":\"吃飯\",\"start\":\"2026-10-06T15:00\",\"end\":\"2026-10-06T16:00\"}]}"))
+                    .andExpect(status().isCreated());
+            mockMvc.perform(get("/api/calendar/events").param("from", "2026-09-28").param("to", "2026-11-09"))
+                    .andExpect(status().isOk());
+            mockMvc.perform(delete("/api/calendar/events/" + DINNER_ID))
+                    .andExpect(status().isNoContent());
+
+            assertEquals(List.of(SIGNED_IN, SIGNED_IN, SIGNED_IN), calendar.owners);
+        }
+
+        @Test
+        @DisplayName("換一個人登入，交給 use case 的就是那個人")
+        void anotherUser() throws Exception {
+            String other = "3f1c8a2e-0000-4000-8000-000000000002";
+
+            mockMvc.perform(get("/api/calendar/events").with(user(other)).param("from", "2026-09-28").param("to", "2026-11-09"))
+                    .andExpect(status().isOk());
+
+            assertEquals(List.of(OwnerId.of(other)), calendar.owners);
+        }
+    }
+
     @TestConfiguration(proxyBeanMethods = false)
     static class StubConfiguration {
 
@@ -285,18 +318,21 @@ class CalendarControllerTest {
                 range -> List.of(new ScheduledEvent(DINNER_ID, DINNER));
 
         Function<DateRange, List<ScheduledEvent>> list = DEFAULT_LIST;
+        final List<OwnerId> owners = new ArrayList<>();
         final List<CalendarEvent> added = new ArrayList<>();
         final List<DateRange> ranges = new ArrayList<>();
         final List<EventId> removed = new ArrayList<>();
 
         @Override
-        public List<ScheduledEvent> addEvents(List<CalendarEvent> events) {
+        public List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events) {
+            owners.add(owner);
             added.addAll(events);
             return events.stream().map(event -> new ScheduledEvent(DINNER_ID, event)).toList();
         }
 
         @Override
-        public List<ScheduledEvent> listEvents(LocalDate start, LocalDate endExclusive) {
+        public List<ScheduledEvent> listEvents(OwnerId owner, LocalDate start, LocalDate endExclusive) {
+            owners.add(owner);
             DateRange range = new DateRange(start, endExclusive);
             ranges.add(range);
             return list.apply(range);
@@ -304,7 +340,8 @@ class CalendarControllerTest {
 
         // 只有 DINNER_ID 存在；其他 id 照真正的 use case 那樣丟「找不到」
         @Override
-        public void removeEvent(EventId id) {
+        public void removeEvent(OwnerId owner, EventId id) {
+            owners.add(owner);
             if (!DINNER_ID.equals(id)) {
                 throw new EventNotFoundException(id);
             }
@@ -313,6 +350,7 @@ class CalendarControllerTest {
 
         void reset() {
             list = DEFAULT_LIST;
+            owners.clear();
             added.clear();
             ranges.clear();
             removed.clear();

@@ -4,6 +4,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Calendar
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.DayPeriod;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.FreeSlot;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlotsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
@@ -29,6 +30,7 @@ import java.util.stream.Collectors;
  * 它只認得 use case（port.in），不認得資料庫、不認得抽取的實作；規則一條都不在這裡。
  *
  * 每個請求建一份新的：propose_events 提議的行程收在這裡，請求結束後交給畫面顯示成卡片。
+ * 擁有者也跟著這一份走，不是模型給的參數：查誰的行事曆由登入者決定，模型再怎麼被誘導也查不到別人的（#104）。
  * 提議不等於存檔 —— 存檔一定是使用者在畫面上按確認（走原本的 POST /events）。
  *
  * 工具回給模型的都是給人看得懂的短文字，而不是 JSON：模型接著要用一兩句話轉述給使用者，
@@ -36,6 +38,7 @@ import java.util.stream.Collectors;
  */
 public final class CalendarTools {
 
+    private final OwnerId owner;
     private final ParseEventsUseCase parseEvents;
     private final ListEventsUseCase listEvents;
     private final FindFreeSlotsUseCase findFreeSlots;
@@ -51,10 +54,12 @@ public final class CalendarTools {
             Pattern.compile("[早晚午晨夜凌]|(?i:(?<![a-z])(?:a\\.?m|p\\.?m)\\.?(?![a-z]))|(?<!\\d)(1[3-9]|2[0-3])\\s*[點:：]");
 
     /**
+     * @param owner    這段對話是誰的：list_events、find_free_slots 只查這個人的行程
      * @param userSaid 這段對話裡使用者說過的所有話（包括這一句）：propose_events 要拿它核對「使用者有沒有講早上還是晚上」
      */
-    public CalendarTools(ParseEventsUseCase parseEvents, ListEventsUseCase listEvents, FindFreeSlotsUseCase findFreeSlots,
+    public CalendarTools(OwnerId owner, ParseEventsUseCase parseEvents, ListEventsUseCase listEvents, FindFreeSlotsUseCase findFreeSlots,
                          List<String> userSaid) {
+        this.owner = Objects.requireNonNull(owner, "owner 不可為 null");
         this.parseEvents = Objects.requireNonNull(parseEvents, "parseEvents 不可為 null");
         this.listEvents = Objects.requireNonNull(listEvents, "listEvents 不可為 null");
         this.findFreeSlots = Objects.requireNonNull(findFreeSlots, "findFreeSlots 不可為 null");
@@ -122,12 +127,13 @@ public final class CalendarTools {
             @ToolParam(description = "開始日期（含），格式 yyyy-MM-dd") String from,
             @ToolParam(description = "結束日期（不含），格式 yyyy-MM-dd；只查一天就填隔天") String to) {
         try {
-            List<ScheduledEvent> events = listEvents.listEvents(LocalDate.parse(from), LocalDate.parse(to));
+            List<ScheduledEvent> events = listEvents.listEvents(owner, LocalDate.parse(from), LocalDate.parse(to));
             checkedCalendar = true;
             if (events.isEmpty()) {
                 return from + " 到 " + to + "（不含）之間沒有行程。";
             }
-            // 標題、地點是外人也寫得進來的文字（行事曆誰都能新增），可能藏著給模型的指令（間接 prompt injection，#13）。
+            // 標題、地點不一定是使用者自己想的字（從信件、網頁複製貼上的；之後的邀請、匯入），可能藏著給模型的指令（間接 prompt injection，#13）。
+            // #104 之後只有本人寫得進自己的行事曆，但這道防線不靠「寫的人可信」。
             // 開頭先講清楚這是資料；每個欄位都用「」框起來，模型分得出哪裡是資料、哪裡是我們說的話（spotlighting）
             return DATA_NOTICE + lines(events.stream().map(e -> describe(e.event())).toList());
         } catch (DateTimeParseException | IllegalArgumentException e) {
@@ -143,7 +149,7 @@ public final class CalendarTools {
             @ToolParam(description = "至少要幾分鐘才算空檔，沒講就填 60") Integer minMinutes) {
         try {
             Duration minimum = Duration.ofMinutes(minMinutes == null ? 60 : minMinutes);
-            List<FreeSlot> slots = findFreeSlots.findFreeSlots(LocalDate.parse(from), LocalDate.parse(to),
+            List<FreeSlot> slots = findFreeSlots.findFreeSlots(owner, LocalDate.parse(from), LocalDate.parse(to),
                     period == null ? DayPeriod.ANYTIME : period, minimum);
             if (slots.isEmpty()) {
                 return "這段期間的這個時段沒有空檔。";

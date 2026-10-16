@@ -1,5 +1,6 @@
 package io.github.andersonchen.talkcal.calendar.application.port.in;
 
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 
 import java.time.LocalDate;
@@ -12,13 +13,13 @@ import java.util.List;
  * 由 service 交給 DateRange 檢查，呼叫端不必先知道有這個型別。
  *
  * 「在期間裡」指的是跟期間有重疊：跨夜、跨月的行程，前後兩段期間都看得到它。
- * 依開始時間排序。
+ * 依開始時間排序。只有 owner 自己的行程，別人的看不到（#104）。
  *
  * 失敗時：
- * - 期間不合規 → IllegalArgumentException
+ * - owner 是 null、期間不合規 → IllegalArgumentException
  * - 資料庫出事、或資料庫裡有不合規則的行程 → IllegalStateException
  */
 public interface ListEventsUseCase {
 
-    List<ScheduledEvent> listEvents(LocalDate start, LocalDate endExclusive);
+    List<ScheduledEvent> listEvents(OwnerId owner, LocalDate start, LocalDate endExclusive);
 }

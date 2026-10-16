@@ -9,6 +9,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Calendar
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.DateRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 
 import java.time.LocalDate;
@@ -47,6 +48,11 @@ class JdbcCalendarEventAdapterTest {
     static JdbcClient jdbc;
     static TransactionTemplate transaction;
 
+    // 直接寫 SQL 的測試也帶著擁有者：不然每一筆都會先撞上 V11 的 NOT NULL，
+    // 「CHECK 擋下了」的測試就變成因為別的原因被擋、照樣綠燈
+    private static final OwnerId OWNER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000001");
+    private static final OwnerId OTHER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000002");
+
     private static final CalendarEvent DINNER =
             CalendarEvent.startingAt("跟小明吃飯", LocalDateTime.of(2026, 10, 6, 15, 0));
     private static final CalendarEvent OVERNIGHT =
@@ -79,12 +85,12 @@ class JdbcCalendarEventAdapterTest {
 
     private static ScheduledEvent saved(String title, LocalDateTime start, LocalDateTime end) {
         ScheduledEvent event = ScheduledEvent.schedule(new CalendarEvent(title, start, end));
-        adapter.save(List.of(event));
+        adapter.save(OWNER, List.of(event));
         return event;
     }
 
     private static List<String> titlesIn(DateRange range) {
-        return adapter.load(range).stream().map(e -> e.event().title()).toList();
+        return adapter.load(OWNER, range).stream().map(e -> e.event().title()).toList();
     }
 
     @Nested
@@ -96,16 +102,16 @@ class JdbcCalendarEventAdapterTest {
         void roundTrip() {
             ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);
 
-            adapter.save(List.of(dinner));
+            adapter.save(OWNER, List.of(dinner));
 
-            assertEquals(List.of(dinner), adapter.load(OCT_06));
+            assertEquals(List.of(dinner), adapter.load(OWNER, OCT_06));
         }
 
         @Test
         @DisplayName("存進去的就是牆上時間本身：用 SQL 轉成字串看，15:00 還是 15:00")
         void storesWallClockTime() {
             ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);
-            adapter.save(List.of(dinner));
+            adapter.save(OWNER, List.of(dinner));
 
             // 直接用字串讀，不經過 JDBC 的型別轉換：看的是資料庫裡實際存的值
             String stored = jdbc.sql("SELECT to_char(start_at, 'YYYY-MM-DD HH24:MI') FROM calendar_event WHERE id = :id")
@@ -118,12 +124,12 @@ class JdbcCalendarEventAdapterTest {
         @DisplayName("全部存或全部不存：第二筆 ID 重複，第一筆也不會留下來")
         void allOrNothing() {
             ScheduledEvent existing = ScheduledEvent.schedule(DINNER);
-            adapter.save(List.of(existing));
+            adapter.save(OWNER, List.of(existing));
 
             ScheduledEvent fresh = ScheduledEvent.schedule(OVERNIGHT);
             ScheduledEvent duplicate = new ScheduledEvent(existing.id(), OVERNIGHT);
 
-            assertThrows(IllegalStateException.class, () -> adapter.save(List.of(fresh, duplicate)));
+            assertThrows(IllegalStateException.class, () -> adapter.save(OWNER, List.of(fresh, duplicate)));
             assertEquals(1, count());
         }
 
@@ -131,8 +137,8 @@ class JdbcCalendarEventAdapterTest {
         @DisplayName("資料庫的 CHECK 也擋得住倒著走的行程（萬一有人繞過 domain 直接寫 SQL）")
         void databaseCheckRejectsEndBeforeStart() {
             assertThrows(Exception.class, () -> jdbc.sql("""
-                            INSERT INTO calendar_event (id, title, start_at, end_at)
-                            VALUES (:id, '壞資料', '2026-10-06 15:00', '2026-10-06 14:00')
+                            INSERT INTO calendar_event (owner_id, id, title, start_at, end_at)
+                            VALUES ('3f1c8a2e-0000-4000-8000-000000000001', :id, '壞資料', '2026-10-06 15:00', '2026-10-06 14:00')
                             """)
                     .param("id", UUID.randomUUID())
                     .update());
@@ -150,9 +156,9 @@ class JdbcCalendarEventAdapterTest {
             ScheduledEvent detailed = ScheduledEvent.schedule(DINNER.withCategory(Category.SOCIAL).withDetails("拉麵店", "記得訂位"));
             ScheduledEvent bare = ScheduledEvent.schedule(OVERNIGHT);
 
-            adapter.save(List.of(detailed, bare));
+            adapter.save(OWNER, List.of(detailed, bare));
 
-            assertEquals(List.of(bare, detailed), adapter.load(OCT_06));
+            assertEquals(List.of(bare, detailed), adapter.load(OWNER, OCT_06));
             Integer nulls = jdbc.sql("SELECT count(*) FROM calendar_event WHERE location IS NULL AND note IS NULL AND id = :id")
                     .param("id", bare.id().value())
                     .query(Integer.class).single();
@@ -163,22 +169,22 @@ class JdbcCalendarEventAdapterTest {
         @DisplayName("V5 之前存的資料：分類補成 PERSONAL（跟 Category.DEFAULT 一致）")
         void columnDefaultMatchesDomainDefault() {
             jdbc.sql("""
-                            INSERT INTO calendar_event (id, title, start_at, end_at)
-                            VALUES (:id, '舊資料', '2026-10-06 15:00', '2026-10-06 16:00')
+                            INSERT INTO calendar_event (owner_id, id, title, start_at, end_at)
+                            VALUES ('3f1c8a2e-0000-4000-8000-000000000001', :id, '舊資料', '2026-10-06 15:00', '2026-10-06 16:00')
                             """)
                     .param("id", UUID.randomUUID())
                     .update();
 
-            assertEquals(Category.DEFAULT, adapter.load(OCT_06).getFirst().event().category());
+            assertEquals(Category.DEFAULT, adapter.load(OWNER, OCT_06).getFirst().event().category());
         }
 
         @Test
         @DisplayName("資料庫的 CHECK：不認得的分類、空白的地點或備註都擋下")
         void databaseChecks() {
             for (String sql : List.of(
-                    "INSERT INTO calendar_event (id, title, start_at, end_at, category) VALUES (:id, '事', '2026-10-06 15:00', '2026-10-06 16:00', 'HOLIDAY')",
-                    "INSERT INTO calendar_event (id, title, start_at, end_at, location) VALUES (:id, '事', '2026-10-06 15:00', '2026-10-06 16:00', '  ')",
-                    "INSERT INTO calendar_event (id, title, start_at, end_at, note) VALUES (:id, '事', '2026-10-06 15:00', '2026-10-06 16:00', '')")) {
+                    "INSERT INTO calendar_event (owner_id, id, title, start_at, end_at, category) VALUES ('3f1c8a2e-0000-4000-8000-000000000001', :id, '事', '2026-10-06 15:00', '2026-10-06 16:00', 'HOLIDAY')",
+                    "INSERT INTO calendar_event (owner_id, id, title, start_at, end_at, location) VALUES ('3f1c8a2e-0000-4000-8000-000000000001', :id, '事', '2026-10-06 15:00', '2026-10-06 16:00', '  ')",
+                    "INSERT INTO calendar_event (owner_id, id, title, start_at, end_at, note) VALUES ('3f1c8a2e-0000-4000-8000-000000000001', :id, '事', '2026-10-06 15:00', '2026-10-06 16:00', '')")) {
                 assertThrows(Exception.class, () -> jdbc.sql(sql).param("id", UUID.randomUUID()).update(), sql);
             }
             assertEquals(0, count());
@@ -194,22 +200,22 @@ class JdbcCalendarEventAdapterTest {
         void deletesOnlyThatOne() {
             ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);
             ScheduledEvent overnight = ScheduledEvent.schedule(OVERNIGHT);
-            adapter.save(List.of(dinner, overnight));
+            adapter.save(OWNER, List.of(dinner, overnight));
 
-            assertTrue(adapter.delete(dinner.id()));
+            assertTrue(adapter.delete(OWNER, dinner.id()));
 
-            assertEquals(List.of(overnight), adapter.load(OCT_06));
+            assertEquals(List.of(overnight), adapter.load(OWNER, OCT_06));
         }
 
         @Test
         @DisplayName("沒有這筆（或刪第二次）回 false，不丟例外 —— 算不算錯是 use case 的事")
         void missingIsFalse() {
             ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);
-            adapter.save(List.of(dinner));
-            adapter.delete(dinner.id());
+            adapter.save(OWNER, List.of(dinner));
+            adapter.delete(OWNER, dinner.id());
 
-            assertFalse(adapter.delete(dinner.id()));
-            assertFalse(adapter.delete(EventId.newId()));
+            assertFalse(adapter.delete(OWNER, dinner.id()));
+            assertFalse(adapter.delete(OWNER, EventId.newId()));
         }
     }
 
@@ -274,13 +280,13 @@ class JdbcCalendarEventAdapterTest {
             transaction.executeWithoutResult(status -> {
                 jdbc.sql("ALTER TABLE calendar_event DROP CONSTRAINT calendar_event_title_not_blank").update();
                 jdbc.sql("""
-                                INSERT INTO calendar_event (id, title, start_at, end_at)
-                                VALUES (:id, E'\n', '2026-10-06 15:00', '2026-10-06 16:00')
+                                INSERT INTO calendar_event (owner_id, id, title, start_at, end_at)
+                                VALUES ('3f1c8a2e-0000-4000-8000-000000000001', :id, E'\n', '2026-10-06 15:00', '2026-10-06 16:00')
                                 """)
                         .param("id", UUID.randomUUID())
                         .update();
 
-                assertThrows(IllegalStateException.class, () -> adapter.load(OCT_06));
+                assertThrows(IllegalStateException.class, () -> adapter.load(OWNER, OCT_06));
                 status.setRollbackOnly();
             });
 
@@ -300,8 +306,8 @@ class JdbcCalendarEventAdapterTest {
         void rejectsBlankTitles() {
             for (String blank : List.of("   ", "\n", "\t", " \n ", "\u3000")) {
                 assertThrows(Exception.class, () -> jdbc.sql("""
-                                INSERT INTO calendar_event (id, title, start_at, end_at)
-                                VALUES (:id, :title, '2026-10-06 15:00', '2026-10-06 16:00')
+                                INSERT INTO calendar_event (owner_id, id, title, start_at, end_at)
+                                VALUES ('3f1c8a2e-0000-4000-8000-000000000001', :id, :title, '2026-10-06 15:00', '2026-10-06 16:00')
                                 """)
                         .param("id", UUID.randomUUID())
                         .param("title", blank)
@@ -314,8 +320,8 @@ class JdbcCalendarEventAdapterTest {
         @DisplayName("前後有空白但中間有字的標題照樣收")
         void acceptsTitleWithSurroundingSpaces() {
             jdbc.sql("""
-                            INSERT INTO calendar_event (id, title, start_at, end_at)
-                            VALUES (:id, ' 吃飯 ', '2026-10-06 15:00', '2026-10-06 16:00')
+                            INSERT INTO calendar_event (owner_id, id, title, start_at, end_at)
+                            VALUES ('3f1c8a2e-0000-4000-8000-000000000001', :id, ' 吃飯 ', '2026-10-06 15:00', '2026-10-06 16:00')
                             """)
                     .param("id", UUID.randomUUID())
                     .update();
@@ -323,8 +329,60 @@ class JdbcCalendarEventAdapterTest {
         }
     }
 
+    @Nested
+    @DisplayName("#104 擁有者：只碰得到自己的")
+    class Owner {
+
+        @Test
+        @DisplayName("同一段期間裡別人的行程，讀不到")
+        void loadsOnlyOwnEvents() {
+            ScheduledEvent mine = ScheduledEvent.schedule(DINNER);
+            ScheduledEvent theirs = ScheduledEvent.schedule(OVERNIGHT);
+            adapter.save(OWNER, List.of(mine));
+            adapter.save(OTHER, List.of(theirs));
+
+            assertEquals(List.of(mine), adapter.load(OWNER, OCT_06));
+            assertEquals(List.of(theirs), adapter.load(OTHER, OCT_06));
+        }
+
+        @Test
+        @DisplayName("IDOR 反例：拿別人行程的 id 來刪 —— 沒刪到（false），那筆還在")
+        void cannotDeleteOthersEvent() {
+            ScheduledEvent theirs = ScheduledEvent.schedule(DINNER);
+            adapter.save(OTHER, List.of(theirs));
+
+            assertFalse(adapter.delete(OWNER, theirs.id()));
+
+            assertEquals(List.of(theirs), adapter.load(OTHER, OCT_06));
+            assertTrue(adapter.delete(OTHER, theirs.id()), "擁有者本人刪得到");
+        }
+
+        @Test
+        @DisplayName("存進去的 owner_id 就是那個擁有者")
+        void storesOwner() {
+            ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);
+            adapter.save(OWNER, List.of(dinner));
+
+            UUID stored = jdbc.sql("SELECT owner_id FROM calendar_event WHERE id = :id").param("id", dinner.id().value())
+                    .query(UUID.class).single();
+            assertEquals(OWNER.value(), stored);
+        }
+
+        @Test
+        @DisplayName("資料庫也不收沒有擁有者的行程（V11 的 NOT NULL）")
+        void ownerIsRequired() {
+            assertThrows(Exception.class, () -> jdbc.sql("""
+                            INSERT INTO calendar_event (id, title, start_at, end_at)
+                            VALUES (:id, '沒有主人', '2026-10-06 15:00', '2026-10-06 16:00')
+                            """)
+                    .param("id", UUID.randomUUID())
+                    .update());
+            assertEquals(0, count());
+        }
+    }
+
     @Test
-    @DisplayName("讀取的 SQL 用得到 V3 的 GiST 索引")
+    @DisplayName("讀取的 SQL 用得到 V11 的 GiST 索引（擁有者＋期間）")
     void loadQueryCanUseTheGistIndex() {
         // 表裡只有幾筆時，規劃器會選全表掃描（那對小表確實比較快），從 EXPLAIN 看不出索引能不能用。
         // 所以在交易裡用 SET LOCAL 暫時禁止全表掃描：如果 SQL 的運算式跟索引對不上，
@@ -335,23 +393,24 @@ class JdbcCalendarEventAdapterTest {
             return String.join("\n", jdbc.sql("""
                             EXPLAIN SELECT id, title, start_at, end_at
                             FROM calendar_event
-                            WHERE tsrange(start_at, end_at) && tsrange(:start, :end)
+                            WHERE owner_id = :owner AND tsrange(start_at, end_at) && tsrange(:start, :end)
                             ORDER BY start_at, end_at, id
                             """)
+                    .param("owner", OWNER.value())
                     .param("start", OCT_06.startTime())
                     .param("end", OCT_06.endTime())
                     .query(String.class)
                     .list());
         });
 
-        assertTrue(plan.contains("calendar_event_period"), () -> "沒有用到索引，計畫是：\n" + plan);
+        assertTrue(plan.contains("calendar_event_owner_period"), () -> "沒有用到索引，計畫是：\n" + plan);
     }
 
     @Test
     @DisplayName("id 欄位存的就是 EventId 的 UUID")
     void storesIdAsUuid() {
         ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);
-        adapter.save(List.of(dinner));
+        adapter.save(OWNER, List.of(dinner));
 
         UUID stored = jdbc.sql("SELECT id FROM calendar_event").query(UUID.class).single();
         assertEquals(dinner.id(), new EventId(stored));

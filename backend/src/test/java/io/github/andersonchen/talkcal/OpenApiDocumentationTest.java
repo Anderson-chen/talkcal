@@ -63,4 +63,15 @@ class OpenApiDocumentationTest {
                 .andExpect(jsonPath("$.paths['/api/calendar/events/{id}'].delete.responses['204']").exists())
                 .andExpect(jsonPath("$.paths['/api/calendar/events/{id}'].delete.responses['404']").exists());
     }
+
+    @Test
+    @DisplayName("#104 登入者不是 API 參數：controller 收的 Principal 不會出現在文件上，看文件的人不會以為能指定擁有者")
+    void signedInUserIsNotAParameter() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths['/api/calendar/events'].get.parameters.length()").value(2))
+                .andExpect(jsonPath("$.paths['/api/calendar/events/{id}'].delete.parameters.length()").value(1))
+                .andExpect(jsonPath("$.paths['/api/calendar/assistant/{conversationId}'].get.parameters.length()").value(1))
+                .andExpect(jsonPath("$.paths['/api/calendar/events'].post.parameters").doesNotExist())
+                .andExpect(jsonPath("$.paths['/api/calendar/assistant'].post.parameters").doesNotExist());
+    }
 }

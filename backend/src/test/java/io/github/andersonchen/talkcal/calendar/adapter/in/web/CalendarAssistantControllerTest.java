@@ -9,9 +9,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.CalendarAssistant;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.hamcrest.Matchers;
@@ -43,6 +46,8 @@ import org.springframework.test.web.servlet.MockMvc;
 class CalendarAssistantControllerTest {
 
     private static final String URL = "/api/calendar/assistant";
+    // 另一個登入的人（預設的請求是 ...0001）
+    private static final String OTHER = "3f1c8a2e-0000-4000-8000-000000000002";
     private static final String UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
     @Autowired
@@ -131,6 +136,26 @@ class CalendarAssistantControllerTest {
     }
 
     @Test
+    @DisplayName("#104 別人拿到我的 conversationId：讀回來是空的，接著說話也只是在他自己名下開一段，我的那段不受影響")
+    void conversationsBelongToSignedInUser() throws Exception {
+        String id = "9d2f8c1a-3b4e-4f6a-8c7d-0e1f2a3b4c5d";
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"明天七點和 Amy 見面\",\"conversationId\":\"" + id + "\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get(URL + "/" + id).with(user(OTHER)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.messages").isEmpty());
+        mockMvc.perform(post(URL).with(user(OTHER)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"嗨\",\"conversationId\":\"" + id + "\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get(URL + "/" + id))
+                .andExpect(jsonPath("$.messages.length()").value(2))
+                .andExpect(jsonPath("$.messages[0].text").value("明天七點和 Amy 見面"));
+    }
+
+    @Test
     @DisplayName("GET 的 conversationId 不是 UUID：400")
     void badIdOnHistory() throws Exception {
         mockMvc.perform(get(URL + "/abc")).andExpect(status().isBadRequest());
@@ -156,8 +181,10 @@ class CalendarAssistantControllerTest {
                     return new ChatResponse(List.of(new Generation(new AssistantMessage("早上還是晚上？"))));
                 }
             };
-            return new CalendarAssistant(model, new InMemoryChatMemoryRepository(),
-                    description -> List.of(), (start, end) -> List.of(), (start, end, period, minimum) -> List.of(),
+            // 每個擁有者一份記憶，跟真的實作一樣分開
+            Map<OwnerId, InMemoryChatMemoryRepository> memories = new ConcurrentHashMap<>();
+            return new CalendarAssistant(model, owner -> memories.computeIfAbsent(owner, o -> new InMemoryChatMemoryRepository()),
+                    description -> List.of(), (owner, start, end) -> List.of(), (owner, start, end, period, minimum) -> List.of(),
                     Clock.systemDefaultZone());
         }
     }
