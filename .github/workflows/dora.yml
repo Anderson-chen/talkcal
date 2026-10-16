@@ -1,0 +1,70 @@
+# 交付指標（DORA）：每週一用 GitHub 上的紀錄算一次，報告貼在這次 run 的摘要頁，原始資料和報告存成 artifact。
+#
+# 為什麼是 Actions 排程、不推進 Grafana／Mimir：
+#   - 資料本來就在 GitHub（Deployments、PR、issue），在 GitHub 上算不用把權杖放到別的地方
+#   - Mimir 跑在部署機器上、平常會關機，GitHub 也沒有連進那台機器的權限（cd/README.md「為什麼是 pull」）
+#   - 這些是「一週幾十筆事件」，不是每 15 秒的時間序列；週報＋明細表比曲線好讀，每一筆都點得回部署和 PR
+#   理由的完整版和定義見 cd/dora/README.md。
+#
+# 只讀：permissions 全部是 read，腳本只用 gh 的 GET 和 GraphQL query。
+
+name: DORA
+
+on:
+  # UTC 週一 01:00 = 台灣週一 09:00，一週開始時看上週
+  schedule:
+    - cron: '0 1 * * 1'
+  # 手動跑：想看某個區間，或剛處理完事故想馬上看數字
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 只看最近幾天；all ＝ 全部歷史
+        required: false
+        default: '30'
+  # 改了算法：只跑反例測試，不連 GitHub API
+  pull_request:
+    paths: ['cd/dora/**', '.github/workflows/dora.yml']
+
+permissions:
+  contents: read
+  deployments: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: 反例測試
+        run: python3 -m unittest discover -s cd/dora -v
+
+  report:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: 算指標
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DAYS: ${{ inputs.days || '30' }}
+        run: |
+          range=(--days "$DAYS"); [ "$DAYS" = all ] && range=()
+          python3 cd/dora/dora.py --repo "$GITHUB_REPOSITORY" "${range[@]}" \
+            --save-snapshot dora-snapshot.json --out dora-report.md
+          cat dora-report.md >> "$GITHUB_STEP_SUMMARY"
+      # 留一份原始資料：之後改了定義，可以用 --snapshot 對舊資料重算、比較前後
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dora-${{ github.run_id }}
+          path: |
+            dora-report.md
+            dora-snapshot.json
+          retention-days: 90
