@@ -89,7 +89,8 @@ export function useAssistant(calendar: CalendarState) {
       typing.value = false
     }
   }
-  restore()
+  // 不等它：讀回來之前畫面先顯示招呼語。錯誤在 restore() 裡自己接住了，不會變成沒人處理的 rejection
+  void restore()
 
   /** 清空：丟掉 conversationId，下一句不帶 id，後端就開一段新的。不用等後端，也就不會清空失敗。 */
   function clear() {
