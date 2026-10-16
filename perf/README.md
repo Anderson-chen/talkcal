@@ -178,6 +178,38 @@ Grafana 的「talkcal — 壓測（k6）」上，紅線是舊 app 收到 SIGTERM
 
 `RATE_PER_MIN` 要低於容量：每分鐘 60 人、問題隨機混合時模型的 KV cache 會塞爆、回 502，跟部署無關的失敗混進來就分不清了。
 
+### canary：邊壓邊換 app，零停機與 canary 的反例
+
+[#20](https://github.com/Anderson-chen/talkcal/issues/20) 的驗證。跟 deploy.js 一樣用固定的到達速率，差別是**打 nginx**（流量切到哪個 slot 是 nginx 決定的）、
+打**查行程**（不叫模型，每秒幾十個也不會塞爆、不受 AI 助理的限流影響）。做法和結果見
+[deploy/README.md「零停機部署與 canary」](../deploy/README.md#零停機部署與-canary)。
+
+在同一台機器上另起一組示範環境，不碰正式那組（專案 `talkcal-canary-demo`，埠 48080／48090／48091，自己的資料庫）：
+
+```bash
+docker compose -f ops/compose.yaml up -d --no-deps mimir grafana     # canary 要查 Mimir
+export DB_PASSWORD=canary-demo-only                                  # 示範用的資料庫自己一份，密碼隨便給
+docker build -t talkcal/app:canary-demo backend && docker build -t talkcal/web:canary-demo web
+D="-f deploy/compose.yaml -f perf/canary/compose.demo.yaml"
+docker compose $D up -d --no-deps --wait postgres && docker compose $D up -d --no-deps --wait app web alloy
+export EXTRA_COMPOSE_FILES=perf/canary/compose.demo.yaml METRICS_SELECTOR='job="talkcal-app",env="canary-demo"'
+```
+
+然後在一個終端機壓，另一個終端機大約 20 秒後換：
+
+```bash
+BASE_URL=http://localhost:48080 DURATION_S=120 k6 run --out csv=perf/results/canary.csv perf/canary.js
+```
+
+```bash
+cd/bluegreen.sh local                                    # 零停機：失敗要是 0
+cd/bluegreen.sh local --rollback                         # 切回上一個 slot：失敗要是 0
+CANARY_PERCENT=10 EXTRA_COMPOSE_FILES="perf/canary/compose.demo.yaml perf/canary/compose.broken.yaml"   cd/bluegreen.sh local                                  # 反例：新版每個請求都 500，要只影響 10% 左右、而且被切回
+```
+
+`python perf/canary/timeline.py perf/results/canary.csv` 把每 10 秒的失敗比例印出來，看得到 canary 那段大約 10%、切回後歸零。
+收工：`docker compose $D --profile bluegreen down -v`（`-v` 連示範的資料庫一起清掉）。
+
 ## 怎麼讀結果
 
 k6 收工時印一張表，看三個地方就夠：
@@ -255,5 +287,7 @@ perf/
 ├── concurrent.js   # 一波人在短時間內各說一句（尖峰）
 ├── knee.js         # 同時數逐階往上加，找臨界值
 ├── deploy.js       # 邊壓邊部署：部署期間有幾個人受影響
+├── canary.js       # 邊壓邊換 app（打 nginx）：零停機、canary 影響了多少請求（#20）
+├── canary/         # canary.js 的示範環境：compose 疊加層、故意壞掉的新版、示範用的 Alloy、時間軸整理
 └── run-to-grafana.sh  # 跑任何一支腳本，指標同時送進 ops/ 的 Grafana
 ```

@@ -94,5 +94,5 @@ app log 裡沒有「Graceful shutdown complete」：還沒等完就被殺了。
 |---|---|
 | 對齊三個等待時間 | ✅ 這次完成 |
 | 邊壓邊部署的 k6 腳本（deploy.js）、dashboard 上的部署時間標記 | ✅ 這次完成 |
-| 零停機部署：先起新的、健康了再關舊的（兩個 app 輪流，前面的 nginx 導流） | 另開任務 |
+| 零停機部署：先起新的、健康了再關舊的（兩個 app 輪流，前面的 nginx 導流） | ✅ [#20](https://github.com/Anderson-chen/talkcal/issues/20)：同樣邊壓邊部署，2401 個請求 0 失敗（[deploy/README.md](../../deploy/README.md#零停機部署與-canary)） |
 | 容量：每分鐘 60 人就塞爆 KV cache。要嘛擋住（rate limit），要嘛加大 context 或減少 slot | 併進上線準備清單的 rate limit 那一項 |
