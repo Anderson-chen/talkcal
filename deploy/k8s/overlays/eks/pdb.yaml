@@ -1,0 +1,11 @@
+# 節點升版、換機型時 EKS 會一台一台清空節點（drain）。沒有這個的話，兩份 app 剛好在同一台上就會一起被趕走。
+# 有了它，drain 要等另一份 ready 了才能趕這一份
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: app
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: app

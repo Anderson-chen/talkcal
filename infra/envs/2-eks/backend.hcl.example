@@ -1,0 +1,5 @@
+# 複製成 backend.hcl（已 gitignore），填入 infra/bootstrap 的輸出：
+#   cd infra/bootstrap && terraform output state_bucket
+bucket  = "talkcal-tfstate-<帳號 ID>"
+region  = "ap-northeast-1"
+profile = "DEV"

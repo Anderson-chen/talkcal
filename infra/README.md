@@ -1,6 +1,6 @@
 # infra —— 搬上 AWS 的基礎設施
 
-狀態：階段一的 Terraform 寫好了、還沒 apply 過；階段二還在規劃。本機現在怎麼跑見 [docs/architecture.md](../docs/architecture.md)。
+狀態：階段一 2026-10-14 上線（平常關機）；階段二的 Terraform 寫好了、還沒 apply 過（開著每小時約 0.47 USD，展示時才 apply）。本機現在怎麼跑見 [docs/architecture.md](../docs/architecture.md)。
 
 ## 兩個階段，一個資料夾一個
 
@@ -10,13 +10,13 @@ infra/
 ├── bootstrap/         # 兩階段共用、整個帳號只跑一次：放 state 的 S3 bucket、花費告警
 └── envs/
     ├── 1-ec2/         # 階段一：一台 EC2 + Docker Compose（#57），模型先走 Bedrock，Terraform 已寫好
-    └── 2-eks/         # 階段二：EKS 叢集（#58），只有規劃
+    └── 2-eks/         # 階段二：EKS 叢集（#58），Terraform 已寫好、沒 apply 過
 ```
 
 | 階段 | 資料夾 | 追蹤 | 換來什麼 | 代價 |
 |---|---|---|---|---|
 | 一 | [envs/1-ec2](envs/1-ec2/README.md) | [#57](https://github.com/Anderson-chen/talkcal/issues/57) | 服務真的在線上，別人連得到；compose 幾乎不用改 | 只有一台，掛了就停，換版時有空窗 |
-| 二 | [envs/2-eks](envs/2-eks/README.md) | [#58](https://github.com/Anderson-chen/talkcal/issues/58) | 換版不停機、一台掛了不會全停，staging / rollback / canary 有地方練 | 元件多、要先學 k8s（[#56](https://github.com/Anderson-chen/talkcal/issues/56) 本機 kind） |
+| 二 | [envs/2-eks](envs/2-eks/README.md) | [#58](https://github.com/Anderson-chen/talkcal/issues/58) | 換版不停機、一台掛了不會全停，staging / rollback / canary 有地方練 | 元件多、要先學 k8s（[#56](https://github.com/Anderson-chen/talkcal/issues/56) 本機 kind）；固定月費約 340 USD，只能 destroy、不能關機 |
 
 **為什麼先做階段一**：上去的就是本機驗證過的那一套，要補的只有對外的入口和祕密。一次把 k8s、EKS、RDS、CloudFront 全換掉，出問題時分不出是哪一層。
 
@@ -36,4 +36,4 @@ infra/
 
 ## 待決定
 
-各階段的「待決定」寫在各自的 README。選好之後理由寫進 ADR（[#47](https://github.com/Anderson-chen/talkcal/issues/47)）。
+各階段的「待決定」寫在各自的 README。選好之後理由寫進 [docs/adr/](../docs/adr/README.md)（慣例在 [#47](https://github.com/Anderson-chen/talkcal/issues/47) 定案）。
