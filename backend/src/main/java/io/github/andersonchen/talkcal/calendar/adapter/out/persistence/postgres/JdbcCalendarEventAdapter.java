@@ -18,6 +18,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -26,6 +28,11 @@ import java.util.UUID;
 /**
  * 把行程存進 PostgreSQL、讀出來（表的定義在 db/migration/V2__create_calendar_events.sql，
  * 讀取用的索引在 V3__index_calendar_event_period.sql，分類、地點、備註是 V5 加的，擁有者是 V11 加的）。
+ *
+ * 起訖時間正在從 start_at、end_at（不帶時區的牆上時間）搬到 starts_at、ends_at（時間點，V12～V14，#18）。
+ * 現在兩邊都寫、還讀舊的：舊版程式（部署途中、退回上一版時）還在讀舊欄位，所以舊欄位要照寫。
+ * 步驟見 docs/database/zero-downtime-schema.md。
+ * domain 還是 LocalDateTime：牆上時間跟時間點的換算只在這裡做，用的是 calendar.zone。
  *
  * 每一句 SQL 都帶著 owner_id 條件（#104）：授權不是另外一道「先查再比對」的檢查，而是查詢本身就只碰得到這個人的資料。
  *
@@ -38,10 +45,14 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEvent
 
     private final JdbcClient jdbc;
     private final TransactionTemplate transaction;
+    // 牆上時間是哪個時區的牆。V12 的 trigger、V13 的 backfill 寫死的是 Asia/Taipei，跟 calendar.zone 要一致：
+    // 不一致的話，新版自己寫的列和舊版寫進來、由 trigger 換算的列，會差上時差
+    private final ZoneId zone;
 
-    public JdbcCalendarEventAdapter(JdbcClient jdbc, TransactionTemplate transaction) {
+    public JdbcCalendarEventAdapter(JdbcClient jdbc, TransactionTemplate transaction, ZoneId zone) {
         this.jdbc = Objects.requireNonNull(jdbc, "jdbc 不可為 null");
         this.transaction = Objects.requireNonNull(transaction, "transaction 不可為 null");
+        this.zone = Objects.requireNonNull(zone, "zone 不可為 null");
     }
 
     @Override
@@ -118,21 +129,31 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEvent
                 rs.getString("category"), rs.getString("location"), rs.getString("note"));
     }
 
+    // 牆上時間 → 時間點。夏令時間切換時不存在或重複的那一小時，照 ZonedDateTime 的規則取（台北現在沒有夏令時間）
+    private OffsetDateTime instant(LocalDateTime wallClock) {
+        return wallClock.atZone(zone).toOffsetDateTime();
+    }
+
     private record Row(UUID id, String title, LocalDateTime start, LocalDateTime end,
                        String category, String location, String note) {
     }
 
     private void insert(OwnerId owner, ScheduledEvent scheduled) {
         jdbc.sql("""
-                        INSERT INTO calendar_event (id, owner_id, title, start_at, end_at, category, location, note)
-                        VALUES (:id, :owner, :title, :start, :end, :category, :location, :note)
+                        INSERT INTO calendar_event (id, owner_id, title, start_at, end_at, starts_at, ends_at,
+                                                    category, location, note)
+                        VALUES (:id, :owner, :title, :start, :end, :startsAt, :endsAt, :category, :location, :note)
                         """)
                 .param("id", scheduled.id().value())
                 .param("owner", owner.value())
                 .param("title", scheduled.event().title())
-                // LocalDateTime 直接交給 PostgreSQL 的 JDBC driver，它對應的正是不帶時區的 TIMESTAMP，不經過任何時區換算
+                // 舊欄位：LocalDateTime 直接交給 PostgreSQL 的 JDBC driver，它對應的正是不帶時區的 TIMESTAMP，不經過任何時區換算。
+                // 只剩舊版程式在讀它；contract 那一步（還沒做）連同這兩個參數一起拿掉
                 .param("start", scheduled.event().start())
                 .param("end", scheduled.event().end())
+                // 新欄位：自己換算好時間點再給，不靠 V12 的 trigger —— trigger 是給不認得新欄位的舊版用的，contract 時會拿掉
+                .param("startsAt", instant(scheduled.event().start()))
+                .param("endsAt", instant(scheduled.event().end()))
                 // 分類存 enum 的名稱，跟 V5 的 CHECK 一致；沒有地點、備註就存 NULL（V5 的 CHECK 不收空白字串）
                 .param("category", scheduled.event().category().name())
                 .param("location", scheduled.event().location().orElse(null))

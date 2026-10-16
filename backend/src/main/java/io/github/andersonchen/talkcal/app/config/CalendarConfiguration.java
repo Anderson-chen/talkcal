@@ -64,8 +64,9 @@ class CalendarConfiguration {
 
     // 一個實作三個 port：回傳型別只能寫實作本身，下面的 use case 照樣用各自的 port 介面收它
     @Bean
-    JdbcCalendarEventAdapter calendarEventStore(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
-        return new JdbcCalendarEventAdapter(jdbcClient, new TransactionTemplate(transactionManager));
+    JdbcCalendarEventAdapter calendarEventStore(JdbcClient jdbcClient, PlatformTransactionManager transactionManager,
+                                                @Value("${calendar.zone}") ZoneId zone) {
+        return new JdbcCalendarEventAdapter(jdbcClient, new TransactionTemplate(transactionManager), zone);
     }
 
     /**
