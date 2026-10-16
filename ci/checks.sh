@@ -17,7 +17,8 @@ echo "── 後端：單元測試、架構規則、整合測試（編譯時 Err
 # 要真模型的那幾支，連不到 llama-server 就自動跳過（Assumptions），下面的摘要會列出來
 # evalClasses：AI eval（./gradlew eval）不在這裡跑（要真模型、跑一分多鐘），但至少要編得過，
 # 不然改了 CalendarAssistant 的方法簽名，eval 壞了沒人知道，直到下次有人想跑它
-(cd backend && ./gradlew --no-daemon test integrationTest evalClasses) || status=1
+# jacocoTestReport：單元＋整合測試合併的覆蓋率報告（#23），不設門檻、不會讓 CI 紅，總數貼在下面的摘要
+(cd backend && ./gradlew --no-daemon test integrationTest evalClasses jacocoTestReport) || status=1
 
 # AI eval：只有 pre-push 發現這次改到 prompt 或模型相關的檔案時才跑（它設 RUN_EVAL=1，見 .githooks/pre-push）。
 # GitHub 上不跑：沒有模型。基準線裡的題目沒過才會紅；報告在 backend/build/eval/report.md（run.sh 會拿回 ci/build/eval/）
@@ -60,6 +61,21 @@ skipped_list() { # 列出被跳過的測試：類別 › 名稱
     done
 }
 
+jacoco_pct() { # jacoco_pct <LINE|BRANCH>：後端整份報告的覆蓋率
+    # XML 整份只有一行；最後一個 </package> 之後的 counter 才是整份報告的總數（前面的是各 package、各類別的）
+    local xml=backend/build/reports/jacoco/test/jacocoTestReport.xml
+    [ -f "$xml" ] || { echo "（沒有報告）"; return; }
+    sed 's/.*<\/package>//' "$xml" | grep -o "<counter type=\"$1\"[^>]*" \
+        | awk -F'"' '{ m = $4; c = $6; printf "%.1f%% (%d/%d)", (m + c ? 100 * c / (m + c) : 0), c, m + c }'
+}
+
+vitest_pct() { # vitest_pct <lines|branches>：前端的覆蓋率，讀 Vitest 的 json-summary
+    local json=web/coverage/coverage-summary.json
+    [ -f "$json" ] || { echo "（沒有報告）"; return; }
+    node -e 'const t = require(process.argv[1]).total[process.argv[2]]; console.log(`${t.pct}% (${t.covered}/${t.total})`)' \
+        "$PWD/$json" "$1"
+}
+
 {
     echo "## 測試結果"
     echo
@@ -82,6 +98,16 @@ skipped_list() { # 列出被跳過的測試：類別 › 名稱
     else
         echo "沒有跳過任何測試。"
     fi
+
+    # 覆蓋率（#23）：只拿來找漏測的地方，不設門檻（理由見 docs/test-coverage.md）。
+    # 只列總數；要看哪一行沒跑到，打開 HTML 報告（GitHub 上在 coverage 這個 artifact，本機在 ci/build/）
+    echo
+    echo "## 測試覆蓋率"
+    echo
+    echo "| | 行 | 分支 | 報告 |"
+    echo "|---|---|---|---|"
+    echo "| 後端（單元＋整合） | $(jacoco_pct LINE) | $(jacoco_pct BRANCH) | \`reports/jacoco/test/html/\` |"
+    echo "| 前端（Vitest，只算 .ts） | $(vitest_pct lines) | $(vitest_pct branches) | \`web-coverage/\` |"
 } > "$summary"
 
 echo
