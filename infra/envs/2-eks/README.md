@@ -1,6 +1,7 @@
 # 2-eks — 階段二：EKS
 
-狀態：**規劃中**，追蹤在 [#58](https://github.com/Anderson-chen/talkcal/issues/58)，要等階段一（[1-ec2](../1-ec2/README.md)）和本機 k8s（[#56](https://github.com/Anderson-chen/talkcal/issues/56)）。整體的階段怎麼分見 [infra/README.md](../../README.md)。
+狀態：**規劃中**，追蹤在 [#58](https://github.com/Anderson-chen/talkcal/issues/58)，要等階段一（[1-ec2](../1-ec2/README.md)）。
+本機 k8s（[#56](https://github.com/Anderson-chen/talkcal/issues/56)）已經做完：manifests 在 [deploy/k8s](../../../deploy/k8s/README.md)，EKS 只要多一個 `overlays/eks/`（模型用 `components/llm-chat-gpu`、資料庫換 RDS、入口換 ALB），base 沿用。整體的階段怎麼分見 [infra/README.md](../../README.md)。
 
 原則是**同一份映像檔、同一套觀測**，只把「本機扮演的角色」換成雲端對應的東西。
 對應關係在 [deploy/README.md 的「對照雲端」](../../../deploy/README.md#對照雲端)已經列過，這裡把它畫成 AWS 的元件，同樣拆成三張。
