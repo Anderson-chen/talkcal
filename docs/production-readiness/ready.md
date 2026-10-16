@@ -151,7 +151,11 @@ GitHub 上不跑（沒有模型），只確定它編得過（`evalClasses`）。
 - [OAuth2LoginSystemTest](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/OAuth2LoginSystemTest.java)：照雲端 nginx 的樣子帶 `X-Forwarded-Proto: https`，回呼網址是 `https://`；沒帶的那題還是 `http://`。故意拿掉 `forward-headers-strategy`，這題變紅
 - nginx：真的 `nginx.conf` 前面接一個會回顯 header 的假 app —— 沒帶 header 時轉出 `http`、帶 `https` 時轉出 `https`；同樣的實驗換成 master 的 `nginx.conf`，帶 `https` 也被改成 `http`（缺口重現）
 - `terraform validate`、`fmt` 通過
-- 部署到 EC2 實際登入：還沒做
+- 部署到 EC2（2026-10-16，`GIT_REF=127-auth-on-aws`）：
+  - 按 Google 登入轉出去的 `redirect_uri` 是 `https://talkcal.<IP>.sslip.io/api/auth/oauth2/callback/google`（改之前會是 `http://`）
+  - 沒登入查行程 401 JSON；`/providers` 只有有設定的 `google`
+  - 兩個臨時帳號註冊、登入成功，session cookie 帶 `Secure`、`HttpOnly`；A 的行程 B 看不到、B 刪 A 的是 404、A 自己刪得掉。驗完把兩個帳號刪掉
+  - 真的用 Google 帳號從雲端登入一次：要先在 Google Cloud Console 登記上面那個 https 回呼網址
 
 **#104 的做法**：
 - 擁有者是 calendar 自己的型別 `OwnerId`，不用 auth 的 `AccountId`：兩個模組互不認識（ArchitectureTest 守著）。值就是登入者的帳號 ID，由 controller 從 `java.security.Principal` 取出來交給 use case —— calendar 不知道是怎麼登入的
