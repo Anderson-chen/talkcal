@@ -74,6 +74,28 @@ jobs:
       # 在這裡才抓到代表已經推上 GitHub 了：key 要當成外洩，作廢重發，刪 commit 不夠
       - run: ci/secrets.sh
 
+  # 後端 Java 的格式（ci/format.sh）。不在 checks 裡：它只看「跟 master 比改過的檔案」，要有 git 歷史，
+  # checks 的容器裡沒有 .git（跟 secrets 同一個理由）。前端的格式、lint 不需要歷史，在 checks 裡
+  format:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # fetch-depth: 0 —— 要有 origin/master 才知道哪些檔案改過
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Spotless 不編譯，只要能跑 Gradle 的 JDK。版本跟 build.gradle 的 toolchain 一樣，免得兩邊各說各話
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/wrapper-validation@v6
+
+      - run: ci/format.sh
+
   # 漏洞掃描：build 出會上線的映像檔再掃，有 HIGH、CRITICAL 就紅燈（必過檢查）。
   # --pull：每次都拉最新的基底映像檔，掃到的才是重新部署時真的會拿到的版本
   vulns:

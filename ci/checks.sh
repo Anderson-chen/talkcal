@@ -12,7 +12,7 @@ cd "$(dirname "$0")/.."
 
 status=0
 
-echo "── 後端：單元測試、架構規則、整合測試 ──"
+echo "── 後端：單元測試、架構規則、整合測試（編譯時 Error Prone 一起跑）──"
 # 整合測試裡要 PostgreSQL 的那幾支用 Testcontainers 開在旁邊（run.sh 把主機的 Docker 接進來了）；
 # 要真模型的那幾支，連不到 llama-server 就自動跳過（Assumptions），下面的摘要會列出來
 # evalClasses：AI eval（./gradlew eval）不在這裡跑（要真模型、跑一分多鐘），但至少要編得過，
@@ -26,12 +26,14 @@ if [ "${RUN_EVAL:-0}" = 1 ]; then
     (cd backend && ./gradlew --no-daemon eval) || status=1
 fi
 
-echo "── 前端：單元測試、型別檢查、打包、E2E ──"
+echo "── 前端：格式、lint、單元測試、型別檢查、打包、E2E ──"
 # npm ci：照 package-lock.json 原樣裝，lock 跟 package.json 對不上就直接失敗
+# format:check：Prettier，整個 web/ 都要排好（npm run format 自動排）
+# lint：ESLint，抓會出錯的寫法（忘了 await、v-for 沒 key…），格式不歸它管。兩個都秒回，放最前面
 # npm test：Vitest，只測純函式（秒回）
 # npm run e2e：Playwright 開真的 Chromium（桌面、手機兩種版面），API 用假的，不需要後端。
 #   它會自己 build 再起 vite preview；放在 build 之後，型別錯的話先在 build 那一步就停
-(cd web && npm ci --no-audit --no-fund && npm test && npm run build && npm run e2e) || status=1
+(cd web && npm ci --no-audit --no-fund && npm run format:check && npm run lint && npm test && npm run build && npm run e2e) || status=1
 
 # ── 測試摘要 ─────────────────────────────────────────────────────
 # 為什麼要特別列出「跳過」：綠燈只代表「跑了的都過了」。
