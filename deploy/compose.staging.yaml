@@ -1,0 +1,74 @@
+# staging：疊在 deploy/compose.yaml 上面，在同一台機器上多起一套「跟正式一樣、但完全分開」的環境（#24）。
+# 新版先部署到這裡、healthy 了，正式環境（cd/envs/local.env）才會拿到同一個 commit（晉升流程見 cd/README.md）。
+#
+#   cd/apply.sh staging              # 平常用這個：專案名稱、.env 都由 cd/envs/staging.env 決定
+#   docker compose -p talkcal-staging --env-file deploy/.env.staging \
+#                  -f deploy/compose.yaml -f deploy/compose.staging.yaml up -d postgres app web
+#
+# 為什麼是疊加層、不是另一份完整的 compose：staging 的價值在「跟正式一樣」，兩份完整的檔案遲早會不一樣。
+# 這裡只寫「為了跟正式共存在同一台機器上，非改不可」的地方，其他（映像檔怎麼 build、healthcheck、
+# graceful shutdown、Spring 的 docker profile）全部沿用。
+#
+# 隔開靠三件事，少一件就會撞到正式環境：
+#   1. 專案名稱 talkcal-staging（下面的 name:，蓋掉 deploy/compose.yaml 的 talkcal-deploy）：網路、volume 都以它當前綴，
+#      所以資料庫是 talkcal-staging_postgres-data，不是正式的 talkcal-deploy_postgres-data。
+#      寫在這個檔案、不靠 -p：忘了帶 -p 也不會變成「用 staging 的設定換掉正式的容器」
+#   2. 下面把寫死的 container_name、主機埠、映像檔 tag 換掉：這三樣不吃專案名稱，不換就跟正式搶同一個
+#   3. 自己的 .env（deploy/.env.staging，--env-file 指定）：DB 密碼、OAuth 跟正式不同一份。
+#      忘了帶 --env-file 時 compose 會默默讀正式的 deploy/.env，所以下面的 labels 要求一個只有
+#      .env.staging 才有的 TALKCAL_ENV，沒有就拒絕啟動
+# 有沒有真的隔開，cd/check-isolation.sh 會把兩邊的設定攤開來比。
+#
+# 埠用 2 開頭：正式的容器版是 1 開頭（18080、18090），本機開發是原本的號碼（8090）。
+
+name: talkcal-staging
+
+# 每個服務都貼上環境名稱：docker ps --filter label=talkcal.env=staging 一眼分得出是哪一套，
+# 之後觀測要分環境也從這裡拿。值一定要從 .env.staging 來，見上面第 3 點
+x-staging-label: &staging-label
+  talkcal.env: ${TALKCAL_ENV:?缺 TALKCAL_ENV：staging 要用自己的 .env（--env-file deploy/.env.staging），見 deploy/README.md}
+
+services:
+  # ── 模型：不另起一份，共用正式環境的 llm-chat ─────────────────────────
+  # 這台只有一張 12GB 的卡，兩份 Qwen3-8B 放不下；模型又是無狀態的（不存任何資料），
+  # 共用不會讓 staging 的資料跑到正式那邊，風險只有「staging 壓測會搶正式的 slot」。
+  # 放進不會被打開的 profile（跟 infra/envs/1-ec2/compose.bedrock.yaml 同一招），up 時就不會起。
+  model-seed:
+    profiles: [model]
+  llm-chat:
+    profiles: [model]
+
+  postgres:
+    # !reset：把 deploy/compose.yaml 寫死的 talkcal-postgres 拿掉，名字改由專案名稱產生（talkcal-staging-postgres-1）
+    container_name: !reset null
+    labels: *staging-label
+    # 不發佈到主機：5432 是正式那份給 bootRun、psql 用的。staging 的資料庫只有 staging 的 app 連得到；
+    # 要查就 docker compose -p talkcal-staging exec postgres psql -U talkcal -d talkcal
+    ports: !reset []
+
+  app:
+    image: talkcal/app:staging        # 不跟正式共用 talkcal/app:local：build staging 會把正式的 tag 指到還沒驗證的版本
+    container_name: !reset null
+    labels: *staging-label
+    environment:
+      # 模型走主機上正式那份發佈出來的 8080。不加入正式的網路直接找 llm-chat：
+      # 一加入，postgres 這個名字在兩個網路上都有，staging 的 app 可能連到正式的資料庫
+      SPRING_AI_OPENAI_CHAT_BASEURL: http://host.docker.internal:8080/v1
+    extra_hosts:
+      # Docker Desktop 本來就有 host.docker.internal；Linux 要靠這行才有。但 Linux 上它連不到只綁 127.0.0.1 的埠，
+      # 所以這招只在 Docker Desktop 成立（EC2 走 Bedrock，本來就沒有共用的問題；見 deploy/README.md 的已知限制）
+      - "host.docker.internal:host-gateway"
+    # !override：ports 是清單，不加的話會跟 deploy/compose.yaml 的 18090 合併，兩個環境搶同一個埠
+    ports: !override
+      - "127.0.0.1:28090:8090"
+    # 原本的 depends_on 有 llm-chat，它在這裡不起；整個換掉、只留資料庫
+    depends_on: !override
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: talkcal/web:staging
+    container_name: !reset null
+    labels: *staging-label
+    ports: !override
+      - "127.0.0.1:28080:80"
