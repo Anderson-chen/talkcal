@@ -11,6 +11,8 @@
 
 ```bash
 cd/apply.sh local                        # 部署 app、web（不含模型）
+cd/apply.sh staging                      # 部署到 staging（postgres、app、web，見 deploy/README.md「環境分層」）
+cd/check-isolation.sh                    # 檢查 local 和 staging 的設定沒有共用埠、容器、volume、映像檔 tag、DB 密碼
 cd/apply.sh local web                    # 只部署前端
 cd/apply.sh local llm-chat               # 只換模型
 WAIT_TIMEOUT=600 cd/apply.sh local app   # 拉長等待
@@ -24,8 +26,8 @@ WAIT_TIMEOUT=600 cd/apply.sh local app   # 拉長等待
 | 問題 | 放哪 | 本機 | AWS（EC2） |
 |---|---|---|---|
 | **做什麼**：換服務、等 healthy | `apply.sh` | 同一支 | 同一支 |
-| **在哪做**：compose 疊哪幾份、模型和 .env 從哪來 | `envs/<env>.env` | `local.env`：只有 `deploy/compose.yaml` | `ec2.env`（還沒搬過來） |
-| **誰觸發、過哪道關** | `triggers/`、Gradle | 手動：`./gradlew deploy`，先跑測試<br>自動：`triggers/watch.sh local`，等 CI 綠燈 | 之後：同一支 watcher，`ec2` |
+| **在哪做**：compose 疊哪幾份、模型和 .env 從哪來 | `envs/<env>.env` | `local.env`：只有 `deploy/compose.yaml`<br>`staging.env`：再疊 `deploy/compose.staging.yaml`、讀 `deploy/.env.staging` | `ec2.env`（還沒搬過來） |
+| **誰觸發、過哪道關** | `triggers/`、Gradle | 手動：`./gradlew deploy`，先跑測試<br>自動：`triggers/watch.sh staging` 等 CI 綠燈；`triggers/watch.sh local` 等 staging 部署成功 | 之後：同一支 watcher，`ec2` |
 
 本機和 EC2 其實都是「一台有 docker compose 的機器」，所以在機器上跑的東西可以一樣；
 不一樣的只有設定，以及觸發怎麼送到機器上（本機直接跑、EC2 透過 SSM）。
@@ -50,17 +52,26 @@ WAIT_TIMEOUT=600 cd/apply.sh local app   # 拉長等待
   沒起的話 app 連不上資料庫，`--wait` 會等到逾時報錯，不會假裝成功。
 - **模型不在預設裡**：映像檔重 build 約十分鐘，換的期間所有請求都會失敗。改程式碼不該順便付這個代價。
 
-## 本機 CD：master 綠燈就自動部署
+## 本機 CD：master 綠燈先上 staging，staging 成功再上正式
 
 ```
 master CI ✅ ──（GitHub 不做任何事）
                         ▲
                         │ 每 5 分鐘：最新一個綠燈的 commit 是哪個？
-             .git/cd-watch.sh local（部署用的 clone 裡 watcher 的副本，工作排程觸發）
+             C:/talkcal-staging/.git/cd-watch.sh staging（watcher 的副本，工作排程觸發）
+                        │ 沒試過 → checkout → 那個 commit 的 cd/apply.sh staging
+                        ▼
+             結果寫回 GitHub Deployments → staging
+                        ▲
+                        │ 每 5 分鐘：staging 最近一次 success 的 commit 是哪個？（local.env 的 PROMOTE_FROM）
+             C:/talkcal-deploy/.git/cd-watch.sh local
                         │ 沒試過 → checkout → 那個 commit 的 cd/apply.sh local
                         ▼
-             結果寫回 GitHub Deployments（repo 頁面右側的 Deployments → local）
+             結果寫回 GitHub Deployments → local
 ```
+
+staging 失敗的版本不會被晉升：正式停在上一個 staging 成功過的版本，等 staging 下一個成功的出來。
+為什麼這樣分、staging 隔開了什麼、還隔不開什麼，見 [deploy/README.md 的「環境分層」](../deploy/README.md#環境分層dev--staging--正式)。
 
 ### 第一次設定
 
@@ -72,7 +83,15 @@ master CI ✅ ──（GitHub 不做任何事）
 git clone https://github.com/Anderson-chen/talkcal.git C:/talkcal-deploy
 cd C:/talkcal-deploy
 .\cd\triggers\install-local.ps1           # 登記工作排程 talkcal-cd-local，每 5 分鐘一輪
+
+# staging：另一個 clone。共用一個的話，staging 正在 build 時正式那輪會把工作目錄換掉（install-local.ps1 會擋）
+git clone https://github.com/Anderson-chen/talkcal.git C:/talkcal-staging
+cd C:/talkcal-staging
+cp deploy/.env.example deploy/.env.staging  # 填值，見 deploy/README.md「第一次起 staging」
+.\cd\triggers\install-local.ps1 -Environment staging   # talkcal-cd-staging
 ```
+
+只裝 local、沒裝 staging 的話，正式永遠等不到 staging 成功的版本、不會再自動部署。暫時不要 staging：拿掉 `cd/envs/local.env` 的 `PROMOTE_FROM`。
 
 `install-local.ps1` 會把 watcher 複製一份到 `.git/cd-watch.sh`，排程跑的是這份：`cd/triggers/watch.sh` 會跟著 checkout 變，
 部署到還沒有 watcher 的舊版本時它就不見了（第一次設定時真的發生過，見 #68）。副本在部署成功後才換成新版。
@@ -87,7 +106,7 @@ cd C:/talkcal-deploy
 
 | 想做的事 | 怎麼做 |
 |---|---|
-| 看部署了什麼 | GitHub repo 頁面的 Deployments，或 `C:/talkcal-deploy/.git/cd-local.log` |
+| 看部署了什麼 | GitHub repo 頁面的 Deployments（local、staging 分開列），或各 clone 的 `.git/cd-<env>.log` |
 | 立刻跑一輪，不等排程 | `/c/talkcal-deploy/.git/cd-watch.sh local`（Git Bash），或 `Start-ScheduledTask talkcal-cd-local` |
 | 失敗的版本修好了要重試 | 刪掉 `.git/cd-local.last` 再跑一輪。同一個 commit 只自動試一次：失敗要人來看，不該每 5 分鐘重 build |
 | 暫停 | `Disable-ScheduledTask talkcal-cd-local`（恢復：`Enable-`；整個拿掉：`Unregister-`） |
@@ -95,7 +114,7 @@ cd C:/talkcal-deploy
 | 關機、重開機 | 不用管。排程登記在 Windows 裡，登入後自己恢復，關機時錯過的那輪會補跑。Docker Desktop 還沒起來的那幾輪會跳過、不記成試過 |
 
 開發用的 clone 照樣可以 `./gradlew deploy`：兩邊換的是同一組容器（compose 專案都叫 `talkcal-deploy`），
-手動部署的版本會留到下一個綠燈的 commit 出現為止。
+手動部署的版本會留到 staging 下一個成功的版本被晉升為止。
 
 ### 為什麼是 pull
 
@@ -116,7 +135,8 @@ cd C:/talkcal-deploy
 
 - `verify.sh`：部署後打一次 health 和 `/api/calendar`，不只看容器的 healthcheck
 - `envs/ec2.env`：把 [infra/envs/1-ec2/deploy.sh](../infra/envs/1-ec2/deploy.sh) 收進來，EC2 也跑 `apply.sh` 和同一支 watcher
-- 現在部署的是 checkout 的程式碼、在機器上 `--build`，還不是 build once；等[版本 tag](https://github.com/Anderson-chen/talkcal/issues/25) 有了，輸入改成映像檔 tag
+- 現在部署的是 checkout 的程式碼、在機器上 `--build`，還不是 build once：從 staging 晉升到正式時，正式會用同一個 commit 再 build 一次。
+  等[版本 tag](https://github.com/Anderson-chen/talkcal/issues/25) 有了，輸入改成映像檔 tag，晉升的就是 staging 跑過的同一個映像檔
 
 ## 已知限制，決定不做
 
