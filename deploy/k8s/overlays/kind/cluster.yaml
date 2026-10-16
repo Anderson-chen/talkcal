@@ -1,0 +1,13 @@
+# kind 叢集的形狀：一個 control-plane、兩個 worker。
+# 兩個 worker：rolling update 和 liveness 重啟時，看得到 Pod 分散在不同節點、Alloy DaemonSet 每台一份。
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: talkcal
+nodes:
+  - role: control-plane
+    # NodePort 接到主機。只綁 127.0.0.1，跟 compose 一樣不對區網開放
+    extraPortMappings:
+      - {containerPort: 30080, hostPort: 38080, listenAddress: 127.0.0.1}   # web
+      - {containerPort: 30090, hostPort: 38090, listenAddress: 127.0.0.1}   # app，給 k6 直接打
+  - role: worker
+  - role: worker
