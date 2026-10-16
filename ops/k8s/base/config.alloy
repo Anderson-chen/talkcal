@@ -1,0 +1,173 @@
+// Alloy 在 k8s 上的設定。跟 ops/alloy/config.alloy（compose 用）做同樣三件事、送到同樣三個地方，
+// 差別只在「怎麼找到來源」：
+//
+//                compose（ops/alloy/config.alloy）          k8s（這份）
+//   找誰         discovery.docker（問 docker.sock）          discovery.kubernetes（問 API server，只問自己這台節點的 Pod）
+//   讀 log       loki.source.docker（經 docker.sock 讀）     loki.source.file（直接讀節點上的 /var/log/pods/...）
+//   抓指標       寫死 app:8090                                依 Pod 的標籤找，Pod 換了、多了都自動跟上
+//
+// 為什麼不掛 docker.sock：它等於整台主機 Docker 的控制權（:ro 擋不住 API 呼叫），而且 k8s 節點根本不一定有 Docker
+// （kind、EKS 都是 containerd）。改成每台節點跑一份 Alloy（DaemonSet），唯讀掛 /var/log/pods，只能讀 log、什麼都不能改。
+//
+// 標籤跟 compose 對齊（service、container、env），Grafana 儀表板的查詢不用改；k8s 多帶 namespace、pod。
+// 送出的位址寫短名字 mimir、loki、tempo：在同一個 namespace 裡由 Service 解析，
+// kind 指到主機上 ops/ 那組容器（overlays/kind），EKS 換成叢集裡的 Service，這份檔案都不用改。
+
+
+// ═══ 找 Pod ═════════════════════════════════════════════════════════
+// 只看自己這台節點上的 Pod：每台都有一份 Alloy，各管各的，不會重複收。
+// NODE_NAME 由 DaemonSet 用 downward API 塞進來（alloy.yaml）
+discovery.kubernetes "pods" {
+  role = "pod"
+  selectors {
+    role  = "pod"
+    field = "spec.nodeName=" + sys.env("NODE_NAME")
+  }
+  namespaces {
+    names = ["talkcal"]
+  }
+}
+
+
+// ═══ 指標 ═══════════════════════════════════════════════════════════
+// job_name 跟 compose 一樣（talkcal-app、llama-cpp），儀表板的查詢才對得上
+
+discovery.relabel "app_metrics" {
+  targets = discovery.kubernetes.pods.targets
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_container_port_name"]
+    regex         = "app;http"
+    action        = "keep"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+}
+
+prometheus.scrape "talkcal_app" {
+  job_name        = "talkcal-app"
+  targets         = discovery.relabel.app_metrics.output
+  metrics_path    = "/actuator/prometheus"
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+}
+
+// 模型在叢集裡跑時（components/llm-chat-gpu）才找得到；kind 連主機上的模型，這裡是空的，
+// 那份由 ops/ compose 的 Alloy 照舊抓
+discovery.relabel "llama_metrics" {
+  targets = discovery.kubernetes.pods.targets
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_container_port_name"]
+    regex         = "llm-chat;http"
+    action        = "keep"
+  }
+}
+
+prometheus.scrape "llama_cpp" {
+  job_name        = "llama-cpp"
+  targets         = discovery.relabel.llama_metrics.output
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+}
+
+prometheus.remote_write "mimir" {
+  endpoint {
+    url                    = "http://mimir:9009/api/v1/push"
+    send_native_histograms = true
+  }
+  // 指標上一律帶 env，跟 compose 收的分得開
+  external_labels = {env = sys.env("TALKCAL_ENV")}
+}
+
+
+// ═══ 日誌 ═══════════════════════════════════════════════════════════
+//
+//   discovery.kubernetes ─▶ discovery.relabel（算出 log 檔路徑、加標籤）─▶ local.file_match ─▶ loki.source.file ─▶ loki.process（拆 CRI 格式）─▶ Loki
+//
+// kubelet 把每個容器的 stdout 寫在節點的 /var/log/pods/<namespace>_<pod>_<uid>/<container>/<重啟次數>.log。
+// 容器重啟、Pod 刪掉以後，檔案還會留一陣子，Alloy 掛了一段時間回來也能接著讀（位置檔在 --storage.path）
+
+discovery.relabel "pod_logs" {
+  targets = discovery.kubernetes.pods.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+  // compose 的 service 標籤（app、web、postgres）對應到 Pod 的 app.kubernetes.io/name
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+    target_label  = "service"
+  }
+  rule {
+    target_label = "env"
+    replacement  = sys.env("TALKCAL_ENV")
+  }
+  // 從 Pod 的 uid、容器名算出 log 檔的位置。用 * 比對資料夾名稱裡的 namespace_pod 前綴和重啟次數
+  rule {
+    source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+    separator     = "/"
+    target_label  = "__path__"
+    replacement   = "/var/log/pods/*$1/*.log"
+  }
+}
+
+local.file_match "pod_logs" {
+  path_targets = discovery.relabel.pod_logs.output
+}
+
+loki.source.file "pod_logs" {
+  targets    = local.file_match.pod_logs.targets
+  forward_to = [loki.process.cri.receiver]
+}
+
+// 檔案裡每一行是 CRI 格式：「時間 stdout F <原本那一行>」。拆掉前面三欄，Loki 存到的才是 app 印的 JSON，
+// `| json` 照樣拆得出欄位；時間也改用這一行自己的，不是 Alloy 讀到的時間
+loki.process "cri" {
+  stage.cri {}
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+
+// ═══ 追蹤 ═══════════════════════════════════════════════════════════
+// app 送到 Service alloy:4318（app.yaml 的 MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT），
+// 落在哪一台的 Alloy 都一樣，轉給 Tempo。k6 的指標入口（compose 版有）這裡沒開：k6 在叢集外面跑，照舊送 ops/ 的 Alloy
+
+otelcol.receiver.otlp "default" {
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure = true
+    }
+  }
+}

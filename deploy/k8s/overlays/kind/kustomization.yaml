@@ -1,0 +1,41 @@
+# 本機 kind 叢集：base + 叢集內的 postgres + 連主機上的模型。怎麼起見 up.sh、deploy/k8s/README.md。
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: talkcal
+
+resources:
+  - ../../base
+
+components:
+  - ../../components/postgres
+  - ../../components/llm-chat-external   # EKS 換成 ../../components/llm-chat-gpu
+
+# 對外的入口：kind 用 NodePort，再由 cluster.yaml 的 extraPortMappings 接到主機的 127.0.0.1。
+# 埠用 3 開頭標示「k8s 版」，不撞 compose 的 18080/18090、staging 的 28080/28090
+patches:
+  - target: {kind: Service, name: web}
+    patch: |-
+      - op: add
+        path: /spec/type
+        value: NodePort
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30080
+  # app 也開一個入口：跟 compose 的 18090 同一個理由，k6 和 curl 直接打 app，不多經過一層 nginx
+  - target: {kind: Service, name: app}
+    patch: |-
+      - op: add
+        path: /spec/type
+        value: NodePort
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30090
+
+# image tag 固定寫 :kind。要部署哪一版由 up.sh 的 APP_TAG、WEB_TAG 決定：它把那一版另外標成 :kind
+# 再用 kind load 放進節點（kind 沒有 registry）。EKS 的 overlay 改成直接寫版本（版本號見 #25）
+images:
+  - name: talkcal/app
+    newTag: kind
+  - name: talkcal/web
+    newTag: kind

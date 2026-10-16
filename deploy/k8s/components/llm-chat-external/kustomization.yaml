@@ -1,0 +1,8 @@
+# 模型不在叢集裡跑：Service llm-chat 只是一個名字，指到叢集外面已經在跑的 llama-server。
+# kind 用這個 —— 本機只有一張 12GB 的卡，deploy/ 的 llm-chat 容器已經佔了 11GB，叢集裡再起一份放不下。
+# app 照樣打 http://llm-chat:8080，不知道後面是 Pod 還是外面的機器；換成 ../llm-chat-gpu 時 app 不用改。
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - llm-chat.yaml

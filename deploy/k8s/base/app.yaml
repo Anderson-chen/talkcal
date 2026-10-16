@@ -1,0 +1,129 @@
+# talkcal app。對應 deploy/compose.yaml 的 app 服務，同一個映像檔（backend/Dockerfile）。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  labels:
+    app.kubernetes.io/name: app
+spec:
+  # 兩份：換版時一份一份換，另一份照常接請求。只有一份的話，rolling update 也救不了「它自己重啟」的那幾秒
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: app
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # 先多起一份新的（surge），新的 ready 了才關一份舊的；任何時候都不少於 2 份在接請求。
+      # compose 做不到這件事：同名容器只能先停舊的再起新的，中間那十幾秒就是部署空窗（#56）
+      maxSurge: 1
+      maxUnavailable: 0
+  # ready 之後再觀察 5 秒才算數：剛起來就馬上掛掉的版本，不會被當成成功、接著去關下一份舊的
+  minReadySeconds: 5
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: app
+    spec:
+      # 收到 SIGTERM 之後等多久才 SIGKILL。跟 compose 的 stop_grace_period: 2m30s 同一個數字、同一個理由：
+      # Spring 會等手上的請求做完，最多 2 分鐘（spring.lifecycle.timeout-per-shutdown-phase），這裡要比它長，
+      # 不然 Spring 還在等就被殺了（docs/postmortems/2026-10-12-deploy-cuts-in-flight-requests.md）。
+      # 下面 preStop 的 10 秒也算在這 150 秒裡：10 + 120 = 130，還剩 20 秒給關連線池、JVM 結束
+      terminationGracePeriodSeconds: 150
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000              # 映像檔裡的 ubuntu 使用者
+      containers:
+        - name: app
+          image: talkcal/app
+          ports:
+            - name: http
+              containerPort: 8090
+          env:
+            # 沿用 docker profile（application-docker.properties）：模型找 llm-chat:8080、資料庫找 postgres:5432、
+            # log 印 JSON。k8s Service 的名字跟 compose 的服務名稱一樣，同一個 namespace 裡直接用短名字就找得到
+            - name: SPRING_PROFILES_ACTIVE
+              value: docker
+            # trace 送給 Alloy。Alloy 在另一個 namespace（ops/k8s），短名字找不到，要寫完整的 Service 名稱
+            - name: MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT
+              value: http://alloy.talkcal-ops.svc.cluster.local:4318/v1/traces
+            # liveness、readiness 兩個端點。Spring Boot 偵測到在 k8s 上會自己打開，寫出來是因為下面的探針靠它
+            - name: MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED
+              value: "true"
+            # readiness 多看資料庫：資料庫連不上時，行程、登入都做不了，這份 app 先不收流量。
+            # 但 liveness 不看資料庫 —— 重啟 app 修不好資料庫，全部一起重啟只會讓恢復更慢。
+            # 模型刻意不放進來：模型掛了只有 AI 助理不能用，行程照樣能查能改
+            - name: MANAGEMENT_ENDPOINT_HEALTH_GROUP_READINESS_INCLUDE
+              value: readinessState,db
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: talkcal-db
+                  key: password
+            # Google、GitHub 登入：沒有這個 Secret 也能起（optional），登入頁就只有帳密，跟 compose 沒填 .env 一樣
+            - name: GOOGLE_CLIENT_ID
+              valueFrom: {secretKeyRef: {name: talkcal-oauth, key: google-client-id, optional: true}}
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom: {secretKeyRef: {name: talkcal-oauth, key: google-client-secret, optional: true}}
+            - name: GITHUB_CLIENT_ID
+              valueFrom: {secretKeyRef: {name: talkcal-oauth, key: github-client-id, optional: true}}
+            - name: GITHUB_CLIENT_SECRET
+              valueFrom: {secretKeyRef: {name: talkcal-oauth, key: github-client-secret, optional: true}}
+
+          # ── 三種探針，各回答一個問題 ──────────────────────────────────
+          # compose 只有一種 healthcheck，同時拿來當「要不要重啟」和「能不能接請求」。k8s 拆開問：
+          #
+          #   startup   —— 開機完了沒？還沒完之前，另外兩個先不問（不然 JVM 還在啟動就被 liveness 判死）
+          #   liveness  —— 卡死了嗎？失敗就重啟這個容器。只看 JVM 自己，不看外部依賴
+          #   readiness —— 現在能接請求嗎？失敗就從 Service 拿掉，不重啟；好了自動加回來
+          startupProbe:
+            httpGet: {path: /actuator/health/liveness, port: http}
+            periodSeconds: 2
+            failureThreshold: 60     # 最多等 2 分鐘開機。本機實測 app 約 10 秒起好，留寬是給冷的節點
+          livenessProbe:
+            httpGet: {path: /actuator/health/liveness, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3      # 連續 30 秒沒回應才重啟：GC 停頓一兩秒不該被當成卡死
+            # 判定卡死以後只等 10 秒就 SIGKILL，不套用 Pod 的 150 秒。
+            # 卡死的程序不會理 SIGTERM，等 150 秒只是讓它多佔 2 分半的位置：
+            # 2026-10-16 在 kind 上 SIGSTOP 一個 app，沒設這行時從卡住到重啟花了 3 分鐘（deploy/k8s/README.md）
+            terminationGracePeriodSeconds: 10
+          readinessProbe:
+            httpGet: {path: /actuator/health/readiness, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2      # 10 秒內就拿掉：不收流量的代價小，寧可快
+
+          lifecycle:
+            preStop:
+              # 關機時先睡 10 秒才送 SIGTERM。
+              # Pod 被標成要刪除時，「從 Service 拿掉」和「送 SIGTERM」是同時開始的，
+              # 但各節點的 kube-proxy、web 的 nginx 要過一下才知道它被拿掉了。
+              # 不等的話 Spring 收到 SIGTERM 就不收新連線，這段時間還被導過來的請求會直接被拒。
+              # 用 k8s 內建的 sleep（1.30 起預設開啟），映像檔裡不必有 sleep 指令
+              sleep:
+                seconds: 10
+
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              # 記憶體設上限、CPU 不設：記憶體超過會被 OOMKill，看得出問題；CPU 上限會被節流，開機變慢、探針逾時
+              # JVM 用 -XX:MaxRAMPercentage=75（Dockerfile），heap 約 768Mi
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app
+  labels:
+    app.kubernetes.io/name: app
+spec:
+  selector:
+    app.kubernetes.io/name: app
+  ports:
+    - name: http
+      port: 8090
+      targetPort: http
