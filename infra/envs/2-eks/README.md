@@ -89,4 +89,4 @@ VPC 跨兩個可用區，每一層的子網兩區各一個。
 | GPU 節點要不要一直開 | 常駐 / 沒人用時縮到 0 | 作品集流量很低，GPU 是最大的開銷；縮到 0 的代價是第一個請求要等開機和載模型 |
 | 觀測要自己架還是用託管 | 叢集內自架 + S3 / Amazon Managed Prometheus + Managed Grafana / Grafana Cloud | 自架：跟本機同一套設定，最能展示「搬得動」 |
 | 部署怎麼推上去 | GitHub Actions 直接 `helm upgrade` / Argo CD（GitOps） | 未定，跟 rollback（[#19](https://github.com/Anderson-chen/talkcal/issues/19)）、canary（[#20](https://github.com/Anderson-chen/talkcal/issues/20)）一起想 |
-| 要不要 staging | 同叢集另一個 namespace / 另一個帳號 | 跟 [#24](https://github.com/Anderson-chen/talkcal/issues/24) 一起決定 |
+| staging 放哪 | 同叢集另一個 namespace / 另一個叢集 / 另一個帳號 | 同叢集另一個 namespace（加 ResourceQuota）：業界常見的是正式獨立、非正式環境共用叢集，作品集只有一個人用，另開叢集就是多一份控制平面的錢。本機現在怎麼做、搬過來要補什麼見 [deploy/README.md「環境分層」](../../../deploy/README.md#已知限制)（[#24](https://github.com/Anderson-chen/talkcal/issues/24)） |
