@@ -177,9 +177,16 @@ services:
   # ── talkcal app ────────────────────────────────────────────────────
   app:
     # Dockerfile 在 backend/（要看得到 src/ 和 build.gradle），後端自己的東西放一起
-    image: talkcal/app:local
+    # tag 是版本號（#25）：cd/apply.sh 用 cd/version.sh 算好 APP_VERSION、GIT_COMMIT 再叫 compose，
+    # 每個版本一個 tag，機器上留著舊版本的映像檔（之後 #19 rollback 就是換回某個 tag）。
+    # 沒經過 apply.sh 直接 docker compose up 時沒有這兩個變數，退回原本的 local / unknown，
+    # app 的 /actuator/info 也會照實回報 local —— 一看就知道這不是走部署流程上去的
+    image: talkcal/app:${APP_VERSION:-local}
     build:
       context: ../backend
+      args:
+        APP_VERSION: ${APP_VERSION:-local}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
     container_name: talkcal-app
 
     environment:
@@ -226,9 +233,12 @@ services:
   # ── 前端：nginx 送 Vue 靜態檔，並把 /api 轉給 app ──────────────────
   # 瀏覽器只連這一個入口，看到的是同一個來源，app 不必開 CORS。對照雲端：Ingress / CDN 那一層。
   web:
-    image: talkcal/web:local
+    image: talkcal/web:${APP_VERSION:-local}   # 版本號跟 app 同一組，理由同上
     build:
       context: ../web             # Dockerfile、nginx.conf 都在 web/ 裡，前端自己的東西放一起
+      args:
+        APP_VERSION: ${APP_VERSION:-local}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
     container_name: talkcal-web
 
     ports:
