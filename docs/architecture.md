@@ -122,6 +122,7 @@ EC2 目前是手動部署：機器平常關機，展示前開機、需要時用 
 | ruleset（protect-master） | 直推 master、force push、刪 master、checks、secrets、vulns 或 PR issue 沒綠就合併、分支落後 master | — |
 | `compose up --wait` | 起不來的容器（healthcheck 沒過） | 起得來但功能壞了：例如模型名稱送錯（[#76](https://github.com/Anderson-chen/talkcal/issues/76)），容器 healthy、第一個 AI 請求才 404 |
 | watcher 同一個 commit 只試一次 | 壞掉的版本每 5 分鐘重 build | watcher 自己掛掉（沒有「多久沒部署」告警，決定不做） |
+| 版本號（[docs/release.md](release.md)） | 說不出線上跑的是哪個 commit：映像檔 tag、label、`/actuator/info` 都帶版本號和 commit；`cd/release.sh` 擋下打錯的 release tag | tag 被刪掉或移動（GitHub 上沒設 tag 保護） |
 
 ### 檔案
 
@@ -130,6 +131,7 @@ EC2 目前是手動部署：機器平常關機，展示前開機、需要時用 
 | 檢查內容 | 要驗什麼 | `ci/checks.sh` |
 | 檢查環境 | 在什麼環境驗 | `ci/Dockerfile` |
 | CI 入口 | 什麼時候驗 | `.githooks/pre-push`、`.github/workflows/ci.yml`（都呼叫 `ci/run.sh`） |
+| 版本號 | 這一版叫什麼 | `cd/version.sh`（部署時算）、`cd/release.sh`（打 release tag） |
 | 部署步驟 | 怎麼把版本放上機器 | `cd/apply.sh`（本機）、`infra/envs/1-ec2/deploy.sh`（EC2，還沒收進 `cd/`） |
 | 環境差異 | 本機和雲端差在哪 | `cd/envs/local.env`、`infra/envs/1-ec2/compose.*.yaml` |
 | CD 入口 | 什麼時候部署 | `cd/triggers/watch.sh` + 工作排程（本機）；手動（EC2） |
