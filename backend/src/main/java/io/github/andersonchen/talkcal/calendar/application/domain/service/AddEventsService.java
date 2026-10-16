@@ -1,6 +1,7 @@
 package io.github.andersonchen.talkcal.calendar.application.domain.service;
 
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPort;
@@ -24,7 +25,10 @@ public final class AddEventsService implements AddEventsUseCase {
     }
 
     @Override
-    public List<ScheduledEvent> addEvents(List<CalendarEvent> events) {
+    public List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events) {
+        if (owner == null) {
+            throw new IllegalArgumentException("擁有者不可為 null");
+        }
         // 這是呼叫端違約（契約說不可為 null），不是業務規則，所以在這裡擋、而不是在 model。
         // 丟 IllegalArgumentException 而不是 NullPointerException：跟其他「輸入不合規」同一種，HTTP 那頭對應 400
         // 不用 events.contains(null)：List.of 做出來的不可變清單，contains(null) 會直接丟 NullPointerException
@@ -36,7 +40,7 @@ public final class AddEventsService implements AddEventsUseCase {
             return List.of();
         }
         List<ScheduledEvent> scheduled = events.stream().map(ScheduledEvent::schedule).toList();
-        saveEventsPort.save(scheduled);
+        saveEventsPort.save(owner, scheduled);
         return scheduled;
     }
 }

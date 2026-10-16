@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.andersonchen.talkcal.calendar.adapter.out.extraction.springai.SpringAiExtractEventsAdapter;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.FindFreeSlotsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ListEventsService;
@@ -51,14 +52,18 @@ class CalendarAssistantConversationTest {
     private static final URI BASE_URI =
             URI.create(System.getProperty("spring.ai.openai.chat.base-url", "http://127.0.0.1:8080/v1"));
 
+    // 這裡只有一個人；分不分得開擁有者不是這裡測的（JdbcAssistantMemoryRepositoryTest、SystemTest）
+    private static final OwnerId OWNER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000001");
+
     // 台北 2026-10-06（週二）11:30
     private static final Clock TUE = Clock.fixed(Instant.parse("2026-10-06T03:30:00Z"), ZoneId.of("Asia/Taipei"));
 
     // 明天（週三）的兩筆：上午的週會、晚上的瑜珈
-    private static final LoadEventsPort CALENDAR = range -> List.of(
+    private static final LoadEventsPort CALENDAR = (owner, range) -> List.of(
             ScheduledEvent.schedule(new CalendarEvent("產品週會", LocalDateTime.of(2026, 10, 7, 9, 0), LocalDateTime.of(2026, 10, 7, 10, 0))),
             ScheduledEvent.schedule(new CalendarEvent("瑜珈課", LocalDateTime.of(2026, 10, 7, 18, 0), LocalDateTime.of(2026, 10, 7, 19, 0))));
 
+    private final InMemoryChatMemoryRepository memory = new InMemoryChatMemoryRepository();
     private CalendarAssistant assistant;
     private String conversation;
     // 這段對話裡 list_events / find_free_slots 讀了幾次行事曆：用來確認模型真的去查了，不是憑記憶回答
@@ -94,17 +99,17 @@ class CalendarAssistantConversationTest {
                         .maxRetries(0)
                         .build())
                 .build();
-        assistant = new CalendarAssistant(chatModel, new InMemoryChatMemoryRepository(),
+        assistant = new CalendarAssistant(chatModel, owner -> memory,
                 new ParseEventsService(new SpringAiExtractEventsAdapter(chatModel), TUE),
-                new ListEventsService(range -> {
+                new ListEventsService((owner, range) -> {
                     calendarReads.incrementAndGet();
-                    return CALENDAR.load(range);
+                    return CALENDAR.load(owner, range);
                 }), new FindFreeSlotsService(CALENDAR, TUE), TUE);
         conversation = UUID.randomUUID().toString();
     }
 
     private CalendarAssistant.Reply say(String message) {
-        return assistant.reply(conversation, message);
+        return assistant.reply(OWNER, conversation, message);
     }
 
     @Test

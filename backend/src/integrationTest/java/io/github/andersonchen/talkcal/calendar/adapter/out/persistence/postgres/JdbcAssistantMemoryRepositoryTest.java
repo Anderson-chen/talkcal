@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -15,6 +17,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -38,10 +41,15 @@ class JdbcAssistantMemoryRepositoryTest {
     @Container
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.6-alpine");
 
-    static JdbcAssistantMemoryRepository memory;
+    private static final OwnerId OWNER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000001");
+    private static final OwnerId OTHER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000002");
+
+    static JdbcAssistantMemoryRepository store;
     static JdbcClient jdbc;
 
     private final String id = UUID.randomUUID().toString();
+    // 大部分的測試只看一個人：OWNER 名下的對話
+    private final ChatMemoryRepository memory = store.of(OWNER);
 
     @BeforeAll
     static void migrateAndConnect() {
@@ -52,7 +60,7 @@ class JdbcAssistantMemoryRepositoryTest {
         DriverManagerDataSource dataSource =
                 new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         jdbc = JdbcClient.create(dataSource);
-        memory = new JdbcAssistantMemoryRepository(jdbc, new TransactionTemplate(new DataSourceTransactionManager(dataSource)));
+        store = new JdbcAssistantMemoryRepository(jdbc, new TransactionTemplate(new DataSourceTransactionManager(dataSource)));
     }
 
     @BeforeEach
@@ -131,7 +139,7 @@ class JdbcAssistantMemoryRepositoryTest {
         jdbc.sql("UPDATE calendar_assistant_message SET created_at = now() - interval '31 days' WHERE conversation_id = :id")
                 .param("id", UUID.fromString(old)).update();
 
-        int deleted = memory.deleteInactiveSince(Instant.now().minus(Duration.ofDays(30)));
+        int deleted = store.deleteInactiveSince(Instant.now().minus(Duration.ofDays(30)));
 
         assertEquals(1, deleted);
         assertTrue(memory.findByConversationId(old).isEmpty());
@@ -145,7 +153,7 @@ class JdbcAssistantMemoryRepositoryTest {
         jdbc.sql("UPDATE calendar_assistant_message SET created_at = now() - interval '31 days' WHERE conversation_id = :id AND position < 3")
                 .param("id", UUID.fromString(id)).update();
 
-        assertEquals(0, memory.deleteInactiveSince(Instant.now().minus(Duration.ofDays(30))));
+        assertEquals(0, store.deleteInactiveSince(Instant.now().minus(Duration.ofDays(30))));
         assertEquals(4, memory.findByConversationId(id).size());
     }
 
@@ -156,15 +164,66 @@ class JdbcAssistantMemoryRepositoryTest {
     }
 
     @Test
+    @DisplayName("#104 別人拿著同一個 conversationId：讀到的是空的；存、刪都只動到他自己名下的，碰不到我的那段")
+    void conversationsAreSeparatedByOwner() {
+        memory.saveAll(id, oneTurnWithTool());
+        ChatMemoryRepository other = store.of(OTHER);
+
+        assertTrue(other.findByConversationId(id).isEmpty());
+        assertTrue(other.findConversationIds().isEmpty());
+        other.saveAll(id, List.of(new UserMessage("蓋掉你")));
+        other.deleteByConversationId(id);
+
+        assertEquals(4, memory.findByConversationId(id).size());
+        assertEquals(List.of(id), memory.findConversationIds());
+    }
+
+    @Test
+    @DisplayName("#104 兩個人剛好同一個 conversationId，清舊對話也各算各的：只刪很久沒說話的那個人的")
+    void cleanupCountsEachOwnersConversation() {
+        memory.saveAll(id, oneTurnWithTool());
+        store.of(OTHER).saveAll(id, List.of(new UserMessage("嗨")));
+        jdbc.sql("UPDATE calendar_assistant_message SET created_at = now() - interval '31 days' WHERE owner_id = :owner")
+                .param("owner", OWNER.value()).update();
+
+        assertEquals(1, store.deleteInactiveSince(Instant.now().minus(Duration.ofDays(30))));
+        assertTrue(memory.findByConversationId(id).isEmpty());
+        assertEquals(1, store.of(OTHER).findByConversationId(id).size());
+    }
+
+    @Test
+    @DisplayName("資料庫也不收沒有擁有者的訊息（V11 的 NOT NULL）")
+    void ownerIsRequired() {
+        assertThrows(Exception.class, () -> jdbc.sql("""
+                        INSERT INTO calendar_assistant_message (conversation_id, position, type, content)
+                        VALUES (:id, 0, 'USER', '嗨')
+                        """).param("id", UUID.fromString(id)).update());
+    }
+
+    @Test
+    @DisplayName("資料庫出事：四個方法都丟 IllegalStateException（502），不讓 Spring 的例外往外跑")
+    void databaseFailuresAreUpstreamFailures() {
+        // 連到一個沒有資料庫的埠：每一次查詢都會失敗
+        DriverManagerDataSource nowhere = new DriverManagerDataSource("jdbc:postgresql://127.0.0.1:1/none", "x", "x");
+        ChatMemoryRepository broken = new JdbcAssistantMemoryRepository(JdbcClient.create(nowhere),
+                new TransactionTemplate(new DataSourceTransactionManager(nowhere))).of(OWNER);
+
+        assertThrows(IllegalStateException.class, broken::findConversationIds);
+        assertThrows(IllegalStateException.class, () -> broken.findByConversationId(id));
+        assertThrows(IllegalStateException.class, () -> broken.saveAll(id, List.of(new UserMessage("嗨"))));
+        assertThrows(IllegalStateException.class, () -> broken.deleteByConversationId(id));
+    }
+
+    @Test
     @DisplayName("資料庫的 CHECK：工具結果只能放在 TOOL、工具呼叫只能放在 ASSISTANT")
     void databaseChecks() {
         assertThrows(Exception.class, () -> jdbc.sql("""
-                        INSERT INTO calendar_assistant_message (conversation_id, position, type, content, tool_calls)
-                        VALUES (:id, 0, 'USER', '嗨', '[]'::jsonb)
+                        INSERT INTO calendar_assistant_message (owner_id, conversation_id, position, type, content, tool_calls)
+                        VALUES ('3f1c8a2e-0000-4000-8000-000000000001', :id, 0, 'USER', '嗨', '[]'::jsonb)
                         """).param("id", UUID.fromString(id)).update());
         assertThrows(Exception.class, () -> jdbc.sql("""
-                        INSERT INTO calendar_assistant_message (conversation_id, position, type, content)
-                        VALUES (:id, 0, 'SYSTEM', '你是助理')
+                        INSERT INTO calendar_assistant_message (owner_id, conversation_id, position, type, content)
+                        VALUES ('3f1c8a2e-0000-4000-8000-000000000001', :id, 0, 'SYSTEM', '你是助理')
                         """).param("id", UUID.fromString(id)).update());
     }
 }

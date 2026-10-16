@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.security.Principal;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -35,6 +36,8 @@ import java.util.UUID;
  * 重新整理頁面後用 GET 讀回那段對話給人看的部分。
  * 沒有 DELETE：「清空」是前端丟掉 conversationId、下一句開新的一段；舊的那段留給每天的清理排程（AssistantMemoryCleanup）。
  * 紀錄只由排程按保留期限刪，不讓一個按鈕（或任何拿得到 id 的請求）把它抹掉。
+ *
+ * 對話屬於登入者（#104）：拿別人的 conversationId 來讀是空的、拿來說話是在自己名下開一段新的，碰不到別人的那段。
  */
 @RestController
 @RequestMapping("/api/calendar/assistant")
@@ -58,23 +61,23 @@ public final class CalendarAssistantController {
             content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
     @ApiResponse(responseCode = "502", description = "模型或資料庫出事；稍後重試",
             content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
-    public AssistantResponse talk(@RequestBody AssistantRequest request) {
+    public AssistantResponse talk(Principal signedIn, @RequestBody AssistantRequest request) {
         String conversationId = conversationId(request.conversationId());
-        CalendarAssistant.Reply reply = assistant.reply(conversationId, request.message());
+        CalendarAssistant.Reply reply = assistant.reply(SignedIn.owner(signedIn), conversationId, request.message());
         return new AssistantResponse(conversationId, reply.text(), reply.proposals().stream().map(EventFields::of).toList());
     }
 
     @GetMapping("/{conversationId}")
     @Operation(summary = "讀回一段對話給人看的部分",
-            description = "使用者的話和助理的回覆，照順序。工具呼叫、提議過的卡片不回。沒有這段對話就是空陣列。")
+            description = "使用者的話和助理的回覆，照順序。工具呼叫、提議過的卡片不回。沒有這段對話（或不是你的）就是空陣列。")
     @ApiResponse(responseCode = "200", description = "這段對話的訊息，可能是空的")
     @ApiResponse(responseCode = "400", description = "conversationId 不是 UUID",
             content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
     @ApiResponse(responseCode = "502", description = "資料庫出事；稍後重試",
             content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
-    public AssistantHistory history(@PathVariable String conversationId) {
+    public AssistantHistory history(Principal signedIn, @PathVariable String conversationId) {
         String id = existingConversationId(conversationId);
-        return new AssistantHistory(id, assistant.history(id).stream()
+        return new AssistantHistory(id, assistant.history(SignedIn.owner(signedIn), id).stream()
                 .map(line -> new AssistantLine(line.fromUser() ? "user" : "assistant", line.text()))
                 .toList());
     }

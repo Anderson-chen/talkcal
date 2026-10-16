@@ -90,12 +90,13 @@ class CalendarConfiguration {
      *
      * 直接拿 ChatModel（跟抽行程背後是同一個），agent loop 由 CalendarAssistant 自己跑。
      * 記憶不用 Spring AI 自動組裝的那個（JdbcChatMemoryRepository 會把工具訊息濾掉），用自己的表，原因寫在 V7。
+     * 記憶依擁有者分開（V11）：助理每一句話先拿「這個人名下的記憶」（assistantMemory::of），再照框架的介面讀寫。
      */
     @Bean
     CalendarAssistant calendarAssistant(ChatModel chatModel, JdbcAssistantMemoryRepository assistantMemory,
                                         ParseEventsUseCase parseEvents, ListEventsUseCase listEvents,
                                         FindFreeSlotsUseCase findFreeSlots, @Value("${calendar.zone}") ZoneId zone) {
-        return new CalendarAssistant(chatModel, assistantMemory, parseEvents, listEvents, findFreeSlots, Clock.system(zone));
+        return new CalendarAssistant(chatModel, assistantMemory::of, parseEvents, listEvents, findFreeSlots, Clock.system(zone));
     }
 
     @Bean

@@ -1,6 +1,7 @@
 package io.github.andersonchen.talkcal.calendar.application.port.in;
 
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 
 import java.util.List;
@@ -16,11 +17,13 @@ import java.util.List;
  * 一次可以多筆（一句話拆出來的行程是一起確認的），而且全部存或全部不存。
  * 空清單就什麼都不做、回傳空的，不算錯。
  *
+ * 存進 owner 的行事曆：之後只有同一個 owner 讀得到、刪得到（#104）。
+ *
  * 失敗時：
- * - events 是 null 或含 null → IllegalArgumentException
+ * - owner 是 null、events 是 null 或含 null → IllegalArgumentException
  * - 資料庫出事 → IllegalStateException（outbound port 的約定），一筆都不會存進去
  */
 public interface AddEventsUseCase {
 
-    List<ScheduledEvent> addEvents(List<CalendarEvent> events);
+    List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events);
 }

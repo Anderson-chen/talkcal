@@ -4,6 +4,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.DateRang
 import io.github.andersonchen.talkcal.calendar.application.domain.model.DayPeriod;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.FreeSlot;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.FreeSlots;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlotsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventsPort;
@@ -30,10 +31,13 @@ public final class FindFreeSlotsService implements FindFreeSlotsUseCase {
     }
 
     @Override
-    public List<FreeSlot> findFreeSlots(LocalDate start, LocalDate endExclusive, DayPeriod period, Duration minimum) {
+    public List<FreeSlot> findFreeSlots(OwnerId owner, LocalDate start, LocalDate endExclusive, DayPeriod period, Duration minimum) {
+        if (owner == null) {
+            throw new IllegalArgumentException("擁有者不可為 null");
+        }
         // 先建 DateRange：不合規的期間連資料庫都不會碰到
         DateRange range = new DateRange(start, endExclusive);
-        List<ScheduledEvent> busy = loadEventsPort.load(range);
+        List<ScheduledEvent> busy = loadEventsPort.load(owner, range);
         return FreeSlots.find(range, period, minimum, busy.stream().map(ScheduledEvent::event).toList(), LocalDateTime.now(clock));
     }
 }

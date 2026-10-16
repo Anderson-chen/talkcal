@@ -80,14 +80,14 @@ GitHub 上不跑（沒有模型），只確定它編得過（`evalClasses`）。
 - pre-push 自動跑靠路徑判斷：prompt 搬到別的檔案、或 `--no-verify` 跳過，就不會跑
 
 <a id="auth"></a>
-### 認證與授權 ❌（認證做了本機帳密，授權還沒做）
+### 認證與授權 ❌（認證、授權都做了，剩 AWS 上改用 Cognito）
 
 分成四步（[#11](https://github.com/Anderson-chen/talkcal/issues/11) 底下）：
 
 | 步驟 | 內容 | 狀態 |
 |---|---|---|
 | [#103](https://github.com/Anderson-chen/talkcal/issues/103) | 認證：auth 模組、本機帳密（自己的 `account` 表、BCrypt）、登入註冊頁 | ✅ |
-| [#104](https://github.com/Anderson-chen/talkcal/issues/104) | 授權：行程、對話依使用者分開（現在登入了，但大家還是看到同一本行事曆） | ❌ |
+| [#104](https://github.com/Anderson-chen/talkcal/issues/104) | 授權：行程、對話依使用者分開 | ✅ |
 | [#105](https://github.com/Anderson-chen/talkcal/issues/105) | 本機加 Google、GitHub 登入 | 程式完成，還沒用真的 OAuth 應用程式走過一次 |
 | [#106](https://github.com/Anderson-chen/talkcal/issues/106) | AWS 上改用 Amazon Cognito | ❌ |
 
@@ -110,7 +110,7 @@ GitHub 上不跑（沒有模型），只確定它編得過（`evalClasses`）。
 - nginx：同一個 IP 連續登入 12 次，前 6 次放行、之後 429「嘗試太多次了」；同時查行程照常 200、AI 發問被擋時訊息照舊
 - k6 smoke 對開了認證的後端跑：setup 登入一次、所有 VU 共用，13 個檢查全過（只在第一次迭代放 cookie 的版本，第二次迭代起都失敗 —— k6 每次迭代會清空 cookie）
 
-**已知限制**：session 存在 app 的記憶體裡（重啟就全部登出、多台時要改存共用的地方）；沒有忘記密碼、沒有 email 驗證；授權還沒做（#104）。
+**已知限制**：session 存在 app 的記憶體裡（重啟就全部登出、多台時要改存共用的地方）；沒有忘記密碼、沒有 email 驗證。
 
 **#105 的做法**：
 - Spring Security 的 `oauth2Login`：Google 走 OIDC（ID token 裡就有使用者 ID `sub`），GitHub 是純 OAuth2（沒有 ID token，要拿 access token 另外打 `/user`，欄位是 GitHub 自己的格式）。兩邊各一個 user service（`AccountOidcUserService`、`AccountOAuth2UserService`），把對方的使用者對到我們的帳號，session 裡記的身分跟帳密登入一樣是帳號 ID
@@ -135,6 +135,26 @@ GitHub 上不跑（沒有模型），只確定它編得過（`evalClasses`）。
 1. Google Cloud Console → APIs & Services → Credentials → 建 OAuth client ID（Web application），Authorized redirect URI 填 `http://localhost:5173/api/auth/oauth2/callback/google`（vite）；要從 `deploy/` 的 nginx 進來就再加一條 `http://localhost:18080/...`
 2. GitHub → Settings → Developer settings → OAuth Apps → New，Authorization callback URL 填 `http://localhost:5173/api/auth/oauth2/callback/github`（GitHub 的 OAuth App 只能填一個）
 3. 把 client id、secret 設成上面四個環境變數再啟動 app（bootRun 或 `deploy/` 的 compose 都會讀）
+
+**#104 的做法**：
+- 擁有者是 calendar 自己的型別 `OwnerId`，不用 auth 的 `AccountId`：兩個模組互不認識（ArchitectureTest 守著）。值就是登入者的帳號 ID，由 controller 從 `java.security.Principal` 取出來交給 use case —— calendar 不知道是怎麼登入的
+- 每個 use case、每個 port 都多收一個擁有者；SQL 一律帶 `owner_id` 條件。授權不是另外一道「先查出是誰的再比對」的檢查，而是查詢本身就只碰得到這個人的資料，漏不掉
+- 請求裡沒有任何「擁有者」欄位：網址、body 都不收，body 多塞 `owner` 也會被忽略。API 文件上也不會出現（測試守著）
+- 刪別人的行程回 **404**，跟不存在一樣，不回 403：回 403 等於告訴對方「這個 id 存在，只是不是你的」
+- AI 助理：工具查的是這段對話擁有者的行事曆，擁有者跟著工具物件走、不是模型給的參數 —— 模型再怎麼被誘導也查不到別人的
+- 對話記憶的主鍵加上 `owner_id`（V11）：同一個 `conversationId` 在不同人底下是兩段對話。別人拿到你的 id，讀到的是自己名下的空對話，存檔也只寫進自己名下，碰不到、蓋不掉你的那段 —— 不必另外寫「這段對話是誰的」的檢查
+- 月曆的 GiST 索引改成 `(owner_id, 期間)` 一起（`btree_gist` 補上 GiST 的 UUID 等於）：只有期間的話，人越多，每次都要先挑出所有人在那段期間的行程再濾掉別人的
+- 既有沒有擁有者的資料直接刪掉（都是開發時的測試資料），不猜一個擁有者塞進去
+- `owner_id` 不加外鍵到 `account`：calendar 和 auth 在資料庫裡也互不認識（跟 V2 的決定一致）
+
+**證據（含反例）**：
+- [AuthorizationSystemTest](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/AuthorizationSystemTest.java)（真的 SecurityFilterChain、真的 PostgreSQL，兩個人各自登入）：amy 的行程 bob 看不到；bob 拿 amy 行程的 id 去刪是 404、那筆還在；body 塞 amy 的 id 當 `owner`，行程還是記在 bob 名下；bob 讀 amy 的對話是空的。每題的反例是本人用同一個 id 照樣成功
+- [JdbcCalendarEventAdapterTest](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/calendar/adapter/out/persistence/postgres/JdbcCalendarEventAdapterTest.java)、[JdbcAssistantMemoryRepositoryTest](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/calendar/adapter/out/persistence/postgres/JdbcAssistantMemoryRepositoryTest.java)：別人的讀不到、刪不到、蓋不掉；清舊對話各算各的；資料庫不收沒有擁有者的列；查詢用得到新的索引
+- 故意拿掉 SQL 裡的 `owner_id` 條件：行程那邊 5 題變紅（其他題照樣綠）；拿掉對話讀取的 `owner_id` 條件：3 題變紅
+- 直接寫 SQL 測 CHECK 的舊測試都補上 `owner_id`：不補的話每一筆會先撞上 NOT NULL，「CHECK 擋下了」的測試會因為別的原因照樣綠燈
+- [OpenApiDocumentationTest](../../backend/src/test/java/io/github/andersonchen/talkcal/OpenApiDocumentationTest.java)：登入者不是 API 參數。反例：故意在 `GET /events` 加一個 `owner` 參數，這題變紅
+
+**已知限制**：沒有分享、共用的行事曆（一本行事曆只屬於一個人）；刪帳號時要另外清掉他的行程和對話（目前沒有刪帳號的功能，也沒有外鍵幫忙連帶刪）。
 
 <a id="rate-limit"></a>
 ### 濫用防護（rate limit） ✅
@@ -168,7 +188,7 @@ AI 助理的發問（`POST /api/calendar/assistant`）每次都會叫模型，�
 <a id="prompt-injection"></a>
 ### Prompt injection ✅（有已知限制）
 
-間接注入（`LLM01`）：行事曆誰都能新增行程，`list_events` 會把標題、地點交給模型，有人把指令寫進標題，模型就讀得到。
+間接注入（`LLM01`）：行程的標題、地點不一定是使用者自己想的字（從信件、網頁複製貼上的，之後的邀請、匯入），`list_events` 會把它們交給模型，有人把指令藏在裡面，模型就讀得到。[#104](#auth) 之後只有本人寫得進自己的行事曆，但這道防線不靠「寫的人可信」。
 [Agent 權限範圍](#agent-permissions)已經把最壞情況壓低（沒有刪改的工具、提議要使用者確認），剩下最危險的是**模型用自己的口吻把攻擊者的話講給使用者聽**，例如叫他去釣魚網址登入。
 
 兩道防線：

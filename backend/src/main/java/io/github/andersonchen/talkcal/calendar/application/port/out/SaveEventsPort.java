@@ -1,5 +1,6 @@
 package io.github.andersonchen.talkcal.calendar.application.port.out;
 
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 
 import java.util.List;
@@ -11,10 +12,13 @@ import java.util.List;
  * 一句話拆出來的行程是使用者一起確認的；存了一半，使用者會看到少了一筆卻不知道為什麼。
  * 怎麼做到（交易）是 adapter 的事，core 不知道有交易這回事。
  *
+ * 擁有者跟著這一批存，不放進 ScheduledEvent：一批行程一定屬於同一個人（發請求的那一個），
+ * 而 domain 的規則（標題、起訖）跟是誰的無關。
+ *
  * 只收 ScheduledEvent：沒有身分的預覽行程在型別上就傳不進來。
  * 失敗時丟 IllegalStateException。
  */
 public interface SaveEventsPort {
 
-    void save(List<ScheduledEvent> events);
+    void save(OwnerId owner, List<ScheduledEvent> events);
 }

@@ -2,6 +2,7 @@ package io.github.andersonchen.talkcal.calendar.adapter.in.assistant;
 
 import io.github.andersonchen.talkcal.calendar.adapter.out.extraction.springai.SpringAiExtractEventsAdapter;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.FindFreeSlotsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ListEventsService;
@@ -126,6 +127,9 @@ class AssistantEval {
         return loadCases().stream().map(c -> DynamicTest.dynamicTest(c.id() + "（" + c.category() + "）", () -> run(c)));
     }
 
+    // 每一題都是同一個人：eval 看的是回答的品質，不是擁有者分不分得開
+    private static final OwnerId OWNER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000001");
+
     private void run(Case c) {
         String reply;
         CalendarAssistant.Reply last;
@@ -134,7 +138,7 @@ class AssistantEval {
             String conversation = UUID.randomUUID().toString();
             last = null;
             for (String turn : c.turns()) {
-                last = assistant.reply(conversation, turn);
+                last = assistant.reply(OWNER, conversation, turn);
             }
             reply = last.text();
         } catch (RuntimeException e) {
@@ -196,7 +200,7 @@ class AssistantEval {
 
     private static CalendarAssistant assistant(List<EventSpec> calendar) {
         List<ScheduledEvent> events = calendar.stream().map(e -> ScheduledEvent.schedule(e.toEvent())).toList();
-        LoadEventsPort load = range -> events.stream()
+        LoadEventsPort load = (owner, range) -> events.stream()
                 .filter(e -> !e.event().start().toLocalDate().isBefore(range.start())
                         && e.event().start().toLocalDate().isBefore(range.endExclusive()))
                 .toList();
@@ -209,7 +213,9 @@ class AssistantEval {
                         .maxRetries(0)
                         .build())
                 .build();
-        return new CalendarAssistant(chatModel, new InMemoryChatMemoryRepository(),
+        // 同一題的每一輪共用一份記憶
+        InMemoryChatMemoryRepository memory = new InMemoryChatMemoryRepository();
+        return new CalendarAssistant(chatModel, owner -> memory,
                 new ParseEventsService(new SpringAiExtractEventsAdapter(chatModel), TUE),
                 new ListEventsService(load), new FindFreeSlotsService(load, TUE), TUE);
     }

@@ -4,6 +4,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Calendar
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.DateRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteEventPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventsPort;
@@ -11,6 +12,7 @@ import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPo
 
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.ResultSet;
@@ -23,7 +25,9 @@ import java.util.UUID;
 
 /**
  * 把行程存進 PostgreSQL、讀出來（表的定義在 db/migration/V2__create_calendar_events.sql，
- * 讀取用的索引在 V3__index_calendar_event_period.sql，分類、地點、備註是 V5 加的）。
+ * 讀取用的索引在 V3__index_calendar_event_period.sql，分類、地點、備註是 V5 加的，擁有者是 V11 加的）。
+ *
+ * 每一句 SQL 都帶著 owner_id 條件（#104）：授權不是另外一道「先查再比對」的檢查，而是查詢本身就只碰得到這個人的資料。
  *
  * 寫法跟 conversation 的 JdbcConversationAdapter 一致：JdbcClient 手寫 SQL、
  * 交易用 TransactionTemplate（類別是 final，@Transactional 的代理包不了）。
@@ -41,29 +45,31 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEvent
     }
 
     @Override
-    public void save(List<ScheduledEvent> events) {
+    public void save(OwnerId owner, List<ScheduledEvent> events) {
         try {
             // port 的約定是「全部存或全部不存」：包在一個交易裡，任何一筆失敗，前面插入的也一起 rollback
-            transaction.executeWithoutResult(status -> events.forEach(this::insert));
-        } catch (DataAccessException e) {
+            transaction.executeWithoutResult(status -> events.forEach(event -> insert(owner, event)));
+        } catch (DataAccessException | TransactionException e) {
+            // 連不上資料庫時，失敗發生在開交易那一步，丟的是 TransactionException，不是 DataAccessException
             throw new IllegalStateException("儲存行程失敗（" + events.size() + " 筆）", e);
         }
     }
 
     @Override
-    public List<ScheduledEvent> load(DateRange range) {
+    public List<ScheduledEvent> load(OwnerId owner, DateRange range) {
         List<Row> rows;
         try {
-            // 條件寫成 tsrange(start_at, end_at) && tsrange(...)，跟 V3 索引的運算式一字不差：
+            // 條件寫成 owner_id = ... AND tsrange(start_at, end_at) && tsrange(...)，跟 V11 索引的兩個欄位對得上：
             // 規劃器是拿「運算式長得一不一樣」來判斷能不能用運算式索引的，
-            // 寫成等價的 start_at < :end AND end_at > :start 結果一樣，但就用不到那個 GiST 索引了。
+            // 期間寫成等價的 start_at < :end AND end_at > :start 結果一樣，但就用不到那個 GiST 索引了。
             // ORDER BY 多帶 end_at、id：開始時間相同時順序也固定，畫面不會每次重新整理就換位置
             rows = jdbc.sql("""
                             SELECT id, title, start_at, end_at, category, location, note
                             FROM calendar_event
-                            WHERE tsrange(start_at, end_at) && tsrange(:start, :end)
+                            WHERE owner_id = :owner AND tsrange(start_at, end_at) && tsrange(:start, :end)
                             ORDER BY start_at, end_at, id
                             """)
+                    .param("owner", owner.value())
                     .param("start", range.startTime())
                     .param("end", range.endTime())
                     .query(JdbcCalendarEventAdapter::row)
@@ -75,11 +81,12 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEvent
     }
 
     @Override
-    public boolean delete(EventId id) {
+    public boolean delete(OwnerId owner, EventId id) {
         try {
-            // 刪到 0 列就是沒有這筆；「沒有算不算錯」交給 use case 判斷
-            return jdbc.sql("DELETE FROM calendar_event WHERE id = :id")
+            // 刪到 0 列就是這個人沒有這筆（不存在、或是別人的）；「沒有算不算錯」交給 use case 判斷
+            return jdbc.sql("DELETE FROM calendar_event WHERE id = :id AND owner_id = :owner")
                     .param("id", id.value())
+                    .param("owner", owner.value())
                     .update() > 0;
         } catch (DataAccessException e) {
             throw new IllegalStateException("刪除行程失敗：" + id, e);
@@ -115,12 +122,13 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEvent
                        String category, String location, String note) {
     }
 
-    private void insert(ScheduledEvent scheduled) {
+    private void insert(OwnerId owner, ScheduledEvent scheduled) {
         jdbc.sql("""
-                        INSERT INTO calendar_event (id, title, start_at, end_at, category, location, note)
-                        VALUES (:id, :title, :start, :end, :category, :location, :note)
+                        INSERT INTO calendar_event (id, owner_id, title, start_at, end_at, category, location, note)
+                        VALUES (:id, :owner, :title, :start, :end, :category, :location, :note)
                         """)
                 .param("id", scheduled.id().value())
+                .param("owner", owner.value())
                 .param("title", scheduled.event().title())
                 // LocalDateTime 直接交給 PostgreSQL 的 JDBC driver，它對應的正是不帶時區的 TIMESTAMP，不經過任何時區換算
                 .param("start", scheduled.event().start())
