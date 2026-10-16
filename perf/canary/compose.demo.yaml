@@ -1,0 +1,64 @@
+# 零停機部署和 canary 的示範環境（#20）：疊在 deploy/compose.yaml 上，在同一台機器上另起一組，不碰正在跑的 talkcal-deploy。
+#
+#   專案名 talkcal-canary-demo：自己的網路、自己的 postgres volume，正式的資料庫不會多出示範用的帳號和 migration
+#   埠 48080（web）、48090（app = blue）、48091（app-green）
+#   映像檔 tag :canary-demo：不蓋掉正式用的 :local
+#   沒有模型：示範打的是查行程（GET /api/calendar/events），不叫模型，也就不受 nginx 對 AI 助理的限流影響
+#   多一個 Alloy：只抓這組的 app、app-green，帶 env="canary-demo" 送進 ops/ 的 Mimir（ops/ 的 Alloy 抓的是正式那組）
+#
+# 怎麼跑見 perf/README.md「零停機部署與 canary」。用 cd/bluegreen.sh 時這樣疊上來：
+#   EXTRA_COMPOSE_FILES=perf/canary/compose.demo.yaml cd/bluegreen.sh local
+
+name: talkcal-canary-demo
+
+services:
+  postgres:
+    container_name: talkcal-canary-demo-postgres
+    ports: !reset []
+
+  app:
+    image: talkcal/app:canary-demo
+    container_name: talkcal-canary-demo-app
+    ports: !override
+      - "127.0.0.1:48090:8090"
+    environment:
+      # 這組的 Alloy 只抓指標、不收 trace，app 送 trace 只會一直連不上、印警告。示範不看 trace，不取樣
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "0"
+
+  app-green:
+    image: talkcal/app:canary-demo
+    container_name: talkcal-canary-demo-app-green
+    ports: !override
+      - "127.0.0.1:48091:8090"
+    environment:
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "0"
+
+  web:
+    image: talkcal/web:canary-demo
+    container_name: talkcal-canary-demo-web
+    ports: !override
+      - "127.0.0.1:48080:80"
+
+  # 用不到，但改名：萬一有人 up 了全部，也不會跟正式那組的容器撞名
+  llm-chat:
+    container_name: talkcal-canary-demo-llm-chat
+    ports: !reset []
+  model-seed:
+    container_name: talkcal-canary-demo-model-seed
+
+  alloy:
+    image: grafana/alloy:v1.11.0
+    container_name: talkcal-canary-demo-alloy
+    command: [run, /etc/alloy/config.alloy]
+    volumes:
+      # 相對路徑從第一個 compose 檔（deploy/compose.yaml）的資料夾算起，不是這個檔案的
+      - ../perf/canary/alloy.demo.alloy:/etc/alloy/config.alloy:ro
+    networks:
+      - default
+      # ops/ 那組的網路：用服務名稱找 mimir
+      - observability
+
+networks:
+  observability:
+    external: true
+    name: talkcal-observability_default

@@ -1,0 +1,20 @@
+// 示範環境（compose.demo.yaml）專用的 Alloy：只抓這組的兩個 app slot，送進 ops/ 的 Mimir。
+// 跟 ops/alloy/config.alloy 抓 app 的那段一樣（job 名稱、slot 標籤），多一個 env="canary-demo"：
+// 查詢時加上它，就不會跟正式那組的指標混在一起（cd/bluegreen.sh 的 METRICS_SELECTOR）
+
+prometheus.scrape "talkcal_app" {
+  job_name        = "talkcal-app"
+  targets         = [
+    {"__address__" = "app:8090", "slot" = "blue", "env" = "canary-demo"},
+    {"__address__" = "app-green:8090", "slot" = "green", "env" = "canary-demo"},
+  ]
+  metrics_path    = "/actuator/prometheus"
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+}
+
+prometheus.remote_write "mimir" {
+  endpoint {
+    url = "http://mimir:9009/api/v1/push"
+  }
+}

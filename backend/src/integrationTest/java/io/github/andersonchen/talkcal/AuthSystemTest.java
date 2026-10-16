@@ -143,6 +143,20 @@ class AuthSystemTest {
     }
 
     @Test
+    @DisplayName("登入狀態存在資料庫（#20）：登入後 spring_session 有這個人的一筆，零停機部署時另一個 app 也認得；反例：登出後那筆就不見了")
+    void sessionIsStoredInDatabase() throws Exception {
+        BrowserSession amy = browser().signUpAndLogIn("amy", PASSWORD);
+        String accountId = jdbc.sql("SELECT id::text FROM account WHERE username = 'amy'").query(String.class).single();
+        String loggedIn = "SELECT count(*) FROM spring_session WHERE principal_name = ?";
+
+        assertEquals(1, jdbc.sql(loggedIn).param(accountId).query(Integer.class).single(),
+                "session 要存在兩個 app 共用的資料庫，不是 app 自己的記憶體");
+
+        assertEquals(204, amy.logout().statusCode());
+        assertEquals(0, jdbc.sql(loggedIn).param(accountId).query(Integer.class).single(), "登出要把資料庫裡的 session 刪掉");
+    }
+
+    @Test
     @DisplayName("反例：沒設定 Google、GitHub 的 client id 時，登入方式是空的、OAuth2 的網址也不存在 —— 跟 #105 之前一樣只有帳密")
     void noExternalProvidersByDefault() throws Exception {
         HttpResponse<String> providers = browser().get("/api/auth/providers");

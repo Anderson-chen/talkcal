@@ -19,6 +19,10 @@ WAIT_TIMEOUT=600 cd/apply.sh local app   # 拉長等待
 平常用 Gradle 的快捷鍵就好（在 `backend/`）：`./gradlew deploy`、`deployApp`、`deployWeb`、`deployModels`，
 它們呼叫的就是上面這支，只多了 `deployApp` 先跑測試。用法見 [deploy/README.md](../deploy/README.md)。
 
+部署 app 不會停機：本機的 env 設了 `APP_STRATEGY=bluegreen`，`apply.sh` 換 app 時改呼叫 [bluegreen.sh](bluegreen.sh) ——
+新版起在另一個 slot、healthy 了才叫 nginx 切流量、再關舊的；可選先放 10% 當 canary、查 Mimir 再全開。
+做法、驗證數字和選型理由見 [deploy/README.md「零停機部署與 canary」](../deploy/README.md#零停機部署與-canary)。
+
 ## 三件事分開
 
 | 問題 | 放哪 | 本機 | AWS（EC2） |

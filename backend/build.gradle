@@ -65,6 +65,9 @@ dependencies {
     // 用 Google、GitHub 帳號登入（#105）：OAuth2 的轉址、換 token、驗 ID token、拿使用者資料都交給它。
     // 只當 client（「用別人的帳號登入」），不當 authorization server，也不驗別人發的 JWT
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+    // 登入狀態（session）存 PostgreSQL，不存 app 的記憶體（#20）：零停機部署時新舊兩個 app 同時在接請求，
+    // 請求換到另一個 app 也還是登入狀態；部署新版也不會把所有人登出。表由 Flyway 建（V15），不讓它自己建
+    implementation 'org.springframework.boot:spring-boot-starter-session-jdbc'
 
     // 行程和 AI 助理的對話記憶存 PostgreSQL。用 JDBC（JdbcClient）而不是 JPA：
     // 只有兩張表，SQL 自己寫一眼看得懂；JPA 要在 domain 物件上加 @Entity，

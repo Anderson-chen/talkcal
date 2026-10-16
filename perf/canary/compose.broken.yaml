@@ -1,0 +1,17 @@
+# 故意壞掉的新版（#20 的反例）：再疊在 compose.demo.yaml 上面，新版起來之後每個 /api 請求都回 500。
+#
+# 壞法是「新版的設定錯了」：資料庫連到一個沒有任何表的 schema、也不跑 migration
+# （像是新版忘了帶 migration，或連錯資料庫）。重點是 healthcheck 照樣會過 ——
+# /actuator/health 只檢查連得上資料庫，不檢查表在不在 —— 所以只靠「等 healthy 才切」擋不住它，要靠 canary 看錯誤率。
+# 不改程式碼做一個壞版本：正式的程式裡不該有「故意出錯」的開關。
+#
+# app 和 app-green 都寫：新版起在哪個 slot 由 bluegreen.sh 決定，正在接流量的那個不會被重建，所以寫兩個也只會壞到新版
+x-broken: &broken
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/talkcal?currentSchema=no_such_schema
+  SPRING_FLYWAY_ENABLED: "false"
+
+services:
+  app:
+    environment: *broken
+  app-green:
+    environment: *broken
