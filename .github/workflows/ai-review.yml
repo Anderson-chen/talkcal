@@ -1,0 +1,51 @@
+# AI 寫的 PR，要有人看過 diff、勾完審查清單、留下紀錄，才是綠燈。
+#
+# 為什麼要擋：這個 repo 幾乎每個 PR 都是 AI 寫的，CI 綠燈只證明「測試過了」，
+# 不證明「有人看過」。到 2026-10-16 已合併的 PR 沒有一個有審查紀錄 —— 審查只發生在對話裡，
+# 合併之後什麼都沒留下。清單、看過的 commit、審查紀錄都寫在 PR 描述裡，半年後點開 PR 就看得到。
+#
+# 擋不住什麼：AI 和人用的是同一個 GitHub 帳號，檢查分不出是誰勾的。
+# 所以規則是 AI 一格都不准勾（寫在 CLAUDE.md），這道檢查把「忘了審」和「審完又 push」變成紅燈。
+# 怎麼補這個洞、為什麼現在不補，見 docs/ai-review.md。
+#
+# 為什麼判斷寫在 .github/ai-review.sh 而不是這裡：要能在本機用假資料造反例（.github/ai-review.test.sh），
+# 每次跑檢查前也先跑一遍，確定規則本身沒壞。
+
+name: AI review
+
+on:
+  pull_request:
+    # edited：勾格子、填紀錄；synchronize：又 push 了，看過的 commit 不再是最新的；labeled：改了誰寫的
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+# 讀程式碼（拿 script）和讀 PR，不寫任何東西
+permissions:
+  contents: read
+  pull-requests: read
+
+# 一次勾好幾格會觸發好幾次 edited，只要最後那次的結果
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 規則本身的反例
+        run: bash .github/ai-review.test.sh
+
+      # 描述和 label 現抓，不用事件裡帶的：從 Actions 頁面重跑舊的那次時，事件裡的還是舊描述
+      - name: 審查清單
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          pr=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json body,labels,headRefOid)
+          export PR_BODY=$(jq -r '.body' <<<"$pr")
+          export PR_LABELS=$(jq -r '.labels[].name' <<<"$pr")
+          export HEAD_SHA=$(jq -r '.headRefOid' <<<"$pr")
+          bash .github/ai-review.sh
