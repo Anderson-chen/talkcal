@@ -422,6 +422,30 @@ class JdbcCalendarEventAdapterTest {
         }
 
         @Test
+        @DisplayName("舊版只寫舊欄位：新版改讀新欄位之後照樣讀得到、時間不變")
+        void oldVersionWritesAreReadableByNewVersion() {
+            insertLikeOldVersion("2026-10-06 15:00", "2026-10-06 16:00");
+
+            List<ScheduledEvent> loaded = adapter.load(OWNER, OCT_06);
+
+            assertEquals(1, loaded.size());
+            assertEquals(LocalDateTime.of(2026, 10, 6, 15, 0), loaded.getFirst().event().start());
+            assertEquals(LocalDateTime.of(2026, 10, 6, 16, 0), loaded.getFirst().event().end());
+        }
+
+        @Test
+        @DisplayName("讀的是新欄位：新舊欄位對不上時，以新欄位為準")
+        void readsNewColumns() {
+            // 正常情況兩邊永遠一致，所以要刻意弄成不一致，才看得出讀的是哪一邊
+            insertLikeOldVersion("2026-10-06 15:00", "2026-10-06 16:00");
+            jdbc.sql("UPDATE calendar_event SET starts_at = '2026-10-06 09:00+08', ends_at = '2026-10-06 10:00+08' WHERE id = :id")
+                    .param("id", OLD_VERSION_ROW)
+                    .update();
+
+            assertEquals(LocalDateTime.of(2026, 10, 6, 9, 0), adapter.load(OWNER, OCT_06).getFirst().event().start());
+        }
+
+        @Test
         @DisplayName("舊版只改舊欄位的時間：新欄位跟著換算，不會留著改之前的值")
         void oldVersionUpdatesFollowToNewColumns() {
             insertLikeOldVersion("2026-10-06 15:00", "2026-10-06 16:00");
@@ -483,7 +507,7 @@ class JdbcCalendarEventAdapterTest {
     }
 
     @Test
-    @DisplayName("讀取的 SQL 用得到 V11 的 GiST 索引（擁有者＋期間）")
+    @DisplayName("讀取的 SQL 用得到 V14 的 GiST 索引（擁有者＋期間，時間點）")
     void loadQueryCanUseTheGistIndex() {
         // 表裡只有幾筆時，規劃器會選全表掃描（那對小表確實比較快），從 EXPLAIN 看不出索引能不能用。
         // 所以在交易裡用 SET LOCAL 暫時禁止全表掃描：如果 SQL 的運算式跟索引對不上，
@@ -492,19 +516,19 @@ class JdbcCalendarEventAdapterTest {
         String plan = transaction.execute(status -> {
             jdbc.sql("SET LOCAL enable_seqscan = off").update();
             return String.join("\n", jdbc.sql("""
-                            EXPLAIN SELECT id, title, start_at, end_at
+                            EXPLAIN SELECT id, title, starts_at, ends_at
                             FROM calendar_event
-                            WHERE owner_id = :owner AND tsrange(start_at, end_at) && tsrange(:start, :end)
-                            ORDER BY start_at, end_at, id
+                            WHERE owner_id = :owner AND tstzrange(starts_at, ends_at) && tstzrange(:start, :end)
+                            ORDER BY starts_at, ends_at, id
                             """)
                     .param("owner", OWNER.value())
-                    .param("start", OCT_06.startTime())
-                    .param("end", OCT_06.endTime())
+                    .param("start", OCT_06.startTime().atZone(TAIPEI).toOffsetDateTime())
+                    .param("end", OCT_06.endTime().atZone(TAIPEI).toOffsetDateTime())
                     .query(String.class)
                     .list());
         });
 
-        assertTrue(plan.contains("calendar_event_owner_period"), () -> "沒有用到索引，計畫是：\n" + plan);
+        assertTrue(plan.contains("calendar_event_owner_instant"), () -> "沒有用到索引，計畫是：\n" + plan);
     }
 
     @Test

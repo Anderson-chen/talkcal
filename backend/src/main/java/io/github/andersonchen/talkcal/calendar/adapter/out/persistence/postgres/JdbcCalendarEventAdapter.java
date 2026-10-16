@@ -30,8 +30,8 @@ import java.util.UUID;
  * 讀取用的索引在 V3__index_calendar_event_period.sql，分類、地點、備註是 V5 加的，擁有者是 V11 加的）。
  *
  * 起訖時間正在從 start_at、end_at（不帶時區的牆上時間）搬到 starts_at、ends_at（時間點，V12～V14，#18）。
- * 現在兩邊都寫、還讀舊的：舊版程式（部署途中、退回上一版時）還在讀舊欄位，所以舊欄位要照寫。
- * 步驟見 docs/database/zero-downtime-schema.md。
+ * 這一版兩邊都寫、只讀新的：舊版程式（部署途中、退回上一版時）還在讀舊欄位，所以舊欄位要照寫；
+ * 讀新欄位，是為了在拿掉舊欄位之前，先用一整個版本證明新欄位是對的。步驟見 docs/database/zero-downtime-schema.md。
  * domain 還是 LocalDateTime：牆上時間跟時間點的換算只在這裡做，用的是 calendar.zone。
  *
  * 每一句 SQL 都帶著 owner_id 條件（#104）：授權不是另外一道「先查再比對」的檢查，而是查詢本身就只碰得到這個人的資料。
@@ -70,20 +70,20 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEvent
     public List<ScheduledEvent> load(OwnerId owner, DateRange range) {
         List<Row> rows;
         try {
-            // 條件寫成 owner_id = ... AND tsrange(start_at, end_at) && tsrange(...)，跟 V11 索引的兩個欄位對得上：
+            // 條件寫成 owner_id = ... AND tstzrange(starts_at, ends_at) && tstzrange(...)，跟 V14 索引的兩個欄位對得上：
             // 規劃器是拿「運算式長得一不一樣」來判斷能不能用運算式索引的，
             // 期間寫成等價的 start_at < :end AND end_at > :start 結果一樣，但就用不到那個 GiST 索引了。
             // ORDER BY 多帶 end_at、id：開始時間相同時順序也固定，畫面不會每次重新整理就換位置
             rows = jdbc.sql("""
-                            SELECT id, title, start_at, end_at, category, location, note
+                            SELECT id, title, starts_at, ends_at, category, location, note
                             FROM calendar_event
-                            WHERE owner_id = :owner AND tsrange(start_at, end_at) && tsrange(:start, :end)
-                            ORDER BY start_at, end_at, id
+                            WHERE owner_id = :owner AND tstzrange(starts_at, ends_at) && tstzrange(:start, :end)
+                            ORDER BY starts_at, ends_at, id
                             """)
                     .param("owner", owner.value())
-                    .param("start", range.startTime())
-                    .param("end", range.endTime())
-                    .query(JdbcCalendarEventAdapter::row)
+                    .param("start", instant(range.startTime()))
+                    .param("end", instant(range.endTime()))
+                    .query(this::row)
                     .list();
         } catch (DataAccessException e) {
             throw new IllegalStateException("讀取行程失敗：" + range, e);
@@ -121,17 +121,22 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEvent
         }
     }
 
-    private static Row row(ResultSet rs, int rowNum) throws SQLException {
-        // getObject(..., LocalDateTime.class)：PostgreSQL 的 driver 把不帶時區的 TIMESTAMP 直接對應成 LocalDateTime，
-        // 不像 getTimestamp() 會經過 JVM 預設時區
+    private Row row(ResultSet rs, int rowNum) throws SQLException {
+        // getObject(..., OffsetDateTime.class)：PostgreSQL 的 driver 把 TIMESTAMPTZ 讀成 UTC 的 OffsetDateTime，
+        // 不經過 JVM 預設時區；再明確換回 calendar.zone 的牆上時間
         return new Row(rs.getObject("id", UUID.class), rs.getString("title"),
-                rs.getObject("start_at", LocalDateTime.class), rs.getObject("end_at", LocalDateTime.class),
+                wallClock(rs.getObject("starts_at", OffsetDateTime.class)),
+                wallClock(rs.getObject("ends_at", OffsetDateTime.class)),
                 rs.getString("category"), rs.getString("location"), rs.getString("note"));
     }
 
     // 牆上時間 → 時間點。夏令時間切換時不存在或重複的那一小時，照 ZonedDateTime 的規則取（台北現在沒有夏令時間）
     private OffsetDateTime instant(LocalDateTime wallClock) {
         return wallClock.atZone(zone).toOffsetDateTime();
+    }
+
+    private LocalDateTime wallClock(OffsetDateTime instant) {
+        return instant.atZoneSameInstant(zone).toLocalDateTime();
     }
 
     private record Row(UUID id, String title, LocalDateTime start, LocalDateTime end,
