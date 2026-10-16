@@ -77,6 +77,7 @@ flowchart LR
 |---|---|---|
 | 18080 | web（nginx） | 瀏覽器，唯一的入口 |
 | 18090 | app（容器版） | k6 直接壓 app，不想多經過 nginx |
+| 18091 | app-green（零停機部署時新版輪流起在這，#20） | 部署前直接確認新版；平常沒在跑 |
 | 8090 | bootRun（不在容器裡） | 開發時跟容器版同時開著比對 |
 | 8080 | llm-chat | bootRun 的 app 打模型 |
 | 5432 | postgres | bootRun 的 app、psql、IDE |

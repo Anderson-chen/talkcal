@@ -8,7 +8,7 @@
 | 服務 | 在哪跑 | 埠 |
 |------|--------|----|
 | Qwen3-8B 生成模型 | **容器**（`llm-chat`） | 8080 |
-| talkcal app | **容器**（`app`） | 18090 |
+| talkcal app | **容器**（`app`；部署時新版輪流起在 `app-green`，見[零停機部署與 canary](#零停機部署與-canary)） | 18090（`app-green` 是 18091） |
 | PostgreSQL（行程、AI 助理的對話記憶） | **容器**（`postgres`） | 5432（只綁 127.0.0.1） |
 | 前端（nginx + Vue） | **容器**（`web`） | 18080 —— 用瀏覽器開這個 |
 
@@ -61,13 +61,112 @@ Gradle 只多做一件事 —— `deployApp` 先跑測試。
 改了程式碼，要把新版放進容器：
 
 ```bash
-./gradlew deployApp                              # 測試 → build 映像檔 → 換掉舊容器 → 等 healthy
+./gradlew deployApp                              # 測試 → build 映像檔 → 新版起在另一個 slot、healthy 才切流量（見「零停機部署與 canary」）
 ./gradlew deployApp -x test                      # 跳過測試
 ./gradlew deployApp -PdeployWaitTimeout=600      # 模型第一次載入比較慢時，拉長等待（預設 300 秒）
 ```
 
 只動 app，不碰模型和資料庫，所以第一次部署前要先 `docker compose up -d postgres llm-chat`。
 前端也一樣：app 沒在跑的話，nginx 找不到 `app` 這個 upstream，web 起不來、會報 unhealthy。
+
+## 零停機部署與 canary
+
+[#20](https://github.com/Anderson-chen/talkcal/issues/20)。以前只有一個 app，部署是先關舊的、再開新的，
+中間有一段沒人接的空窗（2026-10-12 量到 15–25 秒，見 [postmortem](../docs/postmortems/2026-10-12-deploy-cuts-in-flight-requests.md)）。
+現在 app 有兩個位置（slot），部署 app 時：
+
+```
+          web（nginx）  /api ──split_clients──┬──▶ app        （blue，舊版，正在接流量）
+                                               └──▶ app-green  （green，新版先起在這）
+
+1. 新版起在沒接流量的那個 slot，等 healthcheck 通過         docker compose up --wait app-green
+2.（可選）canary：先切 10% 給新版，查 Mimir 的錯誤率和 p95    改寫 routing/app.conf → nginx -s reload
+   ├─ 沒過：切回 100% 舊版，新版關掉（容器和 log 留著）        → 結束碼 1
+   └─ 過了：往下
+3. 全部切給新版                                             改寫 routing/app.conf → nginx -s reload
+4. 等 5 秒，關掉舊版（graceful shutdown，手上的請求做完才結束）  docker compose stop app
+```
+
+下一次部署反過來：新版起在 app、關掉 app-green。兩個輪流，沒有固定誰是正式。
+
+```bash
+cd/apply.sh local app                          # 本機的 env 設了 APP_STRATEGY=bluegreen，app 自動走這條
+CANARY_PERCENT=10 cd/apply.sh local app        # 加 canary（要先起 ops/，要查 Mimir）
+cd/bluegreen.sh local --rollback               # 剛換上的新版有問題：切回上一個 slot（容器還在、映像檔是舊的，十幾秒）
+cd/bluegreen.sh local --status                 # 現在 /api 轉給誰
+```
+
+`./gradlew deployApp` 呼叫的就是 `cd/apply.sh local app`，所以也是零停機。
+
+### 驗證（2026-10-16，k6 每秒 20 個請求打 nginx）
+
+在同一台機器上另起一組示範環境（[perf/canary/compose.demo.yaml](../perf/canary/compose.demo.yaml)，不碰正式那組），
+用 [perf/canary.js](../perf/canary.js) 邊壓邊換。怎麼重跑見 [perf/README.md](../perf/README.md#canary邊壓邊換-app零停機與-canary-的反例)。
+
+| 情境 | 請求數 | 失敗 | 說明 |
+|---|---:|---:|---|
+| 對照：舊做法（先關再開，`up --force-recreate app`） | 1801 | **106**（502） | 約 5 秒沒人接。這裡 app 閒著、起得快；postmortem 那次有 AI 助理的慢請求，空窗 15–25 秒 |
+| blue/green（`cd/bluegreen.sh local`） | 2401 | **0** | 舊 app 結束碼 143（收到 SIGTERM 後自己做完才結束，不是被 SIGKILL 的 137） |
+| `--rollback`（切回上一個 slot） | 1501 | **0** | 從下指令到切完 15 秒 |
+| 反例：新版會回 500，canary 10% | 2938 | **57**（500），1.9% | canary 那 30 秒每 10 秒的失敗比例是 7.5%、9.0%、10.3%；第 30 秒的檢查算出 5xx 比例 100%，切回，之後 0 |
+| 反例：canary 時查不到 Mimir | 3000 | 3（500） | 第一次跑時腳本查 Mimir 那行在 Windows 上有 bug（已修），等於查不到指標：當作沒過、1 秒內切回，不會「沒資料就放行」 |
+| 正向對照：正常的新版走 canary 10%、90 秒 | 3525 | **0** | 三次檢查 5xx 都是 0，p95 沒變慢，通過、全切 |
+
+兩件事也一起證明了：
+
+- **session 存在資料庫**：舊做法那次 app 整個重啟，之後沒有任何 401；以前 session 在 app 的記憶體裡，重啟就全部登出
+- **正常的新版不會被誤擋**：第一次跑正向對照時被擋了 —— 剛起的 JVM 還沒暖機，查行程的 p95 從 25ms 變 105ms，超過「舊版的 1.5 倍」。
+  使用者感覺不到幾十毫秒，所以改成「超過 1.5 倍**而且**多 0.25 秒以上」才算變慢（`CANARY_P95_SLACK`）。這就是要做正向對照的原因
+
+壞掉的新版怎麼做的：不改程式碼，用 [perf/canary/compose.broken.yaml](../perf/canary/compose.broken.yaml) 讓新版連到一個沒有表的 schema、
+也不跑 migration（像是忘了帶 migration）。**healthcheck 照樣會過**（`/actuator/health` 只看連不連得上資料庫），
+所以「等 healthy 才切」擋不住它，只有看真的流量的錯誤率才看得出來 —— 這正是 canary 要補的那一層。
+
+### 為什麼這樣做
+
+| 決定 | 選了 | 沒選 | 理由 |
+|---|---|---|---|
+| 怎麼不中斷 | blue/green：兩個 slot、nginx 切 | rolling（逐台換） | 單機只有一個 app，沒有「台」可以逐台換。兩個 slot 是單機上最小的「先起新的、再關舊的」 |
+| 誰切流量 | 前面本來就有的 nginx（`split_clients`） | 多一層 Traefik、Envoy | nginx 已經在、已經轉 /api；改寫一個檔案再 `nginx -s reload` 就切了，reload 時舊的 worker 會把手上的請求做完 |
+| 切換狀態放哪 | web 的具名 volume（`routing:`） | 主機上的檔案、重 build web | web 容器重建（部署新前端）時狀態還在，不會跑回 blue；同一台機器上的 staging 是另一個 compose 專案，各有各的 volume |
+| 怎麼分流 | 依 `$request_id` 每個請求各抽 | 依使用者黏著（cookie） | 流量小時百分比比較準；k6 所有請求共用一個 session，依 cookie 分會變成 0% 或 100%。代價：同一個人的連續請求可能一次新版一次舊版，所以 API 要前後相容（[#18 零停機 schema](https://github.com/Anderson-chen/talkcal/issues/18)） |
+| session | 存 PostgreSQL（Spring Session JDBC） | 黏著（sticky session） | 黏著的話，切換時被切走的人照樣登出，而且舊 slot 關掉時所有人都登出。存資料庫之後兩個 slot 都認得，部署也不登出任何人 |
+| canary 誰判斷 | 腳本查 Mimir | 人看 Grafana 再按 | 見下一段 |
+| 判斷什麼 | 5xx 比例 ≤ 1%（絕對）、p95 跟舊版比（相對＋寬容值） | p95 設絕對門檻 | 錯誤率不管哪個端點都該接近 0；延遲由 AI 助理的模型決定，絕對值天天不同，跟同一段時間、同一批流量的舊版比才公平 |
+| 請求不夠多 | 當作沒過，切回 | 當作過了 | 「沒看到錯誤」不等於「沒有錯誤」。Flagger 也是這樣：查不到指標算失敗 |
+
+**手動看 Grafana 還是腳本查指標**：選腳本。
+
+| | 人看 Grafana | **腳本查 Mimir（選這個）** |
+|---|---|---|
+| 判斷標準 | 每次看的人心裡的感覺 | 寫在 `cd/bluegreen.sh` 裡，進 git、改了有紀錄 |
+| 反應時間 | 人在不在電腦前 | 每 30 秒查一次，超標就切回（反例裡壞版本只活了 30 秒） |
+| 自動部署（CD watcher）能不能用 | 不能，要有人守著 | 能 |
+| 看得到全貌 | 看得到：延遲分布、log、trace 一起看 | 只看兩個數字；所以 Grafana「talkcal — Spring app」多一張「canary：每個 slot」的圖，用的是同一個算式，人要看也看得到 |
+| 會不會誤判 | 會漏看 | 會被假訊號騙（例如上面的 JVM 暖機），要靠正向對照調門檻 |
+
+做法跟 Argo Rollouts 的 AnalysisTemplate、Flagger 的 metric check 是同一件事：每隔一段時間查一次 PromQL，超過門檻幾次就中止。
+
+### 限制
+
+- **本機 CD 預設不開 canary**（`cd/envs/local.env` 只設 `APP_STRATEGY=bluegreen`）：本機沒有真的使用者，新版那 10% 等不到 `CANARY_MIN_REQUESTS` 個請求，每次都會判斷不了而切回。
+  canary 的機制驗證過，要用時帶 `CANARY_PERCENT=10`
+- **只有 app 零停機**。web 自己換的時候還是先關再開（nginx 收 SIGQUIT 會把手上的請求做完，但新的 nginx 起來前那一兩秒連不上）。要做的話得在 nginx 前面再一層（雲端是 Caddy）
+- **EC2 還沒接上**：`infra/envs/1-ec2/deploy.sh` 還是直接 `compose up`，沒走 `cd/apply.sh`（`cd/envs/ec2.env` 還沒搬，見 [cd/README.md](../cd/README.md#還沒做的)）。搬過去就一起有了
+- **18090 只連得到 blue**：k6 的 `deploy.js`、`knee.js` 預設直接打 app 的 18090。流量在 app-green 時那裡沒人；要量部署就打 nginx 的 18080（`BASE_URL=http://localhost:18080`）
+- **部署的那幾十秒有兩個 JVM**：單機上新的 JVM 啟動會跟舊的搶 CPU。示範時同一台機器另一個 session 在跑 CI，那兩輪有幾秒請求變慢到好幾秒（沒有失敗）；沒有那個負載的兩輪最慢 192ms
+- **回到更舊的版本不是這裡的事**：`--rollback` 只能切回上一個 slot（剛被換下來的那版）。指定任一舊版本見 [#19](https://github.com/Anderson-chen/talkcal/issues/19)；要指定映像檔 tag 等 [#25](https://github.com/Anderson-chen/talkcal/issues/25)
+
+### 搬到 k8s／EKS 之後換成什麼
+
+| 這裡 | k8s | 說明 |
+|---|---|---|
+| app、app-green 兩個 slot | Deployment 的 rolling update（`maxUnavailable: 0`、`maxSurge: 1`）＋ readiness probe | 零停機本身 k8s 內建，不必自己輪流（[#56](https://github.com/Anderson-chen/talkcal/issues/56) 用 kind 做） |
+| nginx `split_clients` 依權重分流 | Gateway API 的 HTTPRoute `backendRefs[].weight` | ingress-nginx 2026-03 退役，k8s 上分流改用 Gateway API |
+| `cd/bluegreen.sh` 的 canary 步驟 | [Argo Rollouts](https://github.com/argoproj/argo-rollouts)（2026-10 是 v1.10.1）的 `Rollout` canary steps ＋ [Gateway API plugin](https://github.com/argoproj-labs/rollouts-plugin-trafficrouter-gatewayapi)（v0.17.0）；或 [Flagger](https://github.com/fluxcd/flagger)（v1.45.0）直接改 HTTPRoute 權重 | 跟這支一樣：改權重、等、查指標。Argo Rollouts 配 ArgoCD、Flagger 配 Flux；已經規劃 ArgoCD（[cd/README.md](../cd/README.md#為什麼是-pull)）就選 Argo Rollouts |
+| 腳本裡的 PromQL 和門檻 | `AnalysisTemplate`（Prometheus provider 指到 Amazon Managed Prometheus），`failureLimit`、`count` | 判斷的算式可以照搬 |
+| `--rollback` | `kubectl argo rollouts abort` / `undo` | |
+| session 存 PostgreSQL | 一樣（或 ElastiCache） | 多副本本來就需要 |
 
 ## 兩種環境怎麼分
 
