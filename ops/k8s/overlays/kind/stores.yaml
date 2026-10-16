@@ -1,0 +1,24 @@
+# 三個資料庫在叢集外面（ops/compose.yaml 的容器）。ExternalName 只回 CNAME，埠照 config.alloy 寫的直接連
+apiVersion: v1
+kind: Service
+metadata:
+  name: mimir
+spec:
+  type: ExternalName
+  externalName: talkcal-mimir
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+spec:
+  type: ExternalName
+  externalName: talkcal-loki
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tempo
+spec:
+  type: ExternalName
+  externalName: talkcal-tempo
