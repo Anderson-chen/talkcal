@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.andersonchen.talkcal.Migrations;
 import io.github.andersonchen.talkcal.auth.application.domain.model.Account;
 import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
 import io.github.andersonchen.talkcal.auth.application.domain.model.ExternalIdentity;
@@ -13,7 +14,6 @@ import io.github.andersonchen.talkcal.auth.application.domain.model.Username;
 
 import java.util.UUID;
 
-import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -45,10 +45,7 @@ class JdbcAccountAdapterTest {
 
     @BeforeAll
     static void migrateAndConnect() {
-        Flyway.configure()
-                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
-                .load()
-                .migrate();
+        Migrations.migrate(POSTGRES);
         DriverManagerDataSource dataSource =
                 new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         jdbc = JdbcClient.create(dataSource);

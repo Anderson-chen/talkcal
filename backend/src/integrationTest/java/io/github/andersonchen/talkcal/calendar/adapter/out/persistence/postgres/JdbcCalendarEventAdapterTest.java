@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.andersonchen.talkcal.Migrations;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.DateRange;
@@ -14,10 +15,10 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Schedule
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
-import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -61,17 +62,17 @@ class JdbcCalendarEventAdapterTest {
     // 10/06 這一天
     private static final DateRange OCT_06 = new DateRange(LocalDate.of(2026, 10, 6), LocalDate.of(2026, 10, 7));
 
+    // 跟 application.properties 的 calendar.zone 一樣，也是 V12 trigger、V13 backfill 寫死的那個
+    private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
+
     @BeforeAll
     static void migrateAndConnect() {
-        Flyway.configure()
-                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
-                .load()
-                .migrate();
+        Migrations.migrate(POSTGRES);
         DriverManagerDataSource dataSource =
                 new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         jdbc = JdbcClient.create(dataSource);
         transaction = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
-        adapter = new JdbcCalendarEventAdapter(jdbc, transaction);
+        adapter = new JdbcCalendarEventAdapter(jdbc, transaction, TAIPEI);
     }
 
     @BeforeEach
@@ -381,8 +382,132 @@ class JdbcCalendarEventAdapterTest {
         }
     }
 
+    /**
+     * 起訖時間從 start_at、end_at 搬到 starts_at、ends_at 的途中，新舊兩版程式會同時在線（#18）。
+     * 「舊版」在這裡就是它實際會送的 SQL：只認得舊欄位的 INSERT、UPDATE、SELECT。
+     */
+    @Nested
+    @DisplayName("#18 新舊版本同時在線：舊欄位、新欄位兩邊都對得上")
+    class ExpandContract {
+
+        private static final UUID OLD_VERSION_ROW = UUID.fromString("00000000-0000-4000-8000-0000000000aa");
+
+        private void insertLikeOldVersion(String start, String end) {
+            // 上一版 JdbcCalendarEventAdapter 的 INSERT：沒有 starts_at、ends_at
+            jdbc.sql("""
+                            INSERT INTO calendar_event (id, owner_id, title, start_at, end_at, category, location, note)
+                            VALUES (:id, :owner, '舊版存的', CAST(:start AS timestamp), CAST(:end AS timestamp), 'WORK', NULL, NULL)
+                            """)
+                    .param("id", OLD_VERSION_ROW)
+                    .param("owner", OWNER.value())
+                    .param("start", start)
+                    .param("end", end)
+                    .update();
+        }
+
+        private String storedInTaipei(String column, UUID id) {
+            return jdbc.sql("SELECT to_char(" + column + " AT TIME ZONE 'Asia/Taipei', 'YYYY-MM-DD HH24:MI') "
+                            + "FROM calendar_event WHERE id = :id")
+                    .param("id", id)
+                    .query(String.class).single();
+        }
+
+        @Test
+        @DisplayName("舊版只寫舊欄位：trigger 補上新欄位，換算成台北的那個時間點")
+        void oldVersionWritesFillNewColumns() {
+            insertLikeOldVersion("2026-10-06 15:00", "2026-10-06 16:00");
+
+            assertEquals("2026-10-06 15:00", storedInTaipei("starts_at", OLD_VERSION_ROW));
+            assertEquals("2026-10-06 16:00", storedInTaipei("ends_at", OLD_VERSION_ROW));
+        }
+
+        @Test
+        @DisplayName("舊版只寫舊欄位：新版改讀新欄位之後照樣讀得到、時間不變")
+        void oldVersionWritesAreReadableByNewVersion() {
+            insertLikeOldVersion("2026-10-06 15:00", "2026-10-06 16:00");
+
+            List<ScheduledEvent> loaded = adapter.load(OWNER, OCT_06);
+
+            assertEquals(1, loaded.size());
+            assertEquals(LocalDateTime.of(2026, 10, 6, 15, 0), loaded.getFirst().event().start());
+            assertEquals(LocalDateTime.of(2026, 10, 6, 16, 0), loaded.getFirst().event().end());
+        }
+
+        @Test
+        @DisplayName("讀的是新欄位：新舊欄位對不上時，以新欄位為準")
+        void readsNewColumns() {
+            // 正常情況兩邊永遠一致，所以要刻意弄成不一致，才看得出讀的是哪一邊
+            insertLikeOldVersion("2026-10-06 15:00", "2026-10-06 16:00");
+            jdbc.sql("UPDATE calendar_event SET starts_at = '2026-10-06 09:00+08', ends_at = '2026-10-06 10:00+08' WHERE id = :id")
+                    .param("id", OLD_VERSION_ROW)
+                    .update();
+
+            assertEquals(LocalDateTime.of(2026, 10, 6, 9, 0), adapter.load(OWNER, OCT_06).getFirst().event().start());
+        }
+
+        @Test
+        @DisplayName("舊版只改舊欄位的時間：新欄位跟著換算，不會留著改之前的值")
+        void oldVersionUpdatesFollowToNewColumns() {
+            insertLikeOldVersion("2026-10-06 15:00", "2026-10-06 16:00");
+
+            jdbc.sql("UPDATE calendar_event SET start_at = '2026-10-06 14:30', end_at = '2026-10-06 17:00' WHERE id = :id")
+                    .param("id", OLD_VERSION_ROW)
+                    .update();
+
+            assertEquals("2026-10-06 14:30", storedInTaipei("starts_at", OLD_VERSION_ROW));
+            assertEquals("2026-10-06 17:00", storedInTaipei("ends_at", OLD_VERSION_ROW));
+        }
+
+        @Test
+        @DisplayName("新版照樣寫舊欄位：舊版的 SELECT 讀得到新版存的行程（退回上一版也不會少資料）")
+        void newVersionWritesAreReadableByOldVersion() {
+            ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);
+            adapter.save(OWNER, List.of(dinner));
+
+            // 上一版 load 的 SQL
+            List<String> oldVersionSees = jdbc.sql("""
+                            SELECT title FROM calendar_event
+                            WHERE owner_id = :owner AND tsrange(start_at, end_at) && tsrange(:start, :end)
+                            """)
+                    .param("owner", OWNER.value())
+                    .param("start", OCT_06.startTime())
+                    .param("end", OCT_06.endTime())
+                    .query(String.class).list();
+            assertEquals(List.of(DINNER.title()), oldVersionSees);
+        }
+
+        @Test
+        @DisplayName("新欄位存的是台北的那個時間點，跟連線的時區無關（app 在 UTC 的機器上也一樣）")
+        void storesTaipeiInstantRegardlessOfSessionTimeZone() {
+            ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);
+            // 模擬容器裡的 JVM（預設 UTC）：PostgreSQL 的 driver 連線時會把 session 時區設成 JVM 的時區。
+            // 不帶時區的值交給資料庫自己轉的話，這時 15:00 會被當成 UTC 的 15:00（台北 23:00）
+            transaction.executeWithoutResult(status -> {
+                jdbc.sql("SET LOCAL TimeZone = 'UTC'").update();
+                adapter.save(OWNER, List.of(dinner));
+            });
+
+            assertEquals("2026-10-06 15:00", storedInTaipei("starts_at", dinner.id().value()));
+            assertEquals("2026-10-06 16:00", storedInTaipei("ends_at", dinner.id().value()));
+        }
+
+        @Test
+        @DisplayName("新欄位也不收倒著走的時間（V12 的 CHECK）")
+        void newColumnsRejectEndBeforeStart() {
+            assertThrows(Exception.class, () -> jdbc.sql("""
+                            INSERT INTO calendar_event (id, owner_id, title, start_at, end_at, starts_at, ends_at)
+                            VALUES (:id, :owner, '倒著走', '2026-10-06 15:00', '2026-10-06 16:00',
+                                    '2026-10-06 16:00+08', '2026-10-06 15:00+08')
+                            """)
+                    .param("id", UUID.randomUUID())
+                    .param("owner", OWNER.value())
+                    .update());
+            assertEquals(0, count());
+        }
+    }
+
     @Test
-    @DisplayName("讀取的 SQL 用得到 V11 的 GiST 索引（擁有者＋期間）")
+    @DisplayName("讀取的 SQL 用得到 V14 的 GiST 索引（擁有者＋期間，時間點）")
     void loadQueryCanUseTheGistIndex() {
         // 表裡只有幾筆時，規劃器會選全表掃描（那對小表確實比較快），從 EXPLAIN 看不出索引能不能用。
         // 所以在交易裡用 SET LOCAL 暫時禁止全表掃描：如果 SQL 的運算式跟索引對不上，
@@ -391,19 +516,19 @@ class JdbcCalendarEventAdapterTest {
         String plan = transaction.execute(status -> {
             jdbc.sql("SET LOCAL enable_seqscan = off").update();
             return String.join("\n", jdbc.sql("""
-                            EXPLAIN SELECT id, title, start_at, end_at
+                            EXPLAIN SELECT id, title, starts_at, ends_at
                             FROM calendar_event
-                            WHERE owner_id = :owner AND tsrange(start_at, end_at) && tsrange(:start, :end)
-                            ORDER BY start_at, end_at, id
+                            WHERE owner_id = :owner AND tstzrange(starts_at, ends_at) && tstzrange(:start, :end)
+                            ORDER BY starts_at, ends_at, id
                             """)
                     .param("owner", OWNER.value())
-                    .param("start", OCT_06.startTime())
-                    .param("end", OCT_06.endTime())
+                    .param("start", OCT_06.startTime().atZone(TAIPEI).toOffsetDateTime())
+                    .param("end", OCT_06.endTime().atZone(TAIPEI).toOffsetDateTime())
                     .query(String.class)
                     .list());
         });
 
-        assertTrue(plan.contains("calendar_event_owner_period"), () -> "沒有用到索引，計畫是：\n" + plan);
+        assertTrue(plan.contains("calendar_event_owner_instant"), () -> "沒有用到索引，計畫是：\n" + plan);
     }
 
     @Test
@@ -411,7 +536,7 @@ class JdbcCalendarEventAdapterTest {
     void databaseDownIsUpstreamFailure() {
         DriverManagerDataSource nowhere = new DriverManagerDataSource("jdbc:postgresql://127.0.0.1:1/none", "x", "x");
         JdbcCalendarEventAdapter broken = new JdbcCalendarEventAdapter(JdbcClient.create(nowhere),
-                new TransactionTemplate(new DataSourceTransactionManager(nowhere)));
+                new TransactionTemplate(new DataSourceTransactionManager(nowhere)), TAIPEI);
 
         assertThrows(IllegalStateException.class, () -> broken.save(OWNER, List.of(ScheduledEvent.schedule(DINNER))));
         assertThrows(IllegalStateException.class, () -> broken.load(OWNER, OCT_06));
