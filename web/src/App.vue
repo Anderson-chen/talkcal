@@ -21,5 +21,9 @@ onMounted(loadMe)
 </template>
 
 <style scoped>
-.view { flex: 1; min-height: 0; overflow-y: auto; }
+.view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
 </style>

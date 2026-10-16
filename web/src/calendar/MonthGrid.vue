@@ -74,28 +74,122 @@ function chipStyle(event: SavedEvent) {
           :title="e.title"
           @click="calendar.detailId.value = e.id"
         >
-          <span class="time">{{ startLabel(e, c.day) }}</span>{{ e.title }}
+          <span class="time">{{ startLabel(e, c.day) }}</span
+          >{{ e.title }}
         </button>
-        <button v-if="c.more > 0" type="button" class="more" @click="calendar.pickDate(c.day, 'day')">+{{ c.more }} 更多</button>
+        <button v-if="c.more > 0" type="button" class="more" @click="calendar.pickDate(c.day, 'day')">
+          +{{ c.more }} 更多
+        </button>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.scroll { overflow-x: auto; }
-.grid { min-width: 640px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; }
-.weekday { background: var(--card); padding: 10px 12px; font-size: 12px; font-weight: 600; color: var(--muted); }
-.cell { background: var(--card); min-height: 116px; padding: 8px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box; min-width: 0; }
-.cell.other { background: var(--panel); }
-.cell-head { display: flex; align-items: center; justify-content: space-between; }
-.num { width: 30px; height: 30px; border: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-family: Manrope, sans-serif; font-weight: 700; padding: 0; background: transparent; color: var(--ink); }
-.other .num { color: var(--faint); }
-.num.selected { box-shadow: inset 0 0 0 2px var(--accent); color: var(--accent); }
-.num.today { background: var(--accent); color: var(--onAccent); box-shadow: none; }
-.add { width: 28px; height: 28px; border: 0; border-radius: 8px; background: transparent; color: var(--faint); display: flex; align-items: center; justify-content: center; padding: 0; }
-.add:hover { color: var(--accent); background: var(--accentSoft); }
-.chip { width: 100%; border: 0; border-radius: 6px; padding: 4px 7px; font-size: 12px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.time { font-family: Manrope, sans-serif; font-weight: 700; margin-right: 4px; }
-.more { border: 0; background: transparent; text-align: left; padding: 2px 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.scroll {
+  overflow-x: auto;
+}
+.grid {
+  min-width: 640px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 1px;
+}
+.weekday {
+  background: var(--card);
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.cell {
+  background: var(--card);
+  min-height: 116px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-sizing: border-box;
+  min-width: 0;
+}
+.cell.other {
+  background: var(--panel);
+}
+.cell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.num {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-family: Manrope, sans-serif;
+  font-weight: 700;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+}
+.other .num {
+  color: var(--faint);
+}
+.num.selected {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  color: var(--accent);
+}
+.num.today {
+  background: var(--accent);
+  color: var(--onAccent);
+  box-shadow: none;
+}
+.add {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.add:hover {
+  color: var(--accent);
+  background: var(--accentSoft);
+}
+.chip {
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 7px;
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.time {
+  font-family: Manrope, sans-serif;
+  font-weight: 700;
+  margin-right: 4px;
+}
+.more {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
 </style>

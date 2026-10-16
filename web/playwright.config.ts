@@ -31,7 +31,11 @@ export default defineConfig({
   // 桌面版和手機版是兩套版面（CalendarView 用 matchMedia 在 760px 切），操作的方式不一樣：
   // 桌面是左側欄的按鈕＋對話框，手機是右下角的浮動按鈕＋整頁表單。所以測試檔用檔名分，各跑各的
   projects: [
-    { name: 'desktop', testMatch: '**/*.desktop.spec.ts', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
+    {
+      name: 'desktop',
+      testMatch: '**/*.desktop.spec.ts',
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
+    },
     // Pixel 7：412px 寬、觸控、手機的 user agent。用 Chromium 模擬，不必另外裝 Safari（WebKit）
     { name: 'mobile', testMatch: '**/*.mobile.spec.ts', use: { ...devices['Pixel 7'] } },
   ],

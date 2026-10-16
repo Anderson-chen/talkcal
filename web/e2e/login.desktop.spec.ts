@@ -80,12 +80,20 @@ test('登入過期：之後任何一個請求回 401，就回到登入頁（不�
   await expect(page.getByRole('heading', { name: '登入' })).toBeVisible()
 })
 
-test('後端開了 Google、GitHub：登入頁多兩個連結，連到後端的 /api/auth/oauth2/authorization/*；反例：沒開就不出現', async ({ page }) => {
+test('後端開了 Google、GitHub：登入頁多兩個連結，連到後端的 /api/auth/oauth2/authorization/*；反例：沒開就不出現', async ({
+  page,
+}) => {
   await fakeApi(page, { loggedIn: false, providers: ['google', 'github'] })
   await page.goto('/')
 
-  await expect(page.getByRole('link', { name: '用 Google 登入' })).toHaveAttribute('href', '/api/auth/oauth2/authorization/google')
-  await expect(page.getByRole('link', { name: '用 GitHub 登入' })).toHaveAttribute('href', '/api/auth/oauth2/authorization/github')
+  await expect(page.getByRole('link', { name: '用 Google 登入' })).toHaveAttribute(
+    'href',
+    '/api/auth/oauth2/authorization/google',
+  )
+  await expect(page.getByRole('link', { name: '用 GitHub 登入' })).toHaveAttribute(
+    'href',
+    '/api/auth/oauth2/authorization/github',
+  )
 
   const other = await page.context().newPage()
   await other.clock.setFixedTime(new Date('2026-10-06T11:30:00+08:00'))
@@ -95,7 +103,9 @@ test('後端開了 Google、GitHub：登入頁多兩個連結，連到後端的 
   await expect(other.getByRole('link', { name: /登入$/ })).toHaveCount(0)
 })
 
-test('從 Google 轉回來但沒登入成功（/?login_error=oauth）：顯示「沒有登入成功」，網址上的參數拿掉', async ({ page }) => {
+test('從 Google 轉回來但沒登入成功（/?login_error=oauth）：顯示「沒有登入成功」，網址上的參數拿掉', async ({
+  page,
+}) => {
   await fakeApi(page, { loggedIn: false, providers: ['google'] })
   await page.goto('/?login_error=oauth')
 

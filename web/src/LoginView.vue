@@ -65,13 +65,23 @@ async function submit() {
       <h1>{{ title }}</h1>
       <div class="field">
         <label for="login-username">帳號名稱</label>
-        <input id="login-username" v-model="username" autocomplete="username" autocapitalize="none" spellcheck="false" />
+        <input
+          id="login-username"
+          v-model="username"
+          autocomplete="username"
+          autocapitalize="none"
+          spellcheck="false"
+        />
       </div>
       <div class="field">
         <label for="login-password">密碼</label>
         <!-- autocomplete 分開寫：註冊時瀏覽器會提議產生強密碼，登入時會帶入記住的密碼 -->
-        <input id="login-password" v-model="password" type="password"
-               :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" />
+        <input
+          id="login-password"
+          v-model="password"
+          type="password"
+          :autocomplete="mode === 'login' ? 'current-password' : 'new-password'"
+        />
       </div>
       <p v-if="mode === 'register'" class="hint">帳號名稱 3～32 個字（英數、底線、點、減號）；密碼至少 8 個字</p>
       <p v-if="error" role="alert" class="error">{{ error }}</p>
@@ -90,24 +100,121 @@ async function submit() {
 </template>
 
 <style scoped>
-.login { height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
-  background: var(--panel); color: var(--ink); font-family: 'Noto Sans TC', Manrope, sans-serif; }
-.card { width: 100%; max-width: 360px; padding: 28px; border-radius: 16px; background: var(--card); border: 1px solid var(--line);
-  display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; }
-h1 { margin: 0; font-size: 22px; font-weight: 700; }
-.field { display: flex; flex-direction: column; gap: 6px; }
-label { font-size: 13px; font-weight: 500; color: var(--muted); }
-input { height: 44px; border: 1px solid var(--field); border-radius: 10px; padding: 0 12px; font-size: 15px;
-  background: var(--card); color: var(--ink); font-family: inherit; }
-input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.hint { margin: 0; font-size: 13px; color: var(--muted); }
-.error { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--dangerSoft); color: var(--danger); font-size: 14px; }
-.primary { height: 44px; border: 0; border-radius: 10px; background: var(--accent); color: var(--onAccent); font-size: 15px;
-  font-weight: 600; font-family: inherit; cursor: pointer; }
-.primary:disabled { opacity: 0.7; cursor: default; }
-.divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
-.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
-.provider { height: 44px; border: 1px solid var(--field); border-radius: 10px; display: flex; align-items: center;
-  justify-content: center; color: var(--ink); background: var(--card); font-size: 15px; font-weight: 500; text-decoration: none; }
-.switch { border: 0; background: transparent; color: var(--accent); font-size: 14px; font-family: inherit; cursor: pointer; }
+.login {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--ink);
+  font-family: 'Noto Sans TC', Manrope, sans-serif;
+}
+.card {
+  width: 100%;
+  max-width: 360px;
+  padding: 28px;
+  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-sizing: border-box;
+}
+h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+input {
+  height: 44px;
+  border: 1px solid var(--field);
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 15px;
+  background: var(--card);
+  color: var(--ink);
+  font-family: inherit;
+}
+input:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--dangerSoft);
+  color: var(--danger);
+  font-size: 14px;
+}
+.primary {
+  height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--onAccent);
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.primary:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+.provider {
+  height: 44px;
+  border: 1px solid var(--field);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  background: var(--card);
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.switch {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+}
 </style>

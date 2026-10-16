@@ -52,7 +52,9 @@ const weekTitle = computed(() => {
   return `${monthDayLabel(first)} – ${first.slice(5, 7) === last.slice(5, 7) ? `${Number(last.slice(8))}日` : monthDayLabel(last)}`
 })
 
-const stepLabel = computed(() => ({ month: ['上個月', '下個月'], week: ['上一週', '下一週'], day: ['前一天', '後一天'] })[calendar.view.value])
+const stepLabel = computed(
+  () => ({ month: ['上個月', '下個月'], week: ['上一週', '下一週'], day: ['前一天', '後一天'] })[calendar.view.value],
+)
 
 function timeLabel(event: SavedEvent) {
   const day = calendar.sel.value
@@ -80,18 +82,32 @@ const dotColor = (category: Category) => theme.colors.value[category].color
         </div>
         <div class="head-actions">
           <button type="button" class="today" @click="calendar.pickDate(calendar.today)">今天</button>
-          <button type="button" class="icon" :aria-label="stepLabel[0]" @click="calendar.step(-1)"><Icon name="chevronLeft" /></button>
-          <button type="button" class="icon" :aria-label="stepLabel[1]" @click="calendar.step(1)"><Icon name="chevronRight" /></button>
-          <button type="button" class="icon" aria-label="選擇主題" @click="themeOpen = true"><Icon name="palette" /></button>
+          <button type="button" class="icon" :aria-label="stepLabel[0]" @click="calendar.step(-1)">
+            <Icon name="chevronLeft" />
+          </button>
+          <button type="button" class="icon" :aria-label="stepLabel[1]" @click="calendar.step(1)">
+            <Icon name="chevronRight" />
+          </button>
+          <button type="button" class="icon" aria-label="選擇主題" @click="themeOpen = true">
+            <Icon name="palette" />
+          </button>
         </div>
       </header>
       <template v-else>
         <header class="head day-head">
-          <button type="button" class="back" @click="calendar.view.value = 'month'"><Icon name="chevronLeft" />{{ Number(calendar.sel.value.slice(5, 7)) }}月</button>
+          <button type="button" class="back" @click="calendar.view.value = 'month'">
+            <Icon name="chevronLeft" />{{ Number(calendar.sel.value.slice(5, 7)) }}月
+          </button>
           <div class="head-actions">
-            <button type="button" class="icon" :aria-label="stepLabel[0]" @click="calendar.step(-1)"><Icon name="chevronLeft" /></button>
-            <button type="button" class="icon" :aria-label="stepLabel[1]" @click="calendar.step(1)"><Icon name="chevronRight" /></button>
-            <button type="button" class="icon" aria-label="選擇主題" @click="themeOpen = true"><Icon name="palette" /></button>
+            <button type="button" class="icon" :aria-label="stepLabel[0]" @click="calendar.step(-1)">
+              <Icon name="chevronLeft" />
+            </button>
+            <button type="button" class="icon" :aria-label="stepLabel[1]" @click="calendar.step(1)">
+              <Icon name="chevronRight" />
+            </button>
+            <button type="button" class="icon" aria-label="選擇主題" @click="themeOpen = true">
+              <Icon name="palette" />
+            </button>
           </div>
         </header>
         <h1 class="day-title">{{ dayLabel(calendar.sel.value) }}</h1>
@@ -115,7 +131,9 @@ const dotColor = (category: Category) => theme.colors.value[category].color
             @dblclick="calendar.pickDate(c.day, 'day')"
           >
             <span class="num" :class="{ other: c.other, today: c.today, selected: c.selected }">{{ c.date }}</span>
-            <span class="dots"><span v-for="d in c.dots" :key="d" class="dot" :style="{ background: dotColor(d) }" /></span>
+            <span class="dots"
+              ><span v-for="d in c.dots" :key="d" class="dot" :style="{ background: dotColor(d) }"
+            /></span>
           </button>
         </div>
         <section class="agenda">
@@ -128,7 +146,9 @@ const dotColor = (category: Category) => theme.colors.value[category].color
               <span class="item-dot" :style="{ background: dotColor(e.category) }" />
               <span class="item-text">
                 <span class="item-title">{{ e.title }}</span>
-                <span class="item-sub">{{ timeLabel(e) }}<template v-if="e.location"> · {{ e.location }}</template></span>
+                <span class="item-sub"
+                  >{{ timeLabel(e) }}<template v-if="e.location"> · {{ e.location }}</template></span
+                >
               </span>
             </button>
             <div v-if="agenda.length === 0" class="nothing">
@@ -151,7 +171,9 @@ const dotColor = (category: Category) => theme.colors.value[category].color
             @click="calendar.pickDate(day, 'day')"
           >
             <span class="wd">{{ weekdayName(day) }}</span>
-            <span class="num" :class="{ today: day === calendar.today, selected: day === calendar.sel.value }">{{ Number(day.slice(8)) }}</span>
+            <span class="num" :class="{ today: day === calendar.today, selected: day === calendar.sel.value }">{{
+              Number(day.slice(8))
+            }}</span>
           </button>
         </div>
         <TimeGrid :key="'w' + week[0]" :days="week" compact title-only class="timeline" />
@@ -160,17 +182,30 @@ const dotColor = (category: Category) => theme.colors.value[category].color
       <!-- 日視圖 -->
       <template v-else>
         <div class="strip">
-          <button v-for="day in week" :key="day" type="button" class="strip-day" :aria-label="monthDayLabel(day)" @click="calendar.pickDate(day)">
+          <button
+            v-for="day in week"
+            :key="day"
+            type="button"
+            class="strip-day"
+            :aria-label="monthDayLabel(day)"
+            @click="calendar.pickDate(day)"
+          >
             <span class="wd">{{ weekdayName(day) }}</span>
-            <span class="num" :class="{ today: day === calendar.today, selected: day === calendar.sel.value }">{{ Number(day.slice(8)) }}</span>
+            <span class="num" :class="{ today: day === calendar.today, selected: day === calendar.sel.value }">{{
+              Number(day.slice(8))
+            }}</span>
             <span class="has" :class="{ on: calendar.eventsOn(day).length > 0 && day !== calendar.sel.value }" />
           </button>
         </div>
         <TimeGrid :key="'d' + calendar.sel.value" :days="[calendar.sel.value]" compact class="timeline" />
       </template>
 
-      <button type="button" class="fab-ai" aria-label="開啟 AI 助理" @click="aiOpen = true"><Icon name="sparkle" :size="18" />AI 助理</button>
-      <button type="button" class="fab-new" aria-label="新增行程" @click="calendar.openForm()"><Icon name="plus" :size="26" /></button>
+      <button type="button" class="fab-ai" aria-label="開啟 AI 助理" @click="aiOpen = true">
+        <Icon name="sparkle" :size="18" />AI 助理
+      </button>
+      <button type="button" class="fab-new" aria-label="新增行程" @click="calendar.openForm()">
+        <Icon name="plus" :size="26" />
+      </button>
     </template>
 
     <div v-if="aiOpen" class="sheet-scrim">
@@ -210,74 +245,453 @@ const dotColor = (category: Category) => theme.colors.value[category].color
 </template>
 
 <style scoped>
-.mobile { position: relative; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); display: flex; flex-direction: column; }
-.head { padding: 20px 12px 8px 20px; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
-.year { font-size: 13px; color: var(--muted); font-family: Manrope, sans-serif; font-weight: 600; letter-spacing: 0.04em; }
-h1 { margin: 0; font-size: 30px; font-weight: 700; line-height: 1.2; }
-h1.small { font-size: 22px; line-height: 1.3; white-space: nowrap; }
-.head-actions { display: flex; align-items: center; }
-.today { height: 36px; padding: 0 12px; border: 1px solid var(--field); border-radius: 18px; background: transparent; color: var(--ink); font-size: 14px; font-weight: 500; margin-right: 4px; }
-.icon { width: 44px; height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--ink); display: flex; align-items: center; justify-content: center; padding: 0; }
-.day-head { padding: 16px 12px 4px 8px; align-items: center; }
-.back { height: 44px; padding: 0 12px 0 6px; border: 0; background: transparent; color: var(--accent); font-size: 16px; font-weight: 500; display: flex; align-items: center; gap: 2px; }
-.day-title { margin: 0 20px 8px; font-size: 26px; }
-.tabs { margin: 4px 20px 12px; }
-.error { margin: 0 20px 8px; padding: 10px 12px; border-radius: 10px; background: var(--dangerSoft); color: var(--danger); font-size: 14px; }
+.mobile {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+}
+.head {
+  padding: 20px 12px 8px 20px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+}
+.year {
+  font-size: 13px;
+  color: var(--muted);
+  font-family: Manrope, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+h1.small {
+  font-size: 22px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.head-actions {
+  display: flex;
+  align-items: center;
+}
+.today {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--field);
+  border-radius: 18px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  margin-right: 4px;
+}
+.icon {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.day-head {
+  padding: 16px 12px 4px 8px;
+  align-items: center;
+}
+.back {
+  height: 44px;
+  padding: 0 12px 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.day-title {
+  margin: 0 20px 8px;
+  font-size: 26px;
+}
+.tabs {
+  margin: 4px 20px 12px;
+}
+.error {
+  margin: 0 20px 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--dangerSoft);
+  color: var(--danger);
+  font-size: 14px;
+}
 
-.month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 0 12px; row-gap: 2px; }
-.weekday { text-align: center; font-size: 12px; color: var(--muted); font-weight: 500; padding: 4px 0; }
-.cell { height: 50px; border: 0; background: transparent; padding: 2px 0; display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.num { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; font-family: Manrope, sans-serif; color: var(--ink); box-sizing: border-box; }
-.num.other { color: var(--faint); }
-.num.selected { box-shadow: inset 0 0 0 2px var(--accent); color: var(--accent); }
-.num.today { background: var(--accent); color: var(--onAccent); box-shadow: none; }
-.dots { display: flex; gap: 3px; height: 5px; }
-.dot { width: 5px; height: 5px; border-radius: 50%; }
+.month {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  padding: 0 12px;
+  row-gap: 2px;
+}
+.weekday {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 4px 0;
+}
+.cell {
+  height: 50px;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.num {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: Manrope, sans-serif;
+  color: var(--ink);
+  box-sizing: border-box;
+}
+.num.other {
+  color: var(--faint);
+}
+.num.selected {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  color: var(--accent);
+}
+.num.today {
+  background: var(--accent);
+  color: var(--onAccent);
+  box-shadow: none;
+}
+.dots {
+  display: flex;
+  gap: 3px;
+  height: 5px;
+}
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
 
-.agenda { flex: 1; min-height: 0; margin-top: 12px; border-top: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; }
-.agenda-head { padding: 16px 20px 8px; display: flex; align-items: baseline; justify-content: space-between; }
-.agenda-head h2 { margin: 0; font-size: 17px; font-weight: 700; }
-.count { font-size: 13px; color: var(--muted); }
-.agenda-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 16px 96px; display: flex; flex-direction: column; gap: 8px; }
-.item { display: flex; gap: 12px; align-items: flex-start; text-align: left; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; color: var(--ink); min-height: 56px; }
-.item-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; }
-.item-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-.item-title { font-size: 15px; font-weight: 600; }
-.item-sub { font-size: 13px; color: var(--muted); font-family: Manrope, 'Noto Sans TC', sans-serif; }
-.nothing { padding: 28px 12px; text-align: center; color: var(--muted); font-size: 14px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.nothing button { height: 44px; padding: 0 18px; border: 1px solid var(--field); border-radius: 22px; background: var(--card); color: var(--ink); font-size: 14px; }
+.agenda {
+  flex: 1;
+  min-height: 0;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+}
+.agenda-head {
+  padding: 16px 20px 8px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.agenda-head h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+.count {
+  font-size: 13px;
+  color: var(--muted);
+}
+.agenda-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 16px 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  text-align: left;
+  padding: 12px 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--ink);
+  min-height: 56px;
+}
+.item-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 6px;
+}
+.item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.item-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.item-sub {
+  font-size: 13px;
+  color: var(--muted);
+  font-family: Manrope, 'Noto Sans TC', sans-serif;
+}
+.nothing {
+  padding: 28px 12px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.nothing button {
+  height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--field);
+  border-radius: 22px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 14px;
+}
 
-.week-head { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 0 8px 8px 44px; border-bottom: 1px solid var(--line); }
-.week-day, .strip-day { border: 0; background: transparent; color: var(--ink); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 2px 0; min-height: 52px; }
-.wd { font-size: 11px; color: var(--muted); }
-.week-day .num { width: 28px; height: 28px; font-size: 14px; }
-.strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 0 12px 10px; border-bottom: 1px solid var(--line); }
-.strip-day { min-height: 60px; gap: 4px; }
-.strip-day .wd { font-size: 12px; }
-.strip-day .num { width: 36px; height: 36px; font-size: 16px; }
-.has { width: 5px; height: 5px; border-radius: 50%; }
-.has.on { background: var(--muted); }
-.timeline { padding-bottom: 96px; --card: var(--bg); }
+.week-head {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  padding: 0 8px 8px 44px;
+  border-bottom: 1px solid var(--line);
+}
+.week-day,
+.strip-day {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 0;
+  min-height: 52px;
+}
+.wd {
+  font-size: 11px;
+  color: var(--muted);
+}
+.week-day .num {
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+}
+.strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  padding: 0 12px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.strip-day {
+  min-height: 60px;
+  gap: 4px;
+}
+.strip-day .wd {
+  font-size: 12px;
+}
+.strip-day .num {
+  width: 36px;
+  height: 36px;
+  font-size: 16px;
+}
+.has {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+.has.on {
+  background: var(--muted);
+}
+.timeline {
+  padding-bottom: 96px;
+  --card: var(--bg);
+}
 
-.fab-ai { position: absolute; right: 20px; bottom: 100px; height: 44px; padding: 0 16px 0 12px; border-radius: 22px; border: 1px solid var(--line); background: var(--card); color: var(--accent); display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14); z-index: 3; }
-.fab-new { position: absolute; right: 20px; bottom: 28px; width: 60px; height: 60px; border-radius: 30px; border: 0; background: var(--accent); color: var(--onAccent); display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25); z-index: 3; }
+.fab-ai {
+  position: absolute;
+  right: 20px;
+  bottom: 100px;
+  height: 44px;
+  padding: 0 16px 0 12px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
+  z-index: 3;
+}
+.fab-new {
+  position: absolute;
+  right: 20px;
+  bottom: 28px;
+  width: 60px;
+  height: 60px;
+  border-radius: 30px;
+  border: 0;
+  background: var(--accent);
+  color: var(--onAccent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  z-index: 3;
+}
 
-.sheet-scrim { position: absolute; inset: 0; background: var(--scrim); display: flex; flex-direction: column; justify-content: flex-end; z-index: 20; }
-.sheet-dismiss { flex: 1; border: 0; background: transparent; cursor: default; }
-.sheet { background: var(--card); border-radius: 22px 22px 0 0; display: flex; flex-direction: column; }
-.ai-sheet { height: min(660px, 85%); }
-.grip { align-self: center; width: 40px; height: 4px; border-radius: 2px; background: var(--field); margin-top: 10px; flex: none; }
-.ai-head { display: flex; align-items: center; gap: 12px; padding: 10px 12px 12px 20px; border-bottom: 1px solid var(--line); }
-.ai-logo { width: 40px; height: 40px; border-radius: 12px; background: var(--accentSoft); color: var(--accent); display: flex; align-items: center; justify-content: center; flex: none; }
-.ai-title { flex: 1; min-width: 0; }
-.ai-title h2 { margin: 0; font-size: 17px; font-weight: 700; }
-.ai-sub { font-size: 12px; color: var(--muted); }
-.theme-sheet { padding: 12px 20px 32px; gap: 16px; }
-.theme-sheet .grip { margin-top: 0; }
-.theme-head { display: flex; align-items: center; justify-content: space-between; }
-.theme-head h2 { margin: 0; font-size: 18px; font-weight: 700; }
-.done { height: 44px; padding: 0 8px; border: 0; background: transparent; color: var(--accent); font-size: 16px; font-weight: 600; }
-.account { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.account-name { font-size: 15px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.logout { height: 40px; padding: 0 16px; border: 1px solid var(--field); border-radius: 10px; background: transparent; color: var(--ink); font-size: 15px; }
+.sheet-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  z-index: 20;
+}
+.sheet-dismiss {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+.sheet {
+  background: var(--card);
+  border-radius: 22px 22px 0 0;
+  display: flex;
+  flex-direction: column;
+}
+.ai-sheet {
+  height: min(660px, 85%);
+}
+.grip {
+  align-self: center;
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--field);
+  margin-top: 10px;
+  flex: none;
+}
+.ai-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 12px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.ai-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--accentSoft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.ai-title {
+  flex: 1;
+  min-width: 0;
+}
+.ai-title h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+.ai-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+.theme-sheet {
+  padding: 12px 20px 32px;
+  gap: 16px;
+}
+.theme-sheet .grip {
+  margin-top: 0;
+}
+.theme-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.theme-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+.done {
+  height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 600;
+}
+.account {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.account-name {
+  font-size: 15px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.logout {
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--field);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 15px;
+}
 </style>

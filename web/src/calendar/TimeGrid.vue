@@ -80,11 +80,21 @@ function subLabel(block: Placed) {
 <template>
   <div ref="scroller" class="scroller">
     <div class="timeline" :class="{ compact }" :style="{ height: `${24 * hourHeight}px` }">
-      <div v-for="(label, h) in HOURS" :key="label" class="hour" :style="{ top: `${h * hourHeight}px`, height: `${hourHeight}px` }">
+      <div
+        v-for="(label, h) in HOURS"
+        :key="label"
+        class="hour"
+        :style="{ top: `${h * hourHeight}px`, height: `${hourHeight}px` }"
+      >
         <span v-if="h > 0" class="hour-label">{{ label }}</span>
       </div>
       <div class="columns" :style="{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }">
-        <div v-for="col in columns" :key="col.day" class="column" :class="{ today: col.today && days.length > 1, single: days.length === 1 }">
+        <div
+          v-for="col in columns"
+          :key="col.day"
+          class="column"
+          :class="{ today: col.today && days.length > 1, single: days.length === 1 }"
+        >
           <button
             v-for="b in col.blocks"
             :key="b.event.id"
@@ -105,23 +115,117 @@ function subLabel(block: Placed) {
 </template>
 
 <style scoped>
-.scroller { overflow-y: auto; min-height: 0; flex: 1; }
-.timeline { position: relative; margin: 12px 0; }
-.hour { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); box-sizing: border-box; }
-.hour:first-child { border-top: 0; }
-.hour-label { position: absolute; left: 12px; top: -9px; width: 44px; font-size: 12px; color: var(--muted); font-family: Manrope, sans-serif; background: var(--card); text-align: right; padding-right: 4px; }
-.compact .hour-label { left: 4px; width: 34px; font-size: 10px; top: -7px; }
-.columns { position: absolute; left: 68px; right: 8px; top: 0; bottom: 0; display: grid; }
-.compact .columns { left: 44px; }
-.column { position: relative; border-left: 1px solid var(--line); }
-.column.single { border-left: 0; }
-.column.today { background: color-mix(in srgb, var(--accentSoft) 40%, transparent); }
-.block { position: absolute; border: 0; border-radius: 10px; padding: 7px 10px; box-sizing: border-box; overflow: hidden; text-align: left; }
-.compact .block { border-radius: 8px; padding: 4px 6px; }
-.title { display: block; font-size: 14px; font-weight: 700; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.compact .title { font-size: 12px; }
-.sub { display: block; font-size: 12px; font-family: Manrope, 'Noto Sans TC', sans-serif; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.compact .sub { font-size: 11px; }
-.now { position: absolute; left: 0; right: 0; height: 2px; background: var(--now); z-index: 2; pointer-events: none; }
-.now span { position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--now); }
+.scroller {
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+.timeline {
+  position: relative;
+  margin: 12px 0;
+}
+.hour {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--line);
+  box-sizing: border-box;
+}
+.hour:first-child {
+  border-top: 0;
+}
+.hour-label {
+  position: absolute;
+  left: 12px;
+  top: -9px;
+  width: 44px;
+  font-size: 12px;
+  color: var(--muted);
+  font-family: Manrope, sans-serif;
+  background: var(--card);
+  text-align: right;
+  padding-right: 4px;
+}
+.compact .hour-label {
+  left: 4px;
+  width: 34px;
+  font-size: 10px;
+  top: -7px;
+}
+.columns {
+  position: absolute;
+  left: 68px;
+  right: 8px;
+  top: 0;
+  bottom: 0;
+  display: grid;
+}
+.compact .columns {
+  left: 44px;
+}
+.column {
+  position: relative;
+  border-left: 1px solid var(--line);
+}
+.column.single {
+  border-left: 0;
+}
+.column.today {
+  background: color-mix(in srgb, var(--accentSoft) 40%, transparent);
+}
+.block {
+  position: absolute;
+  border: 0;
+  border-radius: 10px;
+  padding: 7px 10px;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-align: left;
+}
+.compact .block {
+  border-radius: 8px;
+  padding: 4px 6px;
+}
+.title {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.compact .title {
+  font-size: 12px;
+}
+.sub {
+  display: block;
+  font-size: 12px;
+  font-family: Manrope, 'Noto Sans TC', sans-serif;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.compact .sub {
+  font-size: 11px;
+}
+.now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--now);
+  z-index: 2;
+  pointer-events: none;
+}
+.now span {
+  position: absolute;
+  left: -5px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--now);
+}
 </style>

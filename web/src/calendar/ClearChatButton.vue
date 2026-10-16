@@ -38,7 +38,26 @@ onBeforeUnmount(() => window.clearTimeout(timer))
 </template>
 
 <style scoped>
-.clear { height: 32px; padding: 0 10px; border: 1px solid var(--field); border-radius: 8px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 4px; flex: none; }
-.clear.confirming { border-color: var(--danger); background: var(--danger); color: var(--card); }
-.clear:disabled { opacity: 0.5; }
+.clear {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--field);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.clear.confirming {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--card);
+}
+.clear:disabled {
+  opacity: 0.5;
+}
 </style>

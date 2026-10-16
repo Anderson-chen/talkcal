@@ -64,15 +64,21 @@ export async function loadMe(): Promise<void> {
 
 /** 登入。帳密錯會丟錯（訊息是「帳號或密碼錯誤」），留在登入頁顯示，不跳走。 */
 export async function logIn(username: string, password: string): Promise<void> {
-  await send('/api/auth/login', { method: 'POST', body: new URLSearchParams({ username, password }) },
-    { contentType: 'application/x-www-form-urlencoded', notifyUnauthorized: false })
+  await send(
+    '/api/auth/login',
+    { method: 'POST', body: new URLSearchParams({ username, password }) },
+    { contentType: 'application/x-www-form-urlencoded', notifyUnauthorized: false },
+  )
   await loadMe()
 }
 
 /** 註冊再登入：後端的註冊不會自動登入，這裡接著登入，使用者感覺上是一步。 */
 export async function signUp(username: string, password: string): Promise<void> {
-  await send('/api/auth/register', { method: 'POST', body: JSON.stringify({ username, password }) },
-    { notifyUnauthorized: false })
+  await send(
+    '/api/auth/register',
+    { method: 'POST', body: JSON.stringify({ username, password }) },
+    { notifyUnauthorized: false },
+  )
   await logIn(username, password)
 }
 
