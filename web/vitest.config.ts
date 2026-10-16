@@ -15,6 +15,21 @@ export default mergeConfig(
       // 會把 Playwright 的測試（e2e/*.spec.ts）也拿來跑
       include: ['src/**/*.test.ts'],
       environment: 'node',
+      // 測試覆蓋率（#23）：只拿來找漏測的地方，不設門檻（理由見 docs/test-coverage.md）。
+      // 直接開著而不是另外一個 --coverage 指令：npm test 跟 CI 跑的是同一件事，v8 收集幾乎不花時間
+      coverage: {
+        enabled: true,
+        // v8：用 Node 內建的覆蓋率，不必先插樁（istanbul 要），Vitest 4 起靠 AST 重新對映，準確度跟 istanbul 一樣
+        provider: 'v8',
+        // 要明寫 include：Vitest 4 拿掉了 coverage.all，不寫的話「沒有任何測試 import 的檔案」不會出現在報告裡 ——
+        // 偏偏那些正是要找的漏測。只算 .ts：.vue 元件交給 Playwright 測（見上面），列進來只會是一排 0%
+        include: ['src/**/*.ts'],
+        // main.ts 只有掛載 app 的接線
+        exclude: ['src/main.ts'],
+        // text-summary 印在終端機；html 給人點進去看哪一行沒跑到；json-summary 給 ci/checks.sh 讀總數貼摘要
+        reporter: ['text-summary', 'html', 'json-summary'],
+        reportsDirectory: 'coverage',
+      },
     },
   }),
 )
