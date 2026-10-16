@@ -10,3 +10,6 @@
 - 改到 `infra/`、`deploy/`、`ops/` 底下的檔案或 `web/nginx.conf` 時，都要檢查 `docs/architecture/index.html`：
   圖上的元件、依賴、參數值、檔案行號（`F`、`L` 兩張表）還對不對。要改就跟程式碼放在同一個 PR，
   並把頁尾的「最後核對」日期改成當天。
+- 開 PR 時加 label `ai-generated`，PR 範本的「AI Review」段落原樣留著，**一格都不准勾、審查到的 commit 和審查紀錄都不准填**，
+  之後 push、改描述時也不碰這段。那是使用者看完 diff 之後自己填的；AI review 檢查會先紅燈，這是預期的。
+  理由：AI 和使用者用同一個 GitHub 帳號，檢查分不出是誰勾的，只能靠這條規則（見 `docs/ai-review.md`）。

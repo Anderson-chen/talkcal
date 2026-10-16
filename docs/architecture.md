@@ -97,8 +97,10 @@ flowchart TB
     hook -->|"過了才推得上去"| pr["GitHub PR<br/>描述寫 Closes #N"]
     pr --> ci["CI（ci.yml）<br/>checks：同一支 ci/run.sh，沒有 GPU，模型測試跳過<br/>secrets：掃這個 commit 往回的整個歷史有沒有 key<br/>vulns：掃映像檔漏洞（每天也排程掃）"]
     pr --> prissue["PR issue（pr-issue.yml）<br/>沒連到 issue 就紅燈"]
+    pr --> aireview["AI review（ai-review.yml）<br/>AI 寫的 PR 沒人勾完審查清單就紅燈"]
     ci -->|"必須綠"| merge["merge 進 master<br/>ruleset：一定走 PR、checks、secrets、vulns、PR issue 都必須綠"]
     prissue -->|"必須綠"| merge
+    aireview -.->|"人看完 diff 才綠（還不是必過）"| merge
     merge --> masterci["master 再跑一次 CI"]
     masterci -->|"綠燈"| green(["master 最新的綠燈 commit"])
     green -->|"每 5 分鐘自己來拉"| watch["本機 watcher<br/>cd/triggers/watch.sh local"]
@@ -119,6 +121,7 @@ EC2 目前是手動部署：機器平常關機，展示前開機、需要時用 
 | CI（GitHub Actions） | 乾淨環境才會壞的：「我電腦上可以」；歷史裡任何地方有 key；lint 錯誤（Error Prone、ESLint，見 [ci/README.md](../ci/README.md#lint)） | 模型相關（沒有 GPU）；key 到這裡才抓到時已經公開，只能作廢重發 |
 | CI 的 `vulns`（漏洞掃描） | 映像檔裡有已知、可修的 HIGH/CRITICAL 漏洞；每天排程掃，抓合併之後才公布的 | 上游還沒修的、MEDIUM 以下；寫進忽略清單的（有到期日） |
 | PR issue | 沒連到 issue 的 PR：合併按鈕按不下去 | 連到的 issue 對不對（只檢查有沒有連） |
+| AI review（[docs/ai-review.md](ai-review.md)） | AI 寫的 PR 沒人勾完審查清單、沒留紀錄；看完又 push 了 | 格子是誰勾的（AI 和人同一個帳號）；還不是必過檢查 |
 | ruleset（protect-master） | 直推 master、force push、刪 master、checks、secrets、vulns 或 PR issue 沒綠就合併、分支落後 master | — |
 | `compose up --wait` | 起不來的容器（healthcheck 沒過） | 起得來但功能壞了：例如模型名稱送錯（[#76](https://github.com/Anderson-chen/talkcal/issues/76)），容器 healthy、第一個 AI 請求才 404 |
 | watcher 同一個 commit 只試一次 | 壞掉的版本每 5 分鐘重 build | watcher 自己掛掉（沒有「多久沒部署」告警，決定不做） |
