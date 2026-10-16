@@ -109,6 +109,7 @@ flowchart TB
 
 本機是 **pull**：GitHub 不必有任何連進這台電腦的權限，機器自己去看 CI 綠了沒（理由見 [cd/README.md](../cd/README.md#為什麼是-pull)）。
 EC2 目前是手動部署：機器平常關機，展示前開機、需要時用 SSM 重跑 `deploy.sh`。
+緊急修正走同一條路、不跳過 CI；`master` 有還不能上線的東西時，從線上那一版開 `hotfix/*` 分支，步驟見 [hotfix.md](hotfix.md)。
 
 ### 每一關擋什麼、擋不住什麼
 
