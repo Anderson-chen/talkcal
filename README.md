@@ -167,3 +167,4 @@ CI 在每次 push、PR 時於 GitHub 上跑，本機則由 pre-push hook 在推�
 | 前端怎麼組成 | [web/README.md](web/README.md) |
 | 畫面設計稿和實作的差異 | [docs/design/calendar/README.md](docs/design/calendar/README.md) |
 | 資料表為什麼長這樣 | [backend/src/main/resources/db/migration](backend/src/main/resources/db/migration)（每支 SQL 開頭都寫了理由） |
+| 改資料表怎麼不停機 | [docs/database/zero-downtime-schema.md](docs/database/zero-downtime-schema.md)（expand/contract 的規則、檢查清單、一次實際演練） |
