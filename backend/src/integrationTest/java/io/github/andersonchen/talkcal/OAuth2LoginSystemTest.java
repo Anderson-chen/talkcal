@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
 import java.net.URLDecoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -81,6 +83,23 @@ class OAuth2LoginSystemTest {
         assertTrue(params.get("scope").contains("openid"), params.get("scope"));
         assertTrue(!params.getOrDefault("state", "").isBlank(), "state 防 CSRF：轉回來時要對得上");
         assertTrue(!location.toString().contains("google-client-secret"), "secret 只在後端換 token 時用，不會出現在網址上");
+    }
+
+    @Test
+    @DisplayName("#127 雲端前面有 Caddy 解 HTTPS：nginx 帶著 X-Forwarded-Proto: https 轉過來，回呼網址要是 https://（反例：上面沒帶的那題還是 http://）")
+    void callbackUsesSchemeFromProxy() throws Exception {
+        // 照雲端上 nginx 轉給 app 的樣子送：app 自己收到的是 http，原本的 scheme 在 header 裡
+        HttpResponse<String> response = HttpClient.newHttpClient().send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/auth/oauth2/authorization/google"))
+                        .header("X-Forwarded-Proto", "https")
+                        .header("X-Forwarded-For", "203.0.113.7")
+                        .GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(302, response.statusCode());
+        String redirectUri = query(URI.create(response.headers().firstValue("Location").orElseThrow())).get("redirect_uri");
+        assertTrue(redirectUri.startsWith("https://localhost"), redirectUri);
+        assertTrue(redirectUri.endsWith("/api/auth/oauth2/callback/google"), redirectUri);
     }
 
     @Test

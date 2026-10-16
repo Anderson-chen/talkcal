@@ -80,19 +80,20 @@ GitHub 上不跑（沒有模型），只確定它編得過（`evalClasses`）。
 - pre-push 自動跑靠路徑判斷：prompt 搬到別的檔案、或 `--no-verify` 跳過，就不會跑
 
 <a id="auth"></a>
-### 認證與授權 ❌（認證、授權都做了，剩 AWS 上改用 Cognito）
+### 認證與授權 ❌（認證、授權都做了，剩把這套搬上 AWS 並實際驗證：#127）
 
-分成四步（[#11](https://github.com/Anderson-chen/talkcal/issues/11) 底下）：
+分成這幾步（[#11](https://github.com/Anderson-chen/talkcal/issues/11) 底下）：
 
 | 步驟 | 內容 | 狀態 |
 |---|---|---|
 | [#103](https://github.com/Anderson-chen/talkcal/issues/103) | 認證：auth 模組、本機帳密（自己的 `account` 表、BCrypt）、登入註冊頁 | ✅ |
 | [#104](https://github.com/Anderson-chen/talkcal/issues/104) | 授權：行程、對話依使用者分開 | ✅ |
-| [#105](https://github.com/Anderson-chen/talkcal/issues/105) | 本機加 Google、GitHub 登入 | 程式完成，還沒用真的 OAuth 應用程式走過一次 |
-| [#106](https://github.com/Anderson-chen/talkcal/issues/106) | AWS 上改用 Amazon Cognito | ❌ |
+| [#105](https://github.com/Anderson-chen/talkcal/issues/105) | 本機加 Google、GitHub 登入 | ✅ Google 用真的 OAuth 應用程式走過（兩個 Google 帳號各建一個帳號）；GitHub 還沒 |
+| [#106](https://github.com/Anderson-chen/talkcal/issues/106) | ~~AWS 上改用 Amazon Cognito~~ | 不做：改成同一套直接上 AWS（#127） |
+| [#127](https://github.com/Anderson-chen/talkcal/issues/127) | 目前這套（帳密＋Google、GitHub）直接上 AWS | 程式完成，還沒部署到 EC2 驗證 |
 
 **#103 的做法**：
-- 登入方式是可以換的 adapter：`app.config` 依 `talkcal.auth.provider` 組裝其中一套 SecurityFilterChain（現在只有 `local`，#106 加 `cognito`），業務程式不知道是哪一套
+- 登入方式是可以換的 adapter：`app.config` 依 `talkcal.auth.provider` 組裝其中一套 SecurityFilterChain（現在只有 `local`，本機、雲端都用它），業務程式不知道是哪一套
 - 瀏覽器只拿 HttpOnly 的 session cookie，前端不碰 token；登入、登出交給 Spring Security 的 filter，只回狀態碼和 JSON，不轉址
 - CSRF 用 Spring Security 的 `csrf.spa()`：寫入要把 `XSRF-TOKEN` cookie 放進 `X-XSRF-TOKEN` header；session cookie 是 `SameSite=Lax`，EC2 上加 `Secure`
 - 密碼：存 `{bcrypt}` 雜湊；長度以 bytes 算、上限 72（BCrypt 只看前 72 bytes，後面的會被默默忽略）
@@ -129,13 +130,28 @@ GitHub 上不跑（沒有模型），只確定它編得過（`evalClasses`）。
 - [JdbcAccountAdapterTest](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/auth/adapter/out/persistence/postgres/JdbcAccountAdapterTest.java)（真的 PostgreSQL）：identity 撞了回 false、剛插入的帳號不留下；只有帳號名稱沒有密碼的列塞不進去；刪帳號時 identity 跟著刪
 - 前端 E2E：有開才出現「用 Google 登入」連結；`?login_error=oauth` 顯示訊息、網址參數拿掉；側欄顯示 Google 給的名字（故意改回顯示 `username`，這題變紅）
 
-**已知限制**：同一個人用 Google 和 GitHub 登入是兩個帳號（要等「已登入時綁定」）；帳密帳號不能綁 Google。EC2 上沒開（#106 改走 Cognito）：nginx 送給 app 的 `X-Forwarded-Proto` 是 `http`，在 Caddy 後面組出來的回呼網址會是 `http://`。
+**已知限制**：同一個人用 Google 和 GitHub 登入是兩個帳號（要等「已登入時綁定」）；帳密帳號不能綁 Google。
 
 **在本機開起來**：
 1. Google Cloud Console → APIs & Services → Credentials → 建 OAuth client ID（Web application），Authorized redirect URI 填 `http://localhost:5173/api/auth/oauth2/callback/google`（vite）；要從 `deploy/` 的 nginx 進來就再加一條 `http://localhost:18080/...`
 2. GitHub → Settings → Developer settings → OAuth Apps → New，Authorization callback URL 填 `http://localhost:5173/api/auth/oauth2/callback/github`（GitHub 的 OAuth App 只能填一個）
 3. 把 client id、secret 填進 `deploy/.env`（範本 `deploy/.env.example`），再啟動 app（bootRun 或 `deploy/` 的 compose 都會讀）
 4. 用瀏覽器開 `http://localhost:5173`（vite），不要直接開 bootRun 的 8090：回呼網址是用請求的 `Host` 組的，直接開 8090 送給 Google 的就是 `localhost:8090/...`，跟登記的對不上（`redirect_uri_mismatch`）。vite 轉發時要保留 `Host`（`changeOrigin: false`，見 `web/vite.config.ts`）
+
+**#127 的做法**（為什麼不接 Cognito：看過費用和工作量之後決定不做 —— 少用一個 AWS 服務，本機和雲端跑同一套，GitHub 也不用另外架轉接層）：
+- client id／secret 走跟 DB 密碼同一條路：Terraform 的 `sensitive` 變數（值放在不進 git 的 `oauth.auto.tfvars`，範本 [oauth.auto.tfvars.example](../../infra/envs/1-ec2/oauth.auto.tfvars.example)）→ SSM 的 `/talkcal/dotenv` → 部署時變成 `deploy/.env` → compose 交給 app
+- 回呼網址的 scheme：雲端是 Caddy（HTTPS）→ nginx → app，HTTPS 在 Caddy 就解開了。原本 nginx 送給 app 的 `X-Forwarded-Proto` 是自己的 `$scheme`（http），app 也沒開信任 proxy header，組出來的回呼網址是 `http://`，跟登記的 `https://` 對不上
+  - [nginx.conf](../../web/nginx.conf)：照轉 Caddy 帶的 `X-Forwarded-Proto`，沒有（本機）才用 `$scheme`
+  - `server.forward-headers-strategy=native`：交給 Tomcat 照 header 還原 scheme 和來源 IP；只信任內部網段來的 header
+  - 偽造不了：外面只能經過 Caddy 進來，Caddy 會覆寫使用者自己送的 `X-Forwarded-*`
+- 要在 Google、GitHub 登記的雲端回呼網址由 `terraform output oauth_callback_urls` 印出來。GitHub 的 OAuth App 只能填一個回呼網址，雲端要另建一個
+- sslip.io 的網址跟著 Elastic IP：IP 換了，回呼網址也要重新登記
+
+**證據（含反例）**：
+- [OAuth2LoginSystemTest](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/OAuth2LoginSystemTest.java)：照雲端 nginx 的樣子帶 `X-Forwarded-Proto: https`，回呼網址是 `https://`；沒帶的那題還是 `http://`。故意拿掉 `forward-headers-strategy`，這題變紅
+- nginx：真的 `nginx.conf` 前面接一個會回顯 header 的假 app —— 沒帶 header 時轉出 `http`、帶 `https` 時轉出 `https`；同樣的實驗換成 master 的 `nginx.conf`，帶 `https` 也被改成 `http`（缺口重現）
+- `terraform validate`、`fmt` 通過
+- 部署到 EC2 實際登入：還沒做
 
 **#104 的做法**：
 - 擁有者是 calendar 自己的型別 `OwnerId`，不用 auth 的 `AccountId`：兩個模組互不認識（ArchitectureTest 守著）。值就是登入者的帳號 ID，由 controller 從 `java.security.Principal` 取出來交給 use case —— calendar 不知道是怎麼登入的

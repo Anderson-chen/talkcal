@@ -30,3 +30,11 @@ output "grafana_tunnel" {
   description = "把機器上的 Grafana 接回本機 http://localhost:3000"
   value       = "aws ssm start-session --target ${aws_instance.app.id} --region ${var.region} --profile ${var.aws_profile} --document-name AWS-StartPortForwardingSession --parameters portNumber=3000,localPortNumber=3000"
 }
+
+output "oauth_callback_urls" {
+  description = "要在 Google Cloud Console（Authorized redirect URIs）、GitHub OAuth App（callback URL）登記的回呼網址。Elastic IP 換了網址就跟著換，要重新登記"
+  value = {
+    google = "https://${local.site_address}/api/auth/oauth2/callback/google"
+    github = "https://${local.site_address}/api/auth/oauth2/callback/github"
+  }
+}

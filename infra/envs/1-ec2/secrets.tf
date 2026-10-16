@@ -2,6 +2,7 @@
 # 本機的 compose 把 DB 密碼寫死成 talkcal（只綁 127.0.0.1，刻意接受，見 ready.md 祕密管理）。雲端上改由 Terraform 隨機產生，
 # 存進 SSM Parameter Store（SecureString，用 AWS 代管的金鑰，免費）。
 # 機器部署時才拉下來寫成 deploy/.env，明碼不進 git、不進 user_data、不進映像檔。
+# Google、GitHub 的 client secret 也走這條（#127）：值從 variables.tf 的 sensitive 變數來，沒給就是空的、那個登入方式不開。
 # 代價：密碼會出現在 Terraform state 裡，所以 bootstrap 的 state bucket 一定要加密、不公開。
 locals {
   # sslip.io 把 IP 編進網域（talkcal.1-2-3-4.sslip.io → 1.2.3.4）：免費、免註冊，
@@ -38,5 +39,9 @@ resource "aws_ssm_parameter" "dotenv" {
     SITE_ADDRESS=${local.site_address}
     DB_PASSWORD=${random_password.db.result}
     ${local.backend_env}
+    GOOGLE_CLIENT_ID=${var.google_client_id}
+    GOOGLE_CLIENT_SECRET=${var.google_client_secret}
+    GITHUB_CLIENT_ID=${var.github_client_id}
+    GITHUB_CLIENT_SECRET=${var.github_client_secret}
   ENV
 }
