@@ -1,0 +1,6 @@
+# 複製成 oauth.auto.tfvars（不進 git）再填值，terraform apply 會自動讀 *.auto.tfvars。
+# 沒填的那個登入方式就不開。回呼網址要先在 Google、GitHub 登記：terraform output oauth_callback_urls
+google_client_id     = ""
+google_client_secret = ""
+github_client_id     = ""
+github_client_secret = ""
