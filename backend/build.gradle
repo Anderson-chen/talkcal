@@ -2,6 +2,8 @@ import org.springframework.boot.gradle.plugin.SpringBootPlugin
 
 plugins {
     id 'java'
+    // 測試覆蓋率（#23）：只拿來找漏測的地方，不設門檻。設定和理由見下面 jacocoTestReport 那段
+    id 'jacoco'
     // 讓 ./gradlew run 能直接啟動組裝根
     id 'application'
     // Spring Boot 只負責「組裝」這件事：把散落的 bean 兜起來、打包成可執行 jar、提供 bootRun。
@@ -251,6 +253,29 @@ configurations {
     integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
     evalImplementation.extendsFrom testImplementation
     evalRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+// ── 測試覆蓋率（#23）：單元測試＋整合測試合併成一份報告 ──
+// 用法：./gradlew test integrationTest jacocoTestReport（ci/checks.sh 就是這樣跑）
+// 報告：build/reports/jacoco/test/html/index.html（人看）、build/reports/jacoco/test/jacocoTestReport.xml（checks.sh 讀總數貼摘要）
+// 為什麼合併：很多類別只有整合測試會走到（repository 的 SQL、Spring 組裝），只看單元測試的報告會把它們誤列為漏測。
+// 不設門檻（不加 jacocoTestCoverageVerification）：理由和怎麼用報告找漏測見 docs/test-coverage.md。
+// eval 不算進來：它測的是模型回答的品質，不是程式有沒有被走到，而且 CI 上不跑
+jacoco {
+    // 0.8.14 起正式支援 Java 25 的 class 檔。不寫的話用 Gradle 內建的版本，Gradle 升級時會悄悄跟著換
+    toolVersion = '0.8.15'
+}
+
+tasks.named('jacocoTestReport', JacocoReport) {
+    // 預設只讀 test 的結果，這裡把 integrationTest 的也加進來。
+    // mustRunAfter 而不是 dependsOn：只跑 ./gradlew test jacocoTestReport 時不會被迫起 PostgreSQL 容器；
+    // 沒跑整合測試、exec 檔不存在時 JaCoCo 會略過它，報告就只有單元測試的部分
+    executionData.from(layout.buildDirectory.file('jacoco/integrationTest.exec'))
+    mustRunAfter tasks.named('integrationTest')
+    reports {
+        xml.required = true
+        html.required = true
+    }
 }
 
 tasks.named('check') {
