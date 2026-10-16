@@ -7,6 +7,10 @@ plugins {
     // Spring Boot 只負責「組裝」這件事：把散落的 bean 兜起來、打包成可執行 jar、提供 bootRun。
     // 業務規則一個字都不會碰到它 —— 見 build 檔最後那條 ArchUnit 規則守著這件事。
     id 'org.springframework.boot' version '4.1.1'
+    // 格式（#22）：Java 交給 palantir-java-format 排，CI 只看這次改到的檔案（ratchetFrom，理由見下面 spotless 那段）
+    id 'com.diffplug.spotless' version '8.10.4'
+    // 靜態分析（#22）：Error Prone 掛在 javac 上，編譯時就抓常見的 bug（equals 寫錯、忘了用回傳值…）
+    id 'net.ltgt.errorprone' version '5.1.1'
 }
 
 repositories {
@@ -128,6 +132,41 @@ dependencies {
     // 測試裡照樣產生 trace id、但不往外匯出：沒有它的話，起整個容器的測試會一直嘗試送 span 到 localhost:4318。
     // AccessLogTraceIdTest 靠它在不開 ops/ 的情況下驗「access log 帶著 traceId」。
     testImplementation 'org.springframework.boot:spring-boot-micrometer-tracing-test'
+}
+
+// ── 格式與靜態分析（#22）：選型理由見 ci/README.md 的「格式與 lint」 ──
+//
+// ./gradlew spotlessApply 自動排好，./gradlew spotlessCheck 只檢查（CI 跑這個，見 ci/format.sh）。
+// ratchetFrom：只管「跟 origin/master 比有改過的檔案」，沒改的舊檔案不動。
+// 不一次把整個 codebase 重排：每個檔案的 import 順序、換行都會變，同時進行中的分支幾乎每個 Java 檔都會衝突，
+// git blame 也會整片指向那個格式化 commit。改到哪個檔案、那個檔案就整份排好，慢慢收斂。
+// 代價：要有 git 歷史才知道改了什麼，所以它不在 ci/checks.sh 裡跑（那邊的容器只有程式碼、沒有 .git）
+spotless {
+    ratchetFrom 'origin/master'
+    java {
+        // palantir 而不是 google-java-format：4 格縮排、120 字寬，跟現有程式碼一樣；
+        // google 的 2 格縮排會讓每個被碰到的檔案整份縮排都變。lambda、串接呼叫的換行也比較好讀
+        // 不排 Javadoc：註解是中文、手動斷行，自動重排只會打亂
+        palantirJavaFormat('2.102.0').formatJavadoc(false)
+        removeUnusedImports()
+        // import 分組照現在的習慣：static、本專案、java.*、其他，組之間空一行
+        importOrder('\\#','io.github.andersonchen', 'java|javax', '')
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+}
+
+dependencies {
+    // Error Prone 的檢查規則本體；上面的 net.ltgt.errorprone 外掛負責把它接到每個 JavaCompile 上
+    errorprone 'com.google.errorprone:error_prone_core:2.50.0'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.errorprone {
+        // 預設就好：ERROR 等級的規則（幾乎一定是 bug）讓編譯失敗，WARNING 只印出來。
+        // 不開 -Werror 把警告也變成錯誤：要先把現有的警告全部清掉，會動到大半的 Java 檔（理由同上面的 ratchetFrom）
+        disableWarningsInGeneratedCode = true
+    }
 }
 
 // 程式與註解都有中文，編碼一定要明寫。

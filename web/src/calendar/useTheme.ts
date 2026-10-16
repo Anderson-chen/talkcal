@@ -15,7 +15,10 @@ export function useTheme() {
   }
 
   /** 分類標籤（圓角小膠囊）的顏色 */
-  const chipStyle = (category: Category) => ({ background: colors.value[category].soft, color: colors.value[category].ink })
+  const chipStyle = (category: Category) => ({
+    background: colors.value[category].soft,
+    color: colors.value[category].ink,
+  })
 
   return { key, theme, colors, choose, chipStyle }
 }

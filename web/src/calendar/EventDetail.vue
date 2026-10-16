@@ -19,10 +19,13 @@ const error = ref<string | null>(null)
 const event = computed(() => calendar.detail.value)
 
 // 換看另一筆行程時，「確定刪除？」不能留著 —— 不然一不小心就刪錯筆
-watch(() => event.value?.id, () => {
-  confirming.value = false
-  error.value = null
-})
+watch(
+  () => event.value?.id,
+  () => {
+    confirming.value = false
+    error.value = null
+  },
+)
 
 const dateText = computed(() => {
   const e = event.value
@@ -71,7 +74,9 @@ async function remove() {
   <div v-if="event" class="detail" :class="variant">
     <div class="top">
       <template v-if="props.variant === 'drawer'">
-        <span class="chip" :style="theme.chipStyle(event.category)">{{ theme.colors.value[event.category].label }}</span>
+        <span class="chip" :style="theme.chipStyle(event.category)">{{
+          theme.colors.value[event.category].label
+        }}</span>
         <button type="button" class="icon" aria-label="關閉" @click="close"><Icon name="close" /></button>
       </template>
       <button v-else type="button" class="back" @click="close"><Icon name="chevronLeft" />返回</button>
@@ -79,7 +84,9 @@ async function remove() {
 
     <div class="body">
       <div class="heading">
-        <span v-if="variant === 'page'" class="chip" :style="theme.chipStyle(event.category)">{{ theme.colors.value[event.category].label }}</span>
+        <span v-if="variant === 'page'" class="chip" :style="theme.chipStyle(event.category)">{{
+          theme.colors.value[event.category].label
+        }}</span>
         <h2>{{ event.title }}</h2>
       </div>
       <div class="rows">
@@ -113,28 +120,164 @@ async function remove() {
 </template>
 
 <style scoped>
-.detail { display: flex; flex-direction: column; height: 100%; background: var(--card); color: var(--ink); }
-.top { display: flex; justify-content: space-between; align-items: center; padding: 16px 16px 8px 24px; }
-.page .top { padding: 16px 12px 4px 8px; }
-.icon { width: 40px; height: 40px; border: 0; border-radius: 10px; background: transparent; color: var(--ink); display: flex; align-items: center; justify-content: center; padding: 0; }
-.back { height: 44px; padding: 0 12px 0 6px; border: 0; background: transparent; color: var(--accent); font-size: 16px; font-weight: 500; display: flex; align-items: center; gap: 2px; }
-.chip { align-self: flex-start; display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 14px; font-size: 13px; font-weight: 600; }
-.body { padding: 8px 24px; display: flex; flex-direction: column; gap: 20px; flex: 1; overflow-y: auto; }
-.heading { display: flex; flex-direction: column; gap: 12px; }
-h2 { margin: 0; font-size: 24px; font-weight: 700; line-height: 1.3; }
-.page h2 { font-size: 26px; }
-.rows { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
-.row { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line); color: var(--muted); align-items: flex-start; }
-.row :deep(svg) { flex: none; margin-top: 2px; }
-.stack { display: flex; flex-direction: column; gap: 2px; }
-.main { font-size: 15px; font-weight: 500; color: var(--ink); }
-.note { font-weight: 400; line-height: 1.6; white-space: pre-line; }
-.sub { font-size: 14px; color: var(--muted); font-family: Manrope, 'Noto Sans TC', sans-serif; }
-.error { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--dangerSoft); color: var(--danger); font-size: 14px; }
-.actions { padding: 16px 24px 24px; display: flex; gap: 10px; }
-.page .actions { padding: 16px 24px 28px; }
-.secondary { flex: 1; height: 44px; border: 1px solid var(--field); border-radius: 10px; background: transparent; color: var(--ink); font-size: 14px; font-weight: 600; }
-.danger { height: 44px; padding: 0 16px; border: 1px solid var(--dangerLine); border-radius: 10px; background: transparent; color: var(--danger); font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; }
-.page .danger { width: 100%; height: 50px; border-radius: 14px; font-size: 16px; }
-.danger.confirming { background: var(--danger); color: var(--card); border-color: var(--danger); }
+.detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--card);
+  color: var(--ink);
+}
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 16px 8px 24px;
+}
+.page .top {
+  padding: 16px 12px 4px 8px;
+}
+.icon {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.back {
+  height: 44px;
+  padding: 0 12px 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.chip {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.body {
+  padding: 8px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex: 1;
+  overflow-y: auto;
+}
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.page h2 {
+  font-size: 26px;
+}
+.rows {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+}
+.row {
+  display: flex;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  align-items: flex-start;
+}
+.row :deep(svg) {
+  flex: none;
+  margin-top: 2px;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.main {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.note {
+  font-weight: 400;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+.sub {
+  font-size: 14px;
+  color: var(--muted);
+  font-family: Manrope, 'Noto Sans TC', sans-serif;
+}
+.error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--dangerSoft);
+  color: var(--danger);
+  font-size: 14px;
+}
+.actions {
+  padding: 16px 24px 24px;
+  display: flex;
+  gap: 10px;
+}
+.page .actions {
+  padding: 16px 24px 28px;
+}
+.secondary {
+  flex: 1;
+  height: 44px;
+  border: 1px solid var(--field);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+.danger {
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--dangerLine);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--danger);
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.page .danger {
+  width: 100%;
+  height: 50px;
+  border-radius: 14px;
+  font-size: 16px;
+}
+.danger.confirming {
+  background: var(--danger);
+  color: var(--card);
+  border-color: var(--danger);
+}
 </style>

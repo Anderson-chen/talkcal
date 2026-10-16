@@ -35,10 +35,26 @@ onBeforeUnmount(() => query.removeEventListener('change', onChange))
 </template>
 
 <style scoped>
-.calendar { height: 100%; background: var(--bg); color: var(--ink); font-family: 'Noto Sans TC', Manrope, sans-serif; }
+.calendar {
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Noto Sans TC', Manrope, sans-serif;
+}
 /* 設計稿的基本設定：按鈕、輸入框沿用頁面字型，按鈕有手指游標 */
-.calendar :deep(button) { font-family: inherit; cursor: pointer; }
-.calendar :deep(button:disabled) { cursor: default; }
-.calendar :deep(input), .calendar :deep(textarea) { font-family: inherit; }
-.calendar :deep(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.calendar :deep(button) {
+  font-family: inherit;
+  cursor: pointer;
+}
+.calendar :deep(button:disabled) {
+  cursor: default;
+}
+.calendar :deep(input),
+.calendar :deep(textarea) {
+  font-family: inherit;
+}
+.calendar :deep(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 </style>

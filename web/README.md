@@ -23,7 +23,11 @@ talkcal 的前端：Vue 3 + TypeScript + Vite。只是後端 API 的另一個呼
 npm install
 npm run dev      # http://localhost:5173，/api 轉給 bootRun 的 8090（設 EAT_API 可以改轉到別台）
 npm run build    # 先 vue-tsc 型別檢查，再輸出 dist/
+npm run format   # Prettier 把整個 web/ 排好（CI 跑的是 npm run format:check）
+npm run lint     # ESLint：沒處理的 Promise、v-for 沒 key、E2E 忘了 await…
 ```
+
+格式與 lint 的設定、選型理由見 [ci/README.md 的「格式與 lint」](../ci/README.md#格式與-lint)。
 
 ## 測試
 

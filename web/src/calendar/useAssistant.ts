@@ -33,7 +33,8 @@ export interface ChatMessage {
 // 三種能做的事各舉一個例子：新增、查詢、找空檔
 export const SUGGESTIONS = ['明天下午3點和 Amy 開會', '明天有什麼行程？', '這週哪天下午有空？']
 
-const GREETING = '嗨！我是你的行事曆助理。可以幫你新增行程、查某天的安排，或找出空檔。要新增的話，我會整理好讓你確認後再加入。'
+const GREETING =
+  '嗨！我是你的行事曆助理。可以幫你新增行程、查某天的安排，或找出空檔。要新增的話，我會整理好讓你確認後再加入。'
 
 // conversationId 存在這台瀏覽器：跟主題一樣是個人的東西，不必存到後端。
 // 私密視窗、被封鎖的網站資料都可能讓 localStorage 丟例外，一律吞掉 —— 最壞就是重新整理後開新對話
@@ -60,8 +61,13 @@ function saveConversationId(id: string | undefined) {
 
 export function useAssistant(calendar: CalendarState) {
   let nextId = 1
-  const say = (role: ChatMessage['role'], text: string, proposals: Proposal[] = []): ChatMessage =>
-    ({ id: nextId++, role, text, proposals, error: null })
+  const say = (role: ChatMessage['role'], text: string, proposals: Proposal[] = []): ChatMessage => ({
+    id: nextId++,
+    role,
+    text,
+    proposals,
+    error: null,
+  })
 
   const messages = ref<ChatMessage[]>([say('ai', GREETING)])
   const input = ref('')
@@ -82,14 +88,18 @@ export function useAssistant(calendar: CalendarState) {
         saveConversationId(undefined)
         return
       }
-      messages.value = [say('ai', GREETING), ...history.messages.map((m) => say(m.role === 'user' ? 'me' : 'ai', m.text))]
+      messages.value = [
+        say('ai', GREETING),
+        ...history.messages.map((m) => say(m.role === 'user' ? 'me' : 'ai', m.text)),
+      ]
     } catch (e) {
       messages.value.push(say('ai', `讀不回上次的對話：${message(e)}。可以直接開始新的對話。`))
     } finally {
       typing.value = false
     }
   }
-  restore()
+  // 不等它：讀回來之前畫面先顯示招呼語。錯誤在 restore() 裡自己接住了，不會變成沒人處理的 rejection
+  void restore()
 
   /** 清空：丟掉 conversationId，下一句不帶 id，後端就開一段新的。不用等後端，也就不會清空失敗。 */
   function clear() {
@@ -110,7 +120,13 @@ export function useAssistant(calendar: CalendarState) {
       const answer = await talkToAssistant(said, conversationId)
       conversationId = answer.conversationId
       saveConversationId(conversationId)
-      messages.value.push(say('ai', answer.reply, answer.proposals.map((draft) => ({ draft, status: 'pending' }))))
+      messages.value.push(
+        say(
+          'ai',
+          answer.reply,
+          answer.proposals.map((draft) => ({ draft, status: 'pending' })),
+        ),
+      )
     } catch (e) {
       messages.value.push(say('ai', `助理暫時沒辦法回應：${message(e)}。可以稍後再試一次。`))
     } finally {

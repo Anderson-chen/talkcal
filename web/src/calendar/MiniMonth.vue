@@ -28,8 +28,12 @@ function pick(day: string) {
     <div class="head">
       <span class="title">{{ calendar.shown.value.year }}年{{ calendar.shown.value.month }}月</span>
       <div>
-        <button type="button" class="icon" aria-label="上個月" @click="calendar.shiftMonth(-1)"><Icon name="chevronLeft" :size="16" /></button>
-        <button type="button" class="icon" aria-label="下個月" @click="calendar.shiftMonth(1)"><Icon name="chevronRight" :size="16" /></button>
+        <button type="button" class="icon" aria-label="上個月" @click="calendar.shiftMonth(-1)">
+          <Icon name="chevronLeft" :size="16" />
+        </button>
+        <button type="button" class="icon" aria-label="下個月" @click="calendar.shiftMonth(1)">
+          <Icon name="chevronRight" :size="16" />
+        </button>
       </div>
     </div>
     <div class="grid">
@@ -51,14 +55,63 @@ function pick(day: string) {
 </template>
 
 <style scoped>
-.mini { display: flex; flex-direction: column; gap: 8px; }
-.head { display: flex; align-items: center; justify-content: space-between; }
-.title { font-size: 14px; font-weight: 700; }
-.icon { width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
-.grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
-.weekday { text-align: center; font-size: 11px; color: var(--muted); padding: 2px 0; }
-.cell { height: 30px; border: 0; border-radius: 8px; font-size: 12px; font-family: Manrope, sans-serif; font-weight: 600; padding: 0; background: transparent; color: var(--ink); }
-.cell.other { color: var(--faint); }
-.cell.today { background: var(--accentSoft); color: var(--accent); }
-.cell.selected { background: var(--accent); color: var(--onAccent); }
+.mini {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.title {
+  font-size: 14px;
+  font-weight: 700;
+}
+.icon {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+.weekday {
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 2px 0;
+}
+.cell {
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: Manrope, sans-serif;
+  font-weight: 600;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+}
+.cell.other {
+  color: var(--faint);
+}
+.cell.today {
+  background: var(--accentSoft);
+  color: var(--accent);
+}
+.cell.selected {
+  background: var(--accent);
+  color: var(--onAccent);
+}
 </style>

@@ -93,9 +93,9 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    dev["開分支、commit<br/>（每個分支對一個 issue）"] -->|"git push"| hook["pre-push hook<br/>ci/secrets.sh：要推的 commit 有沒有 key<br/>ci/run.sh：本機有 GPU，模型測試真的跑"]
+    dev["開分支、commit<br/>（每個分支對一個 issue）"] -->|"git push"| hook["pre-push hook<br/>ci/secrets.sh：要推的 commit 有沒有 key<br/>ci/format.sh：改過的 Java 檔格式<br/>ci/run.sh：本機有 GPU，模型測試真的跑"]
     hook -->|"過了才推得上去"| pr["GitHub PR<br/>描述寫 Closes #N"]
-    pr --> ci["CI（ci.yml）<br/>checks：同一支 ci/run.sh，沒有 GPU，模型測試跳過<br/>secrets：掃整個歷史有沒有 key<br/>vulns：掃映像檔漏洞（每天也排程掃）"]
+    pr --> ci["CI（ci.yml）<br/>checks：同一支 ci/run.sh，沒有 GPU，模型測試跳過<br/>format：改過的 Java 檔格式<br/>secrets：掃整個歷史有沒有 key<br/>vulns：掃映像檔漏洞（每天也排程掃）"]
     pr --> prissue["PR issue（pr-issue.yml）<br/>沒連到 issue 就紅燈"]
     ci -->|"必須綠"| merge["merge 進 master<br/>ruleset：一定走 PR、checks、secrets、vulns、PR issue 都必須綠"]
     prissue -->|"必須綠"| merge
@@ -116,7 +116,7 @@ EC2 目前是手動部署：機器平常關機，展示前開機、需要時用 
 |---|---|---|
 | pre-push（[ci/](../ci/README.md)） | 本機就會壞的，包括要 GPU 的模型測試；要推的 commit 裡有 key | `git push --no-verify` 可以跳過 |
 | GitHub push protection | 推上來的 commit 裡有各家服務的 key（AWS、OpenAI…） | 通用格式的 token；可以在 GitHub 上填理由放行 |
-| CI（GitHub Actions） | 乾淨環境才會壞的：「我電腦上可以」；歷史裡任何地方有 key | 模型相關（沒有 GPU）；key 到這裡才抓到時已經公開，只能作廢重發 |
+| CI（GitHub Actions） | 乾淨環境才會壞的：「我電腦上可以」；歷史裡任何地方有 key；格式不對、lint 錯誤（[ci/README.md 的「格式與 lint」](../ci/README.md#格式與-lint)） | 模型相關（沒有 GPU）；key 到這裡才抓到時已經公開，只能作廢重發 |
 | CI 的 `vulns`（漏洞掃描） | 映像檔裡有已知、可修的 HIGH/CRITICAL 漏洞；每天排程掃，抓合併之後才公布的 | 上游還沒修的、MEDIUM 以下；寫進忽略清單的（有到期日） |
 | PR issue | 沒連到 issue 的 PR：合併按鈕按不下去 | 連到的 issue 對不對（只檢查有沒有連） |
 | ruleset（protect-master） | 直推 master、force push、刪 master、checks、secrets、vulns 或 PR issue 沒綠就合併、分支落後 master | — |
@@ -127,7 +127,7 @@ EC2 目前是手動部署：機器平常關機，展示前開機、需要時用 
 
 | 層 | 回答的問題 | 檔案 |
 |---|---|---|
-| 檢查內容 | 要驗什麼 | `ci/checks.sh` |
+| 檢查內容 | 要驗什麼 | `ci/checks.sh`；要 git 歷史的另外一支：`ci/secrets.sh`、`ci/format.sh` |
 | 檢查環境 | 在什麼環境驗 | `ci/Dockerfile` |
 | CI 入口 | 什麼時候驗 | `.githooks/pre-push`、`.github/workflows/ci.yml`（都呼叫 `ci/run.sh`） |
 | 部署步驟 | 怎麼把版本放上機器 | `cd/apply.sh`（本機）、`infra/envs/1-ec2/deploy.sh`（EC2，還沒收進 `cd/`） |

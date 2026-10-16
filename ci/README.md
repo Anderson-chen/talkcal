@@ -1,6 +1,7 @@
 # ci —— 持續整合（CI）
 
-每次改動都在**乾淨的容器**裡自動檢查一遍：後端的單元測試、架構規則、整合測試，前端的單元測試（Vitest）、型別檢查、打包、E2E（Playwright 開真的 Chromium）。
+每次改動都在**乾淨的容器**裡自動檢查一遍：後端的單元測試、架構規則、整合測試（編譯時 Error Prone 一起跑），前端的格式（Prettier）、lint（ESLint）、單元測試（Vitest）、型別檢查、打包、E2E（Playwright 開真的 Chromium）。
+Java 的格式要看 git 歷史，另外由 `ci/format.sh` 檢查（見[格式與 lint](#格式與-lint)）。
 本機（push 之前）和 GitHub（push 之後）跑的是**同一支 script、同一個映像檔**，所以本機綠就代表 GitHub 綠。
 
 整條 CI → CD 的流程圖和每一關擋什麼，見 [docs/architecture.md](../docs/architecture.md#cicd從-commit-到線上)。
@@ -118,6 +119,74 @@ ci/vulns.sh talkcal/app:local talkcal/web:local postgres:18.6-alpine
 
 **為什麼不用 trivy-action**：Trivy 在 2026-03 被入侵過，v0.69.4 和 trivy-action 幾乎所有 tag 都被換成會偷 CI secret 的版本。
 這裡跟 gitleaks 一樣直接跑映像檔，版本和 digest 都釘死，用的是事件之後的版本。
+
+## 格式與 lint
+
+風格交給工具排，不靠人（或 AI）記得；常見的錯在編譯前就紅燈（#22）。
+
+| | 工具 | 擋什麼 | 範圍 | 在哪跑 |
+|---|---|---|---|---|
+| Java 格式 | Spotless + palantir-java-format | 縮排、換行、import 順序、沒用到的 import | **跟 `origin/master` 比改過的檔案**（ratchet） | `ci/format.sh`（CI 的 `format` job、pre-push） |
+| Java 靜態分析 | Error Prone | ERROR 等級的 bug 寫法（`equals` 比錯型別、忘了用回傳值、格式字串對不上…）讓編譯失敗；WARNING 只印出來 | 全部（掛在 javac 上） | 每次編譯，所以 `checks.sh` 自動涵蓋 |
+| 前端格式 | Prettier | 同上，`.ts`、`.vue`（含 template、style）、設定檔 | 整個 `web/` | `checks.sh`：`npm run format:check` |
+| 前端 lint | ESLint（typescript-eslint、eslint-plugin-vue、eslint-plugin-playwright） | 沒處理的 Promise、`v-for` 沒 key、E2E 的 `expect` 忘了 `await`… | 整個 `web/` | `checks.sh`：`npm run lint` |
+
+```bash
+ci/format.sh apply                  # Java：把改過的檔案排好（= cd backend && ./gradlew spotlessApply）
+cd web && npm run format            # 前端：整個 web/ 排好
+cd web && npm run lint -- --fix     # 前端：能自動修的 lint 問題先修掉
+```
+
+### 為什麼 Java 只看改過的檔案，前端卻整個排好
+
+全面格式化的代價看「同時有多少分支在改同一批檔案」：
+
+- **Java**：實際跑過一次全面格式化，109 個檔案裡有 65 個會變（+1429／−813 行），幾乎每個都動到換行和 import 順序。
+  同時進行中的分支（例如動 Flyway migration 和 repository 的那條）會全面衝突，`git blame` 也會整片指向那個格式化 commit。
+  所以用 Spotless 的 `ratchetFrom 'origin/master'`：改到哪個檔案，那個檔案就要整份排好，沒碰的舊檔案不管，慢慢收斂。
+  代價是要有 git 歷史才知道改了什麼 —— `checks.sh` 的容器沒有 `.git`，所以跟 `secrets.sh` 一樣另外一支、另外一個 job。
+- **前端**：只有 `web/` 自己在改、檔案少（38 個），一次排好的衝突風險小，之後也不必有「改過的／沒改過的」兩套標準。
+
+### 選型（2026-10 查的）
+
+**Java formatter：palantir-java-format，不是 google-java-format**。兩個都是「幾乎沒有設定可調」的 formatter，差在：
+palantir 是 4 格縮排、120 字寬，跟現有程式碼一樣，被 ratchet 碰到的檔案只會改真的不合格的地方；
+google-java-format 是 2 格縮排，碰到的檔案每一行都會變。palantir 本來就是為了 lambda、串接呼叫比較好讀，從 google-java-format 分出來的，
+Spring 這種大量 builder、stream 的程式碼正好適用。透過 Spotless 而不是各自的 Gradle 外掛：同一個入口同時管 import 順序、行尾空白，
+`spotlessApply`／`spotlessCheck` 也是 Gradle 專案最常見的指令名稱。
+
+**Java 靜態分析：Error Prone，不加 SpotBugs、Checkstyle、PMD**。
+
+| | 怎麼跑 | 為什麼（不）選 |
+|---|---|---|
+| Error Prone | javac 外掛，編譯時就報 | ERROR 等級的規則誤判極少，紅了幾乎一定是 bug；不必另外一個步驟，編譯過就是檢查過 |
+| SpotBugs | 編譯後掃 bytecode | 跟 Error Prone 重疊大，誤判比較多，要另外維護排除清單 |
+| Checkstyle | 掃原始碼的風格 | 格式已經交給 formatter 自動排，再用規則「檢查」風格是重工 |
+| NullAway | Error Prone 的外掛 | 要在程式碼上標 `@Nullable`，等於改動大半的檔案，先不做 |
+
+Error Prone 只用預設：WARNING 不當成錯誤（不開 `-Werror`）。現在有 14 個警告（`StringCaseLocaleUsage` 6 個最多），
+要變成必過就得先清掉，又是一次動很多檔案的改動，之後另外處理。
+
+**前端：ESLint + Prettier，不是 Biome 或 oxlint**。2026 年 ESLint 10 只剩 flat config（`eslint.config.js`），
+設定照 Vue 官方 `create-vue` 產生的那套（`@vue/eslint-config-typescript`、`eslint-plugin-vue`、`@vue/eslint-config-prettier`）。
+
+| | 為什麼（不）選 |
+|---|---|
+| ESLint + Prettier | Vue 專屬規則（`eslint-plugin-vue`）和要型別資訊的規則（`no-floating-promises`）都只有 ESLint 有；Vue 官方範本的預設 |
+| Biome | 一支 Rust 工具同時 lint 和格式化、快很多，但沒有 Vue 專屬規則，這個專案大半是 `.vue` |
+| oxlint | 比 ESLint 快幾十倍，但規則少、多半不能自動修；常見用法是放在 ESLint 前面當加速層，這個大小的專案 ESLint 本身只要幾秒，不需要 |
+
+ESLint 只管「會出錯的寫法」，排版規則全部關掉（`skip-formatting`）交給 Prettier：兩個工具不管同一件事，就不會互相打架。
+Prettier 的設定（不加分號、單引號、120 字寬）照現有程式碼的寫法定；`endOfLine: auto` 是因為這台機器 `core.autocrlf=true`，
+checkout 出來是 CRLF、CI 容器裡是 LF，兩邊都要過。
+
+版本：Spotless 8.10.4、palantir-java-format 2.102.0、Error Prone 2.50.0、ESLint 10.12、Prettier 3.9（2026-10 時的最新版）。
+參考：
+[ESLint vs Biome vs Oxlint 2026（pkgpulse）](https://www.pkgpulse.com/guides/biome-vs-eslint-vs-oxlint-2026)、
+[Biome vs ESLint vs Oxlint 2026（DEV）](https://dev.to/royce_fabbd83cb268312e928/biome-vs-eslint-vs-oxlint-js-linters-2026-408h)、
+[Spotless Gradle 外掛](https://plugins.gradle.org/plugin/com.diffplug.spotless)、
+[palantir-java-format](https://github.com/palantir/palantir-java-format)、
+[gradle-errorprone-plugin](https://github.com/tbroyer/gradle-errorprone-plugin)。
 
 ## 刻意不做的
 

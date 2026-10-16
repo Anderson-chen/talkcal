@@ -43,7 +43,7 @@ export async function fakeApi(page: Page, options: Options = {}) {
     failNextSave: null as string | null,
     // 註冊過的帳號：名稱 → 密碼
     accounts: new Map<string, string>([['amy', 'correct-horse']]),
-    me: (options.loggedIn ?? true) ? 'amy' : null as string | null,
+    me: (options.loggedIn ?? true) ? 'amy' : (null as string | null),
     // 被 403 擋下的請求（沒帶或帶錯 CSRF token）：測試可以檢查它是空的
     csrfRejected: [] as string[],
     providers: [...(options.providers ?? [])],
@@ -67,10 +67,18 @@ export async function fakeApi(page: Page, options: Options = {}) {
     // ── 帳號 ──
     if (url.pathname === '/api/auth/me') {
       if (options.externalName && state.me) {
-        return route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: 'id-external', name: options.externalName, username: null } })
+        return route.fulfill({
+          status: 200,
+          headers: withCsrfCookie,
+          json: { id: 'id-external', name: options.externalName, username: null },
+        })
       }
       return state.me
-        ? route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: `id-${state.me}`, name: state.me, username: state.me } })
+        ? route.fulfill({
+            status: 200,
+            headers: withCsrfCookie,
+            json: { id: `id-${state.me}`, name: state.me, username: state.me },
+          })
         : route.fulfill({ status: 401, headers: withCsrfCookie, json: { error: '請先登入' } })
     }
     if (url.pathname === '/api/auth/providers') {
@@ -88,7 +96,8 @@ export async function fakeApi(page: Page, options: Options = {}) {
     if (url.pathname === '/api/auth/register') {
       const body = request.postDataJSON() as { username: string; password: string }
       const username = body.username.trim().toLowerCase()
-      if (state.accounts.has(username)) return json(route, 409, { error: `帳號名稱「${username}」已經有人用了，換一個試試` })
+      if (state.accounts.has(username))
+        return json(route, 409, { error: `帳號名稱「${username}」已經有人用了，換一個試試` })
       state.accounts.set(username, body.password)
       return json(route, 201, { id: `id-${username}`, name: username, username })
     }
@@ -125,10 +134,18 @@ export async function fakeApi(page: Page, options: Options = {}) {
 
   return {
     ...state,
-    get saved() { return state.saved },
-    get csrfRejected() { return state.csrfRejected },
-    set failNextSave(error: string | null) { state.failNextSave = error },
+    get saved() {
+      return state.saved
+    },
+    get csrfRejected() {
+      return state.csrfRejected
+    },
+    set failNextSave(error: string | null) {
+      state.failNextSave = error
+    },
     /** 模擬 session 過期：之後的請求都當成沒登入 */
-    expireSession() { state.me = null },
+    expireSession() {
+      state.me = null
+    },
   }
 }

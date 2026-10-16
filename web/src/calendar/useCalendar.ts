@@ -5,7 +5,15 @@
 // 螢幕寬度跨過分界、版面整個換掉時，狀態也還在（選的日期、看的月份不會跳回今天）。
 
 import { computed, inject, ref, watch, type InjectionKey } from 'vue'
-import { addEvents, listEvents, NotFoundError, removeEvent, type Category, type EventFields, type SavedEvent } from '../calendar'
+import {
+  addEvents,
+  listEvents,
+  NotFoundError,
+  removeEvent,
+  type Category,
+  type EventFields,
+  type SavedEvent,
+} from '../calendar'
 import { addDays, daysCovered, gridRange, monthGrid, toIsoDate } from '../monthGrid'
 
 export type View = 'month' | 'week' | 'day'
@@ -38,20 +46,24 @@ export function useCalendar() {
   const version = ref(0)
   let latestLoad = 0
 
-  watch([days, version], async () => {
-    // 快速連按「下個月」時，回應可能不照順序回來：每次領一個號碼，回來時不是最新那一號就丟掉
-    const ticket = ++latestLoad
-    const { from, to } = gridRange(days.value)
-    try {
-      const loaded = await listEvents(from, to)
-      if (ticket !== latestLoad) return
-      events.value = loaded
-      loadError.value = null
-    } catch (e) {
-      if (ticket !== latestLoad) return
-      loadError.value = message(e)
-    }
-  }, { immediate: true })
+  watch(
+    [days, version],
+    async () => {
+      // 快速連按「下個月」時，回應可能不照順序回來：每次領一個號碼，回來時不是最新那一號就丟掉
+      const ticket = ++latestLoad
+      const { from, to } = gridRange(days.value)
+      try {
+        const loaded = await listEvents(from, to)
+        if (ticket !== latestLoad) return
+        events.value = loaded
+        loadError.value = null
+      } catch (e) {
+        if (ticket !== latestLoad) return
+        loadError.value = message(e)
+      }
+    },
+    { immediate: true },
+  )
 
   const reload = () => version.value++
 
@@ -136,8 +148,27 @@ export function useCalendar() {
   }
 
   return {
-    today, sel, view, shown, days, events, loadError, hidden, detailId, detail, form, monthCounts,
-    eventsOn, pickDate, shiftMonth, step, toggleCategory, add, remove, openForm, reload,
+    today,
+    sel,
+    view,
+    shown,
+    days,
+    events,
+    loadError,
+    hidden,
+    detailId,
+    detail,
+    form,
+    monthCounts,
+    eventsOn,
+    pickDate,
+    shiftMonth,
+    step,
+    toggleCategory,
+    add,
+    remove,
+    openForm,
+    reload,
   }
 }
 

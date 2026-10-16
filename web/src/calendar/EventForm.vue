@@ -4,7 +4,7 @@
 // 這裡只管畫面和接線：欄位怎麼驗證、怎麼變成送出的資料，在 eventDraft.ts（純函式，有單元測試）。
 // 跟設計稿不同的地方：結束時間早於開始時間時，當成「結束在隔天」並標示出來（理由見 isOvernight）。
 import { computed, onMounted, reactive, ref } from 'vue'
-import { CATEGORIES, type Category } from '../calendar'
+import { CATEGORIES } from '../calendar'
 import { timeOf } from '../monthGrid'
 import { isOvernight, toDraft, type FormFields } from './eventDraft'
 import Icon from './Icon.vue'
@@ -22,7 +22,7 @@ const form = reactive<FormFields>({
   date: initial.start.slice(0, 10),
   start: timeOf(initial.start),
   end: timeOf(initial.end),
-  category: initial.category as Category,
+  category: initial.category,
   location: initial.location ?? '',
   note: initial.note ?? '',
 })
@@ -68,7 +68,9 @@ function fail(text: string) {
     <header v-if="props.variant === 'page'" class="page-head">
       <button type="button" class="text muted" @click="close">取消</button>
       <h1 id="event-form-title">新增行程</h1>
-      <button type="button" class="text accent" :disabled="saving" @click="save">{{ saving ? '儲存中' : '儲存' }}</button>
+      <button type="button" class="text accent" :disabled="saving" @click="save">
+        {{ saving ? '儲存中' : '儲存' }}
+      </button>
     </header>
     <header v-else class="dialog-head">
       <h2 id="event-form-title">新增行程</h2>
@@ -103,10 +105,21 @@ function fail(text: string) {
             type="button"
             class="cat"
             :aria-pressed="form.category === c"
-            :style="form.category === c ? { borderColor: theme.colors.value[c].ink, background: theme.colors.value[c].soft, color: theme.colors.value[c].ink } : undefined"
+            :style="
+              form.category === c
+                ? {
+                    borderColor: theme.colors.value[c].ink,
+                    background: theme.colors.value[c].soft,
+                    color: theme.colors.value[c].ink,
+                  }
+                : undefined
+            "
             @click="form.category = c"
           >
-            <span class="dot" :style="{ background: form.category === c ? theme.colors.value[c].ink : theme.colors.value[c].color }" />
+            <span
+              class="dot"
+              :style="{ background: form.category === c ? theme.colors.value[c].ink : theme.colors.value[c].color }"
+            />
             {{ theme.colors.value[c].label }}
           </button>
         </div>
@@ -126,39 +139,201 @@ function fail(text: string) {
 
     <footer v-if="props.variant === 'dialog'" class="dialog-foot">
       <button type="button" class="secondary" @click="close">取消</button>
-      <button type="button" class="primary" :disabled="saving" @click="save">{{ saving ? '儲存中…' : '儲存行程' }}</button>
+      <button type="button" class="primary" :disabled="saving" @click="save">
+        {{ saving ? '儲存中…' : '儲存行程' }}
+      </button>
     </footer>
   </div>
 </template>
 
 <style scoped>
-.form { display: flex; flex-direction: column; background: var(--card); color: var(--ink); }
-.form.page { height: 100%; background: var(--panel); }
-.page-head { padding: 16px 12px 12px; display: grid; grid-template-columns: 80px 1fr 80px; align-items: center; background: var(--bg); border-bottom: 1px solid var(--line); }
-.page-head h1 { margin: 0; font-size: 17px; font-weight: 700; text-align: center; }
-.text { height: 44px; border: 0; background: transparent; font-size: 16px; padding: 0 8px; }
-.text.muted { color: var(--muted); text-align: left; }
-.text.accent { color: var(--accent); font-weight: 700; text-align: right; }
-.dialog-head { display: flex; justify-content: space-between; align-items: center; padding: 20px 20px 4px 28px; }
-.dialog-head h2 { margin: 0; font-size: 20px; font-weight: 700; }
-.icon { width: 40px; height: 40px; border: 0; border-radius: 10px; background: transparent; color: var(--ink); display: flex; align-items: center; justify-content: center; padding: 0; }
-.fields { padding: 16px 28px; display: flex; flex-direction: column; gap: 16px; }
-.page .fields { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 16px 32px; gap: 18px; }
-.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; border: 0; margin: 0; padding: 0; }
-label, legend { font-size: 13px; font-weight: 500; color: var(--muted); padding: 0; }
-legend { margin-bottom: 8px; }
-.hint { color: var(--accent); font-weight: 600; }
-input, textarea { height: 44px; border: 1px solid var(--field); border-radius: 10px; padding: 0 12px; font-size: 15px; background: var(--card); color: var(--ink); box-sizing: border-box; min-width: 0; width: 100%; }
-textarea { height: auto; padding: 10px 12px; resize: vertical; }
-.times { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.times.page { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.times.page .field:first-child { grid-column: 1 / -1; }
-.cats { display: flex; flex-wrap: wrap; gap: 8px; }
-.cat { height: 40px; padding: 0 14px; border-radius: 20px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; border: 1px solid var(--field); background: var(--card); color: var(--ink); }
-.cat[aria-pressed='true'] { border-width: 2px; padding: 0 13px; }
-.dot { width: 8px; height: 8px; border-radius: 50%; }
-.error { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--dangerSoft); color: var(--danger); font-size: 14px; }
-.dialog-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 8px 28px 24px; }
-.secondary { height: 44px; padding: 0 18px; border: 1px solid var(--field); border-radius: 10px; background: transparent; color: var(--ink); font-size: 14px; font-weight: 600; }
-.primary { height: 44px; padding: 0 22px; border: 0; border-radius: 10px; background: var(--accent); color: var(--onAccent); font-size: 14px; font-weight: 600; }
+.form {
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  color: var(--ink);
+}
+.form.page {
+  height: 100%;
+  background: var(--panel);
+}
+.page-head {
+  padding: 16px 12px 12px;
+  display: grid;
+  grid-template-columns: 80px 1fr 80px;
+  align-items: center;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.page-head h1 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  text-align: center;
+}
+.text {
+  height: 44px;
+  border: 0;
+  background: transparent;
+  font-size: 16px;
+  padding: 0 8px;
+}
+.text.muted {
+  color: var(--muted);
+  text-align: left;
+}
+.text.accent {
+  color: var(--accent);
+  font-weight: 700;
+  text-align: right;
+}
+.dialog-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 20px 4px 28px;
+}
+.dialog-head h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+.icon {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.fields {
+  padding: 16px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.page .fields {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 16px 32px;
+  gap: 18px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+label,
+legend {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  padding: 0;
+}
+legend {
+  margin-bottom: 8px;
+}
+.hint {
+  color: var(--accent);
+  font-weight: 600;
+}
+input,
+textarea {
+  height: 44px;
+  border: 1px solid var(--field);
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 15px;
+  background: var(--card);
+  color: var(--ink);
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+}
+textarea {
+  height: auto;
+  padding: 10px 12px;
+  resize: vertical;
+}
+.times {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.times.page {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.times.page .field:first-child {
+  grid-column: 1 / -1;
+}
+.cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cat {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--field);
+  background: var(--card);
+  color: var(--ink);
+}
+.cat[aria-pressed='true'] {
+  border-width: 2px;
+  padding: 0 13px;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--dangerSoft);
+  color: var(--danger);
+  font-size: 14px;
+}
+.dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 8px 28px 24px;
+}
+.secondary {
+  height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--field);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+.primary {
+  height: 44px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--onAccent);
+  font-size: 14px;
+  font-weight: 600;
+}
 </style>

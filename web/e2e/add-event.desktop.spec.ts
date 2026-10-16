@@ -26,9 +26,18 @@ test('新增一筆行程：送出填的資料，存好之後出現在月曆上',
 
   // expect(...).toBeHidden() 會自己重試等到成立（預設最多 5 秒）：不用自己等畫面更新
   await expect(form).toBeHidden()
-  expect(api.saved).toEqual([[{
-    title: '產品週會', start: '2026-10-06T10:00', end: '2026-10-06T11:00', category: 'WORK', location: '三樓會議室', note: null,
-  }]])
+  expect(api.saved).toEqual([
+    [
+      {
+        title: '產品週會',
+        start: '2026-10-06T10:00',
+        end: '2026-10-06T11:00',
+        category: 'WORK',
+        location: '三樓會議室',
+        note: null,
+      },
+    ],
+  ])
   // 存好之後畫面重讀，新的那筆出現在月曆上（還會打開它的詳情，所以可能不只一處，取第一個）
   await expect(page.getByText('產品週會').first()).toBeVisible()
 })

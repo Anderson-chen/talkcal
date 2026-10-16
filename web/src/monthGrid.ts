@@ -90,4 +90,3 @@ export function dayLabel(iso: string): string {
 export function timeOf(dateTime: string): string {
   return dateTime.slice(11, 16)
 }
-

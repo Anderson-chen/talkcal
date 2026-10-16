@@ -1,0 +1,4 @@
+# 產出物和第三方的東西不格式化（.gitignore 裡的 node_modules、dist 等 Prettier 本來就會跳過）
+package-lock.json
+# 文件不交給 Prettier：表格、中英混排的換行是手排的，重排只會製造 diff
+*.md

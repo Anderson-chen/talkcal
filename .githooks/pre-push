@@ -24,6 +24,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     # 祕密先掃：幾秒就好，而且推上去就收不回來了 —— 測試紅了可以再推一次修，key 外洩只能作廢重發。
     # 範圍是「還不在任何遠端分支上的 commit」，也就是這次真的會送出去的那些；新分支、舊分支都適用
     ci/secrets.sh "$local_sha" --not --remotes </dev/null
+    # Java 格式也在測試之前：十幾秒就有答案，格式不對時不必等整輪測試跑完才知道
+    ci/format.sh </dev/null
     # AI eval 只在改到 prompt 或模型相關的檔案時跑（一分多鐘，每次都跑太慢；但改了 prompt 卻忘了跑，就是 #13 那種退化沒人發現）。
     # 看的是這次真的會送出去的 commit 改了哪些檔案
     if git log --name-only --format= "$local_sha" --not --remotes | grep -qE "$EVAL_PATHS"; then

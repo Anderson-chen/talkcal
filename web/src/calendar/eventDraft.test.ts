@@ -5,7 +5,13 @@ import { isOvernight, toDraft, type FormFields } from './eventDraft'
 
 // 一份合法的表單；每個測試只改它要測的那一欄，一眼看得出差在哪
 const valid: FormFields = {
-  title: '產品週會', date: '2026-10-06', start: '09:00', end: '10:00', category: 'WORK', location: '', note: '',
+  title: '產品週會',
+  date: '2026-10-06',
+  start: '09:00',
+  end: '10:00',
+  category: 'WORK',
+  location: '',
+  note: '',
 }
 
 describe('toDraft：擋下填錯的', () => {
@@ -24,7 +30,14 @@ describe('toDraft：擋下填錯的', () => {
 describe('toDraft：整理成要送出的資料', () => {
   it('合法的表單：日期和時間合成 YYYY-MM-DDTHH:mm，空的選填欄位送 null', () => {
     expect(toDraft(valid)).toEqual({
-      draft: { title: '產品週會', start: '2026-10-06T09:00', end: '2026-10-06T10:00', category: 'WORK', location: null, note: null },
+      draft: {
+        title: '產品週會',
+        start: '2026-10-06T09:00',
+        end: '2026-10-06T10:00',
+        category: 'WORK',
+        location: null,
+        note: null,
+      },
     })
   })
 

@@ -43,7 +43,10 @@ export interface AssistantReply {
  * conversationId 不帶就是新對話；之後每句帶著回應裡的那一個，助理才記得前面說過什麼。
  */
 export async function talkToAssistant(message: string, conversationId?: string): Promise<AssistantReply> {
-  const res = await send('/api/calendar/assistant', { method: 'POST', body: JSON.stringify({ message, conversationId }) })
+  const res = await send('/api/calendar/assistant', {
+    method: 'POST',
+    body: JSON.stringify({ message, conversationId }),
+  })
   const body = (await res.json()) as AssistantReply
   return { ...body, proposals: body.proposals.map(normalize) }
 }
@@ -85,5 +88,10 @@ export async function removeEvent(id: string): Promise<void> {
  * 前後端不一定同時部署，舊版後端回的行程沒有 category，畫面不該因此整個壞掉（實際發生過：分類圓點拿不到顏色就丟例外）。
  */
 function normalize<T extends EventFields>(event: T): T {
-  return { ...event, category: event.category ?? 'PERSONAL', location: event.location ?? null, note: event.note ?? null }
+  return {
+    ...event,
+    category: event.category ?? 'PERSONAL',
+    location: event.location ?? null,
+    note: event.note ?? null,
+  }
 }
