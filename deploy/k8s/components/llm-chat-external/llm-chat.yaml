@@ -1,0 +1,13 @@
+# ExternalName：叢集的 DNS 把 llm-chat 回答成另一個名字（CNAME），連線直接去那裡，不經過 kube-proxy。
+# talkcal-llm-chat 是 deploy/compose.yaml 那個模型容器的名字。kind 的節點本身也是一個 Docker 容器，
+# 把它接上 compose 的網路（overlays/kind/up.sh 做），Pod 問 DNS 時就能經由節點問到 Docker 內建的 DNS。
+# 埠不轉換：ExternalName 沒有 targetPort，app 打 8080、模型容器也聽 8080，剛好一樣。
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-chat
+  labels:
+    app.kubernetes.io/name: llm-chat
+spec:
+  type: ExternalName
+  externalName: talkcal-llm-chat

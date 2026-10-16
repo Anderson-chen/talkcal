@@ -1,0 +1,73 @@
+# 前端：nginx 送 Vue 靜態檔、/api 轉給 app。對應 deploy/compose.yaml 的 web 服務，同一個映像檔（web/Dockerfile）。
+# 對外的入口（NodePort、Ingress、ALB）各環境不同，放 overlay；這裡的 Service 只在叢集裡面用。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    app.kubernetes.io/name: web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0              # 理由同 app.yaml
+  minReadySeconds: 5
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: web
+    spec:
+      # nginx 收到 SIGQUIT（官方映像檔的 STOPSIGNAL）會等連線處理完才結束。
+      # 最慢的是轉給 app 的 AI 發問，proxy_read_timeout 180s；但 app 那邊最多 2 分鐘就放棄，跟 app 用同一個數字
+      terminationGracePeriodSeconds: 150
+      containers:
+        - name: web
+          image: talkcal/web
+          ports:
+            - name: http
+              containerPort: 80
+          env:
+            # nginx 的 resolver 不套 /etc/resolv.conf 的 search 網域，所以要寫完整名稱（見 web/nginx.conf）。
+            # namespace 寫死 talkcal：跟 base/kustomization.yaml 的 namespace 一起改
+            - name: TALKCAL_APP_UPSTREAM
+              value: app.talkcal.svc.cluster.local:8090
+          # nginx 沒有「開機很久」的問題，不需要 startupProbe
+          livenessProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            # 只看 nginx 自己送不送得出 index.html，不打 /api：app 的健康由 app 自己的 readiness 管。
+            # 打 /api 的話，app 全掛時 web 也全部 not ready，使用者連「服務暫時無法使用」的頁面都拿不到
+            httpGet: {path: /, port: http}
+            periodSeconds: 5
+            failureThreshold: 2
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 10          # 理由同 app.yaml：等 kube-proxy 把它從 Service 拿掉，再開始關
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels:
+    app.kubernetes.io/name: web
+spec:
+  selector:
+    app.kubernetes.io/name: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

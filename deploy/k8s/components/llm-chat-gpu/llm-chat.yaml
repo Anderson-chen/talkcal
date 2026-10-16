@@ -1,0 +1,153 @@
+# 生成模型 Qwen3-8B。對應 deploy/compose.yaml 的 model-seed + llm-chat。
+#
+#   compose                         k8s
+#   model-seed（跑完就結束）    →   initContainer：主程式啟動前跑完，失敗就不啟動
+#   C:\llm\models（來源）       →   S3
+#   models volume               →   PVC（EBS）
+#   deploy.resources nvidia     →   resources.limits nvidia.com/gpu: 1
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llm-chat-model
+data:
+  MODEL_S3_URI: s3://REPLACE-IN-OVERLAY/models/   # overlay 換成真的 bucket
+  MODEL_FILE: Qwen3-8B-Q4_K_M.gguf
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: llm-chat-models
+spec:
+  accessModes: [ReadWriteOnce]       # EBS 只能掛在一台節點上；模型只有一份 Pod，夠用
+  resources:
+    requests:
+      storage: 20Gi                  # Qwen 5.6GB，留空間給換模型時新舊並存
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-chat
+  labels:
+    app.kubernetes.io/name: llm-chat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: llm-chat
+  strategy:
+    # Recreate：先關舊的再起新的，換模型的那幾十秒 AI 助理不能用。
+    # 不用 RollingUpdate 的理由：新舊並存要兩張 GPU（nvidia.com/gpu: 1 是獨佔一整張），PVC 也只能掛一台。
+    # 跟 compose 的 deployModels 同一個取捨：模型很少換、換一次就認了這段空窗（deploy/README.md）
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: llm-chat
+    spec:
+      securityContext:
+        fsGroup: 1000                # PVC 掛進來的擁有者給 ubuntu（uid 1000），initContainer 寫、主程式讀都不用 root
+      # GPU 節點群組通常帶 taint，只讓要 GPU 的 Pod 上去，不讓 app 這種 CPU 工作佔掉貴的機器
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      initContainers:
+        # 從 S3 拉模型到 PVC。跟 compose 的 model-seed 同一個做法：已經有、大小一樣就跳過，所以只有第一次慢。
+        # aws s3 sync 本身就是「大小或時間不同才傳」；權限走 EKS Pod Identity / IRSA，不放金鑰
+        - name: model-seed
+          image: amazon/aws-cli:2.22.0
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              aws s3 sync "$MODEL_S3_URI" /models --exclude "*" --include "*.gguf" --include "SHA256SUMS"
+              # 跟 compose 一樣：SHA256SUMS 有列的就驗，對不上就失敗，主程式不會拿壞掉的檔案起來
+              if [ -f /models/SHA256SUMS ]; then
+                cd /models && grep " $MODEL_FILE\$" SHA256SUMS | sha256sum -c -
+              fi
+              ls -la /models
+          envFrom:
+            - configMapRef: {name: llm-chat-model}
+          securityContext:
+            runAsUser: 1000
+          volumeMounts:
+            - {name: models, mountPath: /models}
+      containers:
+        - name: llm-chat
+          image: talkcal/llama-server
+          # 參數跟 deploy/compose.yaml 的 llm-chat 一樣（理由都寫在那裡）。改一邊就要改另一邊
+          args:
+            - -m
+            - /models/$(MODEL_FILE)
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8080"
+            - -ngl
+            - "99"
+            - -c
+            - "32768"
+            - -np
+            - "200"
+            - --kv-unified
+            - --jinja
+            - --reasoning
+            - "off"
+            - --temp
+            - "0.7"
+            - --top-k
+            - "20"
+            - --top-p
+            - "0.8"
+            - --min-p
+            - "0"
+            - --metrics
+          envFrom:
+            - configMapRef: {name: llm-chat-model}
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            limits:
+              # 獨佔一整張 GPU。k8s 不像 Docker Desktop 讓大家共用一張卡：多一個要 GPU 的服務就要多一張
+              nvidia.com/gpu: 1
+              memory: 12Gi
+            requests:
+              cpu: "2"
+              memory: 8Gi
+          # /health：模型還在載入回 503，載好才回 200
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+            failureThreshold: 60     # 5 分鐘。compose 的 start_period 是 120s；EBS 冷讀比 WSL2 的 volume 慢，放寬
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4      # 1 分鐘沒回應才重啟：重啟要重載 5GB 模型，代價大，寧可多等
+            terminationGracePeriodSeconds: 10   # 判定卡死就直接砍，理由同 base/app.yaml
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          volumeMounts:
+            - {name: models, mountPath: /models, readOnly: true}
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: llm-chat-models
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-chat
+  labels:
+    app.kubernetes.io/name: llm-chat
+spec:
+  selector:
+    app.kubernetes.io/name: llm-chat
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

@@ -1,0 +1,25 @@
+# base：kind 和 EKS（#58）都一樣的部分 —— app、web 兩個 Deployment 和它們的 Service。
+# 環境不同的東西（模型怎麼跑、資料庫在哪、image tag、對外的入口）放 components/ 和 overlays/，這裡不寫。
+# 為什麼用 kustomize 見 deploy/k8s/README.md 的「選型」。
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: talkcal
+
+resources:
+  - namespace.yaml
+  - app.yaml
+  - web.yaml
+
+# image tag 不寫死在 Deployment 裡，由 overlay 換：
+#   kustomize edit set image talkcal/app=talkcal/app:<版本>
+# 版本號怎麼產生是 #25（PR #135）的事，這裡只留接口。
+images:
+  - name: talkcal/app
+    newTag: local
+  - name: talkcal/web
+    newTag: local
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: talkcal
