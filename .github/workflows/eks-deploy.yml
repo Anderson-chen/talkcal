@@ -1,0 +1,164 @@
+# 部署到 EKS（#58、ADR 0004）：build app 推到 ECR → 前端傳到 S3 → kubectl apply -k → 等 rollout 完成。
+#
+# 只能手動觸發：叢集平常是 destroy 掉的（每月固定費用見 infra/envs/2-eks/README.md），沒有叢集時自動跑只會紅燈。
+# 要用之前：
+#   1. infra/envs/2-eks 已經 terraform apply
+#   2. GitHub repo → Settings → Environments 建 eks，Variables 填 terraform output github_environment_variables 的值
+#      （可以再設 Required reviewers：每次部署要人按核准）
+#
+# AWS 憑證：OIDC 換臨時憑證（1 小時），repo 裡沒有任何長期 key。IAM 角色的 trust policy 只認
+# environment: eks 的 job（infra/envs/2-eks/github.tf），別的 workflow、fork 的 PR 拿不到。
+#
+# 回退（#19）：在 Actions 頁面選舊的 commit 或 tag 重跑這個 workflow。映像檔 tag 不可覆寫，同一個版本拿到的就是當初那份。
+
+name: Deploy to EKS
+
+on:
+  workflow_dispatch:
+    inputs:
+      overlay:
+        description: "eks（模型走 Bedrock）或 eks-gpu（叢集內 GPU，要 terraform -var model_backend=gpu）"
+        type: choice
+        options: [eks, eks-gpu]
+        default: eks
+      deploy_web:
+        description: "前端也一起更新"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write # 跟 GitHub 要 OIDC token
+
+# 同時只能有一個部署；後來的排隊，不取消正在跑的（部署到一半被取消比較危險）
+concurrency:
+  group: eks-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: eks
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      EKS_CLUSTER: ${{ vars.EKS_CLUSTER }}
+      ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+      WEB_BUCKET: ${{ vars.WEB_BUCKET }}
+      CLOUDFRONT_DIST_ID: ${{ vars.CLOUDFRONT_DIST_ID }}
+      TARGET_GROUP_NAME: ${{ vars.TARGET_GROUP_NAME }}
+      MODELS_BUCKET: ${{ vars.MODELS_BUCKET }}
+      OVERLAY: deploy/k8s/overlays/${{ inputs.overlay }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # cd/version.sh 要看 tag
+
+      - name: 檢查 environment 變數
+        run: |
+          for v in AWS_REGION EKS_CLUSTER ECR_REGISTRY WEB_BUCKET CLOUDFRONT_DIST_ID TARGET_GROUP_NAME; do
+            [ -n "${!v}" ] || { echo "::error::environment eks 沒有設 $v（見 infra/envs/2-eks/README.md）"; exit 1; }
+          done
+          if [ "${{ inputs.overlay }}" = eks-gpu ] && [ -z "$MODELS_BUCKET" ]; then
+            echo "::error::eks-gpu 要設 MODELS_BUCKET（terraform output models_bucket）"; exit 1
+          fi
+
+      # 版本號：#25（PR #135）的 cd/version.sh —— 有 vX.Y.Z tag 用 tag，沒有用 commit 前 7 碼。
+      # #25 合併之前沒有這支，先退回 commit 前 7 碼（同一個規則的後半段）
+      - name: 版本號
+        id: version
+        run: |
+          if [ -x cd/version.sh ]; then v=$(cd/version.sh); else v=$(git rev-parse --short=7 HEAD); fi
+          case "$v" in *-dirty) echo "::error::工作目錄有改動，版本號是 $v"; exit 1 ;; esac
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "部署版本：$v" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: eks-deploy-${{ github.run_id }}
+
+      - name: 登入 ECR
+        run: aws ecr get-login-password | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+      # tag 不可覆寫（ecr.tf）：同一個版本已經推過就不再 build，重跑同一版（回退）很快
+      - name: build、推 app 映像檔
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          image="$ECR_REGISTRY/talkcal/app:$VERSION"
+          if aws ecr describe-images --repository-name talkcal/app --image-ids imageTag="$VERSION" >/dev/null 2>&1; then
+            echo "$image 已經在 ECR，跳過 build"
+          else
+            docker build --pull --label "org.opencontainers.image.revision=$GITHUB_SHA" --tag "$image" backend
+            docker push "$image"
+          fi
+
+      # gpu 才要：llama-server 的 tag 跟 deploy/compose.yaml 的 x-llama-server 同一個（llama.cpp 和 CUDA 的版本）
+      - name: build、推 llama-server 映像檔（eks-gpu）
+        if: inputs.overlay == 'eks-gpu'
+        run: |
+          tag=$(grep -oE 'image: talkcal/llama-server:[^ ]+' deploy/compose.yaml | head -1 | cut -d: -f3)
+          image="$ECR_REGISTRY/talkcal/llama-server:$tag"
+          if aws ecr describe-images --repository-name talkcal/llama-server --image-ids imageTag="$tag" >/dev/null 2>&1; then
+            echo "$image 已經在 ECR，跳過 build"
+          else
+            docker build --tag "$image" deploy/llama-server
+            docker push "$image"
+          fi
+          yq -i "(.images[] | select(.name == \"talkcal/llama-server\")).newName = \"$ECR_REGISTRY/talkcal/llama-server\"" "$OVERLAY/kustomization.yaml"
+
+      # ── 前端：S3 + CloudFront（ADR 0005）。快取規則跟 web/nginx.conf 一樣 ──────────
+      - uses: actions/setup-node@v7
+        if: inputs.deploy_web
+        with:
+          node-version: 22
+
+      - name: build、上傳前端
+        if: inputs.deploy_web
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+          # /assets/ 檔名帶雜湊：快取一年。舊的不刪——還拿著舊 index.html 的使用者還要載得到
+          aws s3 sync dist/assets "s3://$WEB_BUCKET/assets" --cache-control "public, max-age=31536000, immutable"
+          # 其他檔案（favicon 之類）短快取；index.html 最後才傳，傳之前新的 assets 已經都在了
+          aws s3 sync dist "s3://$WEB_BUCKET" --delete --exclude "assets/*" --exclude index.html --cache-control "public, max-age=300"
+          aws s3 cp dist/index.html "s3://$WEB_BUCKET/index.html" --cache-control "no-cache"
+          aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DIST_ID" --paths /index.html
+
+      # ── 叢集 ─────────────────────────────────────────────────────────────
+      # 這個角色在叢集裡只有 talkcal namespace 的權限（infra/envs/2-eks/addons.tf）
+      - name: 連上叢集
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER" --region "$AWS_REGION"
+
+      # Terraform 才知道的值寫進 params.env，映像檔位址和版本寫進 kustomization.yaml（只改這台 runner 上的檔案）。
+      # yq 是 GitHub 的 ubuntu runner 內建的，不必另外下載 kustomize
+      - name: 填入這次部署的值
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tg=$(aws elbv2 describe-target-groups --names "$TARGET_GROUP_NAME" --query 'TargetGroups[0].TargetGroupArn' --output text)
+          {
+            echo "TARGET_GROUP_ARN=$tg"
+            echo "MODELS_S3_URI=s3://${MODELS_BUCKET:-none}/models/"
+          } > deploy/k8s/overlays/eks/params.env
+          yq -i "(.images[] | select(.name == \"talkcal/app\")) |= (.newName = \"$ECR_REGISTRY/talkcal/app\" | .newTag = \"$VERSION\")" deploy/k8s/overlays/eks/kustomization.yaml
+          kubectl kustomize "$OVERLAY" > rendered.yaml
+          grep -n 'REPLACE-BY-WORKFLOW' rendered.yaml && { echo "::error::還有沒填的佔位值"; exit 1; } || true
+
+      - name: 部署
+        run: |
+          kubectl apply -f rendered.yaml
+          # base 的 rolling update 是 maxSurge 1、maxUnavailable 0，加上 ALB 的 readiness gate：
+          # 新的那份通過 ALB 健康檢查才關舊的。卡住（例如新版起不來）就在這裡失敗，舊的那兩份還在接請求
+          kubectl -n talkcal rollout status deployment/app --timeout=10m
+          if [ "${{ inputs.overlay }}" = eks-gpu ]; then
+            kubectl -n talkcal rollout status deployment/llm-chat --timeout=20m
+          fi
+
+      - name: 結果
+        if: always()
+        run: |
+          { echo '```'; kubectl -n talkcal get deploy,pods -o wide 2>&1 || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
