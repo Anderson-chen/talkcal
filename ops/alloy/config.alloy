@@ -32,9 +32,15 @@
 
 // (1) 我們的 Spring app —— deploy/ 的 app 服務。8090 是容器「裡面」的埠，
 //     主機上看到的 18090 只是 ports 發佈出去給瀏覽器用的，容器之間用不到。
+//     app 有兩個 slot（#20）：app 是 blue、app-green 是 green，部署時新版起在沒接流量的那個。
+//     兩個都抓、各帶一個 slot 標籤：canary 時 cd/bluegreen.sh 用它分開算新版和舊版的錯誤率、p95。
+//     平常只有一個在跑，另一個抓不到（up=0）是正常的；儀表板的查詢沒有分 slot，兩個加總就是全部
 prometheus.scrape "talkcal_app" {
   job_name        = "talkcal-app"
-  targets         = [{"__address__" = "app:8090"}]
+  targets         = [
+    {"__address__" = "app:8090", "slot" = "blue"},
+    {"__address__" = "app-green:8090", "slot" = "green"},
+  ]
   metrics_path    = "/actuator/prometheus"   // Spring Boot 吐 Prometheus 指標的預設路徑
   scrape_interval = "15s"
   forward_to      = [prometheus.remote_write.mimir.receiver]
