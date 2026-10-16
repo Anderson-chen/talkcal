@@ -134,7 +134,7 @@ GitHub 上不跑（沒有模型），只確定它編得過（`evalClasses`）。
 **在本機開起來**：
 1. Google Cloud Console → APIs & Services → Credentials → 建 OAuth client ID（Web application），Authorized redirect URI 填 `http://localhost:5173/api/auth/oauth2/callback/google`（vite）；要從 `deploy/` 的 nginx 進來就再加一條 `http://localhost:18080/...`
 2. GitHub → Settings → Developer settings → OAuth Apps → New，Authorization callback URL 填 `http://localhost:5173/api/auth/oauth2/callback/github`（GitHub 的 OAuth App 只能填一個）
-3. 把 client id、secret 設成上面四個環境變數再啟動 app（bootRun 或 `deploy/` 的 compose 都會讀）
+3. 把 client id、secret 填進 `deploy/.env`（範本 `deploy/.env.example`），再啟動 app（bootRun 或 `deploy/` 的 compose 都會讀）
 
 **#104 的做法**：
 - 擁有者是 calendar 自己的型別 `OwnerId`，不用 auth 的 `AccountId`：兩個模組互不認識（ArchitectureTest 守著）。值就是登入者的帳號 ID，由 controller 從 `java.security.Principal` 取出來交給 use case —— calendar 不知道是怎麼登入的
@@ -174,7 +174,20 @@ AI 助理的發問（`POST /api/calendar/assistant`）每次都會叫模型，�
 證據：連打 20 次，前 6 次放行、之後都是 429（帶 `Retry-After: 60`），同時查行程照常 200；
 換 20 個不同 IP 各打一次，前 11 次放行、之後被全站上限擋下，nginx log 記的是 `zone "assistant_all"` 和偽裝的那個 IP（真實 IP 有認對）。
 
-擋不住、或刻意接受的：
+擋不住、或**本機**（[#123](https://github.com/Anderson-chen/talkcal/issues/123)）：跟雲端用同一個位置、同樣的變數名 —— 不進 git 的 `deploy/.env`，repo 只放範本 [deploy/.env.example](../../deploy/.env.example)（只有名字、沒有值）。
+- `docker compose` 自己會讀；`./gradlew bootRun` 由 [build.gradle](../../backend/build.gradle) 讀進來當環境變數。兩邊用同一份，DB 密碼、Google／GitHub 的 secret 不必各設一次，也不用每開一個終端機就設環境變數
+- 拿掉寫死的 `talkcal`：`application.properties` 改讀 `DB_PASSWORD`，compose 的 postgres、app 都用 `${DB_PASSWORD:?...}`
+- 代價：clone 下來要先 `cp deploy/.env.example deploy/.env` 填值才跑得起來（[deploy/README.md](../../deploy/README.md)）
+
+證據（反例）：
+- 沒有 `deploy/.env`：bootRun 失敗「找不到 deploy/.env：cp deploy/.env.example deploy/.env…」，compose 失敗「缺 DB_PASSWORD：cp deploy/.env.example…」
+- 有 `.env` 但 `DB_PASSWORD` 空白：bootRun 失敗「沒有填 DB_PASSWORD」，不會用空密碼去連
+- `DB_PASSWORD` 故意填錯：app 被資料庫拒絕（`password authentication failed`）—— 證明密碼真的是從 `.env` 來，沒有別的地方寫死；填對就正常啟動、`/actuator/health` 200
+- `.env` 填一組假的 `GOOGLE_CLIENT_ID`：`/api/auth/providers` 回 `["google"]`；拿掉就是空的
+- 雲端的三層 compose 疊起來照樣解析得出 `POSTGRES_PASSWORD`、`SPRING_DATASOURCE_PASSWORD`
+- `git check-ignore`：任何一層的 `.env`、`.env.local` 都被擋，`.env.example` 不被擋；gitleaks 掃一份照真格式寫的假 `.env`，Google、GitHub 的 secret 兩行都抓到（`DB_PASSWORD=talkcal` 抓不到 —— 太短、看起來不像 key，這道只是第二道）
+
+刻意接受的：
 - **全站上限會連累正常使用者**：有人換 IP 狂打時，其他人也會拿到 429。這是刻意的取捨 —— 寧可服務暫時不能用，也不要帳單失控
 - 同一個 NAT 後面的多個人（公司、宿舍）共用一個 IP 的額度
 - 計數在 nginx 的記憶體裡：重啟就歸零；之後變成多台時，每台各算各的
@@ -236,7 +249,7 @@ AI 助理的發問（`POST /api/calendar/assistant`）每次都會叫模型，�
 [application.properties](../../backend/src/main/resources/application.properties)：呼叫模型的逾時是 2 分鐘；SDK 預設的重試關掉了（`max-retries=0`）。理由寫在設定旁邊：本機模型塞爆的時候，重試只會讓它更塞。
 
 <a id="secrets"></a>
-### 祕密管理 ✅（雲端）
+### 祕密管理 ✅
 
 雲端上的祕密由 Terraform 產生、存在 SSM Parameter Store（SecureString），部署時才拉下來寫成只有 root 能讀的 `deploy/.env`。明碼不進 git、不進 user_data、不進映像檔（[secrets.tf](../../infra/envs/1-ec2/secrets.tf)）。
 
@@ -258,8 +271,20 @@ AI 助理的發問（`POST /api/calendar/assistant`）每次都會叫模型，�
 1. 第一次部署跑的還是舊版 `deploy.sh`（bash 手上拿的是 git 換掉之前的檔案），沒有同步 —— app 一直重啟，log 裡 68 次 `password authentication failed`：缺口在線上重現
 2. 重跑一次（這次是新版）：app healthy；從 app 的網路連 postgres，新密碼 `ok`、**舊密碼 `password authentication failed`**
 
+**本機**（[#123](https://github.com/Anderson-chen/talkcal/issues/123)）：跟雲端用同一個位置、同樣的變數名 —— 不進 git 的 `deploy/.env`，repo 只放範本 [deploy/.env.example](../../deploy/.env.example)（只有名字、沒有值）。
+- `docker compose` 自己會讀；`./gradlew bootRun` 由 [build.gradle](../../backend/build.gradle) 讀進來當環境變數。兩邊用同一份，DB 密碼、Google／GitHub 的 secret 不必各設一次，也不用每開一個終端機就設環境變數
+- 拿掉寫死的 `talkcal`：`application.properties` 改讀 `DB_PASSWORD`，compose 的 postgres、app 都用 `${DB_PASSWORD:?...}`
+- 代價：clone 下來要先 `cp deploy/.env.example deploy/.env` 填值才跑得起來（[deploy/README.md](../../deploy/README.md)）
+
+證據（反例）：
+- 沒有 `deploy/.env`：bootRun 失敗「找不到 deploy/.env：cp deploy/.env.example deploy/.env…」，compose 失敗「缺 DB_PASSWORD：cp deploy/.env.example…」
+- 有 `.env` 但 `DB_PASSWORD` 空白：bootRun 失敗「沒有填 DB_PASSWORD」，不會用空密碼去連
+- `DB_PASSWORD` 故意填錯：app 被資料庫拒絕（`password authentication failed`）—— 證明密碼真的是從 `.env` 來，沒有別的地方寫死；填對就正常啟動、`/actuator/health` 200
+- `.env` 填一組假的 `GOOGLE_CLIENT_ID`：`/api/auth/providers` 回 `["google"]`；拿掉就是空的
+- 雲端的三層 compose 疊起來照樣解析得出 `POSTGRES_PASSWORD`、`SPRING_DATASOURCE_PASSWORD`
+- `git check-ignore`：任何一層的 `.env`、`.env.local` 都被擋，`.env.example` 不被擋；gitleaks 掃一份照真格式寫的假 `.env`，Google、GitHub 的 secret 兩行都抓到（`DB_PASSWORD=talkcal` 抓不到 —— 太短、看起來不像 key，這道只是第二道）
+
 刻意接受的：
-- **本機還沒做（延後）**：DB 密碼仍寫死成 `talkcal`（[application.properties](../../backend/src/main/resources/application.properties)、[compose.yaml](../../deploy/compose.yaml)），還沒達到「不寫在程式碼裡」。做法是改讀 `deploy/.env`（不進 git）、repo 只放範本；代價是 clone 下來要先建 `.env` 才能跑。雲端上 app 的密碼一定由環境變數蓋掉，`.env` 缺 `DB_PASSWORD` 時 compose 直接拒絕啟動
 - Grafana 關掉登入、匿名就是 Admin：只綁 127.0.0.1，雲端上要經 SSM port forwarding（先要有 AWS 權限）才連得到
 - 祕密不小心 commit 的情況由[祕密掃描](#secret-scan)擋
 

@@ -25,5 +25,8 @@ tfplan
 *.tfvars
 backend.hcl
 
-# 雲端機器上 deploy.sh 從 SSM 拉下來的 .env（有 DB 密碼）
-deploy/.env
+# 祕密：本機自己填的、雲端 deploy.sh 從 SSM 拉下來的 .env（DB 密碼、OAuth secret）。
+# 不錨定在 deploy/：哪一層多出一份 .env 都不該進 git。範本 .env.example 要進
+.env
+.env.*
+!.env.example

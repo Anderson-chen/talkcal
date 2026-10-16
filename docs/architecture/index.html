@@ -199,7 +199,7 @@ footer{margin-top:28px;font-size:12px;color:var(--text-muted)}
 <span><i class="sw" style="background:var(--surface-1);border:0.5px solid var(--border-strong);opacity:.3"></i>目前 model_backend 不建</span>
 </div>
 <div id="panel"></div>
-<footer><p id="checked">最後核對：2026-10-15（行號以 master 為準；業界說法於同日查證，來源附在每個元件下）</p></footer>
+<footer><p id="checked">最後核對：2026-10-16（行號以 master 為準；業界說法於同日查證，來源附在每個元件下）</p></footer>
 <dialog id="code" aria-labelledby="code-title">
 <div class="dlg">
 <div class="dlg-h">
@@ -327,8 +327,8 @@ buser:{"CallWithBearerToken":E+"bedrock.tf:31","CreateInference":E+"bedrock.tf:4
 bkey:{"service_name":E+"bedrock.tf:56","credential_age_days":E+"bedrock.tf:58"},
 budget:{"limit_amount":B+"variables.tf:19","80% ACTUAL / 100% FORECASTED":B+"main.tf:76"},
 caddy:{"image":E+"compose.ec2.yaml:37","ports":E+"compose.ec2.yaml:39","caddy-data:/data":E+"compose.ec2.yaml:48","reverse_proxy":E+"Caddyfile:9"},
-web:{"ports":D+":236","limit_req":"web/nginx.conf:27","set_real_ip_from":"web/nginx.conf:52","resolver":"web/nginx.conf:66","proxy_read_timeout":"web/nginx.conf:81"},
-app:{"mem_limit":E+"compose.ec2.yaml:30","SESSION_COOKIE_SECURE":E+"compose.ec2.yaml:26","SPRING_AI_OPENAI_*":{bedrock:E+"compose.bedrock.yaml:18",gpu:"backend/src/main/resources/application-docker.properties:8"},"depends_on":{bedrock:E+"compose.bedrock.yaml:23",gpu:D+":200"},"stop_grace_period":D+":221"},
+web:{"ports":D+":237","limit_req":"web/nginx.conf:27","set_real_ip_from":"web/nginx.conf:52","resolver":"web/nginx.conf:66","proxy_read_timeout":"web/nginx.conf:81"},
+app:{"mem_limit":E+"compose.ec2.yaml:30","SESSION_COOKIE_SECURE":E+"compose.ec2.yaml:26","SPRING_AI_OPENAI_*":{bedrock:E+"compose.bedrock.yaml:18",gpu:"backend/src/main/resources/application-docker.properties:8"},"depends_on":{bedrock:E+"compose.bedrock.yaml:23",gpu:D+":201"},"stop_grace_period":D+":222"},
 postgres:{"image":D+":155","POSTGRES_PASSWORD":E+"compose.ec2.yaml:20","密碼同步":E+"deploy.sh:81"},
 llm:{"-ngl":D+":101","-c / -np":D+":103","--kv-unified":D+":110"},
 seed:{"sha256sum -c":D+":74"},

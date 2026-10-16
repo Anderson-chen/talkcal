@@ -136,6 +136,36 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
+// 本機的祕密（DB 密碼、Google／GitHub 的 client secret）放在不進 git 的 deploy/.env，範本是 deploy/.env.example（#123）。
+// docker compose 自己會讀那份；bootRun 沒有這個機制，所以在這裡讀進來、當成環境變數交給 app —— 兩邊用同一份，不必各填一次。
+// 主機上已經設了同名的環境變數就以它為準（跟 compose 的規則一樣）。
+// 沒有這份、或沒填 DB_PASSWORD 就直接失敗：不然 app 會用空密碼去連，錯誤訊息只有「password authentication failed」，看不出要補什麼
+tasks.named('bootRun') {
+    def dotenv = file('../deploy/.env')
+    doFirst {
+        if (!dotenv.exists()) {
+            throw new GradleException('找不到 deploy/.env：cp deploy/.env.example deploy/.env，再填 DB_PASSWORD（見 deploy/README.md）')
+        }
+        def values = [:]
+        dotenv.eachLine('UTF-8') { line ->
+            def text = line.trim()
+            int eq = text.indexOf('=')
+            if (text && !text.startsWith('#') && eq > 0) {
+                // 值可以用引號包起來（compose 也接受這種寫法），包了就拿掉
+                values[text.substring(0, eq).trim()] = text.substring(eq + 1).trim().replaceAll(/^(["'])(.*)\1$/, '$2')
+            }
+        }
+        if (!(System.getenv('DB_PASSWORD') ?: values['DB_PASSWORD'])) {
+            throw new GradleException('deploy/.env 沒有填 DB_PASSWORD（舊的 postgres volume 是用 talkcal 建的，見 deploy/.env.example）')
+        }
+        values.each { name, value ->
+            if (System.getenv(name) == null) {
+                environment name, value
+            }
+        }
+    }
+}
+
 tasks.named('test') {
     useJUnitPlatform()
     testLogging {

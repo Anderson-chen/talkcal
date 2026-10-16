@@ -155,11 +155,11 @@ services:
     image: postgres:18.6-alpine       # 釘死版本；alpine 版比較小
     container_name: talkcal-postgres
     environment:
-      # 本機學習用的帳密，跟 application.properties 的預設值一致。
-      # 正式環境不這樣寫：密碼放 secret，app 那邊用環境變數 SPRING_DATASOURCE_PASSWORD 蓋掉。
+      # 密碼從 deploy/.env 來（範本 .env.example，不進 git）；沒設就拒絕啟動，不退回一個寫死的預設值。
+      # 只在 volume 第一次初始化時讀，之後要換密碼得進資料庫 ALTER ROLE（見 README）
       POSTGRES_DB: talkcal
       POSTGRES_USER: talkcal
-      POSTGRES_PASSWORD: talkcal
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?缺 DB_PASSWORD：cp deploy/.env.example deploy/.env 再填值}
     ports:
       # 給本機 bootRun 的 app 和你自己用 psql / IDE 連。只綁 127.0.0.1，不對區網開放。
       - "127.0.0.1:5432:5432"
@@ -186,7 +186,8 @@ services:
       # 打開 docker profile：application-docker.properties 蓋掉預設值——
       # 模型位址改成服務名稱、log 改成 JSON。本機 bootRun 沒開這個 profile，所以還是 127.0.0.1、彩色文字。
       SPRING_PROFILES_ACTIVE: docker
-      # Google、GitHub 登入（#105）：從主機的環境變數帶進來（例如 export GOOGLE_CLIENT_ID=...，或寫在不進 git 的 deploy/.env），
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?缺 DB_PASSWORD：cp deploy/.env.example deploy/.env 再填值}
+      # Google、GitHub 登入（#105）：值在 deploy/.env（主機上設了同名的環境變數就以它為準），
       # 沒設就是空的 → 登入頁只有帳密。secret 不寫進這個檔案
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}

@@ -18,6 +18,25 @@
 瀏覽器開 http://localhost:18080：nginx 送前端的靜態檔，`/api` 轉給 `app:8090`（設定在 `web/nginx.conf`）。
 app 的 18090 仍然開著，給 k6 和 curl 直接打，不多經過一層 nginx。
 
+## 第一次跑之前：建 `.env`
+
+密碼和 key 不寫在程式碼裡（[#123](https://github.com/Anderson-chen/talkcal/issues/123)），放在這個資料夾的 `.env`，不進 git：
+
+```bash
+cp deploy/.env.example deploy/.env   # 再打開來填值
+```
+
+- `docker compose`、`./gradlew bootRun` 讀的都是這一份；雲端的 `deploy.sh` 也是把 SSM 裡的值寫到同一個位置
+- 沒填 `DB_PASSWORD` 時兩邊都直接拒絕啟動，訊息會說要補什麼
+- 已經有舊的 `postgres-data` volume（以前密碼寫死成 `talkcal`）：PostgreSQL 只在第一次初始化時讀密碼，`DB_PASSWORD` 要填 `talkcal`。
+  想換成別的密碼，先改資料庫裡的，再改 `.env`：
+
+  ```bash
+  docker exec -it talkcal-postgres psql -U talkcal -d talkcal -c "ALTER ROLE talkcal PASSWORD '新密碼'"
+  ```
+- Google、GitHub 的 client id／secret 也填在這裡；沒填就只有帳密登入
+- `.gitignore` 擋掉 `.env`，pre-push 的祕密掃描（gitleaks）再擋一次
+
 ## 一鍵部署
 
 Gradle 指令都在 `backend/` 裡跑。它們只是快捷鍵：部署步驟寫在 [cd/apply.sh](../cd/README.md)，本機和 AWS 共用同一支，
@@ -141,7 +160,7 @@ docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新
 | `SPRING_PROFILES_ACTIVE=docker` | Deployment 的 env，或 ConfigMap |
 | 具名 volume `models` | PersistentVolumeClaim |
 | `postgres` 容器 + `postgres-data` volume | 雲端託管的資料庫（RDS、Cloud SQL），不自己在 k8s 裡跑 |
-| `POSTGRES_PASSWORD: talkcal` 寫在 compose | Secret，app 用環境變數 `SPRING_DATASOURCE_PASSWORD` 拿 |
+| `POSTGRES_PASSWORD` 從不進 git 的 `deploy/.env` 來 | Secret，app 用環境變數 `SPRING_DATASOURCE_PASSWORD` 拿 |
 
 ## 下一步（一次一件）
 
