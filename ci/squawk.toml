@@ -1,0 +1,15 @@
+# squawk（PostgreSQL migration 的 linter）的設定，ci/migrations.sh 用。規則清單：https://squawkhq.com/docs/rules
+#
+# 跟 deploy/compose.yaml 的 postgres 版本一致：有些變更在新版 PostgreSQL 才變安全
+# （例如 11 起 ADD COLUMN ... DEFAULT 常數不再重寫整張表），版本寫錯會誤擋或漏擋
+pg_version = "18.0"
+
+# Flyway 預設把每支 migration 包在一個交易裡跑。告訴 squawk 這件事，它才會抓「同一個交易裡先 ADD 再 VALIDATE」這類
+# 鎖會一路拿到交易結束的問題；CONCURRENTLY 那種不能在交易裡跑的檔案，用 -- squawk-disable-assume-in-transaction 個別關掉
+assume_in_transaction = true
+
+# 預設的規則幾乎就是 docs/database/zero-downtime-schema.md 列的危險變更，只關掉一條：
+#   prefer-bigint-over-int：「INTEGER 會用完，一律用 BIGINT」是 schema 風格的偏好，跟停不停機無關；
+#   這裡的 id 都是 UUID，INTEGER 只用在「第幾則」「幾分鐘」這種不會超過 21 億的值。
+# 個別的例外寫在 SQL 裡（-- squawk-ignore <規則>）並附理由，在 PR 的 diff 上看得到。
+excluded_rules = ["prefer-bigint-over-int"]

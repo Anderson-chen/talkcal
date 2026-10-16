@@ -183,6 +183,45 @@ eslint-plugin-playwright（MIT，397★ 但每週 300 萬下載，E2E 用 Playwr
 [gradle-errorprone-plugin](https://github.com/tbroyer/gradle-errorprone-plugin)。
 星數、下載量是 2026-10-20 的數字。
 
+## DB migration 檢查
+
+`ci/migrations.sh` 跟目標分支比，看這次動了哪些 migration（#18）：
+
+```bash
+ci/migrations.sh               # 跟 origin/master 比
+ci/migrations.sh <commit>      # 跟指定的 commit 比
+```
+
+| 檢查 | 擋什麼 | 為什麼 |
+|---|---|---|
+| 已經在目標分支裡的 migration 不能改、刪、改名 | 偷改 V11、把 V10 改名 | Flyway 比對 checksum，已經跑過的資料庫一啟動就驗證失敗 —— 部署到一半才發現 |
+| 新增的 migration 過 [squawk](https://squawkhq.com/docs/rules)（設定在 `ci/squawk.toml`） | DROP／RENAME COLUMN、改型別、加 NOT NULL 沒預設值、沒 CONCURRENTLY 的索引、ADD CONSTRAINT 沒 NOT VALID、沒設 lock_timeout／statement_timeout | 新舊版本同時在線時舊版會壞，或整張表被鎖住。規則和安全做法見 [零停機的 schema 變更](../docs/database/zero-downtime-schema.md) |
+
+只看新增的檔案：V1～V11 已經跑過、改不了，掃出來的警告（例如 V2 的 `prefer-timestamp-tz`）也修不掉。
+真的要做危險的變更（contract 刪掉沒人用的欄位），在那一句上面加 `-- squawk-ignore <規則>` 並寫理由，PR 的 diff 上看得到。
+
+**為什麼用 squawk、不自己 grep**：grep `DROP COLUMN` 只抓得到字面，抓不到「同一個交易裡 ADD CONSTRAINT NOT VALID 又 VALIDATE，
+鎖一路拿到交易結束」這種要懂鎖的問題 —— #18 第一次寫 backfill 時就是被它抓到的。squawk 用 PostgreSQL 自己的 parser 解析 SQL，
+規則是 PostgreSQL 各版本的鎖行為（`pg_version` 設成跟 compose 一樣）。用 npm 的 `squawk-cli`，版本釘死；
+執行檔是同版本的 npm 平台套件，安裝時不另外下載。
+
+**反例**（2026-10-16，在暫時的分支上做、沒有推上去）：
+
+| 造出來的 migration | 結果 |
+|---|---|
+| V11 結尾加一行註解、V10 改名 | 第 1 道擋下，列出這兩支 |
+| `RENAME COLUMN note TO memo` | `renaming-column` |
+| `DROP COLUMN note` | `ban-drop-column` |
+| `ALTER COLUMN start_at TYPE TIMESTAMPTZ` | `changing-column-type` |
+| `ADD COLUMN reminder_minutes INTEGER NOT NULL`（沒預設值） | `adding-required-field` |
+| `CREATE INDEX`（沒 CONCURRENTLY） | `require-concurrent-index-creation` |
+| `ADD CONSTRAINT ... CHECK (...)`（沒 NOT VALID） | `constraint-missing-not-valid` |
+| `ADD COLUMN color TEXT`，前面沒 SET lock_timeout | `require-lock-timeout`、`require-statement-timeout` |
+| 同上，兩個 timeout 都設了 | 通過 |
+| `DROP COLUMN IF EXISTS note`，上面有 `squawk-ignore ban-drop-column` 和理由 | 通過 |
+
+還沒做：加進 ruleset 的必過檢查（GitHub 的設定，要手動加 `migrations`）。
+
 ## 刻意不做的
 
 - **GitHub 上跑 AI eval（`./gradlew eval`）**：沒有模型。本機的 pre-push 改到 prompt 或模型相關的檔案時才跑（`RUN_EVAL=1`），GitHub 上只確定它編得過。見 [#8 的「AI 品質回歸（eval）」段落](https://github.com/Anderson-chen/talkcal/issues/8)。
