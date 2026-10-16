@@ -223,6 +223,23 @@ services:
 
     restart: unless-stopped
 
+  # ── app 的第二個位置（slot）：零停機部署和 canary 用（#20）──────────────
+  # 上面的 app 就是 blue、這個是 green。部署時 cd/bluegreen.sh 把新版起在「沒在接流量」的那個、
+  # healthy 了才叫 web 的 nginx 把流量切過去，再關掉舊的。兩個輪流當新版，沒有固定誰是正式。
+  # 為什麼上面那個不改名叫 app-blue：nginx 的預設值、Alloy、k6、其他文件都認 app 這個名字，改名牽動太多地方，
+  # 代價是名字不對稱（見 deploy/README.md「零停機部署與 canary」）。
+  app-green:
+    # 跟 app 一模一樣（映像檔、環境變數、healthcheck、stop_grace_period），只蓋掉下面幾個欄位
+    extends:
+      service: app
+    container_name: talkcal-app-green
+    ports: !override
+      # 18091：直接打 green 用（例如部署前先確認它）。!override：extends 預設會把 ports 跟 app 的合併，就會也去搶 18090
+      - "127.0.0.1:18091:8090"
+    # profile：單純的 `docker compose up -d` 不會把它起來，只有 bluegreen.sh 指名要它時才起。
+    # 平常只有一個 app 在跑，第二個 JVM 只在部署的那幾十秒存在
+    profiles: [bluegreen]
+
   # ── 前端：nginx 送 Vue 靜態檔，並把 /api 轉給 app ──────────────────
   # 瀏覽器只連這一個入口，看到的是同一個來源，app 不必開 CORS。對照雲端：Ingress / CDN 那一層。
   web:
@@ -235,6 +252,13 @@ services:
       # 18080：跟 app 的 18090 一樣用 1 開頭標示「容器版」。只綁 127.0.0.1，不對區網開放。
       # app 的 18090 仍然留著：perf/ 的 k6 直接打 app，不想多經過一層 nginx 影響量測。
       - "127.0.0.1:18080:80"
+
+    volumes:
+      # /api 轉給 app 還是 app-green（#20）。cd/bluegreen.sh 改寫這裡的 app.conf 再 nginx -s reload。
+      # 用具名 volume：web 容器重建（部署新前端）時切換狀態還在，不會跑回 app；
+      # 第一次建立時 Docker 會把映像檔裡的預設值（全部給 app）複製進來。
+      # 不用 bind mount 主機資料夾：同一台機器上的 staging（另一個 compose 專案）會共用到同一個檔案，具名 volume 每個專案各一個
+      - routing:/etc/nginx/routing
 
     depends_on:
       # app healthy 才起：nginx 本身不在乎（proxy_pass 等請求來了才連），
@@ -258,3 +282,5 @@ volumes:
   models:
   # 對話紀錄。跟模型那個 volume 一樣，down 不刪、down -v 才清
   postgres-data:
+  # web 的 nginx 把 /api 轉給哪個 app slot（#20）。down 不刪；down -v 清掉後回到預設（全部給 app）
+  routing:

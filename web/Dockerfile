@@ -28,6 +28,9 @@ RUN apk upgrade --no-cache
 
 # 官方映像檔會把 /etc/nginx/conf.d/*.conf 載入，蓋掉它附的 default.conf 就換成我們的設定
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# /api 轉給哪個 app slot（#20）。預設全部給 app；compose 在 /etc/nginx/routing 掛 volume，部署時由 cd/bluegreen.sh 改寫。
+# 放在 conf.d 以外：那裡的 *.conf 會被自動載入，這個檔案只該被 nginx.conf 載入一次
+COPY routing/app.conf /etc/nginx/routing/app.conf
 COPY --from=build /src/dist /usr/share/nginx/html
 
 # 不必自己寫 ENTRYPOINT / USER：官方映像檔的 nginx 主程序以 root 起來只為了綁 80 埠，
