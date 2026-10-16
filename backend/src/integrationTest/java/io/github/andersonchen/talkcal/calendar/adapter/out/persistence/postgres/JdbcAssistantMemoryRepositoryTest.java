@@ -201,7 +201,7 @@ class JdbcAssistantMemoryRepositoryTest {
     }
 
     @Test
-    @DisplayName("資料庫出事：讀、刪都丟 IllegalStateException（502），不讓 Spring 的例外往外跑")
+    @DisplayName("資料庫出事：四個方法都丟 IllegalStateException（502），不讓 Spring 的例外往外跑")
     void databaseFailuresAreUpstreamFailures() {
         // 連到一個沒有資料庫的埠：每一次查詢都會失敗
         DriverManagerDataSource nowhere = new DriverManagerDataSource("jdbc:postgresql://127.0.0.1:1/none", "x", "x");
@@ -210,6 +210,7 @@ class JdbcAssistantMemoryRepositoryTest {
 
         assertThrows(IllegalStateException.class, broken::findConversationIds);
         assertThrows(IllegalStateException.class, () -> broken.findByConversationId(id));
+        assertThrows(IllegalStateException.class, () -> broken.saveAll(id, List.of(new UserMessage("嗨"))));
         assertThrows(IllegalStateException.class, () -> broken.deleteByConversationId(id));
     }
 

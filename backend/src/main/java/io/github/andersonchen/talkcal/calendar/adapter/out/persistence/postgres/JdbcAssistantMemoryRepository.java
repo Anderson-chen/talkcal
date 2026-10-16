@@ -14,6 +14,7 @@ import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.ResultSet;
@@ -138,7 +139,8 @@ public final class JdbcAssistantMemoryRepository {
                         insert(id, position, stored.get(position));
                     }
                 });
-            } catch (DataAccessException e) {
+            } catch (DataAccessException | TransactionException e) {
+                // 連不上資料庫時，失敗發生在開交易那一步，丟的是 TransactionException，不是 DataAccessException
                 throw new IllegalStateException("儲存 AI 助理的對話失敗：" + conversationId, e);
             }
         }

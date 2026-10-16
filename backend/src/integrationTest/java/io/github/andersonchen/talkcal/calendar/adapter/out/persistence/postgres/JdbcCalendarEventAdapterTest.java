@@ -407,6 +407,18 @@ class JdbcCalendarEventAdapterTest {
     }
 
     @Test
+    @DisplayName("資料庫連不上：存、讀、刪都丟 IllegalStateException（502）—— 存檔的失敗發生在開交易那一步，也要包起來")
+    void databaseDownIsUpstreamFailure() {
+        DriverManagerDataSource nowhere = new DriverManagerDataSource("jdbc:postgresql://127.0.0.1:1/none", "x", "x");
+        JdbcCalendarEventAdapter broken = new JdbcCalendarEventAdapter(JdbcClient.create(nowhere),
+                new TransactionTemplate(new DataSourceTransactionManager(nowhere)));
+
+        assertThrows(IllegalStateException.class, () -> broken.save(OWNER, List.of(ScheduledEvent.schedule(DINNER))));
+        assertThrows(IllegalStateException.class, () -> broken.load(OWNER, OCT_06));
+        assertThrows(IllegalStateException.class, () -> broken.delete(OWNER, EventId.newId()));
+    }
+
+    @Test
     @DisplayName("id 欄位存的就是 EventId 的 UUID")
     void storesIdAsUuid() {
         ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);

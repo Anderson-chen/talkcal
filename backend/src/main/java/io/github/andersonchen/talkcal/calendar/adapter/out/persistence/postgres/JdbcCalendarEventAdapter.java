@@ -12,6 +12,7 @@ import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPo
 
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.ResultSet;
@@ -48,7 +49,8 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEvent
         try {
             // port 的約定是「全部存或全部不存」：包在一個交易裡，任何一筆失敗，前面插入的也一起 rollback
             transaction.executeWithoutResult(status -> events.forEach(event -> insert(owner, event)));
-        } catch (DataAccessException e) {
+        } catch (DataAccessException | TransactionException e) {
+            // 連不上資料庫時，失敗發生在開交易那一步，丟的是 TransactionException，不是 DataAccessException
             throw new IllegalStateException("儲存行程失敗（" + events.size() + " 筆）", e);
         }
     }
