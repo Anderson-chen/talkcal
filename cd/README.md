@@ -116,7 +116,7 @@ cd C:/talkcal-deploy
 
 - `verify.sh`：部署後打一次 health 和 `/api/calendar`，不只看容器的 healthcheck
 - `envs/ec2.env`：把 [infra/envs/1-ec2/deploy.sh](../infra/envs/1-ec2/deploy.sh) 收進來，EC2 也跑 `apply.sh` 和同一支 watcher
-- 現在部署的是 checkout 的程式碼、在機器上 `--build`，還不是 build once；等[版本 tag](../docs/production-readiness/release.md#release-tag) 有了，輸入改成映像檔 tag
+- 現在部署的是 checkout 的程式碼、在機器上 `--build`，還不是 build once；等[版本 tag](https://github.com/Anderson-chen/talkcal/issues/25) 有了，輸入改成映像檔 tag
 
 ## 已知限制，決定不做
 
