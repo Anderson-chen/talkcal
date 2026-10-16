@@ -18,3 +18,6 @@
   （#103 就因為 `.gitignore` 的 `out/` 而掉過 5 個檔案）。PR 合併後刪掉資料夾和本機分支。
 - commit 脈絡圖由使用者自己呼叫 `/commit-map [分支]`（`.claude/skills/commit-map/`）產生，開 PR 時不會自動跑，
   也不要主動產生。原本的 PostToolUse hook 會被不相干的指令觸發、在 worktree 裡也產錯分支（#119），所以拿掉了。
+- 開 PR 時加 label `ai-generated`，PR 範本的「AI 改動審查」段落原樣留著，**一格都不准勾、審查到的 commit 和審查紀錄都不准填**，
+  之後 push、改描述時也不碰這段。那是使用者看完 diff 之後自己填的；AI review 檢查會先紅燈，這是預期的。
+  理由：AI 和使用者用同一個 GitHub 帳號，檢查分不出是誰勾的，只能靠這條規則（見 `docs/ai-review.md`）。
