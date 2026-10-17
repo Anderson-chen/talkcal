@@ -163,6 +163,7 @@ CI 在每次 push、PR 時於 GitHub 上跑，本機則由 pre-push hook 在推�
 | 怎麼部署、容器之間怎麼溝通、對照雲端是什麼 | [deploy/README.md](deploy/README.md) |
 | 怎麼觀測、三種訊號怎麼互跳 | [ops/README.md](ops/README.md) |
 | 怎麼壓測、怎麼讀結果 | [perf/README.md](perf/README.md) |
+| 每個請求花多少錢、自架 GPU 和 Bedrock 在哪裡交叉 | [docs/cost.md](docs/cost.md) |
 | CI 怎麼跑、為什麼在容器裡跑 | [ci/README.md](ci/README.md) |
 | 前端怎麼組成 | [web/README.md](web/README.md) |
 | 畫面設計稿和實作的差異 | [docs/design/calendar/README.md](docs/design/calendar/README.md) |
