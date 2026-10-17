@@ -1,6 +1,7 @@
 package io.github.andersonchen.talkcal.calendar.application.port.in;
 
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.EventOrigin;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 
@@ -19,11 +20,13 @@ import java.util.List;
  *
  * 存進 owner 的行事曆：之後只有同一個 owner 讀得到、刪得到（#104）。
  *
+ * origin 是這批行程怎麼來的（採納助理的提議，或手動填的），只用來記產品指標（#36），不影響存檔。
+ *
  * 失敗時：
- * - owner 是 null、events 是 null 或含 null → IllegalArgumentException
+ * - owner、origin 是 null，events 是 null 或含 null → IllegalArgumentException
  * - 資料庫出事 → IllegalStateException（outbound port 的約定），一筆都不會存進去
  */
 public interface AddEventsUseCase {
 
-    List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events);
+    List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events, EventOrigin origin);
 }

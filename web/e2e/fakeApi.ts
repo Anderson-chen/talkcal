@@ -40,6 +40,8 @@ export async function fakeApi(page: Page, options: Options = {}) {
     events: [...(options.events ?? [])],
     // 每次 POST /events 收到的 body.events（前端送了什麼）
     saved: [] as Omit<FakeEvent, 'id'>[][],
+    // 每次 POST /events 收到的 body.origin（手動還是採納助理的提議，後端拿去算產品指標）
+    origins: [] as (string | undefined)[],
     failNextSave: null as string | null,
     // 註冊過的帳號：名稱 → 密碼
     accounts: new Map<string, string>([['amy', 'correct-horse']]),
@@ -108,8 +110,9 @@ export async function fakeApi(page: Page, options: Options = {}) {
       return json(route, 200, { events: inRange })
     }
     if (url.pathname === '/api/calendar/events' && method === 'POST') {
-      const body = request.postDataJSON() as { events: Omit<FakeEvent, 'id'>[] }
+      const body = request.postDataJSON() as { events: Omit<FakeEvent, 'id'>[]; origin?: string }
       state.saved.push(body.events)
+      state.origins.push(body.origin)
       if (state.failNextSave) {
         const error = state.failNextSave
         state.failNextSave = null
@@ -126,6 +129,7 @@ export async function fakeApi(page: Page, options: Options = {}) {
   return {
     ...state,
     get saved() { return state.saved },
+    get origins() { return state.origins },
     get csrfRejected() { return state.csrfRejected },
     set failNextSave(error: string | null) { state.failNextSave = error },
     /** 模擬 session 過期：之後的請求都當成沒登入 */

@@ -11,7 +11,7 @@
 
 import { inject, ref, type InjectionKey } from 'vue'
 import { me } from '../auth'
-import { assistantHistory, talkToAssistant, type EventFields } from '../calendar'
+import { assistantHistory, dismissProposals, talkToAssistant, type EventFields } from '../calendar'
 import { message, type CalendarState } from './useCalendar'
 
 export type ProposalStatus = 'pending' | 'added' | 'removed'
@@ -126,7 +126,7 @@ export function useAssistant(calendar: CalendarState) {
     saving.value = true
     msg.error = null
     try {
-      await calendar.add(pending.map((p) => p.draft))
+      await calendar.add(pending.map((p) => p.draft), 'ASSISTANT')
       for (const p of pending) p.status = 'added'
     } catch (e) {
       msg.error = message(e)
@@ -136,18 +136,27 @@ export function useAssistant(calendar: CalendarState) {
   }
 
   function cancel(msg: ChatMessage) {
-    for (const p of msg.proposals) if (p.status === 'pending') p.status = 'removed'
+    const pending = msg.proposals.filter((p) => p.status === 'pending')
+    for (const p of pending) p.status = 'removed'
+    reportDismissed(pending.length)
   }
 
   function drop(proposal: Proposal) {
+    if (proposal.status !== 'pending') return
     proposal.status = 'removed'
+    reportDismissed(1)
+  }
+
+  // 拒絕了幾張告訴後端（產品指標的採納率）。不等它、失敗也不說：使用者按的是「取消」，不該因為指標送不出去看到錯誤
+  function reportDismissed(count: number) {
+    if (count > 0) dismissProposals(count).catch(() => {})
   }
 
   /** 帶著這筆草稿打開新增表單；在表單裡存好了，這張卡片就算「已加入」。 */
   function edit(proposal: Proposal) {
     calendar.openForm(proposal.draft, () => {
       proposal.status = 'added'
-    })
+    }, 'ASSISTANT')
   }
 
   return { messages, input, typing, saving, send, confirm, cancel, drop, edit, clear }
