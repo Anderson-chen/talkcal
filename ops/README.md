@@ -193,6 +193,15 @@ llama.cpp 本身不產生 span，所以樹只到 app 呼叫出去的那一層。
 本機 bootRun 的 app 也會送 trace（走主機的 `127.0.0.1:4318`），只要 ops/ 有起來。
 ops/ 沒起時 trace 送不出去，app 只會在 log 印 warning，請求照常處理。
 
+## 成本：token 用量和費用
+
+app 每叫一次模型，Spring AI 把回應裡的 `usage` 記成 `gen_ai_client_token_usage_total`（`gen_ai_token_type` 分 input / output / total），
+標著模型名稱和 `model_backend`（`llama-cpp` 或 `bedrock`，從設定 `talkcal.ai.backend` 來）。
+
+儀表板 **`talkcal — 成本（token 與費用）`**：token/s、每個請求平均 token、每個請求叫幾次模型、照 Bedrock 單價換算的每個請求費用，
+以及請求速率離「自架 GPU 比較划算」的交叉點還有多遠。單價是 dashboard 上方的變數。
+算法、單價來源、交叉點怎麼來的見 [docs/cost.md](../docs/cost.md)。
+
 ## 壓測：k6 的指標也進 Mimir
 
 k6 跑完就結束，沒有 `/metrics` 可以等 Alloy 來抓，所以跟 trace 一樣由它用 OTLP 推給 Alloy 的 4318，
@@ -243,5 +252,5 @@ ops/
 ├── tempo/tempo.yaml                          # 追蹤：單機最小設定
 └── grafana/provisioning/
     ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
-    └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces（trace）、talkcal-k6（壓測）
+    └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces（trace）、talkcal-k6（壓測）、talkcal-cost（成本）
 ```
