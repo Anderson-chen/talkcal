@@ -94,7 +94,7 @@ Alloy 加入了 deploy/ 的網路（`talkcal-deploy_default`）：用服務名�
 
 | job | 位址 | 是誰 |
 |-----|------|------|
-| `talkcal-app` | `app:8090/actuator/prometheus` | deploy/ 的 app 容器 |
+| `talkcal-app` | `app:8091/actuator/prometheus` | deploy/ 的 app 容器（management 埠，不發佈到主機） |
 | `llama-cpp` | `llm-chat:8080/metrics` | Qwen3-8B（deploy/ 的 llm-chat） |
 
 每 15 秒抓一次，用 `remote_write` 推進 Mimir。本機 bootRun 的 app 不在 deploy/ 的網路裡，不會被抓。
