@@ -3,6 +3,7 @@ package io.github.andersonchen.talkcal.calendar.adapter.in.web;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.EventOrigin;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.EventNotFoundException;
@@ -86,7 +87,7 @@ public final class CalendarController {
         // 「確認時重驗規則」就發生在這一行：每一筆都得先成為 CalendarEvent，
         // 使用者在確認卡片上改壞的（結束早於開始、清空標題）在這裡就丟 IllegalArgumentException → 400
         List<CalendarEvent> events = request.events().stream().map(CalendarController::toDomain).toList();
-        return SavedEvents.of(addEvents.addEvents(SignedIn.owner(signedIn), events));
+        return SavedEvents.of(addEvents.addEvents(SignedIn.owner(signedIn), events, toOrigin(request.origin())));
     }
 
     @GetMapping("/events")
@@ -197,6 +198,19 @@ public final class CalendarController {
         };
     }
 
+    // 沒帶就是手動：直接呼叫 API 的（腳本、k6）不是在採納助理的提議，算成助理的會灌高採納率。
+    // 帶了但不認得一樣是 400，理由同 toCategory
+    private static EventOrigin toOrigin(String text) {
+        if (text == null) {
+            return EventOrigin.MANUAL;
+        }
+        return switch (text) {
+            case "ASSISTANT" -> EventOrigin.ASSISTANT;
+            case "MANUAL" -> EventOrigin.MANUAL;
+            default -> throw new IllegalArgumentException("不認得的來源：" + text + "（只接受 ASSISTANT、MANUAL）");
+        };
+    }
+
     // domain → 線路上的字串。沒有 default：Category 多了新值，這裡會編譯失敗，逼你決定它在 API 上叫什麼
     private static String fromCategory(Category category) {
         return switch (category) {
@@ -207,7 +221,10 @@ public final class CalendarController {
         };
     }
 
-    public record AddEventsRequest(@Schema(description = "要存的行程，通常是助理提議、使用者確認過的（可能改過）") List<EventFields> events) {
+    public record AddEventsRequest(
+            @Schema(description = "要存的行程，通常是助理提議、使用者確認過的（可能改過）") List<EventFields> events,
+            @Schema(description = "這批行程怎麼來的：採納助理的提議（含改過再存）是 ASSISTANT，手動填的是 MANUAL；不帶就是 MANUAL。只用在產品指標",
+                    allowableValues = {"ASSISTANT", "MANUAL"}, nullable = true) String origin) {
     }
 
     public record SavedEvent(

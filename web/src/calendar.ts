@@ -60,10 +60,24 @@ export async function assistantHistory(conversationId: string): Promise<Assistan
   return (await res.json()) as AssistantHistory
 }
 
+/**
+ * 行程怎麼來的：採納 AI 助理的提議（含從卡片「修改」後再存）是 ASSISTANT，手動填的是 MANUAL。
+ * 只用在後端的產品指標（採納率、手動 vs 助理），不影響存檔。
+ */
+export type EventOrigin = 'ASSISTANT' | 'MANUAL'
+
 /** 把確認過的草稿（或手動表單）存起來。全部存或全部不存；有一筆不合規就整批 400。 */
-export async function addEvents(events: EventFields[]): Promise<SavedEvent[]> {
-  const res = await send('/api/calendar/events', { method: 'POST', body: JSON.stringify({ events }) })
+export async function addEvents(events: EventFields[], origin: EventOrigin): Promise<SavedEvent[]> {
+  const res = await send('/api/calendar/events', { method: 'POST', body: JSON.stringify({ events, origin }) })
   return ((await res.json()) as { events: SavedEvent[] }).events.map(normalize)
+}
+
+/**
+ * 告訴後端使用者按掉了幾張提議卡片。「取消」只改畫面、不經過後端，不回報的話後端算不出採納率。
+ * 只是指標：失敗了也不該打擾使用者，呼叫端自己決定要不要理會錯誤。
+ */
+export async function dismissProposals(count: number): Promise<void> {
+  await send('/api/calendar/assistant/dismissals', { method: 'POST', body: JSON.stringify({ count }) })
 }
 
 /** 期間裡的行程。from 含、to 不含，格式 yyyy-MM-dd；跨夜跨月的行程前後兩頁都會出現。 */
