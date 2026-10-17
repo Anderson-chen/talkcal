@@ -233,6 +233,8 @@ launch.json 的原生 llama-server 沒帶 `-np`，是 llama.cpp 的預設值（4
 - **`load.js`** —— 三段平台找併發上限，暖身不算數。
 - **`concurrent.js`** —— 一波人在短時間內各說一句，看尖峰時最後來的人等多久。
 - **`knee.js`** —— 同時數逐階往上加，印出每階的延遲與吞吐量，找臨界值。
+- **`tokens.js`** —— 一句一句說完訊息池，量每個請求平均燒多少 token、換算成多少錢（讀 app 的 token 指標前後相減）。
+  成本分析 [docs/cost.md](../docs/cost.md) 的輸入就是它量的。
 - **`lib/assistant.js`** —— 各腳本共用的位址、訊息池、請求參數、正常回覆的檢查。
 - **`lib/docker-target.js`** —— 把預設位址改成 docker 那台 app，有給 `BASE_URL` 就尊重它。
 
@@ -255,5 +257,6 @@ perf/
 ├── concurrent.js   # 一波人在短時間內各說一句（尖峰）
 ├── knee.js         # 同時數逐階往上加，找臨界值
 ├── deploy.js       # 邊壓邊部署：部署期間有幾個人受影響
+├── tokens.js       # 每個請求燒多少 token、值多少錢（docs/cost.md 用）
 └── run-to-grafana.sh  # 跑任何一支腳本，指標同時送進 ops/ 的 Grafana
 ```
