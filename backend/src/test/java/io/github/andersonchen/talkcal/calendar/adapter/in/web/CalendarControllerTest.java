@@ -15,6 +15,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Calendar
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.DateRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.EventOrigin;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
@@ -146,6 +147,47 @@ class CalendarControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"events\":[{\"title\":\"吃飯\",\"start\":\"明天三點\",\"end\":\"明天四點\"}]}"))
                     .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Nested
+    @DisplayName("POST /api/calendar/events：行程的來源（產品指標 #36）")
+    class AddWithOrigin {
+
+        private static final String EVENT = "{\"title\":\"吃飯\",\"start\":\"2026-10-06T15:00\",\"end\":\"2026-10-06T16:00\"}";
+
+        @Test
+        @DisplayName("origin 照實轉給 use case：ASSISTANT 是採納、MANUAL 是手動")
+        void passesOriginThrough() throws Exception {
+            for (String origin : List.of("ASSISTANT", "MANUAL")) {
+                mockMvc.perform(post("/api/calendar/events").contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"events\":[" + EVENT + "],\"origin\":\"" + origin + "\"}"))
+                        .andExpect(status().isCreated());
+            }
+
+            assertEquals(List.of(EventOrigin.ASSISTANT, EventOrigin.MANUAL), calendar.origins);
+        }
+
+        @Test
+        @DisplayName("沒帶 origin 算手動，不算採納：直接打 API 的腳本不該灌高採納率")
+        void missingOriginIsManual() throws Exception {
+            mockMvc.perform(post("/api/calendar/events").contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"events\":[" + EVENT + "]}"))
+                    .andExpect(status().isCreated());
+
+            assertEquals(List.of(EventOrigin.MANUAL), calendar.origins);
+        }
+
+        @Test
+        @DisplayName("不認得的 origin（小寫也不行）：400，一筆都不存")
+        void unknownOriginIsRejected() throws Exception {
+            for (String origin : List.of("assistant", "AI")) {
+                mockMvc.perform(post("/api/calendar/events").contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"events\":[" + EVENT + "],\"origin\":\"" + origin + "\"}"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.error").value("不認得的來源：" + origin + "（只接受 ASSISTANT、MANUAL）"));
+            }
+            assertTrue(calendar.added.isEmpty());
         }
     }
 
@@ -320,13 +362,15 @@ class CalendarControllerTest {
         Function<DateRange, List<ScheduledEvent>> list = DEFAULT_LIST;
         final List<OwnerId> owners = new ArrayList<>();
         final List<CalendarEvent> added = new ArrayList<>();
+        final List<EventOrigin> origins = new ArrayList<>();
         final List<DateRange> ranges = new ArrayList<>();
         final List<EventId> removed = new ArrayList<>();
 
         @Override
-        public List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events) {
+        public List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events, EventOrigin origin) {
             owners.add(owner);
             added.addAll(events);
+            origins.add(origin);
             return events.stream().map(event -> new ScheduledEvent(DINNER_ID, event)).toList();
         }
 
@@ -352,6 +396,7 @@ class CalendarControllerTest {
             list = DEFAULT_LIST;
             owners.clear();
             added.clear();
+            origins.clear();
             ranges.clear();
             removed.clear();
         }

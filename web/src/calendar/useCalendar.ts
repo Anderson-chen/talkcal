@@ -5,7 +5,7 @@
 // 螢幕寬度跨過分界、版面整個換掉時，狀態也還在（選的日期、看的月份不會跳回今天）。
 
 import { computed, inject, ref, watch, type InjectionKey } from 'vue'
-import { addEvents, listEvents, NotFoundError, removeEvent, type Category, type EventFields, type SavedEvent } from '../calendar'
+import { addEvents, listEvents, NotFoundError, removeEvent, type Category, type EventFields, type EventOrigin, type SavedEvent } from '../calendar'
 import { addDays, daysCovered, gridRange, monthGrid, toIsoDate } from '../monthGrid'
 
 export type View = 'month' | 'week' | 'day'
@@ -15,6 +15,8 @@ export interface FormRequest {
   initial: EventFields
   // 存好之後要通知誰（AI 卡片要把那一筆標成「已加入」）
   onSaved?: (saved: SavedEvent) => void
+  // 從 AI 卡片「修改」過來的是 ASSISTANT：改過再存還是採納了提議
+  origin: EventOrigin
 }
 
 export function useCalendar() {
@@ -109,8 +111,8 @@ export function useCalendar() {
 
   // ── 新增、刪除 ─────────────────────────────────────────
   /** 存起來、跳到第一筆那天、重讀這一頁。存進去的分類如果被篩掉了，打開它 —— 不然使用者會以為沒存到。 */
-  async function add(drafts: EventFields[]): Promise<SavedEvent[]> {
-    const saved = await addEvents(drafts)
+  async function add(drafts: EventFields[], origin: EventOrigin = 'MANUAL'): Promise<SavedEvent[]> {
+    const saved = await addEvents(drafts, origin)
     const shownAgain = { ...hidden.value }
     for (const e of saved) delete shownAgain[e.category]
     hidden.value = shownAgain
@@ -130,9 +132,9 @@ export function useCalendar() {
     reload()
   }
 
-  function openForm(initial?: Partial<EventFields>, onSaved?: (saved: SavedEvent) => void) {
+  function openForm(initial?: Partial<EventFields>, onSaved?: (saved: SavedEvent) => void, origin: EventOrigin = 'MANUAL') {
     detailId.value = null
-    form.value = { initial: { ...blankDraft(sel.value), ...initial }, onSaved }
+    form.value = { initial: { ...blankDraft(sel.value), ...initial }, onSaved, origin }
   }
 
   return {
