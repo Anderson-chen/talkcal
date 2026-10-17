@@ -43,7 +43,8 @@ import org.springframework.security.web.authentication.logout.HttpStatusReturnin
  * - /api 底下除了註冊、登入，一律要登入；沒登入回 401 JSON，不轉址到登入頁（前端自己決定畫登入畫面）
  * - 會改東西的請求（POST、DELETE）要帶 CSRF token：別的網站騙使用者的瀏覽器送請求時，cookie 會自動帶上，
  *   但它讀不到我們這個網域的 XSRF-TOKEN cookie，送不出對的 header
- * - actuator、API 文件不擋：它們不經過 nginx（nginx 只轉 /api），外面連不到
+ * - actuator、API 文件不擋：它們不經過 nginx（nginx 只轉 /api），外面連不到。
+ *   actuator 另外開在不發佈的 management 埠（#33），這條規則在那個埠上也生效，Alloy 才不必登入就抓得到指標
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(name = "talkcal.auth.provider", havingValue = "local", matchIfMissing = true)
