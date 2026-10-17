@@ -1,18 +1,26 @@
 package io.github.andersonchen.talkcal.app.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Instant;
+import java.util.List;
+import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -93,6 +101,43 @@ class ActuatorPortTest {
     void apiPortStillServesApi() throws Exception {
         // 沒登入打 /api 回 401（LocalAuthConfiguration），證明請求真的進到 app
         assertEquals(401, get(apiPort, "/api/calendar/events").statusCode());
+    }
+
+    @Test
+    @DisplayName("management 埠上的請求不進 access log、也不產生 http.server.requests 指標")
+    void managementPortIsNotObserved() throws Exception {
+        // AccessLogFilter、Boot 開 trace 和記指標的 filter 都只裝在 API 埠那邊，management 埠沒有。
+        // 所以 Alloy 每 15 秒的抓取、Docker 每 10 秒的健康檢查不必在程式裡另外排除，也淹不掉真正的請求
+        Logger accessLogger = (Logger) LoggerFactory.getLogger("access");
+        ListAppender<ILoggingEvent> captured = new ListAppender<>();
+        captured.start();
+        accessLogger.addAppender(captured);
+        try {
+            get(managementPort, "/actuator/health/readiness");
+            get(managementPort, "/actuator/prometheus");
+            // 對照組：API 埠的請求要被記到，證明上面沒記到不是因為根本沒在收
+            get(apiPort, "/api/calendar/events");
+
+            await(() -> !captured.list.isEmpty());
+            List<String> logged = List.copyOf(captured.list).stream().map(ILoggingEvent::getFormattedMessage).toList();
+            assertEquals(1, logged.size(), logged.toString());
+            assertTrue(logged.getFirst().contains("/api/calendar/events"), logged.toString());
+
+            String metrics = get(managementPort, "/actuator/prometheus").body();
+            assertFalse(metrics.contains("uri=\"/actuator"), "management 埠的請求被記成指標了");
+            assertTrue(metrics.contains("http_server_requests_seconds_count{"), "API 埠的請求應該有指標");
+        } finally {
+            accessLogger.detachAppender(captured);
+            captured.stop();
+        }
+    }
+
+    // AccessLogFilter 先把回應送出、再記 log，客戶端收到回應時那筆可能還沒記
+    private static void await(BooleanSupplier condition) throws InterruptedException {
+        Instant deadline = Instant.now().plusSeconds(5);
+        while (!condition.getAsBoolean() && Instant.now().isBefore(deadline)) {
+            Thread.sleep(50);
+        }
     }
 
     private HttpResponse<String> get(int port, String path) throws IOException, InterruptedException {
