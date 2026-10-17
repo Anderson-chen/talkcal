@@ -1,0 +1,525 @@
+{
+  "uid": "talkcal-cost",
+  "title": "talkcal — 成本（token 與費用）",
+  "description": "AI 助理每個請求燒多少 token、照 Bedrock 單價值多少錢，以及離自架 GPU 比較划算的交叉點有多遠。算法和來源見 docs/cost.md（#35）。",
+  "tags": [
+    "talkcal",
+    "cost",
+    "llm"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "type": "textbox",
+        "name": "price_in",
+        "label": "input 單價（USD / 1M token）",
+        "query": "0.18",
+        "current": {
+          "text": "0.18",
+          "value": "0.18"
+        },
+        "description": "Bedrock 東京 Qwen3 32B（mantle）Standard，2026-10-16 AWS Price List。換模型、換區域時改這裡"
+      },
+      {
+        "type": "textbox",
+        "name": "price_out",
+        "label": "output 單價（USD / 1M token）",
+        "query": "0.73",
+        "current": {
+          "text": "0.73",
+          "value": "0.73"
+        },
+        "description": "同上，output"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "用量：token 從哪裡來、燒得多快",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": [],
+      "id": 1
+    },
+    {
+      "type": "timeseries",
+      "title": "token/s，依種類和 model_backend",
+      "description": "sum by (model_backend, gen_ai_token_type) rate(gen_ai_client_token_usage_total)。Spring AI 每叫一次模型，就把回應裡的 usage 加進這個 counter（標籤和 model.backend 的由來見 ObservationConfiguration）。input 通常是 output 的幾十倍：每次叫模型都要把 system prompt、工具定義、對話記憶整包再送一次。model_backend=bedrock 的才照 token 收錢；llama-cpp 是自己的機器，token 再多也是同一個時薪。",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum by (model_backend, gen_ai_token_type) (rate(gen_ai_client_token_usage_total{job=\"talkcal-app\", gen_ai_token_type=~\"input|output\"}[$__rate_interval]))",
+          "legendFormat": "{{model_backend}} {{gen_ai_token_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "id": 2
+    },
+    {
+      "type": "timeseries",
+      "title": "每個請求平均 token（input / output）",
+      "description": "token/s ÷ 會叫模型的請求/s（POST /api/calendar/assistant，不含 4xx：那些在叫模型前就被擋掉）。一個請求是一段 agent loop，會叫模型好幾次，所以這裡是好幾次加起來的量。2026-10-17 本機 qwen3-8b 用 perf/tokens.js 量：input 3905、output 103（docs/cost.md）。這條線明顯偏離，成本分析就要重算。",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(rate(gen_ai_client_token_usage_total{job=\"talkcal-app\", gen_ai_token_type=\"input\"}[$__rate_interval])) / sum(rate(http_server_requests_seconds_count{job=\"talkcal-app\", method=\"POST\", uri=\"/api/calendar/assistant\", status!~\"4..\"}[$__rate_interval]))",
+          "legendFormat": "input"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(rate(gen_ai_client_token_usage_total{job=\"talkcal-app\", gen_ai_token_type=\"output\"}[$__rate_interval])) / sum(rate(http_server_requests_seconds_count{job=\"talkcal-app\", method=\"POST\", uri=\"/api/calendar/assistant\", status!~\"4..\"}[$__rate_interval]))",
+          "legendFormat": "output"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "id": 3
+    },
+    {
+      "type": "timeseries",
+      "title": "每個請求叫幾次模型",
+      "description": "gen_ai.client.operation 的次數 ÷ 請求數。助理先決定用哪個工具、工具回來再生成回覆，提議行程時工具還會再叫一次模型抽行程。這個數字變大（例如 prompt 改壞、模型開始繞圈），每個請求的 token 和費用會跟著倍增。",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(rate(gen_ai_client_operation_seconds_count{job=\"talkcal-app\"}[$__rate_interval])) / sum(rate(http_server_requests_seconds_count{job=\"talkcal-app\", method=\"POST\", uri=\"/api/calendar/assistant\", status!~\"4..\"}[$__rate_interval]))",
+          "legendFormat": "次 / 請求"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "id": 4
+    },
+    {
+      "type": "stat",
+      "title": "每次叫模型的平均 token（usage 有沒有斷掉）",
+      "description": "時間範圍內 total token ÷ 叫模型的次數。掉到 0 代表模型的回應沒帶 usage：Spring AI 會記成 0 而不是報錯（ModelTokenUsageMetricsTest 驗過），這時上面所有 token 和費用都會悄悄變少。例如改成串流卻沒開 include_usage。",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(increase(gen_ai_client_token_usage_total{job=\"talkcal-app\", gen_ai_token_type=\"total\"}[$__range])) / sum(increase(gen_ai_client_operation_seconds_count{job=\"talkcal-app\"}[$__range]))",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "id": 5
+    },
+    {
+      "type": "row",
+      "title": "費用：照 Bedrock 單價換算（單價在上方變數，可以改）",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "panels": [],
+      "id": 6
+    },
+    {
+      "type": "timeseries",
+      "title": "每個請求的費用（USD）",
+      "description": "（input token × $price_in + output token × $price_out）÷ 1M ÷ 請求數。「實際」只算 model_backend=bedrock 的 token —— 自己跑的 llama-cpp 不照 token 收錢，那條線是 0 是對的。「如果全走 Bedrock」把所有 token 都照單價算：本機量到的用量搬上雲會花多少，跟 docs/cost.md 的估算比對。注意本機是 qwen3-8b、雲端是 qwen3-32b，同一句話的 token 數不會完全一樣。",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "((((sum(rate(gen_ai_client_token_usage_total{job=\"talkcal-app\", gen_ai_token_type=\"input\", model_backend=\"bedrock\"}[$__rate_interval])) * $price_in) + (sum(rate(gen_ai_client_token_usage_total{job=\"talkcal-app\", gen_ai_token_type=\"output\", model_backend=\"bedrock\"}[$__rate_interval])) * $price_out)) / 1e6) or vector(0)) / sum(rate(http_server_requests_seconds_count{job=\"talkcal-app\", method=\"POST\", uri=\"/api/calendar/assistant\", status!~\"4..\"}[$__rate_interval]))",
+          "legendFormat": "實際（bedrock）"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "(((sum(rate(gen_ai_client_token_usage_total{job=\"talkcal-app\", gen_ai_token_type=\"input\"}[$__rate_interval])) * $price_in) + (sum(rate(gen_ai_client_token_usage_total{job=\"talkcal-app\", gen_ai_token_type=\"output\"}[$__rate_interval])) * $price_out)) / 1e6) / sum(rate(http_server_requests_seconds_count{job=\"talkcal-app\", method=\"POST\", uri=\"/api/calendar/assistant\", status!~\"4..\"}[$__rate_interval]))",
+          "legendFormat": "如果全走 Bedrock"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "decimals": 6
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "id": 7
+    },
+    {
+      "type": "stat",
+      "title": "時間範圍內 Bedrock token 費用",
+      "description": "時間範圍內 model_backend=bedrock 的 token × 單價。只是 token 的錢，不含 EC2 機器的時薪（docs/cost.md 有兩邊加起來的比較）。",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 18
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "(((sum(increase(gen_ai_client_token_usage_total{job=\"talkcal-app\", gen_ai_token_type=\"input\", model_backend=\"bedrock\"}[$__range])) * $price_in) + (sum(increase(gen_ai_client_token_usage_total{job=\"talkcal-app\", gen_ai_token_type=\"output\", model_backend=\"bedrock\"}[$__range])) * $price_out)) / 1e6) or vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "id": 8
+    },
+    {
+      "type": "stat",
+      "title": "每 1000 個請求（如果全走 Bedrock）",
+      "description": "時間範圍內的總 token 照單價換算 ÷ 請求數 × 1000。docs/cost.md 用的估算值：0.78 USD。時間範圍很短、剛重啟過時會差幾個百分點：increase() 不算一條新時間序列的第一個點。",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 18
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "(((sum(increase(gen_ai_client_token_usage_total{job=\"talkcal-app\", gen_ai_token_type=\"input\"}[$__range])) * $price_in) + (sum(increase(gen_ai_client_token_usage_total{job=\"talkcal-app\", gen_ai_token_type=\"output\"}[$__range])) * $price_out)) / 1e6) / sum(increase(http_server_requests_seconds_count{job=\"talkcal-app\", method=\"POST\", uri=\"/api/calendar/assistant\", status!~\"4..\"}[$__range])) * 1000",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "id": 9
+    },
+    {
+      "type": "stat",
+      "title": "請求/小時（交叉點 ≈ 1341）",
+      "description": "時間範圍內平均每小時的請求數。docs/cost.md 算出的交叉點：機器開著的每小時超過約 1341 個請求（0.37 req/s），自己開 g6.xlarge 跑模型才比 Bedrock 便宜。低於它，Bedrock 的 token 錢比 GPU 機器多出來的時薪少。閾值寫死在顏色上，單價或每個請求的 token 數變了要跟著改。",
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(increase(http_server_requests_seconds_count{job=\"talkcal-app\", method=\"POST\", uri=\"/api/calendar/assistant\", status!~\"4..\"}[$__range])) / ($__range_s / 3600)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1341
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "id": 10
+    }
+  ]
+}
