@@ -1,0 +1,5 @@
+# gitleaks 的誤判（ci/secrets.sh 讀這份）。一行一個 Fingerprint（commit:檔案:規則:行號），上面一行註明為什麼是誤判。
+
+# PR #156（#51 冪等寫入）的 CalendarControllerTest：KEY 常數是冪等測試的假 Idempotency-Key（長得像 UUID），不是祕密。
+# 下一個 commit 已經改成 IDEMPOTENCY_KEY = "test-key"；這一筆留在歷史裡改不掉（不改寫歷史），所以在這裡標成誤判
+106fb8e48797610d9a235cb37e9de505b4b5f8cc:backend/src/test/java/io/github/andersonchen/talkcal/calendar/adapter/in/web/CalendarControllerTest.java:generic-api-key:288
