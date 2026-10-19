@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -15,9 +16,12 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Calendar
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.DateRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.IdempotencyKey;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.AddedEvents;
+import io.github.andersonchen.talkcal.calendar.application.port.in.IdempotencyKeyReusedException;
 import io.github.andersonchen.talkcal.calendar.application.port.in.EventNotFoundException;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.RemoveEventUseCase;
@@ -25,7 +29,9 @@ import io.github.andersonchen.talkcal.calendar.application.port.in.RemoveEventUs
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
@@ -269,6 +275,79 @@ class CalendarControllerTest {
         }
     }
 
+    /**
+     * Idempotency-Key header（#51）：controller 只負責把 header 交給 use case、把結果翻成狀態碼和 Idempotent-Replayed。
+     * 「同一個鍵真的只存一次」在 JdbcCalendarEventAdapterTest 對真的 PostgreSQL 測。
+     */
+    @Nested
+    @DisplayName("POST /api/calendar/events 帶 Idempotency-Key")
+    class IdempotentAdd {
+
+        private static final String DINNER_JSON =
+                "{\"events\":[{\"title\":\"吃飯\",\"start\":\"2026-10-06T15:00\",\"end\":\"2026-10-06T16:00\"}]}";
+        private static final String KEY = "3f1c8a2e-6b0d-4d7e-9a51-2c4e8f7b9d10";
+
+        @Test
+        @DisplayName("第一次：鍵交給 use case，201，Idempotent-Replayed: false")
+        void firstTime() throws Exception {
+            mockMvc.perform(post("/api/calendar/events").header("Idempotency-Key", KEY)
+                            .contentType(MediaType.APPLICATION_JSON).content(DINNER_JSON))
+                    .andExpect(status().isCreated())
+                    .andExpect(header().string("Idempotent-Replayed", "false"))
+                    .andExpect(jsonPath("$.events[0].id").value(DINNER_ID.toString()));
+
+            assertEquals(List.of(new IdempotencyKey(KEY)), calendar.keys);
+        }
+
+        @Test
+        @DisplayName("重送：一樣是 201、一樣的內容，多了 Idempotent-Replayed: true")
+        void replay() throws Exception {
+            for (String replayed : List.of("false", "true")) {
+                mockMvc.perform(post("/api/calendar/events").header("Idempotency-Key", KEY)
+                                .contentType(MediaType.APPLICATION_JSON).content(DINNER_JSON))
+                        .andExpect(status().isCreated())
+                        .andExpect(header().string("Idempotent-Replayed", replayed))
+                        .andExpect(jsonPath("$.events[0].id").value(DINNER_ID.toString()));
+            }
+        }
+
+        @Test
+        @DisplayName("同一個鍵、不同內容：422，說明要換一個鍵")
+        void sameKeyOtherContent() throws Exception {
+            mockMvc.perform(post("/api/calendar/events").header("Idempotency-Key", KEY)
+                    .contentType(MediaType.APPLICATION_JSON).content(DINNER_JSON));
+
+            mockMvc.perform(post("/api/calendar/events").header("Idempotency-Key", KEY)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"events\":[{\"title\":\"開會\",\"start\":\"2026-10-06T15:00\",\"end\":\"2026-10-06T16:00\"}]}"))
+                    .andExpect(status().isUnprocessableContent())
+                    .andExpect(jsonPath("$.error").value(org.hamcrest.Matchers.containsString("換一個新的鍵")));
+        }
+
+        @Test
+        @DisplayName("反例：鍵的格式不對（有空白、超過 100 字）是 400，什麼都不存")
+        void malformedKey() throws Exception {
+            for (String bad : List.of("has space", "a".repeat(101))) {
+                mockMvc.perform(post("/api/calendar/events").header("Idempotency-Key", bad)
+                                .contentType(MediaType.APPLICATION_JSON).content(DINNER_JSON))
+                        .andExpect(status().isBadRequest());
+            }
+            assertTrue(calendar.added.isEmpty());
+        }
+
+        @Test
+        @DisplayName("不帶鍵：照舊每次都存（走沒有鍵的那個 use case 方法），回應沒有 Idempotent-Replayed")
+        void withoutKey() throws Exception {
+            for (int i = 0; i < 2; i++) {
+                mockMvc.perform(post("/api/calendar/events").contentType(MediaType.APPLICATION_JSON).content(DINNER_JSON))
+                        .andExpect(status().isCreated())
+                        .andExpect(header().doesNotExist("Idempotent-Replayed"));
+            }
+            assertEquals(2, calendar.added.size());
+            assertTrue(calendar.keys.isEmpty());
+        }
+    }
+
     @Nested
     @DisplayName("#104 誰的行事曆")
     class Owner {
@@ -322,12 +401,29 @@ class CalendarControllerTest {
         final List<CalendarEvent> added = new ArrayList<>();
         final List<DateRange> ranges = new ArrayList<>();
         final List<EventId> removed = new ArrayList<>();
+        final List<IdempotencyKey> keys = new ArrayList<>();
+        // 照真正的 use case 演：同一個鍵第二次來，內容一樣就是重送、不一樣就丟例外
+        private final Map<IdempotencyKey, List<CalendarEvent>> seen = new HashMap<>();
 
         @Override
         public List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events) {
             owners.add(owner);
             added.addAll(events);
             return events.stream().map(event -> new ScheduledEvent(DINNER_ID, event)).toList();
+        }
+
+        @Override
+        public AddedEvents addEvents(OwnerId owner, IdempotencyKey key, List<CalendarEvent> events) {
+            owners.add(owner);
+            keys.add(key);
+            List<CalendarEvent> earlier = seen.putIfAbsent(key, events);
+            if (earlier != null && !earlier.equals(events)) {
+                throw new IdempotencyKeyReusedException(key);
+            }
+            if (earlier == null) {
+                added.addAll(events);
+            }
+            return new AddedEvents(events.stream().map(event -> new ScheduledEvent(DINNER_ID, event)).toList(), earlier != null);
         }
 
         @Override
@@ -354,6 +450,8 @@ class CalendarControllerTest {
             added.clear();
             ranges.clear();
             removed.clear();
+            keys.clear();
+            seen.clear();
         }
     }
 }

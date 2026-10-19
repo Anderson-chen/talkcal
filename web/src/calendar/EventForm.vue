@@ -7,6 +7,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { CATEGORIES } from '../calendar'
 import { timeOf } from '../monthGrid'
 import { isOvernight, toDraft, type FormFields } from './eventDraft'
+import { oneAtATime, retryKey } from './submitOnce'
 import Icon from './Icon.vue'
 import { message, useCalendarState } from './useCalendar'
 import { useThemeState } from './useTheme'
@@ -28,6 +29,8 @@ const form = reactive<FormFields>({
 })
 const error = ref<string | null>(null)
 const saving = ref(false)
+// 這個表單的冪等鍵（#51）：存失敗後再按「儲存」，內容沒改就帶同一把，上次其實存好了也不會多一筆
+const saveKey = retryKey()
 const titleInput = ref<HTMLInputElement | null>(null)
 
 onMounted(() => titleInput.value?.focus())
@@ -38,25 +41,24 @@ function close() {
   calendar.form.value = null
 }
 
-async function save() {
-  if (saving.value) return
+// oneAtATime：送出中再按（連點、按 Enter）不會送第二次
+const save = oneAtATime(saving, async () => {
   const result = toDraft(form)
   if ('error' in result) return fail(result.error)
 
-  saving.value = true
   error.value = null
+  const drafts = [result.draft]
   try {
-    const [saved] = await calendar.add([result.draft])
+    const [saved] = await calendar.add(drafts, saveKey.for(drafts))
+    saveKey.done()
     request.onSaved?.(saved)
     close()
     // 存好直接打開它的詳情（照設計稿），使用者看得到存進去的樣子
     calendar.detailId.value = saved.id
   } catch (e) {
     fail(message(e))
-  } finally {
-    saving.value = false
   }
-}
+})
 
 function fail(text: string) {
   error.value = text

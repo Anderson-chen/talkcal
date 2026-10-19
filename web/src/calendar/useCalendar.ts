@@ -108,9 +108,12 @@ export function useCalendar() {
   }
 
   // ── 新增、刪除 ─────────────────────────────────────────
-  /** 存起來、跳到第一筆那天、重讀這一頁。存進去的分類如果被篩掉了，打開它 —— 不然使用者會以為沒存到。 */
-  async function add(drafts: EventFields[]): Promise<SavedEvent[]> {
-    const saved = await addEvents(drafts)
+  /**
+   * 存起來、跳到第一筆那天、重讀這一頁。存進去的分類如果被篩掉了，打開它 —— 不然使用者會以為沒存到。
+   * idempotencyKey 由呼叫端（表單、助理的卡片）管：它們才知道「再按一次」是不是同一次新增（#51）。
+   */
+  async function add(drafts: EventFields[], idempotencyKey?: string): Promise<SavedEvent[]> {
+    const saved = await addEvents(drafts, idempotencyKey)
     const shownAgain = { ...hidden.value }
     for (const e of saved) delete shownAgain[e.category]
     hidden.value = shownAgain

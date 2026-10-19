@@ -60,9 +60,15 @@ export async function assistantHistory(conversationId: string): Promise<Assistan
   return (await res.json()) as AssistantHistory
 }
 
-/** 把確認過的草稿（或手動表單）存起來。全部存或全部不存；有一筆不合規就整批 400。 */
-export async function addEvents(events: EventFields[]): Promise<SavedEvent[]> {
-  const res = await send('/api/calendar/events', { method: 'POST', body: JSON.stringify({ events }) })
+/**
+ * 把確認過的草稿（或手動表單）存起來。全部存或全部不存；有一筆不合規就整批 400。
+ *
+ * idempotencyKey（#51）：這一次新增的名字（submitOnce.ts 的 retryKey）。失敗後再送同樣的內容帶同一個，
+ * 上次其實存好了的話後端只回原本那幾筆、不會多存一份。同一個鍵帶了不同內容後端回 422。
+ */
+export async function addEvents(events: EventFields[], idempotencyKey?: string): Promise<SavedEvent[]> {
+  const headers = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined
+  const res = await send('/api/calendar/events', { method: 'POST', body: JSON.stringify({ events }) }, { headers })
   return ((await res.json()) as { events: SavedEvent[] }).events.map(normalize)
 }
 
