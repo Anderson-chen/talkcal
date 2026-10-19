@@ -17,7 +17,8 @@ echo "── 後端：單元測試、架構規則、整合測試（編譯時 Err
 # 要真模型的那幾支，連不到 llama-server 就自動跳過（Assumptions），下面的摘要會列出來
 # evalClasses：AI eval（./gradlew eval）不在這裡跑（要真模型、跑一分多鐘），但至少要編得過，
 # 不然改了 CalendarAssistant 的方法簽名，eval 壞了沒人知道，直到下次有人想跑它
-(cd backend && ./gradlew --no-daemon test integrationTest evalClasses) || status=1
+# checkLicense：runtimeClasspath（會打包進 jar 的）有沒有不允許的授權，規則在 backend/allowed-licenses.json（見 docs/licenses.md）
+(cd backend && ./gradlew --no-daemon test integrationTest evalClasses checkLicense) || status=1
 
 # AI eval：只有 pre-push 發現這次改到 prompt 或模型相關的檔案時才跑（它設 RUN_EVAL=1，見 .githooks/pre-push）。
 # GitHub 上不跑：沒有模型。基準線裡的題目沒過才會紅；報告在 backend/build/eval/report.md（run.sh 會拿回 ci/build/eval/）
@@ -33,6 +34,10 @@ echo "── 前端：lint、單元測試、型別檢查、打包、E2E ──"
 # npm run e2e：Playwright 開真的 Chromium（桌面、手機兩種版面），API 用假的，不需要後端。
 #   它會自己 build 再起 vite preview；放在 build 之後，型別錯的話先在 build 那一步就停
 (cd web && npm ci --no-audit --no-fund && npm run lint && npm test && npm run build && npm run e2e) || status=1
+
+echo "── 授權：前端會打包的套件 ──"
+# 後端的在上面 Gradle 那行（checkLicense）；前端的理由寫在 ci/licenses.sh
+ci/licenses.sh || status=1
 
 # ── 測試摘要 ─────────────────────────────────────────────────────
 # 為什麼要特別列出「跳過」：綠燈只代表「跑了的都過了」。
