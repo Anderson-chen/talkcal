@@ -21,10 +21,17 @@ if (!process.env.E2E_PORT) {
 const port = Number(process.env.E2E_PORT)
 const baseURL = `http://localhost:${port}`
 
+// CPU：同時開幾個瀏覽器。Playwright 預設是核心數的一半，這台 32 核就是 16 個 Chromium，兩個 worktree 一起跑就 32 個；
+// 但測試只有十幾個、每個一秒左右，開到 4 個以上就不會再快（量的結果見 docs/parallel-dev.md）。
+// E2E_WORKERS 可以覆蓋：數字，或 Playwright 認得的百分比（"50%"）。ci/checks.sh 照容器分到的 CPU 給
+const workersEnv = process.env.E2E_WORKERS
+const workers = !workersEnv ? 4 : workersEnv.endsWith('%') ? workersEnv : Number(workersEnv)
+
 export default defineConfig({
   testDir: 'e2e',
   // 一個測試失敗時，CI 上重試一次也還是失敗才算數；本機不重試，失敗要馬上看得到
   retries: process.env.CI ? 1 : 0,
+  workers,
   // 失敗時的報告：HTML 報告裡有每一步的截圖和 trace（時間軸、DOM 快照、網路請求），本機用 npx playwright show-report 打開
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {

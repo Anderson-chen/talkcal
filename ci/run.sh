@@ -25,6 +25,10 @@ cd "$(git rev-parse --show-toplevel)"
 export MSYS_NO_PATHCONV=1
 
 commit=$(git rev-parse --verify "${1:-HEAD}^{commit}")
+# 這個容器最多用幾顆 CPU（#109）。不限的話一個 CI 會吃滿整台，好幾個 worktree 同時跑就互相拖慢、電腦也卡住。
+# 數字怎麼來的（量了一次 CI 用掉多少）見 docs/parallel-dev.md。checks.sh 裡的 Gradle、Vitest、Playwright 也照這個數開 worker：
+# --cpus 只限總量、不改容器看到的核心數，Node 那幾個工具照「看到的核心數」開 worker 的話，會開出一堆搶同一點 CPU 的程序
+cpus=${CI_CPUS:-2}
 image=talkcal-ci
 container=talkcal-ci-$$
 out=ci/build
@@ -56,6 +60,7 @@ trap 'docker rm --force "$container" >/dev/null 2>&1 || true' EXIT
 # SPRING_AI_OPENAI_CHAT_BASEURL：模型測試連哪台 llama-server（backend/build.gradle 會把它傳進測試）。
 # 可以從外面覆蓋，沒給就連主機上的 8080
 docker create --name "$container" \
+    --cpus "$cpus" --env CI_CPUS="$cpus" \
     --volume /var/run/docker.sock:/var/run/docker.sock \
     --volume talkcal-ci-gradle:/opt/gradle-home/caches \
     --volume talkcal-ci-npm:/cache/npm \
