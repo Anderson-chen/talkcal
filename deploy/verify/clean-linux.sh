@@ -21,7 +21,7 @@ root="$(git rev-parse --show-toplevel)"
 
 bundle="$(mktemp)"
 trap 'rm -f "$bundle"; [ -n "${KEEP:-}" ] || docker rm -f -v "$name" >/dev/null 2>&1 || true' EXIT
-git -C "$root" bundle create "$bundle" HEAD 2>/dev/null
+git -C "$root" bundle create -q "$bundle" HEAD
 echo "── 驗證 $(git -C "$root" log -1 --format='%h %s')"
 
 docker rm -f -v "$name" >/dev/null 2>&1 || true
