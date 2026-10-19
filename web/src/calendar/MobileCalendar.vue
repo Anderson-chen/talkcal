@@ -8,6 +8,7 @@ import { computed, ref } from 'vue'
 import { logOut, me } from '../auth'
 import type { Category, SavedEvent } from '../calendar'
 import { dayLabel, monthDayLabel, timeOf, weekdayName, weekOf } from '../monthGrid'
+import TraceId from '../TraceId.vue'
 import AssistantChat from './AssistantChat.vue'
 import ClearChatButton from './ClearChatButton.vue'
 import EventDetail from './EventDetail.vue'
@@ -98,7 +99,10 @@ const dotColor = (category: Category) => theme.colors.value[category].color
       </template>
 
       <ViewTabs wide class="tabs" />
-      <p v-if="calendar.loadError.value" role="alert" class="error">讀不到行程：{{ calendar.loadError.value }}</p>
+      <p v-if="calendar.loadError.value" role="alert" class="error">
+        讀不到行程：{{ calendar.loadError.value.text }}
+        <TraceId v-if="calendar.loadError.value.traceId" :id="calendar.loadError.value.traceId" />
+      </p>
 
       <!-- 月視圖 -->
       <template v-if="calendar.view.value === 'month'">
