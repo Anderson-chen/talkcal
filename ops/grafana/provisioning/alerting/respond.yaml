@@ -1,0 +1,190 @@
+# 補上的告警（#39）：rules.yaml（#121）和 slo-burn-rate.yaml（#34）之外，「應該叫醒人卻還沒有告警」的情況。
+# 每一條為什麼要有、跟其他告警怎麼分工，總表在 docs/alerts.md。
+#
+# 分工的原則（Google SRE 的「對症狀告警，不對原因告警」）：
+#   - 症狀（使用者已經受影響）由 SLO burn rate、5xx 比例、app 掛了負責，這幾條是真正的 page。
+#   - 這個檔案多半是「原因」：同一件事 SLO 也會響，但只說「助理可用性在燒」，不說是哪裡壞。
+#     原因告警只在兩種情況值得加 —— 一、症狀告警在低流量時看不到（半夜沒人用，資料庫掛了也不會有 5xx），
+#     二、原因一眼就能指出處理方向（熔斷打開 = 去看模型，不必從 5xx 一路追）。不符合這兩點的不加（見 docs/alerts.md「考慮過、沒加的」）。
+#   - severity 用跟 rules.yaml 同一套值：critical = 現在就要處理；warning = 上班時間處理。
+#
+# 查詢都只用 job 標籤，不寫埠號（理由同 rules.yaml）。註解裡的 $values 照寫一個 $（同 rules.yaml 開頭的說明）。
+
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: talkcal-respond
+    folder: talkcal
+    interval: 1m
+    rules:
+      # ── 1. 資料庫連不上 ─────────────────────────────────────────
+      # 為什麼要有：資料庫掛掉時，有流量才會有 5xx、SLO 才會燒；半夜沒人用的時候所有症狀告警都安靜，
+      # 第一個早上打開的使用者才發現。exporter 每 15 秒自己去連一次，不靠使用者的流量。
+      - uid: talkcal-db-down
+        title: talkcal 資料庫連不上
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: mimir
+            model:
+              refId: A
+              instant: true
+              # pg_up：postgres_exporter（#32）連得上資料庫是 1、連不上是 0。
+              # 後半：exporter 自己掛了的時候 pg_up 會在 5 分鐘後消失（變成「沒資料」= 正常），
+              # 所以 exporter 抓不到（up = 0）也當成 0 —— 看不到資料庫，不能當沒事。
+              # 兩個 job 都不存在（還沒接 exporter 的環境）時結果是空的 → noDataState OK，不會誤響。
+              expr: >-
+                min(pg_up{job="postgres"})
+                or on()
+                (max(up{job="postgres"}) * 0)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+        # 1 分鐘：跟「app 掛了」同一個標準。重啟 postgres 約 5～10 秒，不會被叫醒
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: talkcal 資料庫連續 1 分鐘連不上（或 postgres_exporter 抓不到）
+          description: >-
+            pg_up 為 0：exporter 連不上 PostgreSQL；或 up{job="postgres"} 為 0：exporter 本身抓不到。
+            行程、登入、AI 助理的對話記憶都要用資料庫，所有 API 都會失敗。
+            先看 `docker compose ps postgres`，再看 postgres 容器的 log。
+
+      # ── 2. 等不到資料庫連線 ─────────────────────────────────────
+      # 為什麼要有：連線池逾時 = 有使用者等了整整 30 秒（connectionTimeout）才拿到 502。正常時一次都不會發生（#32 實測）。
+      # 低流量時 5xx 比例那條（至少 20 個請求）看不到；SLO 會燒，但不會說「是連線池」。
+      # 而且原因方向很明確：池子被占滿，通常是資料庫那頭在等鎖或查詢變慢，不是加大池子能解的（#32 的結論）。
+      - uid: talkcal-db-pool-timeout
+        title: talkcal 有請求等不到資料庫連線
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: mimir
+            model:
+              refId: A
+              instant: true
+              # HikariCP 借不到連線、等滿 connectionTimeout 就 +1（Micrometer 自動產生，不必另外接）
+              expr: sum(increase(hikaricp_connections_timeout_total{job="talkcal-app"}[5m]))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                # > 0.5 而不是 > 0：increase() 會外插，counter 沒動時偶爾算出 0.0x 的小數
+                - evaluator: { type: gt, params: [0.5] }
+        # 不另外等：每一次逾時都已經是一個使用者等了 30 秒，5 分鐘的視窗本身就是緩衝
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'talkcal 近 5 分鐘有 {{ printf "%.0f" $values.A.Value }} 個請求等不到資料庫連線'
+          description: >-
+            每一個都是使用者等滿 30 秒才拿到錯誤。看 talkcal-app dashboard 的「資料庫連線池」那一排：
+            active 貼著上限、pending 衝高，再看 PostgreSQL 的 pg_stat_activity 是不是有連線在等鎖。
+
+      # ── 3. 模型熔斷打開 ─────────────────────────────────────────
+      # 為什麼要有：熔斷打開時 AI 助理回 503，SLO 的助理可用性會燒（critical），但信裡不會說是模型。
+      # 這條直接指出「是模型那頭」，處理方向就不一樣（看 llama-server 或 Bedrock，不是看 app 或資料庫）。
+      # severity 是 warning：行程 API 照常（#44 演練過），使用者只是暫時不能用助理；要不要半夜起來由 SLO 那條決定。
+      - uid: talkcal-model-circuit-open
+        title: talkcal 模型熔斷持續打開（AI 助理暫停）
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 900, to: 0 }
+            datasourceUid: mimir
+            model:
+              refId: A
+              instant: true
+              # 兩個條件都要成立：
+              #   左：近 5 分鐘熔斷擋下了使用者（沒叫模型就回 503）—— 有人真的被擋，不是空轉
+              #   右：近 5 分鐘一次都沒有關回來（closed）—— 不是一下就好的抖動
+              # 為什麼不直接看「state=open」：
+              #   - 打開 30 秒後的狀態要等下一個請求來才會變（沒開自動轉半開），半夜一次抖動之後沒人用，
+              #     狀態會一直停在 open／half_open —— 模型早就好了，告警卻一直響（反例實測過，第一版就是這樣）。
+              #   - 模型一直沒好時狀態在 open 跟 half_open 之間跳，只看「現在」會響一下又解除。
+              # 結果的值是被擋下的請求數，信裡直接寫擋了幾個人。
+              expr: >-
+                sum(increase(resilience4j_circuitbreaker_not_permitted_calls_total{job="talkcal-app", name="chat-model"}[5m]))
+                and on()
+                (max(max_over_time(resilience4j_circuitbreaker_state{job="talkcal-app", name="chat-model", state="closed"}[5m])) == 0)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                # > 0.5：至少擋下一個人（increase() 會外插出小數，同 #2）
+                - evaluator: { type: gt, params: [0.5] }
+        # 不另外等：「5 分鐘沒關回來」已經是等待。一次 30 秒的打開（模型重啟、Bedrock 一陣限流）會關回來，不寄信
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'talkcal 模型熔斷 5 分鐘沒關回來，擋下 {{ printf "%.0f" $values.A.Value }} 個 AI 助理請求（行程功能照常）'
+          description: >-
+            最近 10 次叫模型有一半以上失敗或超過 30 秒，熔斷打開、助理不再叫模型、直接回 503。
+            看 talkcal-app dashboard 最下面「模型熔斷」那一排，再看模型：本機看 llm-chat 容器，雲端看 Bedrock。
+
+      # ── 4. 備份太久沒成功 ───────────────────────────────────────
+      # 為什麼要有：備份每小時一次（#45），失敗只會寫在 journalctl 裡，沒有人會去看。
+      # 不叫人的話，要等到真的需要還原那天，才發現最後一份是兩個禮拜前的。
+      - uid: talkcal-backup-stale
+        title: talkcal 資料庫備份太久沒成功
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: mimir
+            model:
+              refId: A
+              instant: true
+              # talkcal_backup_last_success_timestamp_seconds：backup-to-s3.sh 傳完 S3 才寫的時間（textfile，Alloy 讀）。
+              # 結果的值 = 距離上次成功多久；後半的 and = 開機也已經超過門檻才算。
+              # 為什麼要看開機時間：機器平常關機，開機時上一次備份可能是一週前（關機前那份），那不是失敗 ——
+              # 開機後的整點備份才是要盯的。剛開機的前 2 小時 15 分，右邊是空的、整條不成立。
+              # 只有雲端（有跑 backup-to-s3.sh）才有這個指標；本機手動備份不寫，查詢是空的 → 正常。
+              # 不寫成 max(最後成功 or 開機時間)：PromQL 的 or 比對標籤時不看指標名稱，兩個的標籤一樣，
+              # 右邊會整個被丟掉（反例實測過，第一版就是這樣，剛開機就誤響）。
+              expr: >-
+                (time() - max(talkcal_backup_last_success_timestamp_seconds{job="talkcal-backup"}))
+                and on()
+                ((time() - max(node_boot_time_seconds{job="talkcal-backup"})) > 8100)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                # 2 小時 15 分：整點備份連續兩次沒成功。一次失敗可能是 S3 短暫連不上，下一個整點會補上；
+                # 連兩次就不是巧合了，而且這時 RPO 已經從 1 小時變成 2 小時多。15 分鐘給備份本身跑和時鐘誤差
+                - evaluator: { type: gt, params: [8100] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'talkcal 已經 {{ humanizeDuration $values.A.Value }} 沒有成功備份資料庫'
+          description: >-
+            每小時的備份連續兩次沒有成功傳上 S3。資料還在，但現在出事的話最多會掉這麼久的資料。
+            先看 `journalctl -u talkcal-backup.service -n 50`。

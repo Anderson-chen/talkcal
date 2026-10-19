@@ -254,6 +254,13 @@ Mimir 的 ruler 也能發告警，但那樣要再架一個 Alertmanager，通知
 每條門檻的理由寫在 `rules.yaml` 的註解。這些是依實測值留餘裕的暫時值；
 SLO 定下來（[#34](https://github.com/Anderson-chen/talkcal/issues/34)）之後改成照錯誤預算燒得多快來告警。
 
+上面四條之外還有 SLO 的 burn-rate（`slo-burn-rate.yaml`）、資料庫／連線池／模型熔斷／備份（`respond.yaml`），
+**所有告警的總表**（式子、門檻、severity、為什麼要有）在 [docs/alerts.md](../docs/alerts.md)。
+
+備份太久沒成功那條要的指標，是 `infra/envs/1-ec2/backup-to-s3.sh` 成功時寫的 `.prom` 檔，
+Alloy 用 textfile collector 讀（`config.alloy` 的 (3)）。雲端 `deploy.sh` 用 `TEXTFILE_DIR` 把那個資料夾掛給 Alloy；
+本機沒有備份排程，沒給 `TEXTFILE_DIR` 就掛一個空的 volume，那條告警的查詢是空的、維持正常。
+
 寄信走 Grafana 內建的 SMTP，設定在不進 git 的 `deploy/.env`（`ALERT_SMTP_*`、`ALERT_EMAIL_TO`，範本 `deploy/.env.example`），
 所以起這組要帶 `--env-file ../deploy/.env`。雲端由 Terraform 寫進 SSM 的同一份 `.env`（`infra/envs/1-ec2/alerting.auto.tfvars.example`）。
 
@@ -290,6 +297,6 @@ ops/
 ├── tempo/tempo.yaml                          # 追蹤：單機最小設定
 └── grafana/provisioning/
     ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
-    ├── alerting/                             # 告警：rules、slo-burn-rate（什麼算出事）、contact-points（寄給誰）、policies（多久寄一次）
+    ├── alerting/                             # 告警：rules、slo-burn-rate、respond（什麼算出事，總表 docs/alerts.md）、contact-points（寄給誰）、policies（多久寄一次）
     └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces（trace）、talkcal-k6（壓測）、talkcal-slo
 ```
