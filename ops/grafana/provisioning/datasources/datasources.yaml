@@ -55,6 +55,12 @@ datasources:
           datasourceUid: tempo
           url: '$${__value.raw}'
           urlDisplayLabel: 到 Tempo 看這個請求
+        # 同一個 trace id 再做一顆按鈕，打開「單一請求」dashboard（#31）：trace、log、當時的指標放在同一個畫面。
+        # 沒有 datasourceUid 就是一般網址；時間範圍沿用目前畫面的
+        - name: TraceID
+          matcherRegex: '"traceId":"(\w+)"'
+          url: '/d/talkcal-request/?var-traceId=$${__value.raw}&$${__url_time_range}'
+          urlDisplayLabel: 用「單一請求」dashboard 看
 
   # 追蹤：指到 tempo 容器的查詢埠。
   - name: Tempo
