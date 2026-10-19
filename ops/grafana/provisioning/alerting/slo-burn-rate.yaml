@@ -64,6 +64,8 @@ groups:
           severity: critical   # Workbook 說的 page：現在就要處理
           team: talkcal
         annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/slo-fast-burn.md
           summary: '{{ $labels.slo }} 的 error budget 燒太快（{{ $labels.window }} 視窗 burn rate {{ printf "%.1f" $values.A.Value }}）'
           description: >-
             照目前的速度，28 天的 error budget 幾天內就會燒光。
@@ -102,6 +104,8 @@ groups:
           severity: warning    # Workbook 說的 ticket：上班時間處理
           team: talkcal
         annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/slo-slow-burn.md
           summary: '{{ $labels.slo }} 的 error budget 持續在燒（{{ $labels.window }} 視窗 burn rate {{ printf "%.2f" $values.A.Value }}）'
           description: >-
             不是急事，但照這個速度 28 天的 error budget 會用完。開一張 issue，上班時間查原因。

@@ -50,6 +50,8 @@ groups:
         labels:
           severity: critical
         annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/talkcal-app-down.md
           summary: talkcal app 連續 1 分鐘抓不到指標
           description: >-
             Alloy 抓 job="talkcal-app" 的 /actuator/prometheus 失敗（up 為 0 或整條沒資料）。
@@ -93,6 +95,8 @@ groups:
         labels:
           severity: warning
         annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/talkcal-5xx-ratio.md
           summary: 'talkcal 近 5 分鐘 5xx 比例 {{ humanizePercentage $values.A.Value }}'
           description: >-
             門檻 5%（5 分鐘至少 20 個請求才評估）。在 talkcal-app dashboard 看哪個 uri 在回 5xx，
@@ -132,6 +136,8 @@ groups:
         labels:
           severity: warning
         annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/talkcal-api-p95.md
           summary: 'talkcal 行程 API p95 {{ humanizeDuration $values.A.Value }}'
           description: >-
             門檻 1 秒（不含 /api/calendar/assistant）。先看 talkcal-app dashboard 的延遲和 JVM，
@@ -167,6 +173,8 @@ groups:
         labels:
           severity: warning
         annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/talkcal-assistant-p95.md
           summary: 'talkcal AI 助理 p95 {{ humanizeDuration $values.A.Value }}'
           description: >-
             門檻 30 秒。先看模型那邊：本機看 llama-cpp dashboard 的排隊數（requests_deferred），

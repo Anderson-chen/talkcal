@@ -75,6 +75,8 @@ groups:
         labels:
           severity: critical
         annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/meta-alloy-down.md
           summary: 'Alloy 已經 {{ humanizeDuration $values.A.Value }} 沒送指標進 Mimir'
           description: >-
             指標、log、trace 都經過 Alloy，它停了三種都斷，dashboard 會一片空白。
@@ -110,6 +112,8 @@ groups:
         labels:
           severity: critical
         annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/meta-mimir-down.md
           summary: Grafana 連續 2 分鐘查不到 Mimir
           description: >-
             所有用 Mimir 的告警（app 掛了、5xx、延遲、SLO）這段時間都在「查詢失敗」，不會正常觸發。
@@ -145,6 +149,8 @@ groups:
           # 少的是 log 或 trace 其中一種，指標和告警都還在，不必半夜叫醒人
           severity: warning
         annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/meta-backend-down.md
           summary: '{{ $labels.job }} 連續 2 分鐘抓不到'
           description: >-
             Loki 停了：log 會先留在 Docker 的 log 檔，回來後 Alloy 補送。
@@ -180,6 +186,8 @@ groups:
           # 不給 severity：它不是事件，不進 email；萬一有人改了下面的 notification_settings，policy 也比對不到它
           alert_type: watchdog
         annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/meta-watchdog.md
           summary: 這條永遠在響是正常的；它停了，外部服務會寄信
           description: >-
             每分鐘打一次 HEARTBEAT_URL。外部服務超過寬限時間沒收到，就代表 Grafana 停了、
