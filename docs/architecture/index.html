@@ -199,7 +199,7 @@ footer{margin-top:28px;font-size:12px;color:var(--text-muted)}
 <span><i class="sw" style="background:var(--surface-1);border:0.5px solid var(--border-strong);opacity:.3"></i>目前 model_backend 不建</span>
 </div>
 <div id="panel"></div>
-<footer><p id="checked">最後核對：2026-10-16（行號以 master 為準；業界說法於同日查證，來源附在每個元件下）</p></footer>
+<footer><p id="checked">最後核對：2026-10-19（行號以 master 為準；業界說法於同日查證，來源附在每個元件下）</p></footer>
 <dialog id="code" aria-labelledby="code-title">
 <div class="dlg">
 <div class="dlg-h">
@@ -249,7 +249,7 @@ app:{n:"services.app（Spring）",d:"talkcal 本體：行程與 AI 助理。",de
 postgres:{n:"services.postgres",d:"行程與對話記憶。",deps:["dotenv"],p:[["image","postgres:18.6-alpine","釘版本；alpine 較小"],["POSTGRES_PASSWORD","${DB_PASSWORD}","Terraform 隨機產生，不再寫死"],["密碼同步","ALTER ROLE","映像檔只在第一次初始化時讀密碼"]],ind:"RDS / Aurora；manage_master_user_password（replica、Blue/Green 不支援）。",when:"需要備份 SLA 時。",chk:"ok",src:["rds"]},
 llm:{n:"services.llm-chat",only:"gpu",d:"自己跑的 llama-server。",deps:["seed"],p:[["-ngl","99","全部層放 GPU"],["-c / -np","32768 / 200","同時處理的請求數"],["--kv-unified","開","給了 -np 就要明講，不然 context 被均分到每個 slot 只剩約 163"]],ind:"多人 API 多選 vLLM；llama.cpp 強在 GGUF 與單人延遲。",when:"GPU 配額下來時。",chk:"ok",src:["vllm"]},
 seed:{n:"services.model-seed",only:"gpu",d:"複製模型並驗 SHA256。",deps:["s3m"],p:[["sha256sum -c","驗證","確定模型檔沒有傳壞或被換掉"]],ind:"k8s initContainer 或 Mountpoint for S3。",when:"上 EKS 時。",chk:"ok",src:["mp"]},
-obs:{n:"ops/compose.yaml",d:"觀測堆疊：跟本機同一份。",deps:["app"],p:[["Alloy","v1.11.0","收集三種訊號"],["Mimir","3.2.1","存指標"],["Loki","3.3.0","存日誌"],["Tempo","3.1.0","存追蹤"],["Grafana","11.4.0","畫圖；版本都釘死，換機器拉到同一版"],["Grafana 埠","127.0.0.1:3000","不對外，走 SSM port forwarding"]],ind:"放在被觀測系統之外：Amazon Managed Prometheus / Grafana、Grafana Cloud、CloudWatch、Datadog。",when:"上正式環境時。",chk:"ok",src:["amg"]}
+obs:{n:"ops/compose.yaml",d:"觀測堆疊：跟本機同一份。",deps:["app"],p:[["Alloy","v1.11.0","收集三種訊號"],["Mimir","3.2.1","存指標"],["Loki","3.3.0","存日誌"],["Tempo","3.1.0","存追蹤"],["Grafana","11.4.0","畫圖；版本都釘死，換機器拉到同一版"],["Grafana 埠","127.0.0.1:3000","不對外，走 SSM port forwarding"],["SLO","4 個、滾動 28 天","Mimir 錄製 SLI 與 burn rate，Grafana 發 burn-rate 告警（docs/slo.md）"]],ind:"放在被觀測系統之外：Amazon Managed Prometheus / Grafana、Grafana Cloud、CloudWatch、Datadog。",when:"上正式環境時。",chk:"ok",src:["amg"]}
 };
 const FP={
 "infra/bootstrap/main.tf":"整個帳號只跑一次：建放 state 的 S3 bucket 和每月花費告警。用本機 state，解掉「state bucket 誰來建」的雞生蛋問題。",
@@ -301,7 +301,7 @@ const F={
 "infra/envs/1-ec2/Caddyfile":[["3–10","網域、encode、reverse_proxy","caddy"]],
 "deploy/compose.yaml":[["22–25","x-llama-server","llm"],["29","x-gpu","llm"],["50–84","model-seed","seed"],["86–151","llm-chat","llm"],["154–175","postgres","postgres"],["178–223","app","app"],["227–251","web","web"],["253–259","volumes","postgres"]],
 "web/nginx.conf":[["27–28","兩道限流 zone（每 IP、全站）","web"],["32–37","登入、註冊的限流 zone（每 IP）","web"],["44","超過回 429","web"],["52–53","真實 IP 取自 X-Forwarded-For","web"],["59–62","原本的 scheme（Caddy 帶的 X-Forwarded-Proto，沒有就 $scheme）","web"],["75","resolver","web"],["83","X-Forwarded-Proto 照轉，回呼網址才是 https（#127）","web"],["90","proxy_read_timeout","web"],["93–96","限流套到 /api","web"]],
-"ops/compose.yaml":[["22","mimir","obs"],["40","loki","obs"],["54","tempo","obs"],["67–74","grafana","obs"],["98","alloy","obs"]]
+"ops/compose.yaml":[["22","mimir","obs"],["36","mimir 掛 SLO 錄製規則","obs"],["42","loki","obs"],["56","tempo","obs"],["69–76","grafana","obs"],["100","alloy","obs"]]
 };
 const E="infra/envs/1-ec2/",B="infra/bootstrap/",D="deploy/compose.yaml",O="ops/compose.yaml";
 const L={
@@ -332,7 +332,7 @@ app:{"mem_limit":E+"compose.ec2.yaml:30","SESSION_COOKIE_SECURE":E+"compose.ec2.
 postgres:{"image":D+":155","POSTGRES_PASSWORD":E+"compose.ec2.yaml:20","密碼同步":E+"deploy.sh:81"},
 llm:{"-ngl":D+":101","-c / -np":D+":103","--kv-unified":D+":110"},
 seed:{"sha256sum -c":D+":74"},
-obs:{"Alloy":O+":99","Mimir":O+":23","Loki":O+":41","Tempo":O+":55","Grafana":O+":68","Grafana 埠":O+":74"}
+obs:{"Alloy":O+":101","Mimir":O+":23","Loki":O+":43","Tempo":O+":57","Grafana":O+":70","Grafana 埠":O+":76","SLO":"ops/mimir/rules/anonymous/slo.yaml:31"}
 };
 // t：步驟標題（短）；d：說明。依 model_backend 不同的寫成 {bedrock, gpu}
 const ROUTES={
