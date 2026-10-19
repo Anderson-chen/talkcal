@@ -164,6 +164,7 @@ CI 在每次 push、PR 時於 GitHub 上跑，本機則由 pre-push hook 在推�
 | 怎麼觀測、三種訊號怎麼互跳 | [ops/README.md](ops/README.md) |
 | 怎麼壓測、怎麼讀結果 | [perf/README.md](perf/README.md) |
 | CI 怎麼跑、為什麼在容器裡跑 | [ci/README.md](ci/README.md) |
+| 套件怎麼自動升級、升級 PR 怎麼審 | [docs/dependency-updates.md](docs/dependency-updates.md) |
 | 前端怎麼組成 | [web/README.md](web/README.md) |
 | 畫面設計稿和實作的差異 | [docs/design/calendar/README.md](docs/design/calendar/README.md) |
 | 資料表為什麼長這樣 | [backend/src/main/resources/db/migration](backend/src/main/resources/db/migration)（每支 SQL 開頭都寫了理由） |
