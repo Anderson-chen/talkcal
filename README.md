@@ -162,6 +162,7 @@ CI 在每次 push、PR 時於 GitHub 上跑，本機則由 pre-push hook 在推�
 | 搬上 AWS 的兩個階段（EC2、EKS） | [infra/README.md](infra/README.md) |
 | 怎麼部署、容器之間怎麼溝通、對照雲端是什麼 | [deploy/README.md](deploy/README.md) |
 | 怎麼觀測、三種訊號怎麼互跳 | [ops/README.md](ops/README.md) |
+| 使用者的對話會不會進 log／trace、要求刪除時怎麼刪、觀測資料留多久 | [docs/privacy.md](docs/privacy.md) |
 | 怎麼壓測、怎麼讀結果 | [perf/README.md](perf/README.md) |
 | CI 怎麼跑、為什麼在容器裡跑 | [ci/README.md](ci/README.md) |
 | 前端怎麼組成 | [web/README.md](web/README.md) |
