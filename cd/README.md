@@ -80,6 +80,17 @@ cd C:/talkcal-deploy
 `.ps1` 被擋（Windows 預設不讓腳本執行）的話：`powershell -ExecutionPolicy Bypass -File .\cd\triggers\install-local.ps1`。
 它只在登記時跑一次，之後每 5 分鐘被叫起來的是 `watch.sh`。
 
+macOS、Linux 沒有工作排程，改用 crontab，做的事一樣（複製副本、登記每 5 分鐘一輪）：
+
+```bash
+git clone https://github.com/Anderson-chen/talkcal.git ~/talkcal-deploy
+cd ~/talkcal-deploy
+bash cd/triggers/install-local.sh         # 拿掉：crontab -l | grep -v talkcal-cd-local | crontab -
+```
+
+下面「日常」表裡的 `Start-ScheduledTask`、`Disable-ScheduledTask` 是 Windows 的；macOS、Linux 立刻跑一輪是
+`bash .git/cd-watch.sh local`，暫停就是拿掉那行 crontab。
+
 要先有：`gh auth login`（watcher 用它查 CI、寫部署紀錄）、Docker Desktop 開著、
 `postgres` 和 `llm-chat` 已經起好（同[為什麼每個服務分開換](#為什麼每個服務分開換)）。
 
