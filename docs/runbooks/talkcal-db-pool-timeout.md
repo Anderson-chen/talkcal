@@ -109,4 +109,4 @@ CPU 一直在 100%，或雲端 EBS 的 burst credit 用完（CloudWatch 的 `Bur
 
 | 日期 | 原因 | 花多久恢復 | 備註 |
 |------|------|-----------|------|
-| 2026-10-19 | 演練 | 見 [演練紀錄](../evidence/2026-10-20-runbook-drills.md) | |
+| 2026-10-20 | 演練「資料庫連不上」時連帶響（資料庫停了，每個請求等滿 30 秒） | 跟著資料庫恢復 | [演練紀錄](../evidence/2026-10-20-runbook-drills.md)；這種情況照 [talkcal-db-down](talkcal-db-down.md) 處理 |

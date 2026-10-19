@@ -19,6 +19,9 @@ postgres_exporter 每 15 秒自己去連一次資料庫，連續 1 分鐘以上�
 
 如果是 exporter 壞了，使用者**沒有影響**，只是看不到資料庫那一頭的指標。
 
+**同一件事會連帶收到好幾封**（2026-10-20 演練實測，有流量時）：「有請求等不到資料庫連線」（比這封早約 1 分鐘，請求等滿 30 秒逾時）、
+「SLO 快燒」、幾分鐘後「SLO 慢燒」。它們都是這個原因的結果，照這份處理就好，不用分頭查。
+
 ## 怎麼確認
 
 1. **是資料庫還是 exporter？** Grafana → Explore → Mimir：
@@ -34,11 +37,14 @@ postgres_exporter 每 15 秒自己去連一次資料庫，連續 1 分鐘以上�
    sum(rate(http_server_requests_seconds_count{job="talkcal-app", status=~"5.."}[5m]))
    ```
 
-   沒流量時這裡是空的，不代表沒事 —— 直接打一個需要資料庫的 API 確認：
+   沒流量時這裡是空的，不代表沒事 —— 直接問 app 的 health（它會檢查資料庫）：
 
    ```bash
-   curl -s -o /dev/null -w '%{http_code}\n' http://localhost:18090/actuator/health   # 本機；雲端在機器上打 localhost:8091 或看 dc ps 的 healthy
+   curl -s -w ' %{http_code}\n' http://127.0.0.1:18090/actuator/health   # 本機
+   dc exec app curl -s localhost:8090/actuator/health                   # 雲端（dc 見 README）
    ```
+
+   `{"status":"DOWN"}` 503 → app 連不上資料庫；`UP` 200 → 資料庫其實沒事，看原因 4。
 
 3. **容器狀態**：
 
@@ -132,4 +138,4 @@ postgres log 一直出 `PANIC`、`invalid page`、`could not read block`，重�
 
 | 日期 | 原因 | 花多久恢復 | 備註 |
 |------|------|-----------|------|
-| 2026-10-19 | 演練：`docker stop postgres` | 見 [演練紀錄](../evidence/2026-10-20-runbook-drills.md) | 照這份 runbook 做 |
+| 2026-10-20 | 演練：`docker stop postgres`（原因 1） | 照 runbook 39 秒；故障到恢復信約 12 分鐘 | [演練紀錄](../evidence/2026-10-20-runbook-drills.md)；補了「同一件事會連帶收到好幾封」 |

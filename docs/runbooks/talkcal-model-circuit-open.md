@@ -23,6 +23,7 @@ app 叫模型（本機 llama-server、雲端 Bedrock）最近 10 次裡有一半
    - 熔斷狀態（state timeline）：一直在 open／half_open，沒有回到 closed
    - 沒叫模型就擋下的請求：在增加
    - 失敗率／慢呼叫率：哪一個超過 50%？**失敗率高 = 模型連不上或回錯誤；慢呼叫率高 = 模型卡住**
+   - 失敗率是 **-1** 代表最近不到 5 次呼叫、還不夠判斷，不是異常（正常時沒人用助理就會是 -1）
 2. 查詢：
 
    ```promql
@@ -36,8 +37,18 @@ app 叫模型（本機 llama-server、雲端 Bedrock）最近 10 次裡有一半
    ```logql
    {service="app"} |= "模型的熔斷狀態改變"        # 什麼時候打開、半開、關回來
    {service="app"} |= "AI 助理沒有叫模型"          # 被擋下的請求（503，code=MODEL_UNAVAILABLE）
-   {service="app"} | json | log_level="ERROR"      # 叫模型失敗的原因（例外訊息裡有 HTTP 狀態碼）
+   {service="app"} | json | log_level="ERROR"      # 叫模型失敗的那幾筆
    ```
+
+   ERROR 的 message 只寫「AI 助理失敗：Request failed」，**原因在 stack trace 最後的 `Caused by`**（展開那一行看 `error.stack_trace`）：
+
+   | `Caused by` | 原因 |
+   |---|---|
+   | `UnknownHostException: llm-chat`、`ConnectException: Connection refused` | 模型容器不在或沒在聽 → 原因 1 |
+   | `HttpTimeoutException`、`SocketTimeoutException` | 模型卡住 → 原因 2 |
+   | 帶 `429`、`ThrottlingException` | Bedrock 限流 → 原因 3 |
+   | 帶 `401`、`403` | key 過期或權限 → 原因 4 |
+   | 帶 `404` | 模型名稱錯 → 原因 5 |
 
 ## 可能的原因（由常見到少見）
 
@@ -83,7 +94,7 @@ ERROR log 有 `404`、`ValidationException ... model identifier is invalid`。�
 
 ## 怎麼確認已經恢復
 
-- 熔斷狀態回到 **closed**（第一個 half_open 的試探成功就會關回來）。沒人在用的時候它會一直停在 open／half_open 等試探 —— 自己送一句話給助理就會觸發
+- 熔斷狀態回到 **closed**（第一個 half_open 的試探成功就會關回來；log 會有一行 `State transition from HALF_OPEN to CLOSED`）。沒人在用的時候它會一直停在 open／half_open 等試探 —— 自己送一句話給助理就會觸發
 - 告警解除、收到 `[RESOLVED]`（closed 出現後下一次評估就解除）
 - 助理回得了話；`assistant-latency` 沒有因為剛恢復而一直超過 8 秒
 
@@ -103,4 +114,4 @@ ERROR log 有 `404`、`ValidationException ... model identifier is invalid`。�
 
 | 日期 | 原因 | 花多久恢復 | 備註 |
 |------|------|-----------|------|
-| 2026-10-19 | 演練（假的熔斷指標） | 見 [演練紀錄](../evidence/2026-10-20-runbook-drills.md) | |
+| 2026-10-20 | 演練：`docker stop llm-chat`（原因 1） | 照 runbook 1 分 17 秒 | [演練紀錄](../evidence/2026-10-20-runbook-drills.md)；補了 `Caused by` 對照表、失敗率 -1 的意思 |
