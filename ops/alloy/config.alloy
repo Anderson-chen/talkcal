@@ -133,7 +133,8 @@ loki.write "local" {
 
 // ═══ 追蹤 ═══════════════════════════════════════════════════════════
 //
-//   app ──OTLP/HTTP──▶ otelcol.receiver.otlp ──▶ otelcol.processor.batch ──▶ otelcol.exporter.otlp ──▶ Tempo
+//   app ──OTLP/HTTP──┐
+//   web ──OTLP/gRPC──┴▶ otelcol.receiver.otlp ──▶ otelcol.processor.batch ──▶ otelcol.exporter.otlp ──▶ Tempo
 //
 // trace 也是「推」：span 在請求結束時才完整，只能由 app 主動送出來。
 // OTLP 是 OpenTelemetry 的標準協定，app 那頭只認得它，不知道後面接的是 Tempo。
@@ -141,9 +142,13 @@ loki.write "local" {
 
 // 收：開 OTLP 的 HTTP 入口（4318 是 OTLP/HTTP 的慣用埠）。
 // app 在容器裡用 http://alloy:4318 找到這裡；本機 bootRun 走 compose 發佈到主機的 127.0.0.1:4318。
+// gRPC 入口（4317）給前端的 nginx（#31）：它的 OpenTelemetry 模組只會講 gRPC。只在 deploy/ 的網路裡用，不發佈到主機
 otelcol.receiver.otlp "default" {
   http {
     endpoint = "0.0.0.0:4318"
+  }
+  grpc {
+    endpoint = "0.0.0.0:4317"
   }
   output {
     traces  = [otelcol.processor.batch.default.input]
