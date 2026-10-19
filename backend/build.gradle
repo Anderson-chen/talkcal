@@ -180,6 +180,69 @@ tasks.named('bootRun') {
     }
 }
 
+// ── 平行開發：好幾個 worktree 同時 bootRun 不打架（#109，做法和選擇的理由見 docs/parallel-dev.md）──
+// 埠：8090 空著就用 8090（swagger、perf/ 的 k6、文件寫的都是它），被別的 worktree 佔了就交給系統挑一個空的（SERVER_PORT=0）。
+//   實際拿到哪一號，由 Spring Boot 內建的 WebServerPortFileWriter 寫進 build/application.port，
+//   web/ 的 vite 讀這個檔決定 /api 轉去哪 —— 每個 worktree 有自己的 build/，所以只會接到自己這份後端。
+//   一起寫 build/application.pid：app 被硬砍（沒機會刪檔）時，vite 看 pid 已經不在，就知道那個埠不是這份後端了，
+//   不會默默轉給後來佔到同一號的、別的 worktree 的後端。
+// 資料庫：同一個 PostgreSQL（deploy/ 那台）裡，每個 worktree 一個自己的 database，名字從資料夾名稱來；
+//   主資料夾（talkcal）還是原本的 talkcal，資料不搬。第一次 bootRun 時自動建，Flyway 再把表建好。
+// 這兩個都只在 bootRun：測試的資料庫本來就由 Testcontainers 每次開新的，容器裡的 app 固定 8090、有自己的網路。
+// 主機上已經設了 SERVER_PORT、DB_NAME 就照它（例如想固定某一號）。
+def devPortFile = layout.buildDirectory.file('application.port')
+def devPidFile = layout.buildDirectory.file('application.pid')
+tasks.named('bootRun') {
+    doFirst {
+        // 上一次的檔案先刪：app 還在啟動的那幾秒，vite 不會拿舊的埠去轉
+        [devPortFile, devPidFile].each { it.get().asFile.delete() }
+        environment 'PORTFILE', devPortFile.get().asFile.absolutePath
+        // 寫檔的是 Application.main 掛上的 WebServerPortFileWriter、ApplicationPidFileWriter，這兩個變數是它們認的「寫到哪」
+        environment 'PIDFILE', devPidFile.get().asFile.absolutePath
+
+        if (System.getenv('SERVER_PORT') == null) {
+            boolean free
+            try {
+                new ServerSocket(8090).close()
+                free = true
+            } catch (IOException ignored) {
+                free = false
+            }
+            environment 'SERVER_PORT', free ? '8090' : '0'
+            if (!free) logger.lifecycle('8090 已經有人用了（別的 worktree？），這次交給系統挑一個空的埠，實際的埠寫在 backend/build/application.port')
+        }
+
+        def dbName = System.getenv('DB_NAME') ?: devDatabaseName(rootDir.parentFile.name)
+        environment 'DB_NAME', dbName
+        createDevDatabase(dbName)
+        logger.lifecycle("資料庫：$dbName")
+    }
+}
+
+/** 資料夾名稱 → database 名稱：talkcal → talkcal、talkcal-109 → talkcal_109、109-parallel-dev → talkcal_109_parallel_dev。 */
+static String devDatabaseName(String folder) {
+    def name = folder.toLowerCase().replaceAll(/[^a-z0-9]+/, '_').replaceAll(/^_+|_+$/, '')
+    name = name.startsWith('talkcal') ? name : "talkcal_$name"
+    // PostgreSQL 的名稱最多 63 個字元，超過的會被默默截掉，不如自己先截
+    return name.take(63)
+}
+
+/** 還沒有就建一個。透過 compose 的服務名稱進 postgres 容器跑 psql，不靠容器名稱；名稱只有 [a-z0-9_]，不必跳脫。 */
+void createDevDatabase(String dbName) {
+    def compose = ['docker', 'compose', '-f', file('../deploy/compose.yaml').absolutePath, 'exec', '-T', 'postgres']
+    def exists = providers.exec {
+        commandLine compose + ['psql', '-U', 'talkcal', '-d', 'talkcal', '-tAc', "SELECT 1 FROM pg_database WHERE datname = '$dbName'".toString()]
+        ignoreExitValue = true
+    }
+    if (exists.result.get().exitValue != 0) {
+        throw new GradleException("連不到 deploy/ 的 postgres，先起它：docker compose -f deploy/compose.yaml up -d postgres\n${exists.standardError.asText.get()}")
+    }
+    if (exists.standardOutput.asText.get().trim() != '1') {
+        providers.exec { commandLine compose + ['createdb', '-U', 'talkcal', dbName] }.result.get()
+        logger.lifecycle("第一次在這個資料夾 bootRun：建了資料庫 $dbName")
+    }
+}
+
 tasks.named('test') {
     useJUnitPlatform()
     testLogging {

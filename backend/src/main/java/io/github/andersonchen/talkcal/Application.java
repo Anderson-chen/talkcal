@@ -2,6 +2,8 @@ package io.github.andersonchen.talkcal;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.ApplicationPidFileWriter;
+import org.springframework.boot.web.server.context.WebServerPortFileWriter;
 
 /**
  * 應用程式入口：把 Spring 容器啟起來，就這樣。
@@ -33,6 +35,13 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class Application {
 
     public static void main(String[] args) {
-        SpringApplication.run(Application.class, args);
+        SpringApplication application = new SpringApplication(Application.class);
+        // 本機 bootRun 時把實際拿到的埠和 pid 寫成檔案，web/ 的 vite 讀它決定 /api 轉去哪（#109）：
+        // 好幾個 worktree 同時 bootRun 時，第二個以後的埠是系統挑的，事先不知道。
+        // 只在 bootRun 設了 PORTFILE（這兩個 writer 自己認的變數，寫到哪）時才掛；容器、雲端不寫這些檔
+        if (System.getenv("PORTFILE") != null) {
+            application.addListeners(new WebServerPortFileWriter(), new ApplicationPidFileWriter());
+        }
+        application.run(args);
     }
 }

@@ -4,7 +4,22 @@
 // 後端不開：每個測試用 page.route 把 /api 攔下來回假資料（見 e2e/fakeApi.ts）。
 // 這樣不需要資料庫和模型、GitHub 上也能跑，「API 失敗」這種情況一行就造得出來。
 // 代價是測不到前後端格式對不對得上 —— 那是後端 SystemTest 的事。
+import { execFileSync } from 'node:child_process'
 import { defineConfig, devices } from '@playwright/test'
+
+// 埠：每次跑挑一個空的，不寫死 4173（#109）。寫死的話兩個 worktree 同時跑 E2E，第二個的 vite preview 起不來
+// （strictPort），或者更糟 —— 拿掉 strictPort、reuseExistingServer 又打開時，會直接拿別的 worktree 開著的那份來測。
+// 這個設定檔每個 worker 程序都會重新載入一次，所以挑好的埠放進環境變數：worker 是主程序開的，繼承同一個值。
+// 想固定（例如 vite preview 已經自己開著、要重用）就自己設 E2E_PORT。
+// 用子程序挑：設定檔要同步算出來，Node 的 listen 是非同步的
+if (!process.env.E2E_PORT) {
+  process.env.E2E_PORT = execFileSync(process.execPath, ['-e',
+    "const s = require('node:net').createServer().listen(0, '127.0.0.1', () => { process.stdout.write(String(s.address().port)); s.close() })",
+  ]).toString()
+  process.env.E2E_PORT_PICKED = '1'
+}
+const port = Number(process.env.E2E_PORT)
+const baseURL = `http://localhost:${port}`
 
 export default defineConfig({
   testDir: 'e2e',
@@ -13,7 +28,7 @@ export default defineConfig({
   // 失敗時的報告：HTML 報告裡有每一步的截圖和 trace（時間軸、DOM 快照、網路請求），本機用 npx playwright show-report 打開
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://localhost:4173',
+    baseURL,
     // 跟使用者一樣用台北時間、繁體中文：行事曆的「今天」和日期顯示都看這兩個
     locale: 'zh-TW',
     timezoneId: 'Asia/Taipei',
@@ -22,10 +37,12 @@ export default defineConfig({
   },
   // 測的是打包後的成品（跟 nginx 送出去的是同一份 dist/），不是開發用的 dev server
   webServer: {
-    command: 'npm run build && npx vite preview --port 4173 --strictPort',
-    url: 'http://localhost:4173',
-    // 本機已經開著就直接用，不重開；CI 每次都從頭建
-    reuseExistingServer: !process.env.CI,
+    // strictPort：埠是上面挑好的空埠，萬一剛好被搶走就直接失敗，不讓 vite 自己往上找到別號（那樣 baseURL 就對不上了）
+    command: `npm run build && npx vite preview --port ${port} --strictPort`,
+    url: baseURL,
+    // 自己設了 E2E_PORT、那一號又已經開著，才直接用不重開。自己挑的埠一律從頭起：
+    // 挑完到 preview 起來之間，那一號可能剛好被別的 worktree 拿走，重用的話就是在測別人的 dist/。CI 每次都從頭建
+    reuseExistingServer: !process.env.CI && !process.env.E2E_PORT_PICKED,
     timeout: 120_000,
   },
   // 桌面版和手機版是兩套版面（CalendarView 用 matchMedia 在 760px 切），操作的方式不一樣：
