@@ -163,6 +163,9 @@ aws ec2 stop-instances  --instance-ids "$(terraform output -raw instance_id)" --
 aws ec2 start-instances --instance-ids "$(terraform output -raw instance_id)" --region ap-northeast-1 --profile DEV
 ```
 
+關機前先到 Healthchecks.io 把 talkcal 那個 check 按 **Pause**（有設 `heartbeat_url` 的話）：關機後 heartbeat 停了，
+不按的話 5 分鐘後會收到一封「掛了」的信。開機後 Grafana 送出第一個 heartbeat，check 就自己恢復監控，不必再按（#40，本機實測過）。
+
 容器都設了 `restart: unless-stopped`，開機後會自己起來，不必重跑 deploy.sh；gpu 時模型要重新載入，第一個請求會等比較久。
 徹底收攤用 `terraform destroy`：IP 釋出、網址跟著換，資料庫資料也會一起消失。
 
