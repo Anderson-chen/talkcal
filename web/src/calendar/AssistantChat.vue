@@ -3,11 +3,15 @@
 //
 // 每個解析出的行程一張卡片，卡片上可以「修改」（帶到新增表單）或「移除」；
 // 訊息底下的「加入行事曆」把還沒處理的那幾筆一次存起來。
+//
+// 回不了的時候（#43）：沒送出的那句標「沒送出」，助理那邊是一則說明＋「再試一次」。
+// 要等的話按鈕上倒數，送出鈕、建議說法也一起停用，輸入框照樣可以打字。
+import { computed } from 'vue'
 import { addDays, dayLabel, timeOf } from '../monthGrid'
 import type { EventFields } from '../calendar'
 import TraceId from '../TraceId.vue'
 import Icon from './Icon.vue'
-import { SUGGESTIONS, useAssistantState, type ChatMessage } from './useAssistant'
+import { SLOW_AFTER_SECONDS, SUGGESTIONS, useAssistantState, type ChatMessage } from './useAssistant'
 import { useThemeState } from './useTheme'
 
 defineProps<{ inputId: string; large?: boolean }>()
@@ -22,6 +26,13 @@ function when(draft: EventFields) {
 }
 
 const pendingCount = (msg: ChatMessage) => msg.proposals.filter((p) => p.status === 'pending').length
+
+// 現在能不能送：在等回覆、或還在倒數就不行
+const blocked = computed(() => assistant.typing.value || assistant.waitSeconds.value > 0)
+const placeholder = computed(() =>
+  assistant.waitSeconds.value > 0 ? `${assistant.waitSeconds.value} 秒後可以再問，可以先打字` : '例如：下週二早上10點面試')
+const thinking = computed(() =>
+  assistant.waitedSeconds.value >= SLOW_AFTER_SECONDS ? `還在想，這次比較久（已等 ${assistant.waitedSeconds.value} 秒）…` : '思考中…')
 </script>
 
 <template>
@@ -29,8 +40,10 @@ const pendingCount = (msg: ChatMessage) => msg.proposals.filter((p) => p.status 
     <div class="scroll">
       <div class="messages" aria-live="polite">
         <template v-for="m in assistant.messages.value" :key="m.id">
-          <div v-if="m.role === 'me'" class="bubble me">{{ m.text }}</div>
-          <div v-else class="bubble ai">
+          <div v-if="m.role === 'me'" class="bubble me" :class="{ failed: m.failed }">
+            {{ m.text }}<span v-if="m.failed" class="unsent"><Icon name="close" :size="12" />沒送出</span>
+          </div>
+          <div v-else class="bubble ai" :class="{ notice: m.failure }" :data-failure="m.failure?.kind">
             <span>{{ m.text }}</span>
             <template v-for="(p, i) in m.proposals" :key="i">
               <div v-if="p.status !== 'removed'" class="card">
@@ -53,19 +66,22 @@ const pendingCount = (msg: ChatMessage) => msg.proposals.filter((p) => p.status 
             </div>
             <span v-else-if="m.proposals.length && m.proposals.every((p) => p.status === 'removed')" class="cancelled">已取消</span>
             <span v-if="m.error" role="alert" class="error">{{ m.error.text }}<TraceId v-if="m.error.traceId" :id="m.error.traceId" /></span>
+            <button v-if="assistant.canRetry(m)" type="button" class="retry" :disabled="blocked" @click="assistant.retry(m)">
+              {{ assistant.waitSeconds.value > 0 ? `${assistant.waitSeconds.value} 秒後可以再試` : '再試一次' }}
+            </button>
             <TraceId v-if="m.traceId" :id="m.traceId" />
           </div>
         </template>
-        <div v-if="assistant.typing.value" class="bubble typing">思考中…</div>
+        <div v-if="assistant.typing.value" class="bubble typing">{{ thinking }}</div>
       </div>
     </div>
     <div class="suggestions">
-      <button v-for="s in SUGGESTIONS" :key="s" type="button" :disabled="assistant.typing.value" @click="assistant.send(s)">{{ s }}</button>
+      <button v-for="s in SUGGESTIONS" :key="s" type="button" :disabled="blocked" @click="assistant.send(s)">{{ s }}</button>
     </div>
     <form class="input" @submit.prevent="assistant.send()">
       <label :for="inputId" class="visually-hidden">輸入訊息</label>
-      <input :id="inputId" v-model="assistant.input.value" type="text" autocomplete="off" placeholder="例如：下週二早上10點面試" />
-      <button type="submit" aria-label="送出" :disabled="assistant.typing.value || !assistant.input.value.trim()"><Icon name="send" :size="18" /></button>
+      <input :id="inputId" v-model="assistant.input.value" type="text" autocomplete="off" :placeholder="placeholder" />
+      <button type="submit" aria-label="送出" :disabled="blocked || !assistant.input.value.trim()"><Icon name="send" :size="18" /></button>
     </form>
   </div>
 </template>
@@ -79,6 +95,14 @@ const pendingCount = (msg: ChatMessage) => msg.proposals.filter((p) => p.status 
 .large .bubble { font-size: 15px; }
 .me { align-self: flex-end; max-width: 82%; border-radius: 16px 16px 4px 16px; background: var(--accent); color: var(--onAccent); line-height: 1.5; }
 .ai { align-self: flex-start; border-radius: 16px 16px 16px 4px; background: var(--seg); color: var(--ink); display: flex; flex-direction: column; gap: 10px; }
+/* 沒送出的那句：淡一點、加虛線框，底下標「沒送出」 */
+.me.failed { background: transparent; color: var(--ink); border: 1px dashed var(--danger); display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.unsent { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 600; color: var(--danger); }
+/* 回不了的說明：跟一般回覆同一個位置，左邊一條警示色，一眼分得出不是助理的回答 */
+.notice { background: var(--dangerSoft); border-left: 3px solid var(--danger); }
+.retry { align-self: flex-start; height: 36px; padding: 0 14px; border: 1px solid var(--accent); border-radius: 9px; background: var(--card); color: var(--accent); font-size: 13px; font-weight: 700; }
+.retry:disabled { border-color: var(--field); color: var(--muted); }
+.suggestions button:disabled { opacity: 0.5; }
 .typing { align-self: flex-start; border-radius: 16px 16px 16px 4px; background: var(--seg); color: var(--muted); font-size: 13px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px; white-space: normal; }
 .chip { align-self: flex-start; display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 11px; font-size: 12px; font-weight: 600; }

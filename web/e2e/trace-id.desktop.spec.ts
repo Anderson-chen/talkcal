@@ -45,11 +45,12 @@ test('助理的回覆底下有追蹤碼，按「複製」拿到整串；開場�
 
 test('助理出錯：錯誤訊息跟追蹤碼一起出現', async ({ page }) => {
   await fakeApi(page)
-  await assistantReplies(page, 502, { error: 'AI 助理失敗：Request failed' }, TRACE_ID)
+  // 錯誤格式照 #44 的 AssistantFailure；畫面上的說法依 code 決定（#43），不照抄 error
+  await assistantReplies(page, 502, { error: 'AI 助理失敗：Request failed', code: 'ASSISTANT_FAILED' }, TRACE_ID)
   await page.goto('/')
 
   await ask(page, '明天下午有空嗎？')
-  const failure = page.locator('.bubble.ai', { hasText: '助理暫時沒辦法回應：AI 助理失敗：Request failed' })
+  const failure = page.locator('.bubble.ai', { hasText: '這次助理沒有回成功' })
   await expect(failure.getByText(TRACE_ID)).toBeVisible()
 })
 
@@ -77,7 +78,7 @@ test('反例：請求沒到 app 的錯誤（nginx 自己擋下的 429，沒有 X
   await page.goto('/')
 
   await ask(page, '明天有什麼行程？')
-  await expect(page.getByText('助理暫時沒辦法回應：問得太快了，請等一分鐘再試', { exact: false })).toBeVisible()
+  await expect(page.getByText('問得太快了，先休息一下再問', { exact: false })).toBeVisible()
   await expect(page.getByText('追蹤碼')).toHaveCount(0)
 })
 
