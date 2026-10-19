@@ -6,7 +6,8 @@
 #
 # 什麼烤進映像檔、什麼放快取 —— 看它多久變一次：
 #   JDK、Node、Gradle 本體 —— 很少變，烤進來。改版時映像檔自動重 build（見下面 Gradle 那段）
-#   Java 函式庫、npm 套件 —— 跟著 build.gradle、package-lock.json 常常變，放 run.sh 掛上來的 volume
+#   pnpm 本體 —— 跟著 web/package.json 的 packageManager，很少變，烤進來
+#   Java 函式庫、前端套件 —— 跟著 build.gradle、pnpm-lock.yaml 常常變，放 run.sh 掛上來的 volume（pnpm store）
 #
 # build context 不是資料夾，是 run.sh 用 git archive 從「要測的那個 commit」取出的
 # ci/Dockerfile、backend/gradlew、backend/gradle/wrapper/ —— 跟程式碼一樣，不讀工作目錄裡沒 commit 的東西。
@@ -31,8 +32,10 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 # Gradle 的家目錄分兩半：
 #   wrapper/ —— Gradle 本體（約 140MB）。烤在映像檔裡
 #   caches/  —— 下載的 Java 函式庫。run.sh 只把這一個子目錄掛成 volume，蓋不到 wrapper/
+# pnpm_config_store_dir：pnpm 的 store（下載過的套件，各專案的 node_modules 從這裡硬連結過去）。
+#   pnpm 11 只認 pnpm_config_ 開頭的環境變數，寫成 npm_config_ 會被忽略、store 落在容器裡跟著刪掉
 ENV GRADLE_USER_HOME=/opt/gradle-home \
-    npm_config_cache=/cache/npm
+    pnpm_config_store_dir=/cache/pnpm-store
 
 # 讓 wrapper 自己把 Gradle 本體下載好：下載哪一版、從哪裡下載、驗證 checksum，
 # 都照 gradle-wrapper.properties 來，跟在任何機器上跑 ./gradlew 一模一樣。
@@ -48,10 +51,18 @@ RUN ./gradlew --version --no-daemon
 # 代價：package.json 任何一行改了，這層都會重建（重新下載瀏覽器，約一兩分鐘）；它不常改，划得來。
 # --with-deps：順便用 apt 裝 Chromium 需要的系統函式庫（字型、libnss 等），Ubuntu 基底映像檔裡沒有。
 # 瀏覽器放在固定位置、烤進映像檔：跟 Gradle 本體同一個道理，很少變，不必每次 CI 都下載
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+#
+# pnpm 也在這一層備好：corepack 照 package.json 的 packageManager 下載那一版（含 sha512 驗證），
+# 放在 COREPACK_HOME 烤進映像檔，每次 CI 不必再下載 pnpm 本體；版本也只寫在 package.json 一個地方
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
+    COREPACK_HOME=/opt/corepack \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 WORKDIR /opt/playwright
 COPY web/package.json ./
-RUN npx --yes "playwright@$(node -p "require('./package.json').devDependencies['@playwright/test']")" install --with-deps chromium
+RUN ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
+    && corepack enable --install-directory /usr/local/bin \
+    && corepack install \
+    && pnpm dlx "playwright@$(node -p "require('./package.json').devDependencies['@playwright/test']")" install --with-deps chromium
 
 # 程式碼由 run.sh 用 git archive 複製到這裡（只有要測的那個 commit，沒有沒 commit 的檔案）
 WORKDIR /work

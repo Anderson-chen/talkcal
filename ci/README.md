@@ -14,7 +14,7 @@ git push --no-verify                    # 確定要跳過檢查時
 ```
 
 要先開著 Docker Desktop。llama-server 有開的話，模型相關的測試會真的跑；沒開就跳過，摘要會列出來。
-第一次跑要 build 映像檔（含 Gradle 本體）、下載依賴，比較慢；之後映像檔有快取、依賴放在 volume `talkcal-ci-gradle`、`talkcal-ci-npm` 裡，就快了。
+第一次跑要 build 映像檔（含 Gradle 本體）、下載依賴，比較慢；之後映像檔有快取、依賴放在 volume `talkcal-ci-gradle`、`talkcal-ci-pnpm`（pnpm store）裡，就快了。
 結果：摘要在 `ci/build/summary.md`，失敗時的 HTML 報告在 `ci/build/reports/`。
 
 ## 架構：檢查內容只寫一次，平台只是入口
@@ -50,7 +50,7 @@ git push --no-verify                    # 確定要跳過檢查時
 
 | 代價 | 處理 |
 |---|---|
-| 每次全新環境，東西要重新下載 | 很少變的（JDK、Node、Gradle 本體）烤進映像檔；常變的（Java 函式庫、npm 套件）放具名 volume，跨次保留；程式碼兩邊都不放 |
+| 每次全新環境，東西要重新下載 | 很少變的（JDK、Node、Gradle 本體）烤進映像檔；常變的（Java 函式庫、前端套件）放具名 volume，跨次保留；程式碼兩邊都不放 |
 | Windows 把資料夾掛進容器很慢（實測約 20 MB/s） | 不掛資料夾，用 `git archive` 複製 |
 | 整合測試要開 PostgreSQL（Testcontainers） | 把主機的 `docker.sock` 接進來，PostgreSQL 開在主機的 Docker 上、跟 CI 容器並排，不在容器裡再包一層 |
 | 模型測試要連 llama-server | 經 `host.docker.internal:8080` 連主機上的；要連別台就設 `SPRING_AI_OPENAI_CHAT_BASEURL` |
@@ -131,11 +131,11 @@ ci/vulns.sh talkcal/app:local talkcal/web:local postgres:18.6-alpine
 | | 工具 | 擋什麼 | 在哪跑 |
 |---|---|---|---|
 | 後端 | Error Prone | ERROR 等級的 bug 寫法（忘了用回傳值、`equals` 比錯型別、格式字串對不上…）讓編譯失敗；WARNING 只印出來 | 掛在 javac 上，每次編譯都跑（main、test、integrationTest、eval），`checks.sh` 自動涵蓋 |
-| 前端 | ESLint（eslint-plugin-vue、@vue/eslint-config-typescript、eslint-plugin-playwright） | 沒處理的 Promise、`v-for` 沒 key、E2E 的 `expect` 忘了 `await`… | `checks.sh`：`npm run lint` |
+| 前端 | ESLint（eslint-plugin-vue、@vue/eslint-config-typescript、eslint-plugin-playwright） | 沒處理的 Promise、`v-for` 沒 key、E2E 的 `expect` 忘了 `await`… | `checks.sh`：`pnpm run lint` |
 
 ```bash
-cd web && npm run lint              # 前端
-cd web && npm run lint -- --fix     # 能自動修的先修掉
+cd web && pnpm run lint              # 前端
+cd web && pnpm run lint --fix        # 能自動修的先修掉
 cd backend && ./gradlew classes     # 後端：編譯就是檢查
 ```
 

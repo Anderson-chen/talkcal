@@ -1,5 +1,5 @@
 # talkcal 前端的映像檔。跟 app 的 Dockerfile（backend/Dockerfile）一樣是兩段式——
-#   build   —— Node + npm，把 .vue / .ts 編成靜態檔（dist/）
+#   build   —— Node + pnpm，把 .vue / .ts 編成靜態檔（dist/）
 #   runtime —— 只有 nginx，送靜態檔、把 /api 轉給 app。Node、node_modules、原始碼都不會跟著上雲端。
 
 # ════════════════════════════════════════════════════════════════════
@@ -7,15 +7,21 @@
 FROM node:22-alpine AS build
 WORKDIR /src
 
+# pnpm 不另外裝：Node 附的 corepack 照 package.json 的 packageManager 下載那一版（含 sha512 驗證），
+# 本機、CI、這裡用的都是同一版。不關掉提示的話，corepack 第一次下載前會停下來問 Y/n
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable
+
 # 先只放「決定依賴是什麼」的兩個檔案——只改 src/ 時這層快取不失效，不必每次重裝依賴。
-# npm ci 而不是 npm install：嚴格照 package-lock.json 裝，lock 跟 package.json 對不上就直接失敗，
+# --frozen-lockfile：嚴格照 pnpm-lock.yaml 裝，lock 跟 package.json 對不上就直接失敗，
 # 不會偷偷升級（TypeScript 釘在 5.9 的理由見 web/README.md）。
-COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci
+# store 放 BuildKit 的快取：重 build 不必重新下載。pnpm 11 只認 pnpm_config_ 開頭的環境變數，npm_config_ 的它不看
+COPY package.json pnpm-lock.yaml ./
+RUN --mount=type=cache,target=/pnpm-store pnpm_config_store_dir=/pnpm-store pnpm install --frozen-lockfile
 
 COPY . .
 # build 會先跑 vue-tsc 型別檢查：型別錯就 build 失敗，壞的前端進不了映像檔
-RUN npm run build
+RUN pnpm run build
 
 # ════════════════════════════════════════════════════════════════════
 # 1.30 是 nginx 的 stable 線，只收安全和錯誤修補；原本的 1.29 是 mainline，已被 1.31 取代、不再更新（#85）。
