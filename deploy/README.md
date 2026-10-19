@@ -152,6 +152,22 @@ docker compose down
 docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新播種
 ```
 
+## 換一台電腦：在乾淨的 Linux 上從 0 起起來
+
+[`verify/`](verify/) 證明這套不依賴作者那台 Windows（[#49](https://github.com/Anderson-chen/talkcal/issues/49)）：
+
+```bash
+bash deploy/verify/clean-linux.sh     # 開一個全新的 docker:dind 容器，git clone 進去，照根目錄 README 的步驟從 0 起
+```
+
+裡面跑的是 [`verify/from-zero.sh`](verify/from-zero.sh)：`cp .env.example .env` → 下載模型、驗 SHA256 → 起 postgres、模型 →
+build 並起 app、web → 從 nginx 的入口註冊、登入、跟助理說一句話。中間夾兩個反例：`MODELS_DIR` 沒填時 compose 要拒絕啟動，
+指到空資料夾時 `model-seed` 要失敗、模型服務不能起。
+
+那個容器沒有 GPU，所以多疊一份 [`verify/compose.mock-llm.yaml`](verify/compose.mock-llm.yaml)：
+`llm-chat` 換成假的 llama-server（`verify/mock_llm.py`，`/health` 要看到播好的模型檔才回 200），其他服務一行沒動。
+模型檔照樣真的下載 5GB、驗 SHA256、播進 volume，只是沒有東西去跑它。結果記在關掉 #49 的那個 PR 描述裡。
+
 ## 對照雲端
 
 | 這裡 | 雲端（k8s）上對應的東西 |
