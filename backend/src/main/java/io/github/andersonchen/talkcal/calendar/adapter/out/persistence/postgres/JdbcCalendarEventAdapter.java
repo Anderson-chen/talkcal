@@ -6,8 +6,11 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.DateRang
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
+import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteArchivedEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteEventPort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEndedEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventsPort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.RestoreEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPort;
 
 import org.springframework.dao.DataAccessException;
@@ -18,7 +21,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -33,8 +40,10 @@ import java.util.UUID;
  * 交易用 TransactionTemplate（類別是 final，@Transactional 的代理包不了）。
  *
  * 一個類別實作讀、存、刪三個 port：碰的是同一張表，「這張表長什麼樣」的知識只該在一個地方。
+ * 歸檔（#54）要的三個 port 也在這裡：找出舊的、歸檔好之後刪掉、從歸檔還原回來 —— 一樣是這張表。
  */
-public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEventsPort, DeleteEventPort {
+public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEventsPort, DeleteEventPort,
+        LoadEndedEventsPort, DeleteArchivedEventsPort, RestoreEventsPort {
 
     private final JdbcClient jdbc;
     private final TransactionTemplate transaction;
@@ -94,6 +103,68 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEvent
     }
 
     /**
+     * 不帶 owner_id 條件：這是排程的維護工作，要看全部的人（LoadEndedEventsPort 的約定）。
+     * 照 end_at、id 排：每一輪先搬最舊的，limit 截在哪裡也是固定的。
+     * end_at 沒有自己的索引：一天跑一次，掃一次表比每次寫入都多維護一個索引便宜。表大到掃不動時再用一個 migration 加上
+     */
+    @Override
+    public Map<OwnerId, List<ScheduledEvent>> loadEndedBefore(LocalDateTime cutoff, int limit) {
+        List<OwnedRow> rows;
+        try {
+            rows = jdbc.sql("""
+                            SELECT owner_id, id, title, start_at, end_at, category, location, note
+                            FROM calendar_event
+                            WHERE end_at < :cutoff
+                            ORDER BY end_at, id
+                            LIMIT :limit
+                            """)
+                    .param("cutoff", cutoff)
+                    .param("limit", limit)
+                    .query((rs, rowNum) -> new OwnedRow(new OwnerId(rs.getObject("owner_id", UUID.class)), row(rs, rowNum)))
+                    .list();
+        } catch (DataAccessException e) {
+            throw new IllegalStateException("讀取要歸檔的行程失敗：" + cutoff, e);
+        }
+        Map<OwnerId, List<ScheduledEvent>> byOwner = new LinkedHashMap<>();
+        rows.forEach(r -> byOwner.computeIfAbsent(r.owner(), o -> new ArrayList<>()).add(restore(r.row())));
+        return byOwner;
+    }
+
+    @Override
+    public int deleteArchived(OwnerId owner, Collection<EventId> ids, LocalDateTime cutoff) {
+        if (ids.isEmpty()) {
+            return 0;
+        }
+        try {
+            // end_at < :cutoff 再檢查一次：讀出來到現在之間被改成未來的那筆，已經不舊了，不刪（它也沒必要留在歸檔，下次會再存新版）
+            return jdbc.sql("DELETE FROM calendar_event WHERE owner_id = :owner AND id IN (:ids) AND end_at < :cutoff")
+                    .param("owner", owner.value())
+                    .param("ids", ids.stream().map(EventId::value).toList())
+                    .param("cutoff", cutoff)
+                    .update();
+        } catch (DataAccessException e) {
+            throw new IllegalStateException("刪除已歸檔的行程失敗（" + ids.size() + " 筆）", e);
+        }
+    }
+
+    @Override
+    public int restore(OwnerId owner, List<ScheduledEvent> events) {
+        try {
+            // ON CONFLICT (id) DO NOTHING：已經在行事曆上的那筆不蓋掉、也不算錯（RestoreEventsPort 的約定）。
+            // 同一個 id 在別人名下（UUID 撞號，實際上不會發生）一樣跳過，不會變成搶走別人的行程
+            Integer restored = transaction.execute(status -> events.stream()
+                    .mapToInt(event -> insertSql(owner, event, "ON CONFLICT (id) DO NOTHING").update())
+                    .sum());
+            return restored == null ? 0 : restored;
+        } catch (DataAccessException | TransactionException e) {
+            throw new IllegalStateException("還原行程失敗（" + events.size() + " 筆）", e);
+        }
+    }
+
+    private record OwnedRow(OwnerId owner, Row row) {
+    }
+
+    /**
      * 讀出來的每一筆重新走一次 CalendarEvent 的規則，資料庫裡的壞資料在這裡就被擋下（跟 Conversation.restore 同一個想法）。
      * 擋下時丟 IllegalStateException 而不是讓 IllegalArgumentException 往外跑：
      * 壞的是資料庫裡的資料，不是呼叫端送錯東西，不該變成 400。
@@ -123,10 +194,15 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEvent
     }
 
     private void insert(OwnerId owner, ScheduledEvent scheduled) {
-        jdbc.sql("""
+        insertSql(owner, scheduled, "").update();
+    }
+
+    // 新增和還原只差在最後那一句（還原遇到已經有的 id 就跳過），欄位的對應只寫一份
+    private JdbcClient.StatementSpec insertSql(OwnerId owner, ScheduledEvent scheduled, String onConflict) {
+        return jdbc.sql("""
                         INSERT INTO calendar_event (id, owner_id, title, start_at, end_at, category, location, note)
                         VALUES (:id, :owner, :title, :start, :end, :category, :location, :note)
-                        """)
+                        """ + onConflict)
                 .param("id", scheduled.id().value())
                 .param("owner", owner.value())
                 .param("title", scheduled.event().title())
@@ -136,7 +212,6 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEvent
                 // 分類存 enum 的名稱，跟 V5 的 CHECK 一致；沒有地點、備註就存 NULL（V5 的 CHECK 不收空白字串）
                 .param("category", scheduled.event().category().name())
                 .param("location", scheduled.event().location().orElse(null))
-                .param("note", scheduled.event().note().orElse(null))
-                .update();
+                .param("note", scheduled.event().note().orElse(null));
     }
 }

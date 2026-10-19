@@ -149,6 +149,7 @@ footer{margin-top:28px;font-size:12px;color:var(--text-muted)}
 <g class="nd" data-k="dotenv"><rect class="b" x="440" y="198" width="204" height="40" rx="6"/><text class="t" x="542" y="218" text-anchor="middle" dominant-baseline="central">SSM 參數 .env</text></g>
 <g class="nd" data-k="bsvc"><rect class="b" x="440" y="248" width="204" height="40" rx="6"/><text class="t" x="542" y="268" text-anchor="middle" dominant-baseline="central">Bedrock 端點</text></g>
 <g class="nd" data-k="s3m"><rect class="b" x="440" y="298" width="204" height="40" rx="6"/><text class="t" x="542" y="318" text-anchor="middle" dominant-baseline="central">S3 模型 bucket</text></g>
+<g class="nd" data-k="s3a"><rect class="b" x="440" y="348" width="204" height="40" rx="6"/><text class="t" x="542" y="368" text-anchor="middle" dominant-baseline="central">S3 歸檔 bucket</text></g>
 <g class="nd" data-k="tfstate"><rect class="b" x="440" y="470" width="204" height="40" rx="6"/><text class="t" x="542" y="490" text-anchor="middle" dominant-baseline="central">S3 tfstate（bootstrap）</text></g>
 <rect x="20" y="554" width="640" height="98" rx="14" fill="none" stroke="var(--border-strong)" stroke-width="0.5" stroke-dasharray="5 4"/>
 <text class="ts" x="34" y="574">帳號層級（IAM、Budgets 不分區域）</text>
@@ -164,10 +165,11 @@ footer{margin-top:28px;font-size:12px;color:var(--text-muted)}
 <line x1="362" y1="414" x2="438" y2="222" marker-end="url(#arrow)"/>
 <line x1="362" y1="424" x2="438" y2="272" marker-end="url(#arrow)"/>
 <line x1="362" y1="434" x2="438" y2="322" marker-end="url(#arrow)"/>
+<line x1="362" y1="444" x2="438" y2="372" marker-end="url(#arrow)"/>
 <line x1="214" y1="588" x2="214" y2="454" marker-end="url(#arrow)"/>
 </g>
 </svg>
-<svg id="svg-ec2" width="100%" viewBox="0 0 680 470" role="img" style="display:none"><title>EC2 內部</title><desc>Caddy、nginx、app、postgres、觀測、模型容器</desc>
+<svg id="svg-ec2" width="100%" viewBox="0 0 680 470" role="img" style="display:none"><title>EC2 內部</title><desc>Caddy、nginx、app、postgres、觀測、模型容器，和 EC2 外面的 Bedrock、S3</desc>
 <defs><marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
 <text class="ts" x="160" y="16" text-anchor="middle">從 SG 的 80 / 443 進來</text>
 <g class="nd" data-k="ec2"><rect class="c" x="20" y="30" width="480" height="420" rx="16"/><text class="th" x="36" y="52">EC2 instance（docker compose）</text></g>
@@ -179,6 +181,7 @@ footer{margin-top:28px;font-size:12px;color:var(--text-muted)}
 <g class="nd" data-k="llm"><rect class="b" x="296" y="260" width="184" height="56" rx="8"/><text class="th" x="388" y="278" text-anchor="middle" dominant-baseline="central">llm-chat</text><text class="ts" x="388" y="298" text-anchor="middle" dominant-baseline="central">llama-server（gpu）</text></g>
 <g class="nd" data-k="seed"><rect class="b" x="296" y="370" width="184" height="56" rx="8"/><text class="th" x="388" y="388" text-anchor="middle" dominant-baseline="central">model-seed</text><text class="ts" x="388" y="408" text-anchor="middle" dominant-baseline="central">跑完就結束（gpu）</text></g>
 <g class="nd" data-k="bsvc"><rect class="b" x="520" y="260" width="140" height="56" rx="8"/><text class="th" x="590" y="278" text-anchor="middle" dominant-baseline="central">Bedrock</text><text class="ts" x="590" y="298" text-anchor="middle" dominant-baseline="central">EC2 外面</text></g>
+<g class="nd" data-k="s3a"><rect class="b" x="520" y="70" width="140" height="56" rx="8"/><text class="th" x="590" y="88" text-anchor="middle" dominant-baseline="central">S3 歸檔</text><text class="ts" x="590" y="108" text-anchor="middle" dominant-baseline="central">EC2 外面</text></g>
 <g class="nd" data-k="s3m"><rect class="b" x="520" y="370" width="140" height="56" rx="8"/><text class="th" x="590" y="388" text-anchor="middle" dominant-baseline="central">S3 模型</text><text class="ts" x="590" y="408" text-anchor="middle" dominant-baseline="central">deploy.sh sync</text></g>
 <line x1="160" y1="22" x2="160" y2="66" class="arr" marker-end="url(#arrow2)"/>
 <line x1="160" y1="126" x2="160" y2="156" class="arr" marker-end="url(#arrow2)"/>
@@ -188,6 +191,7 @@ footer{margin-top:28px;font-size:12px;color:var(--text-muted)}
 <path d="M262 274 H280 V238 H590 V256" class="arr" marker-end="url(#arrow2)"/>
 <line x1="388" y1="368" x2="388" y2="320" class="arr" marker-end="url(#arrow2)"/>
 <line x1="518" y1="398" x2="484" y2="398" class="arr" marker-end="url(#arrow2)"/>
+<path d="M240 318 V340 H506 V98 H516" class="arr" marker-end="url(#arrow2)"/>
 </svg>
 </div>
 <div class="legend">
@@ -199,7 +203,7 @@ footer{margin-top:28px;font-size:12px;color:var(--text-muted)}
 <span><i class="sw" style="background:var(--surface-1);border:0.5px solid var(--border-strong);opacity:.3"></i>目前 model_backend 不建</span>
 </div>
 <div id="panel"></div>
-<footer><p id="checked">最後核對：2026-10-16（行號以 master 為準；業界說法於同日查證，來源附在每個元件下）</p></footer>
+<footer><p id="checked">最後核對：2026-10-19（行號以 master 為準；業界說法於同日查證，來源附在每個元件下）</p></footer>
 <dialog id="code" aria-labelledby="code-title">
 <div class="dlg">
 <div class="dlg-h">
@@ -232,11 +236,12 @@ subnet:{n:"aws_subnet.public",d:"機器住的巷子。",deps:["vpc","az"],p:[["c
 rt:{n:"aws_route_table.public + association",d:"有 0.0.0.0/0 → IGW 才叫公有子網。",deps:["vpc","igw","subnet"],p:[["route","0.0.0.0/0 → IGW","這條讓子網成為公有"],["association","subnet ↔ route table","沒關聯就走 VPC 預設路由表"]],ind:"私有子網走 NAT：東京約 $0.062/小時（約 $45/月，第三方整理）＋每 GB 費用；S3 Gateway Endpoint 免費。",when:"搬進私有子網時。",chk:"fix",fix:"NAT 不是二、三十美金，東京約 $45/月起。",src:["nat","gwe"]},
 sg:{n:"aws_security_group.app + rules",d:"有狀態防火牆，只放 Caddy。",deps:["vpc"],p:[["80/tcp","0.0.0.0/0","轉址＋Let's Encrypt HTTP-01 驗證"],["443/tcp、443/udp","0.0.0.0/0","HTTPS、HTTP/3"],["22/tcp","count = allow_ssh","預設不開，登入走 SSM"],["egress","全部","拉映像檔、原始碼、模型、憑證"]],ind:"ALB 的 SG 對外，app 的 SG 只收 ALB 的 SG；CloudFront 前置時 ALB 限 prefix list＋密鑰標頭。",when:"有 ALB 時。",chk:"ok",src:["cf2"]},
 eip:{n:"aws_eip.main + association",d:"固定公有 IP，網址從它算。",deps:[],p:[["domain","vpc","VPC 用的 EIP"],["association","拆開","先有 IP 才能在開機前算好網址"]],ind:"ALB＋Route 53 alias，機器 IP 不重要。",when:"有 ALB 或自有網域時。",chk:"na",src:[]},
-ec2:{n:"aws_instance.app",d:"唯一一台機器，跑整組 compose。",deps:["ami","subnet","sg","profile","dotenv","s3m"],p:[["instance_type",{bedrock:"m7i-flex.large",gpu:"g6.xlarge"},{bedrock:"8GB 放得下 app、DB、Caddy、觀測",gpu:"L4 是 sm_89，映像檔不用重編"}],["root_volume_size",{bedrock:"30GB",gpu:"150GB"},{bedrock:"放映像檔和資料",gpu:"Deep Learning AMI 本身就 75GB"}],["http_tokens","required","強制 IMDSv2，擋 SSRF 偷憑證"],["hop_limit","1","容器碰不到 IMDS"],["user_data_replace_on_change","false","重建會掉 volume 裡的資料"],["ignore_changes","[ami]","新 AMI 不觸發重建"]],ind:"IMDSv2 是基線；AWS 帳號層級預設的 hop limit 是 2（讓容器拿角色），talkcal 刻意設 1。小團隊跑容器多選 ECS Fargate。",when:"要水平擴展時。",chk:"ok",src:["imds","imds2","ecs"]},
+ec2:{n:"aws_instance.app",d:"唯一一台機器，跑整組 compose。",deps:["ami","subnet","sg","profile","dotenv","s3m","s3a"],p:[["instance_type",{bedrock:"m7i-flex.large",gpu:"g6.xlarge"},{bedrock:"8GB 放得下 app、DB、Caddy、觀測",gpu:"L4 是 sm_89，映像檔不用重編"}],["root_volume_size",{bedrock:"30GB",gpu:"150GB"},{bedrock:"放映像檔和資料",gpu:"Deep Learning AMI 本身就 75GB"}],["http_tokens","required","強制 IMDSv2，擋 SSRF 偷憑證"],["hop_limit","1","容器碰不到 IMDS"],["user_data_replace_on_change","false","重建會掉 volume 裡的資料"],["ignore_changes","[ami]","新 AMI 不觸發重建"]],ind:"IMDSv2 是基線；AWS 帳號層級預設的 hop limit 是 2（讓容器拿角色），talkcal 刻意設 1。小團隊跑容器多選 ECS Fargate。",when:"要水平擴展時。",chk:"ok",src:["imds","imds2","ecs"]},
 ami:{n:"data.aws_ssm_parameter.ubuntu / dlami",d:"查最新 AMI，不寫死。",deps:[],p:[["dlami","…/deeplearning/…/latest/ami-id","gpu：驅動、Docker、NVIDIA toolkit 都裝好"],["ubuntu","…/ubuntu/server/24.04/…","bedrock：小、開機快"]],ind:"golden AMI：只用 AWS 選 EC2 Image Builder，跨雲選 Packer。",when:"開機安裝太慢時。",chk:"ok",src:["pk"]},
-dotenv:{n:"aws_ssm_parameter.dotenv",d:"整份 .env 存成 SecureString。",deps:["eip","pwd","bkey"],p:[["site_address","talkcal.<IP>.sslip.io","不買網域也拿得到 Let's Encrypt 憑證"],["name","/talkcal/dotenv","EC2 角色只准讀這一個路徑"],["type","SecureString","AWS 代管金鑰加密，免費"],["GOOGLE_*、GITHUB_*","sensitive 變數","Google、GitHub 登入的 client id／secret；沒給就不開（#127）"]],ind:"要輪替放 Secrets Manager（$0.40/個/月），不輪替放 Parameter Store（標準層免費）。",when:"需要輪替時。",chk:"ok",src:["sm"]},
+dotenv:{n:"aws_ssm_parameter.dotenv",d:"整份 .env 存成 SecureString。",deps:["eip","pwd","bkey","s3a"],p:[["site_address","talkcal.<IP>.sslip.io","不買網域也拿得到 Let's Encrypt 憑證"],["name","/talkcal/dotenv","EC2 角色只准讀這一個路徑"],["type","SecureString","AWS 代管金鑰加密，免費"],["GOOGLE_*、GITHUB_*","sensitive 變數","Google、GitHub 登入的 client id／secret；沒給就不開（#127）"],["ARCHIVE_*","bucket、區域、歸檔 user 的 key","app 讀寫歸檔用（#54）"]],ind:"要輪替放 Secrets Manager（$0.40/個/月），不輪替放 Parameter Store（標準層免費）。",when:"需要輪替時。",chk:"ok",src:["sm"]},
 bsvc:{n:"Bedrock（mantle 端點）",only:"bedrock",d:"AWS 代管模型，不是 Terraform 建的。",deps:["bkey"],p:[["BEDROCK_BASE_URL","bedrock-mantle.ap-northeast-1.api.aws/v1","OpenAI 相容端點，程式不用改"],["BEDROCK_MODEL","qwen.qwen3-32b","東京實測 json_schema、工具呼叫都能動"]],ind:"Mantle 提供 OpenAI 相容端點。AWS：長期 key 只建議探索用，正式環境用短期 key（≤12 小時）或 IAM 角色。",when:"上正式前（#72）。",chk:"fix",fix:"AWS 自己就把長期 key 定位為探索用途。",src:["brk"]},
 s3m:{n:"aws_s3_bucket.models",only:"gpu",d:"GGUF 模型來源。",deps:[],p:[["count","gpu 才建","bedrock 時機器上沒有模型檔"],["bucket","talkcal-models-<帳號ID>","bucket 名稱全球唯一"]],ind:"EKS 上可用 Mountpoint for S3 CSI driver 掛載。",when:"多台共用模型時。",chk:"ok",src:["mp"]},
+s3a:{n:"aws_s3_bucket.archive + 專用 IAM user",d:"舊資料的歸檔（#54）：舊行程、舊的 AI 助理對話壓成 JSON Lines + gzip，存好了才從 postgres 刪。本機是 compose 的 RustFS。",deps:[],p:[["bucket","talkcal-archive-<帳號ID>","跟模型 bucket 分開：權限、保留方式都不同"],["versioning","不開","刪帳號（#52）時要真的刪掉，不能留舊版本"],["儲存類別","Standard","一包只有幾 KB；IA／Glacier IR 每個物件最少算 128KB，反而貴"],["sse_algorithm","AES256","使用者的資料"],["權限","Put / Get / DeleteObject、ListBucket","只有這個 bucket；不能改 bucket 設定"],["存取方式","專用 user 的 access key","容器拿不到機器角色（hop limit 1），跟 Bedrock 同一個取捨"]],ind:"冷資料放物件儲存是常規；量大時合併成大檔再轉 Glacier，用 Athena 直接查（key 用 owner=、month= 分區）。在 AWS 上跑容器多半讓工作負載自己拿角色（ECS task role、EKS Pod Identity），不發長期 key。",when:"上容器平台時改用 task role，刪掉 access key。",chk:"ok",src:["pod"]},
 tfstate:{n:"aws_s3_bucket.tfstate（+ versioning / 加密 / 公開封鎖）",d:"所有階段的 state。",deps:[],p:[["bucket","talkcal-tfstate-<帳號ID>","帶帳號 ID 不撞名"],["prevent_destroy","true","state 掉了就失去所有資源的管理權"],["versioning","Enabled","state 寫壞了可以拿回舊版"],["sse_algorithm","AES256","state 裡有 DB 密碼和 API key"]],ind:"一樣；use_lockfile 需要對 .tflock 的 get / put / delete 權限。",when:"—",chk:"ok",src:["tfs3"]},
 role:{n:"aws_iam_role.ec2 + policies",d:"EC2 的身分。",deps:["dotenv","s3m"],p:[["assume_role","ec2.amazonaws.com","只有 EC2 能扮演"],["SSM attachment","AmazonSSMManagedInstanceCore","Session Manager 登入，不開 22"],["ReadDotenv","ssm:GetParameter","只能讀 .env 這一個參數"],["ReadModels",{bedrock:"（無）",gpu:"s3:GetObject / ListBucket"},"gpu 才給"]],ind:"一樣；上 EKS 時新的 EC2 節點叢集多用 Pod Identity，Fargate / Windows 用 IRSA。",when:"上容器平台時。",chk:"ok",src:["pod"]},
 profile:{n:"aws_iam_instance_profile.ec2",d:"把角色裝進 EC2。",deps:["role"],p:[["role","aws_iam_role.ec2.name","EC2 只能透過 profile 拿角色"]],ind:"一樣。",when:"—",chk:"na",src:[]},
@@ -245,7 +250,7 @@ bkey:{n:"aws_iam_service_specific_credential.bedrock",only:"bedrock",d:"Bedrock 
 budget:{n:"aws_budgets_budget.monthly",d:"花費保險絲。",deps:[],p:[["limit_amount","50 USD（var.budget_limit_usd）","忘了關機幾天就會超過"],["80% ACTUAL / 100% FORECASTED","寄信","只通知，不會幫你關機"]],ind:"Budget Actions 能跑 SSM 停 EC2 / RDS；Anomaly Detection 只通知。",when:"要自動關機時。",chk:"ok",src:["bud","cad"]},
 caddy:{n:"services.caddy",d:"雲端才有的 HTTPS 入口。",deps:["web","dotenv","sg"],p:[["image","caddy:2.10.0-alpine","釘版本；2.11 還沒在機器上驗過憑證流程"],["ports","80、443、443/udp","443/udp 給 HTTP/3"],["caddy-data:/data","憑證存 volume","重建容器不必重新申請（有次數上限）"],["reverse_proxy","web:80","/api 轉發和限流照舊交給 nginx"]],ind:"ALB＋ACM；k8s 改用 Gateway API（AWS LBC 2026-03 GA）＋cert-manager。ingress-nginx 已於 2026-03 退役。Let's Encrypt 同組網域一週最多 5 張重複憑證。",when:"有 ALB 或上 EKS 時。",chk:"fix",fix:"不再建議 Ingress controller。Caddy 已出到 2.11.x，這裡仍釘 2.10.0，升版要另外驗證。",src:["lbc","ingx","ingx2","le","caddy"]},
 web:{n:"services.web（nginx）",d:"送靜態檔、轉 /api、擋太頻繁的 AI 發問。",deps:["app"],p:[["ports","127.0.0.1:18080:80","只綁本機，外面只能經過 Caddy"],["limit_req","每 IP 10 次/分、全站 30 次/分","只限 AI 發問；超過回 429，也是帳單上限"],["set_real_ip_from","172.16.0.0/12","前面有 Caddy，不改的話全站共用一個 IP 額度"],["resolver","127.0.0.11 valid=10s","app 換 IP 也找得到（#90）"],["X-Forwarded-Proto","照轉 Caddy 的（本機退回 $scheme）","不然 app 組出來的 Google、GitHub 回呼網址是 http://（#127）"],["proxy_read_timeout","180s","比 app 的 2 分鐘長，讓 app 先回錯誤原因"]],ind:"CloudFront：預設行為指 S3（OAC），/api/* 指 ALB，同源免 CORS。",when:"要 CDN 時。",chk:"ok",src:["cf","cf2"]},
-app:{n:"services.app（Spring）",d:"talkcal 本體：行程與 AI 助理。",deps:["postgres","bsvc","llm"],p:[["mem_limit","2g","沒設的話 JVM 的 75% 算整台"],["SPRING_AI_OPENAI_*",{bedrock:"Bedrock",gpu:"llm-chat:8080"},"用環境變數蓋掉，程式不改"],["depends_on",{bedrock:"!override 只留 postgres",gpu:"llm-chat、postgres"},{bedrock:"沒有 llm-chat，不換掉 compose 會報錯",gpu:"等模型和資料庫健康才起"}],["stop_grace_period","2m30s","等進行中的模型呼叫做完再關"]],ind:"ECS service / k8s Deployment，多副本、probe、ECR。",when:"要多副本時。",chk:"ok",src:["ecs"]},
+app:{n:"services.app（Spring）",d:"talkcal 本體：行程與 AI 助理；每天凌晨把舊資料搬到歸檔（#54）。",deps:["postgres","bsvc","llm","s3a"],p:[["mem_limit","2g","沒設的話 JVM 的 75% 算整台"],["SPRING_AI_OPENAI_*",{bedrock:"Bedrock",gpu:"llm-chat:8080"},"用環境變數蓋掉，程式不改"],["depends_on",{bedrock:"!override 只留 postgres",gpu:"llm-chat、postgres"},{bedrock:"沒有 llm-chat，不換掉 compose 會報錯",gpu:"等模型和資料庫健康才起"}],["stop_grace_period","2m30s","等進行中的模型呼叫做完再關"],["TALKCAL_ARCHIVE_*","endpoint 空白 = S3","本機是 RustFS，雲端換成 S3，程式不改"]],ind:"ECS service / k8s Deployment，多副本、probe、ECR。",when:"要多副本時。",chk:"ok",src:["ecs"]},
 postgres:{n:"services.postgres",d:"行程與對話記憶。",deps:["dotenv"],p:[["image","postgres:18.6-alpine","釘版本；alpine 較小"],["POSTGRES_PASSWORD","${DB_PASSWORD}","Terraform 隨機產生，不再寫死"],["密碼同步","ALTER ROLE","映像檔只在第一次初始化時讀密碼"]],ind:"RDS / Aurora；manage_master_user_password（replica、Blue/Green 不支援）。",when:"需要備份 SLA 時。",chk:"ok",src:["rds"]},
 llm:{n:"services.llm-chat",only:"gpu",d:"自己跑的 llama-server。",deps:["seed"],p:[["-ngl","99","全部層放 GPU"],["-c / -np","32768 / 200","同時處理的請求數"],["--kv-unified","開","給了 -np 就要明講，不然 context 被均分到每個 slot 只剩約 163"]],ind:"多人 API 多選 vLLM；llama.cpp 強在 GGUF 與單人延遲。",when:"GPU 配額下來時。",chk:"ok",src:["vllm"]},
 seed:{n:"services.model-seed",only:"gpu",d:"複製模型並驗 SHA256。",deps:["s3m"],p:[["sha256sum -c","驗證","確定模型檔沒有傳壞或被換掉"]],ind:"k8s initContainer 或 Mountpoint for S3。",when:"上 EKS 時。",chk:"ok",src:["mp"]},
@@ -259,21 +264,22 @@ const FP={
 "infra/envs/1-ec2/backend.hcl.example":"backend.hcl 的範本。bucket 名稱帶帳號 ID，實際的 backend.hcl 已 gitignore。",
 "infra/envs/1-ec2/providers.tf":"AWS provider：區域、CLI 設定檔、每個資源自動貼的標籤。",
 "infra/envs/1-ec2/variables.tf":"這個階段的所有輸入：model_backend，和依它決定預設值的機型、磁碟、模型；Google、GitHub 登入的 client id／secret（sensitive）。",
-"infra/envs/1-ec2/outputs.tf":"apply 完要用的值：網址、IP、SSM 連線用的 instance id、Grafana 通道指令、要登記的 OAuth 回呼網址。",
+"infra/envs/1-ec2/outputs.tf":"apply 完要用的值：網址、IP、SSM 連線用的 instance id、歸檔 bucket、Grafana 通道指令、要登記的 OAuth 回呼網址。",
 "infra/envs/1-ec2/vpc.tf":"網路：一個公有子網的最小 VPC，不建 NAT；可用區自動挑有這個機型的。",
 "infra/envs/1-ec2/security-groups.tf":"防火牆：對外只開 80/443（含 HTTP/3 的 UDP），22 預設關。",
 "infra/envs/1-ec2/ec2.tf":"機器本身：AMI、機型、磁碟、強制 IMDSv2，和固定的 Elastic IP。",
 "infra/envs/1-ec2/iam.tf":"機器的角色：SSM 連線、讀 .env，gpu 時再加讀模型 bucket。",
 "infra/envs/1-ec2/bedrock.tf":"（bedrock）只能呼叫模型的專用 IAM user，和它的 Bedrock API key。",
-"infra/envs/1-ec2/secrets.tf":"產生 DB 密碼，連同網址、Bedrock 設定、Google／GitHub 的 client secret 寫成一份 .env 存進 SSM。",
+"infra/envs/1-ec2/secrets.tf":"產生 DB 密碼，連同網址、Bedrock 設定、Google／GitHub 的 client secret、歸檔的 bucket 和 key 寫成一份 .env 存進 SSM。",
 "infra/envs/1-ec2/s3.tf":"（gpu）模型檔的 bucket。",
+"infra/envs/1-ec2/archive.tf":"舊資料的歸檔（#54）：加密、不公開、不開版本控制的 bucket，和只能讀寫它的專用 IAM user、access key。",
 "infra/envs/1-ec2/user-data.sh.tftpl":"第一次開機跑一次：裝或驗證 Docker、clone repo、呼叫 deploy.sh。",
 "infra/envs/1-ec2/deploy.sh":"在機器上跑的部署：拉版本 →（gpu）拉模型 → 拉 .env → 同步 DB 密碼 → 兩組 compose up。",
-"infra/envs/1-ec2/compose.ec2.yaml":"疊在 deploy/compose.yaml 上、兩種 model_backend 共用的雲端差異：DB 密碼、session cookie 只走 HTTPS、app 記憶體上限、Caddy。",
+"infra/envs/1-ec2/compose.ec2.yaml":"疊在 deploy/compose.yaml 上、兩種 model_backend 共用的雲端差異：DB 密碼、session cookie 只走 HTTPS、歸檔改放 S3、app 記憶體上限、不起本機的 RustFS、Caddy。",
 "infra/envs/1-ec2/compose.bedrock.yaml":"（bedrock）不起模型容器，app 的模型位址、key、名稱換成 Bedrock 的。",
 "infra/envs/1-ec2/compose.gpu.yaml":"（gpu）模型來源換成從 S3 拉下來的資料夾。",
 "infra/envs/1-ec2/Caddyfile":"HTTPS 入口：網址、壓縮，全部轉給 web。",
-"deploy/compose.yaml":"本機和雲端共用的服務定義：模型、postgres、app、web。",
+"deploy/compose.yaml":"本機和雲端共用的服務定義：模型、postgres、歸檔（RustFS，雲端不起）、app、web。",
 "web/nginx.conf":"前端的 nginx：送靜態檔、/api 轉給 app、AI 發問和登入註冊限流。",
 "ops/compose.yaml":"觀測堆疊：Alloy 收集，Mimir / Loki / Tempo 存，Grafana 畫圖。"
 };
@@ -285,21 +291,22 @@ const F={
 "infra/envs/1-ec2/backend.hcl.example":[["3","bucket（帳號 ID 不進 repo）","backend"],["4–5","region、profile","backend"]],
 "infra/envs/1-ec2/providers.tf":[["1–12","provider \"aws\"","provider"],["14","data aws_caller_identity（拼 bucket 名）","s3m"]],
 "infra/envs/1-ec2/variables.tf":[["1–8","region","provider"],["10–14","aws_profile","provider"],["16–20","project","provider"],["22–37","model_backend（上方切換）",null],["39–49","instance_type","ec2"],["51–60","root_volume_size","ec2"],["62–69","bedrock_model","bsvc"],["71–79","bedrock_key_days","bkey"],["81–85","repo_url","ec2"],["87–91","git_ref","ec2"],["93–100","allow_ssh","sg"],["102–106","ssh_cidr","sg"],["108–135","google_／github_client_id、_secret（sensitive，#127）","dotenv"]],
-"infra/envs/1-ec2/outputs.tf":[["1–4","instance_id","ec2"],["6–8","public_ip","eip"],["10–13","app_url","caddy"],["15–17","model_backend",null],["19–22","models_bucket","s3m"],["24–27","availability_zone","az"],["29–32","grafana_tunnel","obs"],["34–40","oauth_callback_urls（要在 Google、GitHub 登記的回呼網址）","caddy"]],
+"infra/envs/1-ec2/outputs.tf":[["1–4","instance_id","ec2"],["6–8","public_ip","eip"],["10–13","app_url","caddy"],["15–17","model_backend",null],["19–22","models_bucket","s3m"],["24–27","archive_bucket","s3a"],["29–32","availability_zone","az"],["34–37","grafana_tunnel","obs"],["39–45","oauth_callback_urls（要在 Google、GitHub 登記的回呼網址）","caddy"]],
 "infra/envs/1-ec2/vpc.tf":[["5–13","aws_vpc.main","vpc"],["15–21","aws_internet_gateway.main","igw"],["25–32","data instance_type_offerings","az"],["34–36","locals.availability_zone","az"],["38–47","aws_subnet.public","subnet"],["49–60","aws_route_table.public","rt"],["62–65","route_table_association","rt"]],
 "infra/envs/1-ec2/security-groups.tf":[["3–11","aws_security_group.app","sg"],["14–21","ingress 80/tcp","sg"],["23–30","ingress 443/tcp","sg"],["33–40","ingress 443/udp","sg"],["43–59","ingress 22（count）","sg"],["62–67","egress all","sg"]],
 "infra/envs/1-ec2/ec2.tf":[["2–8","locals（gpu、機型、磁碟、ami）","ec2"],["18–21","data dlami","ami"],["25–28","data ubuntu","ami"],["33–39","aws_eip.main","eip"],["41–84","aws_instance.app","ec2"],["86–89","aws_eip_association","eip"]],
 "infra/envs/1-ec2/iam.tf":[["5–16","aws_iam_role.ec2","role"],["18–21","SSM attachment","role"],["24–55","role_policy.deploy","role"],["57–60","instance_profile","profile"]],
 "infra/envs/1-ec2/bedrock.tf":[["13–17","aws_iam_user.bedrock","buser"],["19–49","aws_iam_user_policy.bedrock","buser"],["54–59","service_specific_credential","bkey"]],
-"infra/envs/1-ec2/secrets.tf":[["7–23","locals（site_address、backend_env）","dotenv"],["11","site_address（也是 Caddy 的網址）","caddy"],["25–28","random_password.db","pwd"],["31–47","aws_ssm_parameter.dotenv（含 Google、GitHub 的 client id／secret）","dotenv"]],
+"infra/envs/1-ec2/secrets.tf":[["7–23","locals（site_address、backend_env）","dotenv"],["11","site_address（也是 Caddy 的網址）","caddy"],["25–28","random_password.db","pwd"],["31–51","aws_ssm_parameter.dotenv（含 Google、GitHub 的 client id／secret）","dotenv"],["46–49","ARCHIVE_*（歸檔的 bucket、區域、key）","s3a"]],
 "infra/envs/1-ec2/s3.tf":[["7–10","aws_s3_bucket.models","s3m"],["12–21","加密","s3m"],["23–31","公開封鎖","s3m"]],
+"infra/envs/1-ec2/archive.tf":[["7–9","aws_s3_bucket.archive","s3a"],["11–19","加密","s3a"],["21–28","公開封鎖","s3a"],["30–36","刻意不開版本控制、不轉 Glacier、不設過期（理由）","s3a"],["37–50","lifecycle：清掉沒傳完的分段上傳","s3a"],["59–61","aws_iam_user.archive","s3a"],["63–86","只能讀寫這個 bucket 的 policy","s3a"],["90–92","aws_iam_access_key.archive","s3a"]],
 "infra/envs/1-ec2/user-data.sh.tftpl":[["全檔","第一次開機腳本","ec2"]],
 "infra/envs/1-ec2/deploy.sh":[["53","從 SSM 拉 .env","dotenv"],["65","疊三份 compose","ec2"],["76–82","起 postgres、ALTER ROLE","postgres"],["85","up -d --build","app"],["89","起觀測","obs"]],
-"infra/envs/1-ec2/compose.ec2.yaml":[["18–20","postgres 密碼","postgres"],["22–30","app 密碼、session cookie Secure、mem_limit","app"],["36–53","caddy","caddy"],["55–57","caddy volumes","caddy"]],
+"infra/envs/1-ec2/compose.ec2.yaml":[["18–20","postgres 密碼","postgres"],["22–35","app 密碼、session cookie Secure、歸檔改放 S3、mem_limit","app"],["29–31","TALKCAL_ARCHIVE_*（endpoint 空白 = S3）","s3a"],["37–42","本機的 RustFS 不起","s3a"],["44–65","caddy","caddy"],["67–69","caddy volumes","caddy"]],
 "infra/envs/1-ec2/compose.bedrock.yaml":[["11–12","model-seed 不起","seed"],["13–14","llm-chat 不起","llm"],["16–25","app 改打 Bedrock","app"]],
 "infra/envs/1-ec2/compose.gpu.yaml":[["8–10","model-seed 改掛 S3 拉下來的資料夾","seed"]],
 "infra/envs/1-ec2/Caddyfile":[["3–10","網域、encode、reverse_proxy","caddy"]],
-"deploy/compose.yaml":[["22–25","x-llama-server","llm"],["29","x-gpu","llm"],["50–84","model-seed","seed"],["86–151","llm-chat","llm"],["154–175","postgres","postgres"],["178–223","app","app"],["227–251","web","web"],["253–259","volumes","postgres"]],
+"deploy/compose.yaml":[["23–26","x-llama-server","llm"],["30","x-gpu","llm"],["51–85","model-seed","seed"],["87–152","llm-chat","llm"],["154–176","postgres","postgres"],["178–204","archive（本機的 RustFS，雲端不起）","s3a"],["206–221","archive-init：建 bucket","s3a"],["223–273","app","app"],["242–244","app 連歸檔的帳密","s3a"],["275–301","web","web"],["303–311","volumes","postgres"]],
 "web/nginx.conf":[["27–28","兩道限流 zone（每 IP、全站）","web"],["32–37","登入、註冊的限流 zone（每 IP）","web"],["44","超過回 429","web"],["52–53","真實 IP 取自 X-Forwarded-For","web"],["59–62","原本的 scheme（Caddy 帶的 X-Forwarded-Proto，沒有就 $scheme）","web"],["75","resolver","web"],["83","X-Forwarded-Proto 照轉，回呼網址才是 https（#127）","web"],["90","proxy_read_timeout","web"],["93–96","限流套到 /api","web"]],
 "ops/compose.yaml":[["22","mimir","obs"],["40","loki","obs"],["54","tempo","obs"],["67–74","grafana","obs"],["98","alloy","obs"]]
 };
@@ -317,21 +324,22 @@ sg:{"80/tcp":E+"security-groups.tf:14","443/tcp、443/udp":E+"security-groups.tf
 eip:{"domain":E+"ec2.tf:34","association":E+"ec2.tf:86"},
 ec2:{"instance_type":E+"ec2.tf:5","root_volume_size":E+"ec2.tf:6","http_tokens":E+"ec2.tf:55","hop_limit":E+"ec2.tf:59","user_data_replace_on_change":E+"ec2.tf:74","ignore_changes":E+"ec2.tf:78"},
 ami:{"dlami":E+"ec2.tf:20","ubuntu":E+"ec2.tf:27"},
-dotenv:{"site_address":E+"secrets.tf:11","name":E+"secrets.tf:32","type":E+"secrets.tf:34","GOOGLE_*、GITHUB_*":E+"secrets.tf:42"},
+dotenv:{"site_address":E+"secrets.tf:11","name":E+"secrets.tf:32","type":E+"secrets.tf:34","GOOGLE_*、GITHUB_*":E+"secrets.tf:42","ARCHIVE_*":E+"secrets.tf:46"},
 bsvc:{"BEDROCK_BASE_URL":E+"secrets.tf:19","BEDROCK_MODEL":E+"variables.tf:68"},
 s3m:{"count":E+"s3.tf:8","bucket":E+"s3.tf:9"},
+s3a:{"bucket":E+"archive.tf:8","versioning":E+"archive.tf:31","儲存類別":E+"archive.tf:33","sse_algorithm":E+"archive.tf:16","權限":E+"archive.tf:72","存取方式":E+"archive.tf:59"},
 tfstate:{"bucket":B+"main.tf:33","prevent_destroy":B+"main.tf:36","versioning":B+"main.tf:44","sse_algorithm":B+"main.tf:53"},
 role:{"assume_role":E+"iam.tf:8","SSM attachment":E+"iam.tf:20","ReadDotenv":E+"iam.tf:32","ReadModels":E+"iam.tf:41"},
 profile:{"role":E+"iam.tf:59"},
 buser:{"CallWithBearerToken":E+"bedrock.tf:31","CreateInference":E+"bedrock.tf:41"},
 bkey:{"service_name":E+"bedrock.tf:56","credential_age_days":E+"bedrock.tf:58"},
 budget:{"limit_amount":B+"variables.tf:19","80% ACTUAL / 100% FORECASTED":B+"main.tf:76"},
-caddy:{"image":E+"compose.ec2.yaml:37","ports":E+"compose.ec2.yaml:39","caddy-data:/data":E+"compose.ec2.yaml:48","reverse_proxy":E+"Caddyfile:9"},
-web:{"ports":D+":237","limit_req":"web/nginx.conf:27","set_real_ip_from":"web/nginx.conf:52","resolver":"web/nginx.conf:75","X-Forwarded-Proto":"web/nginx.conf:83","proxy_read_timeout":"web/nginx.conf:90"},
-app:{"mem_limit":E+"compose.ec2.yaml:30","SESSION_COOKIE_SECURE":E+"compose.ec2.yaml:26","SPRING_AI_OPENAI_*":{bedrock:E+"compose.bedrock.yaml:18",gpu:"backend/src/main/resources/application-docker.properties:8"},"depends_on":{bedrock:E+"compose.bedrock.yaml:23",gpu:D+":201"},"stop_grace_period":D+":222"},
-postgres:{"image":D+":155","POSTGRES_PASSWORD":E+"compose.ec2.yaml:20","密碼同步":E+"deploy.sh:81"},
-llm:{"-ngl":D+":101","-c / -np":D+":103","--kv-unified":D+":110"},
-seed:{"sha256sum -c":D+":74"},
+caddy:{"image":E+"compose.ec2.yaml:49","ports":E+"compose.ec2.yaml:51","caddy-data:/data":E+"compose.ec2.yaml:60","reverse_proxy":E+"Caddyfile:9"},
+web:{"ports":D+":286","limit_req":"web/nginx.conf:27","set_real_ip_from":"web/nginx.conf:52","resolver":"web/nginx.conf:75","X-Forwarded-Proto":"web/nginx.conf:83","proxy_read_timeout":"web/nginx.conf:90"},
+app:{"mem_limit":E+"compose.ec2.yaml:35","SESSION_COOKIE_SECURE":E+"compose.ec2.yaml:26","SPRING_AI_OPENAI_*":{bedrock:E+"compose.bedrock.yaml:18",gpu:"backend/src/main/resources/application-docker.properties:8"},"depends_on":{bedrock:E+"compose.bedrock.yaml:23",gpu:D+":250"},"stop_grace_period":D+":271","TALKCAL_ARCHIVE_*":E+"compose.ec2.yaml:29"},
+postgres:{"image":D+":156","POSTGRES_PASSWORD":E+"compose.ec2.yaml:20","密碼同步":E+"deploy.sh:81"},
+llm:{"-ngl":D+":102","-c / -np":D+":104","--kv-unified":D+":111"},
+seed:{"sha256sum -c":D+":75"},
 obs:{"Alloy":O+":99","Mimir":O+":23","Loki":O+":41","Tempo":O+":55","Grafana":O+":68","Grafana 埠":O+":74"}
 };
 // t：步驟標題（短）；d：說明。依 model_backend 不同的寫成 {bedrock, gpu}
@@ -343,7 +351,8 @@ req:{n:"請求怎麼走",intro:"使用者打開網址，到 AI 回答為止經�
  {k:"web",t:"nginx",d:"靜態檔直接回，/api 轉給 app。AI 發問每個 IP 每分鐘 10 次、全站 30 次，超過回 429；等 app 最多 180 秒。"},
  {k:"app",t:"app",d:"Spring 處理行程查詢和 AI 助理。模型呼叫走 OpenAI 相容的 client，換模型只改環境變數。"},
  {k:{bedrock:"bsvc",gpu:"llm"},t:"模型",d:{bedrock:"打 Bedrock mantle 端點上的 Qwen3 32B，帶 .env 裡的 API key。模型在 AWS 那邊，這台機器不需要 GPU。",gpu:"打同一台機器上的 llm-chat（llama-server、L4 GPU），跟本機一樣是 Qwen3-8B。"}},
- {k:"postgres",t:"資料庫",d:"行程和對話記憶存在 postgres，資料在 EBS 上的 docker volume；不對外開埠。"}]},
+ {k:"postgres",t:"資料庫",d:"行程和對話記憶存在 postgres，資料在 EBS 上的 docker volume；不對外開埠。"},
+ {k:"s3a",t:"歸檔",d:"每天凌晨 app 把結束超過 2 年的行程、30 天沒說話的對話壓成 JSON Lines + gzip 放進 S3，存好了才從 postgres 刪；POST /api/calendar/archive/restore 找回來（#54）。"}]},
 deploy:{n:"怎麼部署上去",intro:"從空帳號到網站上線：本機跑兩次 terraform apply，機器開機後自己部署完（約 4 分鐘）。",steps:[
  {k:"tfstate",t:"bootstrap",d:"整個帳號只跑一次：建放 state 的 S3 bucket（加密、版本控制、禁止刪除）和花費告警。它自己用本機 state。"},
  {k:"backend",t:"state 位置",d:"階段一的 state 放進那個 bucket，use_lockfile 上鎖。bucket 名稱帶帳號 ID，放在 gitignore 掉的 backend.hcl。"},
@@ -360,7 +369,7 @@ secret:{n:"密碼怎麼傳",intro:"明碼不進 git、不進 user_data、不進�
  {k:"dotenv",t:"存進 SSM",d:"全部組成一份 .env，存成 SecureString（AWS 代管金鑰，免費）。"},
  {k:"role",t:"誰能讀",d:"EC2 的角色只准 GetParameter 這一個參數。hop limit 設 1，容器拿不到機器的角色憑證。"},
  {k:"ec2",t:"寫到主機",d:"deploy.sh 在主機上拉 .env，umask 077 只給 root 讀；compose 再把變數交給各容器。"},
- {k:"postgres",t:"交給容器",d:"postgres、app 拿 DB_PASSWORD；app 另外拿 BEDROCK_API_KEY；Caddy 拿 SITE_ADDRESS。"},
+ {k:"postgres",t:"交給容器",d:"postgres、app 拿 DB_PASSWORD；app 另外拿 BEDROCK_API_KEY 和歸檔的 ARCHIVE_*；Caddy 拿 SITE_ADDRESS。"},
  {k:"tfstate",t:"state 的代價",d:"state 裡有明碼，所以 state bucket 一定要加密、封鎖公開，並開版本控制。"}]},
 cost:{n:"每月花多少",intro:"平常關機、展示才開：關機時只剩磁碟和 IP 在收錢。數字是東京的約略值。",steps:[
  {k:"ec2",t:"機器",d:{bedrock:"m7i-flex.large 約 0.1 USD/小時，24 小時開著一個月約 73 USD，所以平常關機。",gpu:"g6.xlarge 約 0.8–1 USD/小時，24 小時開著一個月要 600 USD 以上，所以平常關機。"}},

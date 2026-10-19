@@ -34,7 +34,7 @@ import java.util.UUID;
  *
  * 多輪對話靠 conversationId（UUID）：第一句不帶，回應裡會拿到一個；之後每句帶著它。歷史存在伺服器。
  * 重新整理頁面後用 GET 讀回那段對話給人看的部分。
- * 沒有 DELETE：「清空」是前端丟掉 conversationId、下一句開新的一段；舊的那段留給每天的清理排程（AssistantMemoryCleanup）。
+ * 沒有 DELETE：「清空」是前端丟掉 conversationId、下一句開新的一段；舊的那段留給每天的歸檔排程（AssistantMemoryArchive）。
  * 紀錄只由排程按保留期限刪，不讓一個按鈕（或任何拿得到 id 的請求）把它抹掉。
  *
  * 對話屬於登入者（#104）：拿別人的 conversationId 來讀是空的、拿來說話是在自己名下開一段新的，碰不到別人的那段。

@@ -21,6 +21,11 @@ output "models_bucket" {
   value       = local.gpu ? aws_s3_bucket.models[0].bucket : null
 }
 
+output "archive_bucket" {
+  description = "舊資料的歸檔（#54）：aws s3 ls s3://<bucket>/calendar-event/ 看得到每個人、每個月一包"
+  value       = aws_s3_bucket.archive.bucket
+}
+
 output "availability_zone" {
   description = "機器開在哪個可用區（自動挑有這個機型的）"
   value       = local.availability_zone

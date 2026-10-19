@@ -43,5 +43,9 @@ resource "aws_ssm_parameter" "dotenv" {
     GOOGLE_CLIENT_SECRET=${var.google_client_secret}
     GITHUB_CLIENT_ID=${var.github_client_id}
     GITHUB_CLIENT_SECRET=${var.github_client_secret}
+    ARCHIVE_BUCKET=${aws_s3_bucket.archive.bucket}
+    ARCHIVE_REGION=${var.region}
+    ARCHIVE_ACCESS_KEY=${aws_iam_access_key.archive.id}
+    ARCHIVE_SECRET_KEY=${aws_iam_access_key.archive.secret}
   ENV
 }

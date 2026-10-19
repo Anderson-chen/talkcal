@@ -79,6 +79,15 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
     runtimeOnly 'org.flywaydb:flyway-database-postgresql'
 
+    // 資料歸檔（#54）：舊資料壓縮成 JSON Lines + gzip，放到 S3 相容的物件儲存（雲端 S3、本機 RustFS）。
+    // 用 AWS 官方的 SDK v2 而不是各家的 client：S3 的 API 已經是物件儲存的共通語言，換 RustFS、S3 只差 endpoint。
+    // BOM 跟 Boot、Spring AI 的一樣用 platform() 吃，版號只寫一次。
+    // 只要同步的 S3Client：排程一天一次，不需要 async 的那一套（netty），排掉省 10MB 依賴、少一份要追漏洞的東西
+    implementation platform('software.amazon.awssdk:bom:2.55.16')
+    implementation('software.amazon.awssdk:s3') {
+        exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
+    }
+
     // 打開 /actuator/*：健康檢查、指標等維運用的入口。它自動 instrument 出 HTTP 延遲、
     // JVM、執行緒池等「通用指標」，一行採集程式都不用寫 —— 業務指標才要自己用 Micrometer 埋。
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
