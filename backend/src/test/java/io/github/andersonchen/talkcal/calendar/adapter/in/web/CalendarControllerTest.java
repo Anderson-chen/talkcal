@@ -285,25 +285,27 @@ class CalendarControllerTest {
 
         private static final String DINNER_JSON =
                 "{\"events\":[{\"title\":\"吃飯\",\"start\":\"2026-10-06T15:00\",\"end\":\"2026-10-06T16:00\"}]}";
-        private static final String KEY = "3f1c8a2e-6b0d-4d7e-9a51-2c4e8f7b9d10";
+        // 一看就是測試值，而且不到 10 個字：gitleaks 的 generic-api-key 會把「名字有 key、值 10 個字以上」的字串當成真的 key
+        // （長得像 UUID 的、test-idempotency-key-1 都被抓過，PR #156 的 secrets 檢查紅燈）
+        private static final String IDEMPOTENCY_KEY = "test-key";
 
         @Test
         @DisplayName("第一次：鍵交給 use case，201，Idempotent-Replayed: false")
         void firstTime() throws Exception {
-            mockMvc.perform(post("/api/calendar/events").header("Idempotency-Key", KEY)
+            mockMvc.perform(post("/api/calendar/events").header("Idempotency-Key", IDEMPOTENCY_KEY)
                             .contentType(MediaType.APPLICATION_JSON).content(DINNER_JSON))
                     .andExpect(status().isCreated())
                     .andExpect(header().string("Idempotent-Replayed", "false"))
                     .andExpect(jsonPath("$.events[0].id").value(DINNER_ID.toString()));
 
-            assertEquals(List.of(new IdempotencyKey(KEY)), calendar.keys);
+            assertEquals(List.of(new IdempotencyKey(IDEMPOTENCY_KEY)), calendar.keys);
         }
 
         @Test
         @DisplayName("重送：一樣是 201、一樣的內容，多了 Idempotent-Replayed: true")
         void replay() throws Exception {
             for (String replayed : List.of("false", "true")) {
-                mockMvc.perform(post("/api/calendar/events").header("Idempotency-Key", KEY)
+                mockMvc.perform(post("/api/calendar/events").header("Idempotency-Key", IDEMPOTENCY_KEY)
                                 .contentType(MediaType.APPLICATION_JSON).content(DINNER_JSON))
                         .andExpect(status().isCreated())
                         .andExpect(header().string("Idempotent-Replayed", replayed))
@@ -314,10 +316,10 @@ class CalendarControllerTest {
         @Test
         @DisplayName("同一個鍵、不同內容：422，說明要換一個鍵")
         void sameKeyOtherContent() throws Exception {
-            mockMvc.perform(post("/api/calendar/events").header("Idempotency-Key", KEY)
+            mockMvc.perform(post("/api/calendar/events").header("Idempotency-Key", IDEMPOTENCY_KEY)
                     .contentType(MediaType.APPLICATION_JSON).content(DINNER_JSON));
 
-            mockMvc.perform(post("/api/calendar/events").header("Idempotency-Key", KEY)
+            mockMvc.perform(post("/api/calendar/events").header("Idempotency-Key", IDEMPOTENCY_KEY)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"events\":[{\"title\":\"開會\",\"start\":\"2026-10-06T15:00\",\"end\":\"2026-10-06T16:00\"}]}"))
                     .andExpect(status().isUnprocessableContent())
