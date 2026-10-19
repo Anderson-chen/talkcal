@@ -2,12 +2,15 @@ package io.github.andersonchen.talkcal.auth.adapter.in.web;
 
 import io.github.andersonchen.talkcal.auth.application.domain.model.Account;
 import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
+import io.github.andersonchen.talkcal.auth.application.port.in.DeleteAccountUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.FindAccountUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.RegisterAccountUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.UsernameTakenException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.List;
 import java.util.Objects;
@@ -18,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,7 +31,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 帳號的 HTTP 入口：註冊、看「目前是誰」、有哪些登入方式。
+ * 帳號的 HTTP 入口：註冊、看「目前是誰」、有哪些登入方式、刪除自己的帳號。
  *
  * 登入、登出不在這裡：交給 Spring Security 的 filter（POST /api/auth/login、/api/auth/logout，
  * Google、GitHub 的 /api/auth/oauth2/*，設定在 app.config），
@@ -35,7 +39,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/auth")
-@Tag(name = "auth", description = "帳號：註冊、目前登入的是誰、有哪些登入方式（登入、登出是 Spring Security 的 /api/auth/login、/api/auth/logout）")
+@Tag(name = "auth", description = "帳號：註冊、目前登入的是誰、有哪些登入方式、刪除帳號（登入、登出是 Spring Security 的 /api/auth/login、/api/auth/logout）")
 public final class AuthController {
 
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
@@ -43,12 +47,14 @@ public final class AuthController {
     private final RegisterAccountUseCase registerAccount;
     private final FindAccountUseCase findAccount;
     private final LoginProviders loginProviders;
+    private final DeleteAccountUseCase deleteAccount;
 
     public AuthController(RegisterAccountUseCase registerAccount, FindAccountUseCase findAccount,
-                          LoginProviders loginProviders) {
+                          LoginProviders loginProviders, DeleteAccountUseCase deleteAccount) {
         this.registerAccount = Objects.requireNonNull(registerAccount, "registerAccount 不可為 null");
         this.findAccount = Objects.requireNonNull(findAccount, "findAccount 不可為 null");
         this.loginProviders = Objects.requireNonNull(loginProviders, "loginProviders 不可為 null");
+        this.deleteAccount = Objects.requireNonNull(deleteAccount, "deleteAccount 不可為 null");
     }
 
     /** 註冊用的帳密。 */
@@ -97,6 +103,25 @@ public final class AuthController {
         return me(AccountId.of(authentication.getName()))
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+    }
+
+    /**
+     * 刪除自己的帳號（#52）：行程、AI 助理的對話、帳號、綁定的 Google／GitHub 登入全部刪掉，然後登出。
+     *
+     * 刪的是登入者自己（session 裡的身分），路徑上沒有 id 可以填 —— 想刪別人的帳號，連寫法都沒有。
+     * 會改東西，跟其他 DELETE 一樣要帶 CSRF token：別的網站騙瀏覽器送這個請求會被擋下（403）。
+     * 帳號已經不在（另一個分頁刪過了）也回 204：結果一樣是「什麼都不剩」。
+     */
+    @DeleteMapping("/me")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "刪除自己的帳號和所有資料（行程、AI 助理的對話、登入方式），刪完自動登出；無法復原")
+    public void deleteMe(Authentication authentication, HttpServletRequest request) throws ServletException {
+        AccountId id = AccountId.of(authentication.getName());
+        deleteAccount.delete(id);
+        // 記下「什麼時候、刪了哪個帳號」：使用者之後問「我的資料刪了沒」時有紀錄可查。只有 id，沒有名字或內容
+        log.info("刪除帳號：account={}", id);
+        // 交給 Spring Security 登出（清 session、清 CSRF token），跟 /api/auth/logout 走同一組處理
+        request.logout();
     }
 
     private Optional<Me> me(AccountId id) {

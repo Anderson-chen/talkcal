@@ -1,11 +1,18 @@
 package io.github.andersonchen.talkcal.app.config;
 
 import io.github.andersonchen.talkcal.auth.adapter.out.persistence.postgres.JdbcAccountAdapter;
+import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
+import io.github.andersonchen.talkcal.auth.application.domain.service.DeleteAccountService;
 import io.github.andersonchen.talkcal.auth.application.domain.service.FindAccountService;
 import io.github.andersonchen.talkcal.auth.application.domain.service.SignInExternallyService;
+import io.github.andersonchen.talkcal.auth.application.port.in.DeleteAccountUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.FindAccountUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.SignInExternallyUseCase;
+import io.github.andersonchen.talkcal.auth.application.port.out.DeleteAccountPort;
+import io.github.andersonchen.talkcal.auth.application.port.out.ForgetAccountDataPort;
 import io.github.andersonchen.talkcal.auth.application.port.out.LoadAccountPort;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
+import io.github.andersonchen.talkcal.calendar.application.port.in.ForgetOwnerUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.out.SaveAccountPort;
 
 import org.springframework.context.annotation.Bean;
@@ -41,5 +48,21 @@ class AuthConfiguration {
     @Bean
     SignInExternallyUseCase signInExternally(LoadAccountPort loadAccountPort, SaveAccountPort saveAccountPort) {
         return new SignInExternallyService(loadAccountPort, saveAccountPort);
+    }
+
+    /**
+     * 刪帳號之前，先請擁有資料的模組忘掉這個人（#52）。目前只有 calendar（行程、AI 助理的對話）。
+     *
+     * 兩個模組互不認識，翻譯在這裡做：auth 的 AccountId 和 calendar 的 OwnerId 是同一個 UUID（登入者的身分就是擁有者）。
+     * 之後多一個存了帳號資料的模組（例如冪等 key、歸檔各自成模組），在這裡多接一行。
+     */
+    @Bean
+    ForgetAccountDataPort forgetAccountData(ForgetOwnerUseCase forgetOwner) {
+        return (AccountId id) -> forgetOwner.forget(new OwnerId(id.value()));
+    }
+
+    @Bean
+    DeleteAccountUseCase deleteAccount(ForgetAccountDataPort forgetAccountData, DeleteAccountPort deleteAccountPort) {
+        return new DeleteAccountService(forgetAccountData, deleteAccountPort);
     }
 }
