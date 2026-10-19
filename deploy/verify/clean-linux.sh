@@ -12,8 +12,6 @@
 # 需要：Docker（Windows 的 Git Bash、macOS、Linux 都可以），磁碟約 15GB（模型 5GB 下載一份、播進 volume 再一份，加上映像檔）。
 # 時間：模型下載看網速（7 MB/s 約 12 分鐘），build app、web 約 5 分鐘。
 set -euo pipefail
-# Git Bash 會把 /root/... 這種參數改寫成 C:/Program Files/Git/root/...，docker exec 進容器的路徑不能被改
-export MSYS_NO_PATHCONV=1
 
 name=talkcal-clean-linux
 dind_image=docker:27.5.1-dind
@@ -23,6 +21,9 @@ bundle="$(mktemp)"
 trap 'rm -f "$bundle"; [ -n "${KEEP:-}" ] || docker rm -f -v "$name" >/dev/null 2>&1 || true' EXIT
 git -C "$root" bundle create -q "$bundle" HEAD
 echo "── 驗證 $(git -C "$root" log -1 --format='%h %s')"
+# 建完 bundle 才設：git 本身要 Git Bash 幫它把 /tmp/... 換成 Windows 路徑。
+# 之後 Git Bash 會把 /root/... 這種參數改寫成 C:/Program Files/Git/root/...，docker exec 進容器的路徑不能被改
+export MSYS_NO_PATHCONV=1
 
 docker rm -f -v "$name" >/dev/null 2>&1 || true
 # --privileged：dind 要自己管 cgroup、網路，這是 Docker 官方 dind 映像檔的用法
