@@ -78,6 +78,15 @@ variable "bedrock_key_days" {
   default     = 90
 }
 
+variable "backup_retention_days" {
+  description = <<-DESC
+    資料庫備份在 S3 留幾天（#45）。30：誤刪、資料被程式寫壞，通常幾天內就會發現；
+    留一個月是給「過了一陣子才有人說我的行程不見了」的情況。dump 只有幾百 KB，一個月的每小時備份也不到 1 GB。
+  DESC
+  type        = number
+  default     = 30
+}
+
 variable "repo_url" {
   description = "機器開機時 git clone 的來源。repo 是公開的，不需要憑證"
   type        = string

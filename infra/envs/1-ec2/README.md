@@ -149,6 +149,10 @@ terraform apply
 # Google、GitHub 要登記的回呼網址（Elastic IP 換了就會跟著換，要重新登記）
 terraform output oauth_callback_urls
 
+# 資料庫備份（自動：每小時、關機前、部署前）。看狀態、手動補一份；還原步驟見 docs/runbooks/backup-restore.md
+systemctl list-timers talkcal-backup.timer && cat /opt/talkcal/backups/last-success
+sudo bash /opt/talkcal/repo/infra/envs/1-ec2/backup-to-s3.sh manual
+
 # 看 Grafana：在本機跑這行，再開 http://localhost:3000
 terraform output -raw grafana_tunnel
 ```
@@ -164,7 +168,10 @@ aws ec2 start-instances --instance-ids "$(terraform output -raw instance_id)" --
 ```
 
 容器都設了 `restart: unless-stopped`，開機後會自己起來，不必重跑 deploy.sh；gpu 時模型要重新載入，第一個請求會等比較久。
-徹底收攤用 `terraform destroy`：IP 釋出、網址跟著換，資料庫資料也會一起消失。
+關機前 systemd 會先把資料庫備份到 S3（`talkcal-backup-on-shutdown`），所以關機這段時間的 RPO 是 0；關機要等它跑完（幾秒）。
+
+徹底收攤用 `terraform destroy`：IP 釋出、網址跟著換，機器上的資料庫也一起消失。
+備份 bucket 有東西時 destroy 會停在那裡（`force_destroy = false`，刻意的）：先決定要不要把備份下載回來，再清空 bucket 重跑。
 
 ## 代價
 
@@ -183,6 +190,7 @@ aws ec2 start-instances --instance-ids "$(terraform output -raw instance_id)" --
 | HTTPS | Caddy + sslip.io | 一個設定檔包辦憑證和續期，不必買網域；跟 cool-down 同一套做法 |
 | 觀測放哪 | 同一台，跟本機同一份 `ops/` | 最能證明「搬得動」；記憶體不夠再考慮 Grafana Cloud |
 | 映像檔從哪來 | 機器上 build | 不必先從家裡推幾 GB 的 CUDA 映像檔上 ECR；版本 tag 做了再改 |
+| 資料庫備份 | 每小時、關機前、部署前 `pg_dump` 到 S3（`backups.tf`），30 天；不做 EBS 自動快照 | 機器能從程式碼重建，要保護的只有資料庫；pg_dump 能只救一張表、跨版本還原。RPO：正常關機 0、當機 ≤ 1 小時。理由和還原步驟見 [runbook](../../../docs/runbooks/backup-restore.md)（[#45](https://github.com/Anderson-chen/talkcal/issues/45)） |
 | Region | 東京 ap-northeast-1 | 2026-10-13 查過：台北 ap-east-2 沒有任何 G 系列機型（g4dn、g5、g6 都沒有）；東京的 g6.xlarge 在 1a、1c 兩個可用區 |
 
 ## 待決定
@@ -190,7 +198,6 @@ aws ec2 start-instances --instance-ids "$(terraform output -raw instance_id)" --
 | 問題 | 選項 | 目前傾向 |
 |---|---|---|
 | 開機策略 | 常駐 / 平常關機、展示才開 | 平常關機 |
-| EBS 自動快照 | 現在沒有 / Data Lifecycle Manager 每天一次 | 跟 [#45 備份與還原](https://github.com/Anderson-chen/talkcal/issues/45) 一起做 |
 
 ## 疑難排解
 
