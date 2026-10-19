@@ -24,6 +24,7 @@ services:
     volumes:
       - ./verify/mock_llm.py:/mock/mock_llm.py:ro
     healthcheck:
-      # python:alpine 沒有 curl，用 busybox 的 wget
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      # python:alpine 沒有 curl，用 busybox 的 wget。寫 127.0.0.1 不寫 localhost：busybox 先試 ::1，
+      # mock 只聽 IPv4，會一直 Connection refused（第一次在乾淨 Linux 跑就是卡在這裡變 unhealthy）
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       start_period: 10s
