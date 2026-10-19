@@ -14,7 +14,9 @@ git push --no-verify                    # 確定要跳過檢查時
 ```
 
 要先開著 Docker Desktop。llama-server 有開的話，模型相關的測試會真的跑；沒開就跳過，摘要會列出來。
-第一次跑要 build 映像檔（含 Gradle 本體）、下載依賴，比較慢；之後映像檔有快取、依賴放在 volume `talkcal-ci-gradle`、`talkcal-ci-npm` 裡，就快了。
+第一次跑要 build 映像檔（含 Gradle 本體）、下載依賴，比較慢；之後映像檔有快取、依賴放在 volume `talkcal-ci-gradle-ro`、`talkcal-ci-npm` 裡，就快了。
+好幾個 worktree 可以同時跑：每個 CI 容器最多用 2 顆 CPU（`CI_CPUS` 可以改），Gradle 的快取唯讀共用、不會搶鎖，
+理由和實測見 [docs/parallel-dev.md](../docs/parallel-dev.md)。
 結果：摘要在 `ci/build/summary.md`，失敗時的 HTML 報告在 `ci/build/reports/`。
 
 ## 架構：檢查內容只寫一次，平台只是入口
