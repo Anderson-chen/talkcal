@@ -9,7 +9,7 @@ import io.github.andersonchen.talkcal.calendar.application.port.in.ParseEventsUs
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.memory.ChatMemoryRepository;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
@@ -106,20 +106,21 @@ public final class CalendarAssistant {
     // 一句話最多跑幾步（呼叫模型的次數）。正常是兩步：呼叫工具 → 根據結果回話；超過就是在繞圈
     static final int MAX_STEPS = 4;
     // 記憶只留最近幾輪（一輪 = 使用者一句話，加上之後的工具呼叫和回覆）。
-    // 以輪為單位截：從中間截會留下沒有前頭呼叫的工具結果，API 會直接拒收
-    static final int MAX_TURNS = 10;
+    // 以輪為單位截：從中間截會留下沒有前頭呼叫的工具結果，API 會直接拒收。
+    // public：組裝根把同一個數字交給資料庫那邊的記憶，存的時候就刪掉更早的輪
+    public static final int MAX_TURNS = 10;
     private static final DateTimeFormatter NOW_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final ChatModel chatModel;
-    // 擁有者 → 這個人名下的對話記憶。框架的 ChatMemoryRepository 只認 conversationId，擁有者要在拿到它之前先決定
-    private final Function<OwnerId, ChatMemoryRepository> memories;
+    // 擁有者 → 這個人名下的對話記憶。框架的 ChatMemory 只認 conversationId，擁有者要在拿到它之前先決定
+    private final Function<OwnerId, ChatMemory> memories;
     private final ToolCallingManager toolCallingManager = ToolCallingManager.builder().build();
     private final ParseEventsUseCase parseEvents;
     private final ListEventsUseCase listEvents;
     private final FindFreeSlotsUseCase findFreeSlots;
     private final Clock clock;
 
-    public CalendarAssistant(ChatModel chatModel, Function<OwnerId, ChatMemoryRepository> memories, ParseEventsUseCase parseEvents,
+    public CalendarAssistant(ChatModel chatModel, Function<OwnerId, ChatMemory> memories, ParseEventsUseCase parseEvents,
                              ListEventsUseCase listEvents, FindFreeSlotsUseCase findFreeSlots, Clock clock) {
         this.chatModel = Objects.requireNonNull(chatModel, "chatModel 不可為 null");
         this.memories = Objects.requireNonNull(memories, "memories 不可為 null");
@@ -148,7 +149,7 @@ public final class CalendarAssistant {
         Objects.requireNonNull(owner, "owner 不可為 null");
         Objects.requireNonNull(conversationId, "conversationId 不可為 null");
         try {
-            return memories.apply(owner).findByConversationId(conversationId).stream()
+            return recentTurns(memories.apply(owner).get(conversationId)).stream()
                     .filter(m -> m.getMessageType() == MessageType.USER
                             || (m instanceof AssistantMessage a && !a.hasToolCalls() && a.getText() != null && !a.getText().isBlank()))
                     .map(m -> new Line(m.getMessageType() == MessageType.USER, m.getText().strip()))
@@ -168,8 +169,12 @@ public final class CalendarAssistant {
      *     呼叫模型（帶著工具定義；Spring AI 2.0 的 ChatModel 只會回「要呼叫哪個工具」，不會自己執行）
      *     沒要工具 → 這就是回覆，結束
      *     要工具   → ToolCallingManager 執行，「呼叫」和「結果」都接到對話後面，再問一次
-     * 存回記憶（只留最近 MAX_TURNS 輪）
+     * 這一輪新增的（使用者的話、工具呼叫和結果、回覆）接到記憶的最後面
      * </pre>
+     *
+     * 存的時候只接「這一輪新增的」，不把讀出來的歷史整段寫回去（#50）：
+     * 同一段對話同時送兩句，兩個請求讀到的是同一份歷史；整段寫回的話，晚存的會把早存的那一輪蓋掉。
+     * 只往後接，兩輪都留著。怎麼接、接在哪裡由記憶自己排隊（JdbcAssistantMemoryRepository）。
      *
      * 失敗時（模型、資料庫出事、繞圈超過 MAX_STEPS）一律丟 IllegalStateException：
      * 背後的例外型別五花八門，裡面還可能混著 IllegalArgumentException，不包起來會被誤認成「呼叫端送錯」。
@@ -183,8 +188,10 @@ public final class CalendarAssistant {
         try {
             // 每一輪都重給 system：日期表要跟著「現在」走，昨天開始的對話今天繼續，「明天」就不一樣了。所以 system 不進記憶
             SystemMessage system = new SystemMessage(instruction(LocalDateTime.now(clock)));
-            ChatMemoryRepository memory = memories.apply(owner);
-            List<Message> conversation = new ArrayList<>(memory.findByConversationId(conversationId));
+            ChatMemory memory = memories.apply(owner);
+            // 只拿最近 MAX_TURNS 輪給模型；記到哪裡為止是歷史，之後的就是這一輪新增的
+            List<Message> earlier = recentTurns(memory.get(conversationId));
+            List<Message> conversation = new ArrayList<>(earlier);
             conversation.add(new UserMessage(message));
             // 工具要知道使用者實際說過什麼（例如有沒有講早上晚上），不能只看模型整理出來的那句
             List<String> userSaid = conversation.stream()
@@ -243,7 +250,8 @@ public final class CalendarAssistant {
                         text = INTERNALS_FALLBACK;
                     }
                     conversation.add(answer);
-                    memory.saveAll(conversationId, recentTurns(conversation));
+                    // 工具執行後換掉的 conversation 前面還是同一份歷史（只拿掉 system 和提醒），所以從 earlier.size() 起就是這一輪的
+                    memory.add(conversationId, List.copyOf(conversation.subList(earlier.size(), conversation.size())));
                     log.info("AI 助理回覆：conversation={} steps={} proposals={} reply={}",
                             conversationId, step + 1, tools.proposals().size(), text);
                     return new Reply(text.strip(), tools.proposals());

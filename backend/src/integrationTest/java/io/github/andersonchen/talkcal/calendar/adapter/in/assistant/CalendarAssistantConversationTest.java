@@ -31,7 +31,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 
@@ -63,7 +64,8 @@ class CalendarAssistantConversationTest {
             ScheduledEvent.schedule(new CalendarEvent("產品週會", LocalDateTime.of(2026, 10, 7, 9, 0), LocalDateTime.of(2026, 10, 7, 10, 0))),
             ScheduledEvent.schedule(new CalendarEvent("瑜珈課", LocalDateTime.of(2026, 10, 7, 18, 0), LocalDateTime.of(2026, 10, 7, 19, 0))));
 
-    private final InMemoryChatMemoryRepository memory = new InMemoryChatMemoryRepository();
+    // 不讓它自己截（截輪數是 CalendarAssistant 的事），它只負責往後接
+    private final ChatMemory memory = MessageWindowChatMemory.builder().maxMessages(Integer.MAX_VALUE).build();
     private CalendarAssistant assistant;
     private String conversation;
     // 這段對話裡 list_events / find_free_slots 讀了幾次行事曆：用來確認模型真的去查了，不是憑記憶回答

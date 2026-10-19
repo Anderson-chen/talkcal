@@ -21,7 +21,8 @@ import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -182,8 +183,8 @@ class CalendarAssistantControllerTest {
                 }
             };
             // 每個擁有者一份記憶，跟真的實作一樣分開
-            Map<OwnerId, InMemoryChatMemoryRepository> memories = new ConcurrentHashMap<>();
-            return new CalendarAssistant(model, owner -> memories.computeIfAbsent(owner, o -> new InMemoryChatMemoryRepository()),
+            Map<OwnerId, ChatMemory> memories = new ConcurrentHashMap<>();
+            return new CalendarAssistant(model, owner -> memories.computeIfAbsent(owner, o -> MessageWindowChatMemory.builder().maxMessages(Integer.MAX_VALUE).build()),
                     description -> List.of(), (owner, start, end) -> List.of(), (owner, start, end, period, minimum) -> List.of(),
                     Clock.systemDefaultZone());
         }

@@ -19,8 +19,10 @@ import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
@@ -83,7 +85,7 @@ class CalendarAssistantTest {
         return new CalendarAssistant(model,
                 owner -> {
                     memoryOwners.add(owner);
-                    return memory;
+                    return MessageWindowChatMemory.builder().chatMemoryRepository(memory).maxMessages(Integer.MAX_VALUE).build();
                 },
                 description -> {
                     parsed.add(description);
@@ -197,6 +199,66 @@ class CalendarAssistantTest {
         assertEquals(CalendarAssistant.MAX_TURNS * 4, kept.size());
         assertEquals(MessageType.USER, kept.getFirst().getMessageType());
         assertEquals("第 2 句", kept.getFirst().getText());
+    }
+
+    @Test
+    @DisplayName("#50 同一段對話同時送兩句：先送的還在跑模型、後送的就存好了，兩句和兩個回覆都留著")
+    void concurrentRepliesKeepBothTurns() {
+        // 用重入代替兩條執行緒，順序固定、每次都一樣：第一句讀完歷史、正在等模型的時候，第二句從頭跑到存好，第一句才回來存。
+        // 反例：原本存檔是把「讀到的歷史 + 這一輪」整段寫回（saveAll），第一句存的時候把第二句那一輪蓋掉，這個測試是紅的
+        CalendarAssistant[] self = new CalendarAssistant[1];
+        ChatModel model = new ChatModel() {
+            @Override
+            public ChatResponse call(Prompt prompt) {
+                String said = prompt.getInstructions().getLast().getText();
+                if (said.equals("第一句")) {
+                    self[0].reply(OWNER, ID, "第二句");
+                }
+                return new ChatResponse(List.of(new Generation(says("收到" + said))));
+            }
+        };
+        self[0] = assistant(model);
+
+        self[0].reply(OWNER, ID, "第一句");
+
+        // 第二句先存好，所以排在前面；重點是兩輪都在
+        assertEquals(List.of("第二句", "收到第二句", "第一句", "收到第一句"),
+                memory.findByConversationId(ID).stream().map(Message::getText).toList());
+    }
+
+    @Test
+    @DisplayName("交給記憶的只有這一輪新增的（使用者的話、工具呼叫、工具結果、回覆），讀出來的歷史不重寫")
+    void addsOnlyThisTurn() {
+        assistant(scripted(says("早上還是晚上？"))).reply(OWNER, ID, "明天七點吃飯");
+        List<List<Message>> added = new ArrayList<>();
+        ChatMemory window = MessageWindowChatMemory.builder().chatMemoryRepository(memory).maxMessages(Integer.MAX_VALUE).build();
+        ChatMemory recording = new ChatMemory() {
+            @Override
+            public void add(String conversationId, List<Message> messages) {
+                added.add(List.copyOf(messages));
+                window.add(conversationId, messages);
+            }
+
+            @Override
+            public List<Message> get(String conversationId) {
+                return window.get(conversationId);
+            }
+
+            @Override
+            public void clear(String conversationId) {
+                window.clear(conversationId);
+            }
+        };
+        CalendarAssistant second = new CalendarAssistant(scripted(proposes("明天晚上七點吃飯"), says("請確認卡片。")), owner -> recording,
+                description -> List.of(DINNER), (owner, start, end) -> List.of(), (owner, start, end, period, minimum) -> List.of(), TUE);
+
+        second.reply(OWNER, ID, "晚上");
+
+        assertEquals(1, added.size());
+        assertEquals(List.of(MessageType.USER, MessageType.ASSISTANT, MessageType.TOOL, MessageType.ASSISTANT),
+                added.getFirst().stream().map(Message::getMessageType).toList());
+        assertEquals("晚上", added.getFirst().getFirst().getText());
+        assertEquals(6, memory.findByConversationId(ID).size());
     }
 
     @Test

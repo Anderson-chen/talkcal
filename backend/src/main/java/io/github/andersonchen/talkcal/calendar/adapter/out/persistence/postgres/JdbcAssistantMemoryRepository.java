@@ -6,7 +6,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 
-import org.springframework.ai.chat.memory.ChatMemoryRepository;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
@@ -32,9 +32,20 @@ import java.util.UUID;
  * 對話依擁有者分開（#104，V11）：of(owner) 拿到的是「這個人名下的對話」，每一句 SQL 都帶著 owner_id。
  * 同一個 conversation_id 在不同人底下是不同的兩段，別人拿到你的 conversation_id 也讀不到、蓋不掉你的那段。
  *
- * of(owner) 回傳 Spring AI 的 ChatMemoryRepository，而不是自己定一個 port：
+ * 寫入是只往後接（append-only），不是整段取代（#50）。
+ * 原本照 Spring AI ChatMemoryRepository 的 saveAll：讀出整段 → 跑模型（好幾秒）→ 整段刪掉重插。
+ * 同一段對話同時送兩句（兩個分頁、按了兩次送出），兩個請求讀到同一份歷史，晚存的那個整段蓋掉早的，
+ * 早的那句和它的回覆就不見了，而且沒有任何錯誤（V7 當時寫明接受這個代價）。
+ * 改成每一輪只把「這一輪新增的那幾則」接在最後面：兩句都留著，誰先誰後照存進來的順序。
+ *
+ * 為什麼不是樂觀鎖（version 欄位、衝突回 409）：對話不是「兩個人改同一份東西」，兩句都是使用者真的說過的，
+ * 沒有誰該被退回；回 409 要使用者重送，重送就要重跑一次模型（又是好幾秒、又花一次錢），換來的結果跟直接接上去一樣。
+ * 代價：晚到的那句，模型回它的時候沒看到同時送出的那一句（兩個請求本來就是並行的）；但兩句和兩個回覆都存著，下一輪模型都看得到。
+ *
+ * of(owner) 回傳 Spring AI 的 ChatMemory（add / get / clear），而不是自己定一個 port：
  * 對話記憶是 AI 助理（inbound adapter）跟框架之間的事，core 不知道有「對話」這回事。
- * 照框架的介面寫，哪天 Spring AI 官方的實作支援工具訊息了，組裝根換一行就好。
+ * 用 ChatMemory 而不是 ChatMemoryRepository，是因為框架裡「往後接」的語意就是 ChatMemory.add；
+ * ChatMemoryRepository 只有 saveAll（整段取代），照它寫就一定是讀-改-寫，躲不掉上面那個遺失更新。
  * 框架的介面只認 conversationId，擁有者只好在拿到這個物件之前先決定 —— 所以是「先 of(owner)，再照框架的方法用」。
  *
  * 名字不叫 Adapter：這個字尾在專案裡專指「實作 core 的 outbound port」（ArchitectureTest 守著），這個不是。
@@ -48,23 +59,31 @@ public final class JdbcAssistantMemoryRepository {
 
     private final JdbcClient jdbc;
     private final TransactionTemplate transaction;
+    private final int keepTurns;
 
-    public JdbcAssistantMemoryRepository(JdbcClient jdbc, TransactionTemplate transaction) {
+    /**
+     * @param keepTurns 一段對話最多留幾輪（一輪 = 使用者一句話，加上之後的工具呼叫和回覆）。
+     *                  每次接上新的一輪，就把更早的輪刪掉：只往後接的話，一直在聊的對話不會被清理排程刪，會無限長下去
+     */
+    public JdbcAssistantMemoryRepository(JdbcClient jdbc, TransactionTemplate transaction, int keepTurns) {
         this.jdbc = Objects.requireNonNull(jdbc, "jdbc 不可為 null");
         this.transaction = Objects.requireNonNull(transaction, "transaction 不可為 null");
+        if (keepTurns < 1) {
+            throw new IllegalArgumentException("keepTurns 至少要 1：" + keepTurns);
+        }
+        this.keepTurns = keepTurns;
     }
 
     /** 這個人名下的對話。物件很輕（只記著擁有者），每個請求拿一個新的就好。 */
-    public ChatMemoryRepository of(OwnerId owner) {
+    public ChatMemory of(OwnerId owner) {
         return new OwnedMemory(Objects.requireNonNull(owner, "owner 不可為 null").value());
     }
 
     /**
      * 刪掉 cutoff 之前就沒再說過話的對話，回傳刪了幾段。不分擁有者：這是這張表自己的維護工作，不是誰的請求。
      *
-     * 「最後說話的時間」= 那段對話最新一列的 created_at：saveAll 每一輪都整段刪掉重插，
-     * 所以一段對話的每一列其實都是最後那一輪的時間。用 max 而不是隨便一列，是不想依賴這個巧合 ——
-     * 哪天改成只插新的那幾則，這裡照樣對。整段一起刪，不會留下只剩後半截、開頭被砍掉的對話。
+     * 「最後說話的時間」= 那段對話最新一列的 created_at：寫入是只往後接，最新一列就是最後那一輪存進來的時間。
+     * 整段一起刪，不會留下只剩後半截、開頭被砍掉的對話。
      * 一段對話是 (owner_id, conversation_id) 一組：兩個人剛好用了同一個 conversation_id，也是各算各的。
      */
     public int deleteInactiveSince(Instant cutoff) {
@@ -86,7 +105,7 @@ public final class JdbcAssistantMemoryRepository {
                 .size();
     }
 
-    private final class OwnedMemory implements ChatMemoryRepository {
+    private final class OwnedMemory implements ChatMemory {
 
         private final UUID owner;
 
@@ -95,19 +114,7 @@ public final class JdbcAssistantMemoryRepository {
         }
 
         @Override
-        public List<String> findConversationIds() {
-            try {
-                return jdbc.sql("SELECT DISTINCT conversation_id FROM calendar_assistant_message WHERE owner_id = :owner")
-                        .param("owner", owner)
-                        .query((rs, rowNum) -> rs.getObject(1, UUID.class).toString())
-                        .list();
-            } catch (DataAccessException e) {
-                throw new IllegalStateException("讀取 AI 助理的對話清單失敗", e);
-            }
-        }
-
-        @Override
-        public List<Message> findByConversationId(String conversationId) {
+        public List<Message> get(String conversationId) {
             try {
                 return jdbc.sql("""
                                 SELECT type, content, tool_calls::text AS tool_calls, tool_responses::text AS tool_responses
@@ -125,19 +132,35 @@ public final class JdbcAssistantMemoryRepository {
         }
 
         /**
-         * 整段取代（Spring AI 的 ChatMemoryRepository 就是這個語意）：先刪再全部重插，包在一個交易裡，
-         * 不會留下「刪了一半、插了一半」的對話。刪的也只有這個人名下的那段。
+         * 接在這段對話的最後面，包在一個交易裡：不會留下「插了一半」的一輪。
+         *
+         * 接在哪裡（position）要先看目前最後一則是第幾則；兩個請求同時看，會拿到同一個號碼，第二個撞主鍵失敗。
+         * 所以先拿這段對話的 advisory lock（交易結束自動放掉），同一段對話的寫入排隊，一次一個；
+         * 鎖只包「查號碼 → 插入 → 刪舊輪」這幾句 SQL，跑模型的那幾秒不在裡面，不同的對話也不互相等。
+         * 不用 SELECT ... FOR UPDATE：第一輪還沒有任何一列可以鎖，兩個請求還是會撞。
          */
         @Override
-        public void saveAll(String conversationId, List<Message> messages) {
+        public void add(String conversationId, List<Message> messages) {
             UUID id = uuid(conversationId);
             List<Message> stored = messages.stream().filter(m -> m.getMessageType() != MessageType.SYSTEM).toList();
+            if (stored.isEmpty()) {
+                return;
+            }
             try {
                 transaction.executeWithoutResult(status -> {
-                    delete(id);
-                    for (int position = 0; position < stored.size(); position++) {
-                        insert(id, position, stored.get(position));
+                    lock(id);
+                    int next = jdbc.sql("""
+                                    SELECT coalesce(max(position) + 1, 0) FROM calendar_assistant_message
+                                    WHERE owner_id = :owner AND conversation_id = :id
+                                    """)
+                            .param("owner", owner)
+                            .param("id", id)
+                            .query(Integer.class)
+                            .single();
+                    for (int i = 0; i < stored.size(); i++) {
+                        insert(id, next + i, stored.get(i));
                     }
+                    dropOldTurns(id);
                 });
             } catch (DataAccessException | TransactionException e) {
                 // 連不上資料庫時，失敗發生在開交易那一步，丟的是 TransactionException，不是 DataAccessException
@@ -146,18 +169,44 @@ public final class JdbcAssistantMemoryRepository {
         }
 
         @Override
-        public void deleteByConversationId(String conversationId) {
+        public void clear(String conversationId) {
             try {
-                delete(uuid(conversationId));
+                jdbc.sql("DELETE FROM calendar_assistant_message WHERE owner_id = :owner AND conversation_id = :id")
+                        .param("owner", owner)
+                        .param("id", uuid(conversationId))
+                        .update();
             } catch (DataAccessException e) {
                 throw new IllegalStateException("刪除 AI 助理的對話失敗：" + conversationId, e);
             }
         }
 
-        private void delete(UUID id) {
-            jdbc.sql("DELETE FROM calendar_assistant_message WHERE owner_id = :owner AND conversation_id = :id")
+        // 鎖的是 (擁有者, 對話) 這一組；hashtextextended 把它變成 advisory lock 要的 bigint。
+        // 不同對話剛好撞到同一個雜湊值，只是多排一下隊，不會錯
+        private void lock(UUID id) {
+            jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
+                    .param("key", "calendar_assistant_message:" + owner + ":" + id)
+                    .query((rs, rowNum) -> 0)
+                    .list();
+        }
+
+        /**
+         * 只留最近 keepTurns 輪：從倒數第 keepTurns 句使用者的話開始留，更早的刪掉。
+         * 以輪為單位刪，不從中間截：工具結果前面一定要有呼叫它的那則助理訊息，拆開了 API 會拒收整個請求。
+         * position 不重新編號：讀的時候只看順序，號碼從幾開始都一樣。
+         */
+        private void dropOldTurns(UUID id) {
+            jdbc.sql("""
+                            DELETE FROM calendar_assistant_message
+                            WHERE owner_id = :owner AND conversation_id = :id
+                              AND position < (
+                                  SELECT position FROM calendar_assistant_message
+                                  WHERE owner_id = :owner AND conversation_id = :id AND type = 'USER'
+                                  ORDER BY position DESC
+                                  OFFSET :skip LIMIT 1)
+                            """)
                     .param("owner", owner)
                     .param("id", id)
+                    .param("skip", keepTurns - 1)
                     .update();
         }
 
