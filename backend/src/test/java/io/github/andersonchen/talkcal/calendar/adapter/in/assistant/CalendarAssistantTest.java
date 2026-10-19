@@ -19,6 +19,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -32,6 +33,8 @@ import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
 /**
  * 不打真模型：一個照劇本回話的假 ChatModel，看 agent loop 本身對不對 —— 工具有沒有被執行、
@@ -126,6 +129,20 @@ class CalendarAssistantTest {
         assistant(withDefaults).reply(OWNER, ID, "明天七點吃飯");
 
         assertEquals("qwen-from-properties", prompts.get(0).getOptions().getModel());
+    }
+
+    @Test
+    @DisplayName("#52 log 不記對話內容：使用者的話、工具參數、回覆都不出現；反例：conversation、步數、工具名稱照記")
+    @ExtendWith(OutputCaptureExtension.class)
+    void logsWhatHappenedNotWhatWasSaid(CapturedOutput output) {
+        assistant(scripted(proposes("陪王小明看身心科"), says("王小明的行程請確認。")))
+                .reply(OWNER, ID, "幫我記陪王小明看身心科 0912-345-678");
+
+        assertFalse(output.getOut().contains("王小明"), output.getOut());
+        assertFalse(output.getOut().contains("0912"), output.getOut());
+        assertTrue(output.getOut().contains("conversation=" + ID), output.getOut());
+        assertTrue(output.getOut().contains("tool=propose_events"), output.getOut());
+        assertTrue(output.getOut().contains("steps=2"), output.getOut());
     }
 
     @Test
