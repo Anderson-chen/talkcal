@@ -28,6 +28,10 @@ cp deploy/.env.example deploy/.env   # 再打開來填值
 
 - `docker compose`、`./gradlew bootRun` 讀的都是這一份；雲端的 `deploy.sh` 也是把 SSM 裡的值寫到同一個位置
 - 沒填 `DB_PASSWORD` 時兩邊都直接拒絕啟動，訊息會說要補什麼
+- `MODELS_DIR`：放模型檔的資料夾（[#49](https://github.com/Anderson-chen/talkcal/issues/49) 之前寫死成 `C:\llm\models`，只能在 Windows 上照原樣跑）。
+  還沒有模型檔就跑 `bash deploy/models/download.sh`，從哪下載、怎麼驗證見 [models/README.md](models/README.md)。
+  沒填時 compose 拒絕啟動（不設的話 Docker 會在主機上建一個空資料夾掛進來，看起來起得來、其實沒有模型）；
+  填了但資料夾裡沒有模型，`model-seed` 失敗、說出缺哪個檔案，模型服務不會起
 - 已經有舊的 `postgres-data` volume（以前密碼寫死成 `talkcal`）：PostgreSQL 只在第一次初始化時讀密碼，`DB_PASSWORD` 要填 `talkcal`。
   想換成別的密碼，先改資料庫裡的，再改 `.env`：
 
@@ -118,11 +122,13 @@ docker compose build app    # 改了 app 的程式碼後，只重 build app
 
 ## 模型檔怎麼進容器
 
-`model-seed` 先把 `C:\llm\models` 的 `.gguf` 複製進具名 volume `models`，跑完就結束；模型服務等它成功才啟動，
-從 volume 唯讀讀取。已經複製過的（大小相同）會跳過，所以只有第一次慢；有列在 `SHA256SUMS` 的會驗證內容。
+`model-seed` 先把 `MODELS_DIR`（`.env` 裡設的主機資料夾）的 `.gguf` 複製進具名 volume `models`，跑完就結束；模型服務等它成功才啟動，
+從 volume 唯讀讀取。已經複製過的（大小相同）會跳過，所以只有第一次慢；有列在 `SHA256SUMS` 的會驗證內容
+（`deploy/models/download.sh` 下載時會寫這份）。
 
-為什麼不直接掛 `C:\llm\models`：實測 Windows → WSL2 檔案通道循序讀只有約 20 MB/s，
-llama.cpp 預設的 mmap 零碎讀更慢——Qwen 5GB 載了 5 分鐘還卡在 275MB。
+為什麼不直接掛主機資料夾：實測 Windows → WSL2 檔案通道循序讀只有約 20 MB/s，
+llama.cpp 預設的 mmap 零碎讀更慢——Qwen 5GB 載了 5 分鐘還卡在 275MB。macOS 的 Docker Desktop 也是 VM，檔案通道一樣慢；
+Linux 主機直接掛不慢，但三種作業系統走同一條路，行為才一樣。
 
 | | 直接掛 Windows 資料夾 | volume（現在） |
 |---|---|---|
@@ -132,7 +138,7 @@ llama.cpp 預設的 mmap 零碎讀更慢——Qwen 5GB 載了 5 分鐘還卡在 
 ## 怎麼切換
 
 ```bash
-# 原生 → 容器：先關掉 C:\llm 底下生成模型那支 .bat 的視窗（搶同樣的 8080，VRAM 也不夠放兩份）
+# 原生 → 容器：先關掉主機上原生跑的 llama-server（作者電腦是 C:\llm 底下那支 .bat；搶同樣的 8080，VRAM 也不夠放兩份）
 # 本機的 bootRun 不用關：容器 app 在 18090，不會撞
 cd deploy
 docker compose up -d
@@ -141,7 +147,7 @@ docker compose logs -f      # 看載入過程，出現 "model loaded" 就載好�
 
 # 容器 → 原生
 docker compose down
-# 再點兩下 C:\llm 底下生成模型那支 .bat
+# 再起回原生的 llama-server（作者電腦是點兩下 C:\llm 底下那支 .bat）
 
 docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新播種
 ```

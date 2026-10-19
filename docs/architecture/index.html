@@ -199,7 +199,7 @@ footer{margin-top:28px;font-size:12px;color:var(--text-muted)}
 <span><i class="sw" style="background:var(--surface-1);border:0.5px solid var(--border-strong);opacity:.3"></i>目前 model_backend 不建</span>
 </div>
 <div id="panel"></div>
-<footer><p id="checked">最後核對：2026-10-16（行號以 master 為準；業界說法於同日查證，來源附在每個元件下）</p></footer>
+<footer><p id="checked">最後核對：2026-10-19（行號以 master 為準；業界說法於同日查證，來源附在每個元件下）</p></footer>
 <dialog id="code" aria-labelledby="code-title">
 <div class="dlg">
 <div class="dlg-h">
@@ -248,7 +248,7 @@ web:{n:"services.web（nginx）",d:"送靜態檔、轉 /api、擋太頻繁的 AI
 app:{n:"services.app（Spring）",d:"talkcal 本體：行程與 AI 助理。",deps:["postgres","bsvc","llm"],p:[["mem_limit","2g","沒設的話 JVM 的 75% 算整台"],["SPRING_AI_OPENAI_*",{bedrock:"Bedrock",gpu:"llm-chat:8080"},"用環境變數蓋掉，程式不改"],["depends_on",{bedrock:"!override 只留 postgres",gpu:"llm-chat、postgres"},{bedrock:"沒有 llm-chat，不換掉 compose 會報錯",gpu:"等模型和資料庫健康才起"}],["stop_grace_period","2m30s","等進行中的模型呼叫做完再關"]],ind:"ECS service / k8s Deployment，多副本、probe、ECR。",when:"要多副本時。",chk:"ok",src:["ecs"]},
 postgres:{n:"services.postgres",d:"行程與對話記憶。",deps:["dotenv"],p:[["image","postgres:18.6-alpine","釘版本；alpine 較小"],["POSTGRES_PASSWORD","${DB_PASSWORD}","Terraform 隨機產生，不再寫死"],["密碼同步","ALTER ROLE","映像檔只在第一次初始化時讀密碼"]],ind:"RDS / Aurora；manage_master_user_password（replica、Blue/Green 不支援）。",when:"需要備份 SLA 時。",chk:"ok",src:["rds"]},
 llm:{n:"services.llm-chat",only:"gpu",d:"自己跑的 llama-server。",deps:["seed"],p:[["-ngl","99","全部層放 GPU"],["-c / -np","32768 / 200","同時處理的請求數"],["--kv-unified","開","給了 -np 就要明講，不然 context 被均分到每個 slot 只剩約 163"]],ind:"多人 API 多選 vLLM；llama.cpp 強在 GGUF 與單人延遲。",when:"GPU 配額下來時。",chk:"ok",src:["vllm"]},
-seed:{n:"services.model-seed",only:"gpu",d:"複製模型並驗 SHA256。",deps:["s3m"],p:[["sha256sum -c","驗證","確定模型檔沒有傳壞或被換掉"]],ind:"k8s initContainer 或 Mountpoint for S3。",when:"上 EKS 時。",chk:"ok",src:["mp"]},
+seed:{n:"services.model-seed",only:"gpu",d:"複製模型並驗 SHA256。",deps:["s3m"],p:[["sha256sum -c","驗證","確定模型檔沒有傳壞或被換掉"],["MODELS_DIR","/opt/talkcal/models","掛成 /seed 的來源資料夾；沒設 compose 拒絕啟動，資料夾裡沒有模型 model-seed 失敗（本機是 deploy/.env 填的路徑）"]],ind:"k8s initContainer 或 Mountpoint for S3。",when:"上 EKS 時。",chk:"ok",src:["mp"]},
 obs:{n:"ops/compose.yaml",d:"觀測堆疊：跟本機同一份。",deps:["app"],p:[["Alloy","v1.11.0","收集三種訊號"],["Mimir","3.2.1","存指標"],["Loki","3.3.0","存日誌"],["Tempo","3.1.0","存追蹤"],["Grafana","11.4.0","畫圖；版本都釘死，換機器拉到同一版"],["Grafana 埠","127.0.0.1:3000","不對外，走 SSM port forwarding"]],ind:"放在被觀測系統之外：Amazon Managed Prometheus / Grafana、Grafana Cloud、CloudWatch、Datadog。",when:"上正式環境時。",chk:"ok",src:["amg"]}
 };
 const FP={
@@ -271,7 +271,7 @@ const FP={
 "infra/envs/1-ec2/deploy.sh":"在機器上跑的部署：拉版本 →（gpu）拉模型 → 拉 .env → 同步 DB 密碼 → 兩組 compose up。",
 "infra/envs/1-ec2/compose.ec2.yaml":"疊在 deploy/compose.yaml 上、兩種 model_backend 共用的雲端差異：DB 密碼、session cookie 只走 HTTPS、app 記憶體上限、Caddy。",
 "infra/envs/1-ec2/compose.bedrock.yaml":"（bedrock）不起模型容器，app 的模型位址、key、名稱換成 Bedrock 的。",
-"infra/envs/1-ec2/compose.gpu.yaml":"（gpu）模型來源換成從 S3 拉下來的資料夾。",
+"infra/envs/1-ec2/compose.gpu.yaml":"（gpu）目前沒有要蓋掉的：model-seed 掛的 MODELS_DIR 由 deploy.sh 設成 S3 拉下來的資料夾（#49 之前本機寫死 C:/llm/models，才需要這份換掉）。",
 "infra/envs/1-ec2/Caddyfile":"HTTPS 入口：網址、壓縮，全部轉給 web。",
 "deploy/compose.yaml":"本機和雲端共用的服務定義：模型、postgres、app、web。",
 "web/nginx.conf":"前端的 nginx：送靜態檔、/api 轉給 app、AI 發問和登入註冊限流。",
@@ -291,15 +291,15 @@ const F={
 "infra/envs/1-ec2/ec2.tf":[["2–8","locals（gpu、機型、磁碟、ami）","ec2"],["18–21","data dlami","ami"],["25–28","data ubuntu","ami"],["33–39","aws_eip.main","eip"],["41–84","aws_instance.app","ec2"],["86–89","aws_eip_association","eip"]],
 "infra/envs/1-ec2/iam.tf":[["5–16","aws_iam_role.ec2","role"],["18–21","SSM attachment","role"],["24–55","role_policy.deploy","role"],["57–60","instance_profile","profile"]],
 "infra/envs/1-ec2/bedrock.tf":[["13–17","aws_iam_user.bedrock","buser"],["19–49","aws_iam_user_policy.bedrock","buser"],["54–59","service_specific_credential","bkey"]],
-"infra/envs/1-ec2/secrets.tf":[["7–23","locals（site_address、backend_env）","dotenv"],["11","site_address（也是 Caddy 的網址）","caddy"],["25–28","random_password.db","pwd"],["31–47","aws_ssm_parameter.dotenv（含 Google、GitHub 的 client id／secret）","dotenv"]],
+"infra/envs/1-ec2/secrets.tf":[["7–24","locals（site_address、backend_env）","dotenv"],["11","site_address（也是 Caddy 的網址）","caddy"],["26–29","random_password.db","pwd"],["32–48","aws_ssm_parameter.dotenv（含 Google、GitHub 的 client id／secret）","dotenv"]],
 "infra/envs/1-ec2/s3.tf":[["7–10","aws_s3_bucket.models","s3m"],["12–21","加密","s3m"],["23–31","公開封鎖","s3m"]],
 "infra/envs/1-ec2/user-data.sh.tftpl":[["全檔","第一次開機腳本","ec2"]],
-"infra/envs/1-ec2/deploy.sh":[["53","從 SSM 拉 .env","dotenv"],["65","疊三份 compose","ec2"],["76–82","起 postgres、ALTER ROLE","postgres"],["85","up -d --build","app"],["89","起觀測","obs"]],
+"infra/envs/1-ec2/deploy.sh":[["29","export MODELS_DIR（兩種 model_backend 都要）","seed"],["56","從 SSM 拉 .env","dotenv"],["68","疊三份 compose","ec2"],["79–85","起 postgres、ALTER ROLE","postgres"],["88","up -d --build","app"],["92","起觀測","obs"]],
 "infra/envs/1-ec2/compose.ec2.yaml":[["18–20","postgres 密碼","postgres"],["22–30","app 密碼、session cookie Secure、mem_limit","app"],["36–53","caddy","caddy"],["55–57","caddy volumes","caddy"]],
 "infra/envs/1-ec2/compose.bedrock.yaml":[["11–12","model-seed 不起","seed"],["13–14","llm-chat 不起","llm"],["16–25","app 改打 Bedrock","app"]],
-"infra/envs/1-ec2/compose.gpu.yaml":[["8–10","model-seed 改掛 S3 拉下來的資料夾","seed"]],
+"infra/envs/1-ec2/compose.gpu.yaml":[["8","空的：模型來源已經由 deploy/compose.yaml 的 MODELS_DIR 決定","seed"]],
 "infra/envs/1-ec2/Caddyfile":[["3–10","網域、encode、reverse_proxy","caddy"]],
-"deploy/compose.yaml":[["22–25","x-llama-server","llm"],["29","x-gpu","llm"],["50–84","model-seed","seed"],["86–151","llm-chat","llm"],["154–175","postgres","postgres"],["178–223","app","app"],["227–251","web","web"],["253–259","volumes","postgres"]],
+"deploy/compose.yaml":[["22–25","x-llama-server","llm"],["29","x-gpu","llm"],["51–96","model-seed","seed"],["98–163","llm-chat","llm"],["166–187","postgres","postgres"],["190–235","app","app"],["239–263","web","web"],["265–271","volumes","postgres"]],
 "web/nginx.conf":[["27–28","兩道限流 zone（每 IP、全站）","web"],["32–37","登入、註冊的限流 zone（每 IP）","web"],["44","超過回 429","web"],["52–53","真實 IP 取自 X-Forwarded-For","web"],["59–62","原本的 scheme（Caddy 帶的 X-Forwarded-Proto，沒有就 $scheme）","web"],["75","resolver","web"],["83","X-Forwarded-Proto 照轉，回呼網址才是 https（#127）","web"],["90","proxy_read_timeout","web"],["93–96","限流套到 /api","web"]],
 "ops/compose.yaml":[["22","mimir","obs"],["40","loki","obs"],["54","tempo","obs"],["67–74","grafana","obs"],["98","alloy","obs"]]
 };
@@ -307,7 +307,7 @@ const E="infra/envs/1-ec2/",B="infra/bootstrap/",D="deploy/compose.yaml",O="ops/
 const L={
 provider:{"region":E+"providers.tf:2","profile":E+"providers.tf:3","default_tags":E+"providers.tf:5"},
 backend:{"required_version":E+"backend.tf:2","key":E+"backend.tf:10","use_lockfile":E+"backend.tf:11","bucket":E+"backend.hcl.example:3"},
-pwd:{"length":E+"secrets.tf:26","special":E+"secrets.tf:27"},
+pwd:{"length":E+"secrets.tf:27","special":E+"secrets.tf:28"},
 vpc:{"cidr_block":E+"vpc.tf:6","enable_dns_support":E+"vpc.tf:7","enable_dns_hostnames":E+"vpc.tf:8"},
 igw:{"vpc_id":E+"vpc.tf:16"},
 az:{"location_type":E+"vpc.tf:26","sort()[0]":E+"vpc.tf:35"},
@@ -317,8 +317,8 @@ sg:{"80/tcp":E+"security-groups.tf:14","443/tcp、443/udp":E+"security-groups.tf
 eip:{"domain":E+"ec2.tf:34","association":E+"ec2.tf:86"},
 ec2:{"instance_type":E+"ec2.tf:5","root_volume_size":E+"ec2.tf:6","http_tokens":E+"ec2.tf:55","hop_limit":E+"ec2.tf:59","user_data_replace_on_change":E+"ec2.tf:74","ignore_changes":E+"ec2.tf:78"},
 ami:{"dlami":E+"ec2.tf:20","ubuntu":E+"ec2.tf:27"},
-dotenv:{"site_address":E+"secrets.tf:11","name":E+"secrets.tf:32","type":E+"secrets.tf:34","GOOGLE_*、GITHUB_*":E+"secrets.tf:42"},
-bsvc:{"BEDROCK_BASE_URL":E+"secrets.tf:19","BEDROCK_MODEL":E+"variables.tf:68"},
+dotenv:{"site_address":E+"secrets.tf:11","name":E+"secrets.tf:33","type":E+"secrets.tf:35","GOOGLE_*、GITHUB_*":E+"secrets.tf:43"},
+bsvc:{"BEDROCK_BASE_URL":E+"secrets.tf:20","BEDROCK_MODEL":E+"variables.tf:68"},
 s3m:{"count":E+"s3.tf:8","bucket":E+"s3.tf:9"},
 tfstate:{"bucket":B+"main.tf:33","prevent_destroy":B+"main.tf:36","versioning":B+"main.tf:44","sse_algorithm":B+"main.tf:53"},
 role:{"assume_role":E+"iam.tf:8","SSM attachment":E+"iam.tf:20","ReadDotenv":E+"iam.tf:32","ReadModels":E+"iam.tf:41"},
@@ -327,11 +327,11 @@ buser:{"CallWithBearerToken":E+"bedrock.tf:31","CreateInference":E+"bedrock.tf:4
 bkey:{"service_name":E+"bedrock.tf:56","credential_age_days":E+"bedrock.tf:58"},
 budget:{"limit_amount":B+"variables.tf:19","80% ACTUAL / 100% FORECASTED":B+"main.tf:76"},
 caddy:{"image":E+"compose.ec2.yaml:37","ports":E+"compose.ec2.yaml:39","caddy-data:/data":E+"compose.ec2.yaml:48","reverse_proxy":E+"Caddyfile:9"},
-web:{"ports":D+":237","limit_req":"web/nginx.conf:27","set_real_ip_from":"web/nginx.conf:52","resolver":"web/nginx.conf:75","X-Forwarded-Proto":"web/nginx.conf:83","proxy_read_timeout":"web/nginx.conf:90"},
-app:{"mem_limit":E+"compose.ec2.yaml:30","SESSION_COOKIE_SECURE":E+"compose.ec2.yaml:26","SPRING_AI_OPENAI_*":{bedrock:E+"compose.bedrock.yaml:18",gpu:"backend/src/main/resources/application-docker.properties:8"},"depends_on":{bedrock:E+"compose.bedrock.yaml:23",gpu:D+":201"},"stop_grace_period":D+":222"},
-postgres:{"image":D+":155","POSTGRES_PASSWORD":E+"compose.ec2.yaml:20","密碼同步":E+"deploy.sh:81"},
-llm:{"-ngl":D+":101","-c / -np":D+":103","--kv-unified":D+":110"},
-seed:{"sha256sum -c":D+":74"},
+web:{"ports":D+":249","limit_req":"web/nginx.conf:27","set_real_ip_from":"web/nginx.conf:52","resolver":"web/nginx.conf:75","X-Forwarded-Proto":"web/nginx.conf:83","proxy_read_timeout":"web/nginx.conf:90"},
+app:{"mem_limit":E+"compose.ec2.yaml:30","SESSION_COOKIE_SECURE":E+"compose.ec2.yaml:26","SPRING_AI_OPENAI_*":{bedrock:E+"compose.bedrock.yaml:18",gpu:"backend/src/main/resources/application-docker.properties:8"},"depends_on":{bedrock:E+"compose.bedrock.yaml:23",gpu:D+":213"},"stop_grace_period":D+":234"},
+postgres:{"image":D+":167","POSTGRES_PASSWORD":E+"compose.ec2.yaml:20","密碼同步":E+"deploy.sh:84"},
+llm:{"-ngl":D+":113","-c / -np":D+":115","--kv-unified":D+":122"},
+seed:{"sha256sum -c":D+":84","MODELS_DIR":D+":93"},
 obs:{"Alloy":O+":99","Mimir":O+":23","Loki":O+":41","Tempo":O+":55","Grafana":O+":68","Grafana 埠":O+":74"}
 };
 // t：步驟標題（短）；d：說明。依 model_backend 不同的寫成 {bedrock, gpu}

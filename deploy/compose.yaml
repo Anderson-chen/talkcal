@@ -40,13 +40,14 @@ x-gpu: &gpu
           capabilities: [gpu]
 
 services:
-  # ── 模型播種：把模型從 Windows 資料夾複製進 volume（只跑一次就結束）──────────
-  # 為什麼不讓模型服務直接掛 C:/llm/models：實測 Windows → WSL2 的檔案通道只有約 20 MB/s，
+  # ── 模型播種：把模型從主機的資料夾（MODELS_DIR）複製進 volume（只跑一次就結束）──────
+  # 為什麼不讓模型服務直接掛主機資料夾：實測 Windows → WSL2 的檔案通道只有約 20 MB/s，
   # 而 llama.cpp 預設用 mmap 零碎讀取更慢——Qwen 5GB 載了 5 分鐘還卡在 275MB。
-  # volume 放在 WSL2 自己的 Linux 檔案系統上，讀取快得多。慢的通道只在「第一次複製」時走一遍。
+  # volume 放在 Docker 自己的 Linux 檔案系統上，讀取快得多。慢的通道只在「第一次複製」時走一遍。
+  # （Linux 主機掛資料夾本來就不慢，但走同一條路，三種作業系統的行為才一樣。）
   #
   # 對照雲端：這就是 k8s 的 initContainer —— 主程式啟動前，先把模型從物件儲存（S3/GCS）
-  # 拉到本機磁碟（PVC），主程式只讀本機磁碟。這裡的「物件儲存」由 C:\llm\models 扮演。
+  # 拉到本機磁碟（PVC），主程式只讀本機磁碟。這裡的「物件儲存」由 MODELS_DIR 扮演。
   model-seed:
     <<: *llama-server               # 借用同一個映像檔（有 bash、sha256sum），不用多拉一個 image
     container_name: talkcal-model-seed
@@ -58,6 +59,15 @@ services:
     command:
       - |
         set -euo pipefail
+        # 先確定要用的模型在不在（檔名跟下面 llm-chat 的 -m 同一個）。不擋的話，空資料夾會讓迴圈對著
+        # 字面上的 "/seed/*.gguf" 跑，錯誤訊息看不出原因；MODELS_DIR 指錯資料夾也一樣
+        need=Qwen3-8B-Q4_K_M.gguf
+        if [ ! -f "/seed/$$need" ] && [ ! -f "/models/$$need" ]; then
+          echo "MODELS_DIR 裡沒有 $$need：先跑 deploy/models/download.sh，或把 deploy/.env 的 MODELS_DIR 指到放模型的資料夾" >&2
+          ls -la /seed >&2
+          exit 1
+        fi
+        shopt -s nullglob
         for src in /seed/*.gguf; do
           name=$$(basename "$$src")
           dst=/models/$$name
@@ -78,7 +88,9 @@ services:
         chmod a+r /models/*.gguf
         ls -la /models
     volumes:
-      - C:/llm/models:/seed:ro      # 來源：唯讀，播種絕不會動到你原本的模型檔
+      # 來源：唯讀，播種絕不會動到你原本的模型檔。路徑在 deploy/.env（範本 .env.example）。
+      # 沒設就拒絕啟動：不設的話 Docker 會在主機上建一個空資料夾掛進來，看起來起得來、其實沒有模型
+      - ${MODELS_DIR:?缺 MODELS_DIR：在 deploy/.env 填放模型檔的資料夾（見 deploy/models/README.md）}:/seed:ro
       - models:/models
     restart: "no"                   # 跑完就結束是正常的，不要重啟它
 
@@ -252,7 +264,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  # 具名 volume：存在 WSL2 的 Linux 檔案系統上，讀取速度遠快於掛載 Windows 資料夾。
+  # 具名 volume：存在 Docker 自己的 Linux 檔案系統上（Windows、macOS 是 Docker Desktop 的 VM），讀取速度遠快於掛載主機資料夾。
   # `docker compose down` 不會刪它（模型不必重新複製）；`down -v` 才會清掉，下次啟動重新播種。
   # 對照雲端：PersistentVolumeClaim。
   models:

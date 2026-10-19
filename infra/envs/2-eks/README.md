@@ -73,7 +73,7 @@ VPC 跨兩個可用區，每一層的子網兩區各一個。
 | `stop_grace_period: 2m30s` | `terminationGracePeriodSeconds: 150` | 沿用 graceful shutdown 的實驗結果（[postmortem](../../../docs/postmortems/)） |
 | `deploy.resources: nvidia` | GPU 節點群組 + `nvidia.com/gpu: 1` | k8s 是一個 Pod 獨佔一張卡，不像 Docker Desktop 大家共用 |
 | `model-seed` + `models` volume | initContainer 從 S3 拉到 EBS（PVC） | 同一個設計：慢的來源只讀一次，模型服務只讀本機磁碟 |
-| `C:\llm\models` | S3 bucket | 模型檔的唯一來源 |
+| `MODELS_DIR`（主機資料夾） | S3 bucket | 模型檔的唯一來源 |
 | `postgres` 容器 + volume | RDS PostgreSQL | 備份、修補、故障轉移交給託管服務（[#45](https://github.com/Anderson-chen/talkcal/issues/45)） |
 | compose 裡寫死的 `POSTGRES_PASSWORD` | Secrets Manager → External Secrets → 環境變數 | 祕密不進版控（[#14](https://github.com/Anderson-chen/talkcal/issues/14)） |
 | `docker build` 存在本機 | GitHub Actions build → ECR | PR 合併才出映像檔；用 OIDC，不存長期的 AWS 金鑰 |

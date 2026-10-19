@@ -23,7 +23,10 @@ MODEL_BACKEND="${MODEL_BACKEND:-gpu}"
 
 ROOT="/opt/$PROJECT"
 REPO="$ROOT/repo"
-MODELS_DIR="$ROOT/models"
+# export：deploy/compose.yaml 的 model-seed 掛 ${MODELS_DIR}，沒設就整份 compose 拒絕展開（#49）。
+# bedrock 也要給：compose 先展開整份檔案才看 profile，model-seed 不起也一樣會報「缺 MODELS_DIR」。
+# 主機的環境變數優先於 deploy/.env，所以 SSM 那份 .env 有沒有這行都沒關係
+export MODELS_DIR="$ROOT/models"
 
 echo "── 1. 原始碼：$GIT_REF"
 # 正在跑的這支腳本也會被換掉：git 是刪掉舊檔、寫新檔，bash 手上拿的還是舊檔，不會讀到一半變內容。

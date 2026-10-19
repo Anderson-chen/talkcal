@@ -31,8 +31,8 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    src[("C:\llm\models<br/>Windows 資料夾")] -->|"第一次複製<br/>SHA256 驗證"| seed["model-seed<br/>跑完就結束"]
-    seed --> vol[("volume models<br/>在 WSL2 裡，讀得快")]
+    src[("MODELS_DIR<br/>主機的資料夾")] -->|"第一次複製<br/>SHA256 驗證"| seed["model-seed<br/>跑完就結束"]
+    seed --> vol[("volume models<br/>在 Docker 的 Linux 檔案系統裡，讀得快")]
     vol -->|"唯讀掛載"| llm["llm-chat"]
 ```
 
