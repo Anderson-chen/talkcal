@@ -4,7 +4,7 @@
 // 這裡只管畫面和接線：欄位怎麼驗證、怎麼變成送出的資料，在 eventDraft.ts（純函式，有單元測試）。
 // 跟設計稿不同的地方：結束時間早於開始時間時，當成「結束在隔天」並標示出來（理由見 isOvernight）。
 import { computed, onMounted, reactive, ref } from 'vue'
-import { CATEGORIES, type Category } from '../calendar'
+import { CATEGORIES } from '../calendar'
 import { timeOf } from '../monthGrid'
 import { isOvernight, toDraft, type FormFields } from './eventDraft'
 import Icon from './Icon.vue'
@@ -22,7 +22,7 @@ const form = reactive<FormFields>({
   date: initial.start.slice(0, 10),
   start: timeOf(initial.start),
   end: timeOf(initial.end),
-  category: initial.category as Category,
+  category: initial.category,
   location: initial.location ?? '',
   note: initial.note ?? '',
 })

@@ -1,6 +1,6 @@
 # ci —— 持續整合（CI）
 
-每次改動都在**乾淨的容器**裡自動檢查一遍：後端的單元測試、架構規則、整合測試，前端的單元測試（Vitest）、型別檢查、打包、E2E（Playwright 開真的 Chromium）。
+每次改動都在**乾淨的容器**裡自動檢查一遍：後端的單元測試、架構規則、整合測試（編譯時 Error Prone 一起跑），前端的 lint（ESLint）、單元測試（Vitest）、型別檢查、打包、E2E（Playwright 開真的 Chromium）。
 本機（push 之前）和 GitHub（push 之後）跑的是**同一支 script、同一個映像檔**，所以本機綠就代表 GitHub 綠。
 
 整條 CI → CD 的流程圖和每一關擋什麼，見 [docs/architecture.md](../docs/architecture.md#cicd從-commit-到線上)。
@@ -123,6 +123,65 @@ ci/vulns.sh talkcal/app:local talkcal/web:local postgres:18.6-alpine
 
 **為什麼不用 trivy-action**：Trivy 在 2026-03 被入侵過，v0.69.4 和 trivy-action 幾乎所有 tag 都被換成會偷 CI secret 的版本。
 這裡跟 gitleaks 一樣直接跑映像檔，版本和 digest 都釘死，用的是事件之後的版本。
+
+## lint
+
+常見的錯在測試之前就紅燈（#22）。只抓「會出錯的寫法」，不管格式。
+
+| | 工具 | 擋什麼 | 在哪跑 |
+|---|---|---|---|
+| 後端 | Error Prone | ERROR 等級的 bug 寫法（忘了用回傳值、`equals` 比錯型別、格式字串對不上…）讓編譯失敗；WARNING 只印出來 | 掛在 javac 上，每次編譯都跑（main、test、integrationTest、eval），`checks.sh` 自動涵蓋 |
+| 前端 | ESLint（eslint-plugin-vue、@vue/eslint-config-typescript、eslint-plugin-playwright） | 沒處理的 Promise、`v-for` 沒 key、E2E 的 `expect` 忘了 `await`… | `checks.sh`：`npm run lint` |
+
+```bash
+cd web && npm run lint              # 前端
+cd web && npm run lint -- --fix     # 能自動修的先修掉
+cd backend && ./gradlew classes     # 後端：編譯就是檢查
+```
+
+### 選型（2026-10 查的）
+
+挑工具時看三件事：**授權**（只用 MIT、Apache-2.0；這些都是開發工具，不會打包進 jar 或映像檔）、
+**社群熱門度**（維護者、星數、下載量，最後一次發版多久以前）、**版本發布滿兩週**（新版被植入惡意程式碼通常幾天內就會被發現；
+Trivy 2026-03 的事件見下面的「漏洞掃描」）。npm 套件用 `npm install --before=<兩週前>` 裝，連間接依賴也算進去。
+
+**後端：Error Prone，不加 SpotBugs、Checkstyle、PMD**
+
+| | 授權 | 熱門度 | 為什麼（不）選 |
+|---|---|---|---|
+| Error Prone 2.50.0 | Apache-2.0 | 7.3k★，Google 維護 | javac 外掛，編譯過就是檢查過；ERROR 等級的規則誤判極少，紅了幾乎一定是 bug |
+| SpotBugs | LGPL-2.1 | 4.0k★ | 編譯後掃 bytecode，跟 Error Prone 重疊大，誤判比較多，要另外維護排除清單 |
+| Checkstyle | LGPL-2.1 | 9.6k★ | 檢查的是風格，那是 formatter 的事（#179） |
+| NullAway | MIT | 4.1k★ | Error Prone 的外掛，要在程式碼上標 `@Nullable`，等於改動大半的檔案，先不做 |
+
+Error Prone 只用預設：WARNING 不當成錯誤（不開 `-Werror`）。現在有 14 個警告（`StringCaseLocaleUsage` 6 個最多），
+要變成必過就得先清掉，會動到不少 Java 檔，之後另外處理。
+Gradle 外掛用 [net.ltgt.errorprone](https://github.com/tbroyer/gradle-errorprone-plugin)（Apache-2.0，Error Prone 官方文件指名的 Gradle 接法）。
+
+**前端：ESLint，不是 Biome 或 oxlint**。2026 年 ESLint 10 只剩 flat config（`eslint.config.js`），
+設定照 Vue 官方 `create-vue` 產生的那套。
+
+| | 授權 | 熱門度（npm 週下載） | 為什麼（不）選 |
+|---|---|---|---|
+| ESLint 10 | MIT | 27.6k★，9600 萬 | Vue 專屬規則（eslint-plugin-vue，Vue 官方）和要型別資訊的規則（`no-floating-promises`）都只有 ESLint 有 |
+| Biome | Apache-2.0 | 26.0k★，1100 萬 | 一支 Rust 工具同時 lint 和格式化、快很多，但沒有 Vue 專屬規則，這個專案大半是 `.vue` |
+| oxlint | MIT | 23.1k★，1600 萬 | 比 ESLint 快幾十倍，但規則少、多半不能自動修；常見用法是放在 ESLint 前面當加速層，這個大小的專案 ESLint 本身只要幾秒 |
+
+外掛：eslint-plugin-vue（MIT，Vue 官方，370 萬）、@vue/eslint-config-typescript（MIT，Vue 官方，90 萬）、
+eslint-plugin-playwright（MIT，397★ 但每週 300 萬下載，E2E 用 Playwright 的專案幾乎都裝）。
+
+### 格式化為什麼還沒做
+
+格式化（Spotless + google-java-format、Prettier）另外在 [#179](https://github.com/Anderson-chen/talkcal/issues/179)：
+要一次把整個 codebase 排好才划算，但 2026-10 時有 30 個開著的 PR，現在排會全面衝突。
+只排改過的檔案（Spotless 的 ratchet）也試過：之後每個碰到舊檔的 PR 都要把整份檔案重排，邏輯和格式混在同一個 commit，所以不採用。
+等開著的 PR 消化完再一次做。
+
+參考：
+[ESLint vs Biome vs Oxlint 2026（pkgpulse）](https://www.pkgpulse.com/guides/biome-vs-eslint-vs-oxlint-2026)、
+[Biome vs ESLint vs Oxlint 2026（DEV）](https://dev.to/royce_fabbd83cb268312e928/biome-vs-eslint-vs-oxlint-js-linters-2026-408h)、
+[gradle-errorprone-plugin](https://github.com/tbroyer/gradle-errorprone-plugin)。
+星數、下載量是 2026-10-20 的數字。
 
 ## 刻意不做的
 
