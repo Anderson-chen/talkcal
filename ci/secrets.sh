@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 # 掃 git 歷史裡有沒有祕密（API key、token、私鑰）。用 gitleaks，在容器裡跑。
 #
-#   ci/secrets.sh                       掃整個歷史（GitHub Actions 用）
+#   ci/secrets.sh                       掃 HEAD 往回的整個歷史（GitHub Actions 用，等於 ci/secrets.sh HEAD）
 #   ci/secrets.sh <commit> --not --remotes   只掃還沒推上去的 commit（pre-push hook 用）
 #
 # 參數原樣交給 git log（gitleaks 的 --log-opts），所以「掃哪些 commit」就是 git log 的語法。
+#
+# 為什麼沒帶參數時要補 HEAD：gitleaks 的 --log-opts 是空的話，會自己下 git log --all，
+# 掃的是 repo 裡「所有」ref。CI 用 fetch-depth: 0 checkout 時，所有開著的 PR 的分支都在
+# refs/remotes/origin/ 底下，結果別人分支上的一個誤判，會讓每一條 PR 都紅燈。
+# 只掃 HEAD 能走到的 commit：在 PR 上 HEAD 是 master 加這個 PR 的 merge commit，
+# 所以 master 的歷史和這個 PR 的每個 commit 都會掃到，別人的分支等它自己的 PR 去掃。
 #
 # 為什麼掃歷史，不是掃 checks.sh 那份 git archive：祕密在第 3 個 commit 加進去、第 4 個刪掉，
 # 最新的檔案看起來乾淨，但推上去之後兩個 commit 都在，任何人 clone 都拿得到。
@@ -29,4 +35,4 @@ repo=$(pwd -W 2>/dev/null || pwd)
 
 # --redact：報告裡把祕密遮起來。CI 的 log 是公開的，不能在說「這裡有 key」的同時把 key 印出來
 docker run --rm --volume "$repo:/repo:ro" "$image" \
-    git /repo --log-opts="$*" --redact --no-banner --verbose
+    git /repo --log-opts="${*:-HEAD}" --redact --no-banner --verbose

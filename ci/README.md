@@ -71,16 +71,21 @@ git push --no-verify                    # 確定要跳過檢查時
 檔案看起來乾淨，推上去之後任何人 clone 都拿得到。所以它不在 `checks.sh` 裡 —— 那邊只有某個 commit 的檔案，沒有 `.git`。
 
 ```bash
-ci/secrets.sh                        # 掃整個歷史
+ci/secrets.sh HEAD                   # 掃 HEAD 往回的整個歷史（不帶參數也是這個）
 ci/secrets.sh HEAD --not --remotes   # 只掃還沒推上去的（pre-push 用的就是這個）
 ```
 
 | | pre-push | GitHub push protection | CI 的 `secrets` job |
 |---|---|---|---|
-| 掃哪些 commit | 這次要推的 | 這次推上來的 | 整個歷史 |
+| 掃哪些 commit | 這次要推的 | 這次推上來的 | 這次要測的 commit 往回的整個歷史 |
 | 認得什麼 | gitleaks 的規則（各家 key ＋通用 token） | 只認各家服務的 key 格式 | 同 pre-push |
 | 跳得過嗎 | `--no-verify` | 可以在 GitHub 上填理由放行 | 不行（必過檢查） |
 | 抓到時 | key 還在本機，改掉再推 | 被拒收 | **已經公開**，要作廢重發 |
+
+CI 只掃 `HEAD` 走得到的 commit，不掃其他分支：`fetch-depth: 0` 會把所有分支一起抓下來，
+而 gitleaks 沒指定範圍時會用 `git log --all`，結果別的 PR 分支上一個誤判，所有 PR 的 `secrets` 都紅燈（#180）。
+在 PR 上 `HEAD` 是 master 加這個 PR 的 merge commit，所以 master 的歷史和這個 PR 的每個 commit 都會掃到；
+別的分支由它自己的 PR 負責。
 
 pre-push 先掃祕密、再跑測試：掃描只要幾秒，而且測試紅了可以再推一次修，key 送出去就收不回來。
 ### GitHub 已經會擋，為什麼還要 gitleaks

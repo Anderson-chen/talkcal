@@ -95,7 +95,7 @@ flowchart LR
 flowchart TB
     dev["開分支、commit<br/>（每個分支對一個 issue）"] -->|"git push"| hook["pre-push hook<br/>ci/secrets.sh：要推的 commit 有沒有 key<br/>ci/run.sh：本機有 GPU，模型測試真的跑"]
     hook -->|"過了才推得上去"| pr["GitHub PR<br/>描述寫 Closes #N"]
-    pr --> ci["CI（ci.yml）<br/>checks：同一支 ci/run.sh，沒有 GPU，模型測試跳過<br/>secrets：掃整個歷史有沒有 key<br/>vulns：掃映像檔漏洞（每天也排程掃）"]
+    pr --> ci["CI（ci.yml）<br/>checks：同一支 ci/run.sh，沒有 GPU，模型測試跳過<br/>secrets：掃這個 commit 往回的整個歷史有沒有 key<br/>vulns：掃映像檔漏洞（每天也排程掃）"]
     pr --> prissue["PR issue（pr-issue.yml）<br/>沒連到 issue 就紅燈"]
     ci -->|"必須綠"| merge["merge 進 master<br/>ruleset：一定走 PR、checks、secrets、vulns、PR issue 都必須綠"]
     prissue -->|"必須綠"| merge
