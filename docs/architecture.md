@@ -116,7 +116,7 @@ EC2 目前是手動部署：機器平常關機，展示前開機、需要時用 
 |---|---|---|
 | pre-push（[ci/](../ci/README.md)） | 本機就會壞的，包括要 GPU 的模型測試；要推的 commit 裡有 key | `git push --no-verify` 可以跳過 |
 | GitHub push protection | 推上來的 commit 裡有各家服務的 key（AWS、OpenAI…） | 通用格式的 token；可以在 GitHub 上填理由放行 |
-| CI（GitHub Actions） | 乾淨環境才會壞的：「我電腦上可以」；歷史裡任何地方有 key | 模型相關（沒有 GPU）；key 到這裡才抓到時已經公開，只能作廢重發 |
+| CI（GitHub Actions） | 乾淨環境才會壞的：「我電腦上可以」；歷史裡任何地方有 key；lint 錯誤（Error Prone、ESLint，見 [ci/README.md](../ci/README.md#lint)） | 模型相關（沒有 GPU）；key 到這裡才抓到時已經公開，只能作廢重發 |
 | CI 的 `vulns`（漏洞掃描） | 映像檔裡有已知、可修的 HIGH/CRITICAL 漏洞；每天排程掃，抓合併之後才公布的 | 上游還沒修的、MEDIUM 以下；寫進忽略清單的（有到期日） |
 | PR issue | 沒連到 issue 的 PR：合併按鈕按不下去 | 連到的 issue 對不對（只檢查有沒有連） |
 | ruleset（protect-master） | 直推 master、force push、刪 master、checks、secrets、vulns 或 PR issue 沒綠就合併、分支落後 master | — |
