@@ -11,15 +11,14 @@ name: CI
 
 on:
   push:
-    # hotfix/*：從線上那一版開出來的修正分支不會發 PR 到 master，靠 push 跑完整 CI（流程見 docs/hotfix.md）
-    branches: [master, 'hotfix/**']
+    branches: [master]
   pull_request:
   # 每天掃一次 master 的漏洞：新的 CVE 會在程式碼沒變的時候冒出來，只靠 push、PR 觸發會一直沒發現。
   # 排程的那次只跑 vulns（另外兩個 job 程式碼沒變，結果不會變）。失敗時 GitHub 會寄信給最後改這個排程的人。
   # 時間是 UTC：01:00 = 台灣 09:00，上班時間收到通知
   schedule:
     - cron: '0 1 * * *'
-  # 手動觸發：漏洞剛公布、想馬上確認有沒有中
+  # 手動觸發：漏洞剛公布、想馬上確認有沒有中；hotfix 分支沒有 PR，也用這個跑 CI（docs/hotfix.md）
   workflow_dispatch:
 
 # 只讀程式碼，不需要任何寫入權限。預設的 GITHUB_TOKEN 權限比這寬，明寫出來把它收窄
