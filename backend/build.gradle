@@ -7,6 +7,8 @@ plugins {
     // Spring Boot 只負責「組裝」這件事：把散落的 bean 兜起來、打包成可執行 jar、提供 bootRun。
     // 業務規則一個字都不會碰到它 —— 見 build 檔最後那條 ArchUnit 規則守著這件事。
     id 'org.springframework.boot' version '4.1.1'
+    // 靜態分析（#22）：Error Prone 掛在 javac 上，編譯時就抓常見的 bug（忘了用回傳值、equals 比錯型別…）
+    id 'net.ltgt.errorprone' version '5.1.1'
 }
 
 repositories {
@@ -128,6 +130,18 @@ dependencies {
     // 測試裡照樣產生 trace id、但不往外匯出：沒有它的話，起整個容器的測試會一直嘗試送 span 到 localhost:4318。
     // AccessLogTraceIdTest 靠它在不開 ops/ 的情況下驗「access log 帶著 traceId」。
     testImplementation 'org.springframework.boot:spring-boot-micrometer-tracing-test'
+
+    // Error Prone 的檢查規則本體；上面的 net.ltgt.errorprone 外掛負責把它接到每個 JavaCompile 上（main、test、integrationTest、eval 都有）。
+    // 選型理由見 ci/README.md 的「lint」
+    errorprone 'com.google.errorprone:error_prone_core:2.50.0'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.errorprone {
+        // 預設就好：ERROR 等級的規則（幾乎一定是 bug）讓編譯失敗，WARNING 只印出來。
+        // 不開 -Werror 把警告也變成錯誤：現有 14 個警告要先清掉，那會動到不少 Java 檔，跟開著的 PR 衝突
+        disableWarningsInGeneratedCode = true
+    }
 }
 
 // 程式與註解都有中文，編碼一定要明寫。
