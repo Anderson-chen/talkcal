@@ -65,14 +65,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # fetch-depth: 0 —— 要整個歷史。預設只抓最新一個 commit，中間 commit 加了又刪的 key 會看不到
+      # fetch-depth: 0 —— 要整個歷史。預設只抓最新一個 commit，中間 commit 加了又刪的 key 會看不到。
+      # 副作用是所有分支也一起抓下來了，所以下面要指定只掃 HEAD
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       # 本機 pre-push 只掃要推的那幾個 commit；這裡掃整個歷史，補上 --no-verify 跳過的那些。
-      # 在這裡才抓到代表已經推上 GitHub 了：key 要當成外洩，作廢重發，刪 commit 不夠
-      - run: ci/secrets.sh
+      # 在這裡才抓到代表已經推上 GitHub 了：key 要當成外洩，作廢重發，刪 commit 不夠。
+      # HEAD：只掃這次要測的 commit 往回的歷史，不掃其他 PR 的分支（不帶參數 gitleaks 會掃 --all）
+      - run: ci/secrets.sh HEAD
 
   # 漏洞掃描：build 出會上線的映像檔再掃，有 HIGH、CRITICAL 就紅燈（必過檢查）。
   # --pull：每次都拉最新的基底映像檔，掃到的才是重新部署時真的會拿到的版本
