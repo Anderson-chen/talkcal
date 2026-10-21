@@ -32,6 +32,8 @@ services:
     volumes:
       # :ro = 唯讀。設定檔由版控管，不讓容器改它
       - ./mimir/mimir.yaml:/etc/mimir/mimir.yaml:ro
+      # SLO 的錄製規則（docs/slo.md）。改了要 docker compose restart mimir
+      - ./mimir/rules:/etc/mimir/rules:ro
       # 具名 volume：資料存這，容器重建後資料還在
       - mimir-data:/data
     restart: unless-stopped           # 當掉/開機自動拉回來，但你手動 down 掉就別雞婆重啟

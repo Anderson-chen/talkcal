@@ -32,10 +32,20 @@ blocks_storage:
 compactor:
   data_dir: /data/compactor  # compactor 合併小區塊時的工作目錄
 
+# 錄製規則（recording rules）：Mimir 的 ruler 定時跑 PromQL，把結果寫回成新的時間序列。
+# 目前只有 SLO 那一份（rules/anonymous/slo.yaml，理由見 docs/slo.md）。
+# local = 從掛進來的資料夾讀、唯讀：規則跟 dashboard 一樣進版控，不走 API 上傳（那樣的規則只存在容器的資料裡，重建就沒了）。
+# 代價是只在啟動時讀一次，改了規則要重啟 mimir。
+# 資料夾底下一層是租戶名稱：關掉多租戶時只有 anonymous 一個。
 ruler_storage:
-  backend: filesystem
-  filesystem:
-    dir: /data/rules         # 告警 / 錄製規則（目前沒有，但 ruler 元件啟動時要有地方放）
+  backend: local
+  local:
+    directory: /etc/mimir/rules
+
+ruler:
+  rule_path: /data/ruler     # ruler 評估時的暫存檔放這（預設在工作目錄，容器裡不一定能寫）
+  # 告警不在 Mimir 這裡發：告警規則寫在 Grafana（grafana/provisioning/alerting/），通知管道也在那邊，
+  # 所以不設 alertmanager_url。Mimir 的 ruler 只做錄製。
 
 # 複製份數：預設每筆資料寫進 3 個 ingester，掛一台不掉資料。單機只有一個 ingester，只能寫 1 份。
 # 想體驗「掛一台不掉資料」得真的起 3 個 Mimir，那是之後的練習。
