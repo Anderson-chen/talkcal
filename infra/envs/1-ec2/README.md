@@ -170,6 +170,9 @@ aws ec2 stop-instances  --instance-ids "$(terraform output -raw instance_id)" --
 aws ec2 start-instances --instance-ids "$(terraform output -raw instance_id)" --region ap-northeast-1 --profile DEV
 ```
 
+關機前先到 Healthchecks.io 把 talkcal 那個 check 按 **Pause**（有設 `heartbeat_url` 的話）：關機後 heartbeat 停了，
+不按的話 5 分鐘後會收到一封「掛了」的信。開機後 Grafana 送出第一個 heartbeat，check 就自己恢復監控，不必再按（#40，本機實測過）。
+
 容器都設了 `restart: unless-stopped`，開機後會自己起來，不必重跑 deploy.sh；gpu 時模型要重新載入，第一個請求會等比較久。
 關機前 systemd 會先把資料庫備份到 S3（`talkcal-backup-on-shutdown`），所以關機這段時間的 RPO 是 0；關機要等它跑完（幾秒）。
 
