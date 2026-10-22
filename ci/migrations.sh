@@ -26,6 +26,9 @@ cd "$(git rev-parse --show-toplevel)"
 
 base=${1:-origin/master}
 dir=backend/src/main/resources/db/migration
+# 整合測試裡 expand/contract 演練用的 migration（只在測試資料庫跑，見 docs/database/zero-downtime-schema.md）。
+# 不受第 1 道限制（沒有正式資料庫跑過它），但一樣給 squawk 看：演練示範的寫法要是 squawk 會擋的，示範就不成立
+drill=backend/src/integrationTest/resources/db/drill
 # 版本釘死。npm 上同一個版本號發布後不能被換掉；squawk 的執行檔也是 npm 套件（@squawk-cli/<平台>），
 # 安裝時不另外下載東西。升級時看 changelog：新版常常會多規則，舊的 migration 不受影響（只掃新增的）
 squawk=squawk-cli@2.66.0
@@ -49,7 +52,8 @@ else
 fi
 
 echo "── 新增的 migration：squawk ──"
-added=$(git diff --name-only --diff-filter=A "$base"...HEAD -- "$dir" | grep '\.sql$' || true)
+# AM：正式的改了已經在第 1 道紅燈；演練的改了要重掃
+added=$(git diff --name-only --diff-filter=AM "$base"...HEAD -- "$dir" "$drill" | grep '\.sql$' || true)
 if [ -z "$added" ]; then
     echo "沒有新增 migration。"
 else

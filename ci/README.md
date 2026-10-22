@@ -199,6 +199,8 @@ ci/migrations.sh <commit>      # 跟指定的 commit 比
 
 只看新增的檔案：V1～V11 已經跑過、改不了，掃出來的警告（例如 V2 的 `prefer-timestamp-tz`）也修不掉。
 真的要做危險的變更（contract 刪掉沒人用的欄位），在那一句上面加 `-- squawk-ignore <規則>` 並寫理由，PR 的 diff 上看得到。
+整合測試裡 expand/contract 演練用的 migration（`backend/src/integrationTest/resources/db/drill`）也掃，新增、修改都算：
+演練示範的寫法要是 squawk 會擋的，示範就不成立。它們不受第 1 道限制，沒有正式資料庫跑過。
 
 **為什麼用 squawk、不自己 grep**：grep `DROP COLUMN` 只抓得到字面，抓不到「同一個交易裡 ADD CONSTRAINT NOT VALID 又 VALIDATE，
 鎖一路拿到交易結束」這種要懂鎖的問題 —— #18 第一次寫 backfill 時就是被它抓到的。squawk 用 PostgreSQL 自己的 parser 解析 SQL，
@@ -219,6 +221,7 @@ ci/migrations.sh <commit>      # 跟指定的 commit 比
 | `ADD COLUMN color TEXT`，前面沒 SET lock_timeout | `require-lock-timeout`、`require-statement-timeout` |
 | 同上，兩個 timeout 都設了 | 通過 |
 | `DROP COLUMN IF EXISTS note`，上面有 `squawk-ignore ban-drop-column` 和理由 | 通過 |
+| 演練的 V2 `DROP NOT NULL`、V7 `DROP COLUMN`（2026-10-22） | 先被 `ban-drop-not-null`、`ban-drop-column` 擋下（V7 的 ignore 跟違規的那句隔了一行，沒作用）；補上理由、寫成同一行之後通過，拿掉 V7 的 ignore 又擋下 |
 
 還沒做：加進 ruleset 的必過檢查（GitHub 的設定，要手動加 `migrations`）。
 
