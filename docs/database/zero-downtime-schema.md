@@ -3,8 +3,8 @@
 改資料表的時候服務不用停（#18）。這份文件是**通用的做法**：什麼時候新舊兩版程式會同時連著同一個資料庫、
 哪些變更在那時候會壞、要拆成哪幾次發布、每一次要等什麼前提。真的碰到需求時照著走。
 
-這裡沒有為了示範去改產品的資料表。做法是用整合測試裡的一張演練表證明的（[演練](#演練欄位改名分五次發布)），
-測試專用的 migration 在 [`backend/src/integrationTest/resources/db/drill`](../../backend/src/integrationTest/resources/db/drill)，不會跑到正式的資料庫。
+這裡沒有為了示範去改產品的資料表。做法是用一張演練表實測證明的，結果在[演練紀錄](#演練紀錄)。
+日常擋問題的是 CI 的 squawk（[ci/migrations.sh](../../ci/migrations.sh)）：每個新增的 migration 都自動掃，演練則是一次性的證明。
 
 ## 什麼時候新舊版本會同時在線
 
@@ -78,21 +78,40 @@ Flyway 一支 migration 一個交易，交易裡拿到的鎖會一直拿到交�
 - `VALIDATE` 只拿 SHARE UPDATE EXCLUSIVE（不擋讀寫）；驗證過的 `IS NOT NULL` CHECK 讓 `SET NOT NULL` 不必再掃表（PostgreSQL 12 起）。
 - `CREATE INDEX CONCURRENTLY` 不能在交易裡跑，一定要自己一支。
 
-## 演練：欄位改名，分五次發布
+### 為什麼不用 pgroll
 
-[ExpandContractDrillTest](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/schema/ExpandContractDrillTest.java)
+[pgroll](https://github.com/xataio/pgroll)（Xata）把 expand/contract 自動化：每個版本一個 schema，裡面是 view，
+舊版連舊的 view、新版連新的，雙寫和 backfill 它用 trigger 自己產生。但：
+
+- 要換掉 Flyway，migration 改寫成它的 JSON/YAML 格式；
+- app 要依版本連到不同的 search_path，部署流程要跟著改；
+- 這裡的變更頻率是幾週一次，手動拆發布反而看得清楚每一步在做什麼。
+
+變更一多、或多個服務共用一個資料庫的時候再評估。
+
+## 演練紀錄
+
+2026-10-22 實測（PostgreSQL 18.6 容器）。測試和演練用的 migration **沒有留在 CI**：它們測的是假的 adapter 和一張演練表，
+產品之後改欄位時順序做錯，它們也不會紅，留著只是每次多跑半分鐘。程式碼封存在 `archive/18-zero-downtime-drill` 分支的
+[`d0c7aeb`](https://github.com/Anderson-chen/talkcal/tree/d0c7aebfcd3fc765f35bae64e328aaa5bd7ddb4a)（下面的連結都指向這個 commit，分支刪了也看得到）。
+產品第一次真的要做不相容的變更、或第一次要 `CREATE INDEX CONCURRENTLY` 時，照這裡的寫法對真的 adapter 寫測試
+（[#199](https://github.com/Anderson-chen/talkcal/issues/199)）。
+
+### 欄位改名，分五次發布
+
+[ExpandContractDrillTest](https://github.com/Anderson-chen/talkcal/blob/d0c7aebfcd3fc765f35bae64e328aaa5bd7ddb4a/backend/src/integrationTest/java/io/github/andersonchen/talkcal/schema/ExpandContractDrillTest.java)
 把 `drill_contact.phone` 改名成 `phone_number`，照上表走 R1～R5。每一版「程式」就是它的 adapter 送的 SQL
-（[ContactApp](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/schema/ContactApp.java)）。
+（[ContactApp](https://github.com/Anderson-chen/talkcal/blob/d0c7aebfcd3fc765f35bae64e328aaa5bd7ddb4a/backend/src/integrationTest/java/io/github/andersonchen/talkcal/schema/ContactApp.java)）。
 
 | migration | 發布 | 做什麼 |
 |---|---|---|
-| [V1](../../backend/src/integrationTest/resources/db/drill/V1__create_contact.sql) | R1 | 起點：`phone NOT NULL` |
-| [V2](../../backend/src/integrationTest/resources/db/drill/V2__expand_phone_number.sql) | R2 | 加 `phone_number`、`phone` 放寬成可為 NULL |
-| [V3](../../backend/src/integrationTest/resources/db/drill/V3__phone_number_present_check.sql) | R3 | `CHECK (phone_number IS NOT NULL) NOT VALID` |
-| [V4](../../backend/src/integrationTest/resources/db/drill/V4__backfill_phone_number.sql) | R3 | 以 `phone` 為準補 `phone_number` |
-| [V5](../../backend/src/integrationTest/resources/db/drill/V5__phone_number_not_null.sql) | R3 | `VALIDATE`、`SET NOT NULL`、拿掉 CHECK |
-| [V6](../../backend/src/integrationTest/resources/db/drill/V6__phone_number_index.sql) | R3 | `CREATE INDEX CONCURRENTLY` |
-| [V7](../../backend/src/integrationTest/resources/db/drill/V7__contract_phone.sql) | R5 | 刪 `phone` |
+| [V1](https://github.com/Anderson-chen/talkcal/blob/d0c7aebfcd3fc765f35bae64e328aaa5bd7ddb4a/backend/src/integrationTest/resources/db/drill/V1__create_contact.sql) | R1 | 起點：`phone NOT NULL` |
+| [V2](https://github.com/Anderson-chen/talkcal/blob/d0c7aebfcd3fc765f35bae64e328aaa5bd7ddb4a/backend/src/integrationTest/resources/db/drill/V2__expand_phone_number.sql) | R2 | 加 `phone_number`、`phone` 放寬成可為 NULL |
+| [V3](https://github.com/Anderson-chen/talkcal/blob/d0c7aebfcd3fc765f35bae64e328aaa5bd7ddb4a/backend/src/integrationTest/resources/db/drill/V3__phone_number_present_check.sql) | R3 | `CHECK (phone_number IS NOT NULL) NOT VALID` |
+| [V4](https://github.com/Anderson-chen/talkcal/blob/d0c7aebfcd3fc765f35bae64e328aaa5bd7ddb4a/backend/src/integrationTest/resources/db/drill/V4__backfill_phone_number.sql) | R3 | 以 `phone` 為準補 `phone_number` |
+| [V5](https://github.com/Anderson-chen/talkcal/blob/d0c7aebfcd3fc765f35bae64e328aaa5bd7ddb4a/backend/src/integrationTest/resources/db/drill/V5__phone_number_not_null.sql) | R3 | `VALIDATE`、`SET NOT NULL`、拿掉 CHECK |
+| [V6](https://github.com/Anderson-chen/talkcal/blob/d0c7aebfcd3fc765f35bae64e328aaa5bd7ddb4a/backend/src/integrationTest/resources/db/drill/V6__phone_number_index.sql) | R3 | `CREATE INDEX CONCURRENTLY` |
+| [V7](https://github.com/Anderson-chen/talkcal/blob/d0c7aebfcd3fc765f35bae64e328aaa5bd7ddb4a/backend/src/integrationTest/resources/db/drill/V7__contract_phone.sql) | R5 | 刪 `phone` |
 
 正向：一個資料庫照順序跑完五次發布。每次 migration 一跑完，在線的兩版先讀一遍之前所有發布寫的、改的資料；
 接著各自新增、輪流修改既有的每一筆，再讀一遍。每一筆、每一版讀到的都要是最後寫的那個值。
@@ -113,10 +132,10 @@ Flyway 一支 migration 一個交易，交易裡拿到的鎖會一直拿到交�
 不另外測 schema 長什麼樣（欄位是不是 NOT NULL、索引在不在）：那是 PostgreSQL 照 DDL 做的事，
 migrate 沒丟例外就代表都執行了。測的是程式讀到什麼。
 
-## migration 跑的當下，請求不被卡住
+### migration 跑的當下，請求不被卡住
 
 上一節是「新舊版本都能用」；這節是「不停」：migration 跟同時進來的請求搶同一張表的鎖時會怎樣。
-[MigrationLockTest](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/schema/MigrationLockTest.java)
+[MigrationLockTest](https://github.com/Anderson-chen/talkcal/blob/d0c7aebfcd3fc765f35bae64e328aaa5bd7ddb4a/backend/src/integrationTest/java/io/github/andersonchen/talkcal/schema/MigrationLockTest.java)
 用真的交易模擬「還沒結束的請求」（開了、碰過表、還沒 commit），每個設計都配一個拿掉它的反例：
 
 | 設計 | 測什麼 | 反例：拿掉這個設計 |
@@ -131,7 +150,7 @@ migrate 沒丟例外就代表都執行了。測的是程式讀到什麼。
 `transactional-lock=false` 已經設在 [application.properties](../../backend/src/main/resources/application.properties)：
 產品現在還沒有 CONCURRENTLY 的 migration，先設好，免得第一次建大表索引時才在部署途中卡住。
 
-### 實測到的坑
+#### 實測到的坑
 
 **1. `CREATE INDEX CONCURRENTLY` 會讓 Flyway 卡住不動。** `pg_stat_activity` 看到的是：
 
@@ -154,17 +173,6 @@ Flyway 偵測到 CONCURRENTLY 就把整支放到交易外面跑，而 `SET` 被�
 
 **3. `squawk-ignore` 只管它的下一行。** 寫成 `ALTER TABLE t` 換行 `DROP COLUMN c`，違規算在第二行，ignore 沒作用。
 要放行的那句寫成一行。
-
-### 為什麼不用 pgroll
-
-[pgroll](https://github.com/xataio/pgroll)（Xata）把 expand/contract 自動化：每個版本一個 schema，裡面是 view，
-舊版連舊的 view、新版連新的，雙寫和 backfill 它用 trigger 自己產生。但：
-
-- 要換掉 Flyway，migration 改寫成它的 JSON/YAML 格式；
-- app 要依版本連到不同的 search_path，部署流程要跟著改；
-- 這裡的變更頻率是幾週一次，手動拆發布反而看得清楚每一步在做什麼。
-
-變更一多、或多個服務共用一個資料庫的時候再評估。
 
 ## 危險的變更和安全的做法
 
@@ -201,7 +209,7 @@ Flyway 偵測到 CONCURRENTLY 就把整支放到交易外面跑，而 `SET` 被�
 - [ ] 開頭有 `SET LOCAL lock_timeout`、`SET LOCAL statement_timeout`（`CONCURRENTLY` 那支除外）
 - [ ] 一支只做一件事：DDL 和大量 UPDATE 分開，鎖才不會疊在一起
 - [ ] 有整合測試對真的 PostgreSQL 跑過，看的是程式讀到什麼、不是 schema 的長相：
-      同時在線的兩版 adapter 讀得到彼此寫的資料（寫法參考演練的 `ExpandContractDrillTest`）
+      同時在線的兩版 adapter 讀得到彼此寫的資料（寫法參考[演練紀錄](#演練紀錄)的 `ExpandContractDrillTest`）
 - [ ] `ci/migrations.sh` 綠燈
 
 ## 參考資料
