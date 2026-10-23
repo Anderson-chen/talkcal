@@ -112,6 +112,7 @@ Gradle 指令都在 `backend/` 裡跑：
 ```bash
 ./gradlew test               # 單元測試、web 切片、架構規則：不需要任何外部服務，秒回
 ./gradlew integrationTest    # 對真的 llama-server 和 PostgreSQL（Testcontainers）；模型沒開就自動跳過那幾支
+./gradlew test integrationTest jacocoTestReport   # 加上合併的覆蓋率報告（只找漏測、不設門檻，見 docs/test-coverage.md）
 ../ci/run.sh                 # 跟 CI 完全一樣：在乾淨的容器裡跑上面全部，再加前端的型別檢查和打包
 ```
 
@@ -198,6 +199,7 @@ CI 在每次 push、PR 時於 GitHub 上跑，本機則由 pre-push hook 在推�
 | 怎麼觀測、三種訊號怎麼互跳 | [ops/README.md](ops/README.md) |
 | 怎麼壓測、怎麼讀結果 | [perf/README.md](perf/README.md) |
 | CI 怎麼跑、為什麼在容器裡跑 | [ci/README.md](ci/README.md) |
+| 測試覆蓋率怎麼看、為什麼不設門檻 | [docs/test-coverage.md](docs/test-coverage.md) |
 | 前端怎麼組成 | [web/README.md](web/README.md) |
 | 畫面設計稿和實作的差異 | [docs/design/calendar/README.md](docs/design/calendar/README.md) |
 | 資料表為什麼長這樣 | [backend/src/main/resources/db/migration](backend/src/main/resources/db/migration)（每支 SQL 開頭都寫了理由） |
