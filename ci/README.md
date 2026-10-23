@@ -15,7 +15,7 @@ git push --no-verify                    # 確定要跳過檢查時
 
 要先開著 Docker Desktop。llama-server 有開的話，模型相關的測試會真的跑；沒開就跳過，摘要會列出來。
 第一次跑要 build 映像檔（含 Gradle 本體）、下載依賴，比較慢；之後映像檔有快取、依賴放在 volume `talkcal-ci-gradle`、`talkcal-ci-npm` 裡，就快了。
-結果：摘要在 `ci/build/summary.md`，失敗時的 HTML 報告在 `ci/build/reports/`。
+結果：摘要在 `ci/build/summary.md`，失敗時的 HTML 報告在 `ci/build/reports/`；覆蓋率報告在 `ci/build/reports/jacoco/`、`ci/build/web-coverage/`（GitHub 上是 `coverage` artifact，怎麼看見 [docs/test-coverage.md](../docs/test-coverage.md)）。
 
 ## 架構：檢查內容只寫一次，平台只是入口
 

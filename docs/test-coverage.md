@@ -8,14 +8,14 @@
 | | 指令 | 報告 |
 |---|---|---|
 | 全部（跟 CI 一樣，在容器裡） | `ci/run.sh` | 總數在 `ci/build/summary.md` 的「測試覆蓋率」；HTML 在 `ci/build/reports/jacoco/test/html/index.html`（後端）、`ci/build/web-coverage/index.html`（前端） |
-| 只有後端 | `cd backend && ./gradlew test integrationTest jacocoTestReport` | `backend/build/reports/jacoco/test/html/index.html`（XML 在同一層的 `jacocoTestReport.xml`） |
-| 只有前端 | `cd web && npm test` | 終端機印總數；HTML 在 `web/coverage/index.html` |
+| 只有後端 | `cd backend && ./gradlew test integrationTest jacocoTestReport` | `backend/build/reports/jacoco/test/html/index.html`（CSV 在同一層的 `jacocoTestReport.csv`，`ci/checks.sh` 讀它加總） |
+| 只有前端 | `cd web && npm test`（`--coverage` 寫在 script 裡；`npm run test:watch` 不收集） | 終端機印總數；HTML 在 `web/coverage/index.html` |
 | GitHub | 每次 CI 自動跑 | 總數貼在 Actions 結果頁的摘要；HTML 在 `coverage` 這個 artifact（成功、失敗都會上傳） |
 
 範圍：
 
 - **後端是單元測試＋整合測試合併的一份**。repository 的 SQL、Spring 組裝這些只有整合測試會走到，只看單元測試會把它們誤列為漏測。
-  只跑 `./gradlew test jacocoTestReport` 也可以，報告就只有單元測試的部分。AI eval（`./gradlew eval`）不算：它量的是模型答得好不好，不是程式有沒有被走到。
+  只跑 `./gradlew test jacocoTestReport` 也可以，報告就只有單元測試的部分。AI eval（`./gradlew eval`）不算、也不插樁：它量的是模型答得好不好，不是程式有沒有被走到。
 - **前端只算 `src/**/*.ts`**。Vitest 只測純函式，`.vue` 元件交給 Playwright 用真的瀏覽器測（見 `web/vitest.config.ts` 開頭）；
   `.vue` 列進來只會是一排 0%，反而把真正的漏測淹掉。Playwright 跑到的程式不算進這份報告。
 - 模型沒開時，要真模型的整合測試會跳過，那些程式在報告裡會是沒跑到 —— 看到 AI 相關的類別紅一片，先看摘要的「跳過的測試」。
