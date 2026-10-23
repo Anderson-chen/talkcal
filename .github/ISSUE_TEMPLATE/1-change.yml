@@ -1,0 +1,29 @@
+# 一般的 issue：新功能、改進、文件、流程。檔名的數字決定在選單裡的順序。
+# 欄位照現有 issue 的寫法（例如 #188）：目的、現況、做完的證據。
+name: 一般
+description: 新功能、改進、文件、流程
+# 開完直接出現在 talkcal-to-product 看板上，不用再手動加
+projects: ["Anderson-chen/6"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **標題**寫做完之後變成怎樣，例如 `多個副本時限流上限不會倍增`。
+        不用加 `feat:` 這類前綴，類型交給 label；PR 標題會從這句改寫。
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目的
+      description: 做完之後，誰可以做到什麼、少了什麼麻煩
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: 現況
+      description: 現在怎樣、缺什麼；附上相關的檔案或 issue
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 做完的證據
+      description: 怎麼證明做到了；要有反例（該擋的會擋、正常的不被誤擋）
