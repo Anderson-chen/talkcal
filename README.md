@@ -170,6 +170,39 @@ CI 在每次 push、PR 時於 GitHub 上跑，本機則由 pre-push hook 在推�
 - [HikariCP：Dropwizard / Micrometer metrics](https://github.com/brettwooldridge/HikariCP/wiki/Dropwizard-Metrics)、[Spring Boot：Supported metrics（DataSource）](https://docs.spring.io/spring-boot/reference/actuator/metrics.html)：連線池有哪些指標可以看
 - [Grafana：Trace correlations](https://grafana.com/docs/grafana/latest/datasources/tempo/configure-tempo-data-source/)、[Tempo：metrics-generator（service graph）](https://grafana.com/docs/tempo/latest/metrics-generator/service_graphs/)：在 Grafana 裡把指標、log、trace 串起來
 
+## 產品範圍怎麼分類
+
+上線準備的五段回答「怎麼做到」；產品範圍回答「要做到什麼」：只有行事曆加 AI 助理才會這樣問、要看使用者要什麼才能決定的事。
+分成八個面向，每個面向是一個 epic issue（標 `epic` 和 `product: 面向`），裡面列細項的現況；決定要做的才拆成子 issue，決定不做的在 epic 裡寫理由。
+
+| 面向 | 要回答的問題 | 對應的機制（上線準備） | epic |
+|---|---|---|---|
+| 時間解讀 | 使用者說的時間、看到的時間，在各種情境下都是同一個意思嗎 | #46 時區（儲存） | [#189](https://github.com/Anderson-chen/talkcal/issues/189) |
+| 同時操作 | 同時操作時，使用者看到的結果合理嗎 | #50 並行修改、#51 冪等寫入、#187 排程工作只執行一次 | [#190](https://github.com/Anderson-chen/talkcal/issues/190) |
+| 行程管理 | 行程從建立、修改、提醒到刪除，使用者需要的每一步都有嗎 | | [#191](https://github.com/Anderson-chen/talkcal/issues/191) |
+| 資料互通 | 資料進得來、出得去、能跟別人和其他行事曆共用嗎 | #11 認證與授權 | [#192](https://github.com/Anderson-chen/talkcal/issues/192) |
+| 多語系 | 換一種語言、換一個地方的人還能用嗎 | | [#193](https://github.com/Anderson-chen/talkcal/issues/193) |
+| AI 助理使用規則 | 使用者能信任它、成本控制得住、答錯時有回饋管道嗎 | #12 濫用防護、#35 成本、#36 產品指標 | [#194](https://github.com/Anderson-chen/talkcal/issues/194) |
+| 帳號與個資 | 使用者能完整掌控自己的帳號和資料，也符合法規嗎 | #52 隱私 | [#195](https://github.com/Anderson-chen/talkcal/issues/195) |
+| 回應速度 | 使用者覺得快嗎，而不只是後端的數字 | #34 SLO、③ Run 的壓測與容量 | [#196](https://github.com/Anderson-chen/talkcal/issues/196) |
+
+### 跟上線準備怎麼分
+
+兩者是看同一個產品的兩個角度，不是第六段：
+
+| | 上線準備（五段） | 產品範圍（八個面向） |
+|---|---|---|
+| 角度 | 工程與營運面 | 產品面 |
+| 回答 | 怎麼做到：怎麼把它做穩、顧好 | 要做到什麼 |
+| 誰決定 | 工程，有業界標準做法 | 產品，看使用者要什麼 |
+| 換一個產品 | 大部分照搬 | 幾乎全部重想 |
+
+新的面向放哪邊，只問一句：**這件事要問誰才能決定？** 兩邊都沾到的不選邊，拆成兩項：機制放上線準備、規則放產品範圍，互相連結。
+例如時區：「存下來不會被資料庫偷偷換算」是機制，在 #46；「要支援哪些時區、出國時顯示哪裡的時間」是規則，在 #189。
+同理，限流（擋濫用）和方案配額（免費一天幾次）、量出成本和依成本定價，都是一邊一項。
+
+這條線不等於「非功能需求」和「功能需求」：「使用者能接受等多久」是效能、算非功能需求，但要問使用者才能決定，所以放產品範圍。
+
 ## 文件地圖
 
 | 想知道 | 看哪裡 |
