@@ -28,6 +28,10 @@ COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
+# Trivy：前端套件的授權檢查（ci/licenses.sh）。跟 ci/vulns.sh 同一版、同一個 digest，理由寫在那裡。
+# 只搬執行檔：授權分類內建在裡面，掃授權不必下載漏洞資料庫
+COPY --from=aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969     /usr/local/bin/trivy /usr/local/bin/trivy
+
 # Gradle 的家目錄分兩半：
 #   wrapper/ —— Gradle 本體（約 140MB）。烤在映像檔裡
 #   caches/  —— 下載的 Java 函式庫。run.sh 只把這一個子目錄掛成 volume，蓋不到 wrapper/
