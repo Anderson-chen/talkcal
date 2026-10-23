@@ -12,7 +12,7 @@
 #   - 跑完：容器整個刪掉，只把摘要和測試報告複製回主機的 ci/build/。
 #
 # 跟主機共用的只有三樣，都是刻意的：
-#   - 依賴快取（具名 volume talkcal-ci-gradle、talkcal-ci-npm）：不共用的話每次都要重新下載幾百 MB。
+#   - 依賴快取（具名 volume talkcal-ci-gradle、talkcal-ci-pnpm）：不共用的話每次都要重新下載幾百 MB。
 #     Gradle 本體不在這裡，它烤在映像檔裡（見 ci/Dockerfile）
 #   - Docker（docker.sock）：讓 Testcontainers 開 PostgreSQL。開在主機上、跟這個容器並排，而不是容器裡再包一層
 #   - 主機上的 llama-server（host.docker.internal:8080）：有開就真的跑模型測試，沒開就跳過
@@ -58,7 +58,7 @@ trap 'docker rm --force "$container" >/dev/null 2>&1 || true' EXIT
 docker create --name "$container" \
     --volume /var/run/docker.sock:/var/run/docker.sock \
     --volume talkcal-ci-gradle:/opt/gradle-home/caches \
-    --volume talkcal-ci-npm:/cache/npm \
+    --volume talkcal-ci-pnpm:/cache/pnpm-store \
     --add-host host.docker.internal:host-gateway \
     --env TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
     --env RUN_EVAL="${RUN_EVAL:-0}"     --env SPRING_AI_OPENAI_CHAT_BASEURL="${SPRING_AI_OPENAI_CHAT_BASEURL:-http://host.docker.internal:8080/v1}" \
@@ -76,7 +76,7 @@ mkdir -p "$out"
 docker cp "$container:/work/ci/build/summary.md" "$out/summary.md" >/dev/null 2>&1 || true
 docker cp "$container:/work/backend/build/reports" "$out/reports" >/dev/null 2>&1 || true
 docker cp "$container:/work/backend/build/eval" "$out/eval" >/dev/null 2>&1 || true
-# 前端 E2E 失敗時的 HTML 報告（每一步的截圖、trace）：npx playwright show-report ci/build/playwright-report
+# 前端 E2E 失敗時的 HTML 報告（每一步的截圖、trace）：pnpm --dir web exec playwright show-report ../ci/build/playwright-report
 docker cp "$container:/work/web/playwright-report" "$out/playwright-report" >/dev/null 2>&1 || true
 
 if [ $status -eq 0 ]; then
