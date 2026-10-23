@@ -1,7 +1,8 @@
 # epic：上線準備的一段，或產品範圍的一個面向，底下掛子 issue（分法見 README）。
-# 欄位照現有 epic 的寫法（例如 #30、#189）。
+# 欄位照現有 epic 的寫法（例如 #30、#189）：要回答的問題（Goal）、細項（Scope）。
+# 表單上看得到的文字（欄位名稱、說明、表格欄名）用英文，填的內容用中文。
 name: Epic
-description: 上線準備的一段或產品範圍的一個面向，底下掛子 issue
+description: A stage of launch readiness or one area of product scope, with sub-issues under it
 title: "epic(): "
 labels: [epic]
 projects: ["Anderson-chen/6"]
@@ -9,21 +10,21 @@ body:
   - type: markdown
     attributes:
       value: |
-        **標題**寫 `epic(範圍): 名稱`，例如 `epic(run): 上線後觀測`。
-        範圍用英文小寫；有對應的 `stage:`、`product:` label 就用同一個字，也把那個 label 加上。
+        **Title:** `epic(scope): name`, e.g. `epic(run): 上線後觀測`.
+        Scope is lowercase English; if a matching `stage:` or `product:` label exists, use the same word and add that label.
   - type: textarea
-    id: question
+    id: goal
     attributes:
-      label: 要回答的問題
-      description: 這一塊要確保什麼
+      label: Goal
+      description: What this area has to make sure of.
     validations:
       required: true
   - type: textarea
-    id: items
+    id: scope
     attributes:
-      label: 細項
-      description: 每一列一個細項。要做的開成子 issue，用 sub-issue 掛到這張 epic 底下（epic 上會顯示完成幾個），編號也寫在最後一欄；決定不做的，最後一欄寫理由
+      label: Scope
+      description: One row per item. Items to do become sub-issues attached to this epic (the epic shows how many are done), with the number in the last column; for items decided against, put the reason there.
       value: |
-        | 細項 | 現況 | 追蹤或決定 |
+        | Item | Status | Tracking / Decision |
         |---|---|---|
         |  |  |  |
