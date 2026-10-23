@@ -76,6 +76,24 @@ jobs:
       # HEAD：只掃這次要測的 commit 往回的歷史，不掃其他 PR 的分支（不帶參數 gitleaks 會掃 --all）
       - run: ci/secrets.sh HEAD
 
+  # DB migration 的檢查（#18）：已經跑過的不能改；新增的給 squawk 看會不會在新舊版本同時在線時壞掉、鎖住整張表。
+  # 也是自己一個 job、一個燈：它要 .git 比對「這次改了哪些」，不在 checks.sh 的容器裡（同 secrets）
+  migrations:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # fetch-depth: 0 —— 要拿得到比對的那個 commit（PR 的目標分支、push 之前的 master）
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # PR：跟目標分支比；push 到 master：跟推之前的那個 commit 比。
+      # 經過 env 再用，不把 ${{ }} 直接寫進指令：值會原樣貼進 shell，是 workflow 注入的典型入口
+      - run: ci/migrations.sh "${BASE:-HEAD~1}"
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+
   # 漏洞掃描：build 出會上線的映像檔再掃，有 HIGH、CRITICAL 就紅燈（必過檢查）。
   # --pull：每次都拉最新的基底映像檔，掃到的才是重新部署時真的會拿到的版本
   vulns:
