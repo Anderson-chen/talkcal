@@ -1,0 +1,15 @@
+# 模型在叢集裡跑：GPU 節點上一個 llama-server Pod，模型檔由 initContainer 從 S3 拉到 PVC。
+# 給 EKS（#58）用。kind 不用這個，改用 ../llm-chat-external（連主機上的 llama-server），理由見 deploy/k8s/README.md。
+#
+# 要由 overlay 補的兩個值：
+#   - ConfigMap llm-chat-model 的 MODEL_S3_URI（模型檔在哪個 bucket）
+#   - PVC 的 storageClassName（EKS 是 gp3）
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - llm-chat.yaml
+
+images:
+  - name: talkcal/llama-server
+    newTag: b10964-cuda13.0.1        # 跟 deploy/compose.yaml 的 x-llama-server 同一個 tag

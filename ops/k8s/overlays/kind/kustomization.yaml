@@ -1,0 +1,18 @@
+# kind：Alloy 在叢集裡收，存和畫圖沿用主機上 ops/compose.yaml 那組容器（Grafana 照樣開 localhost:3000）。
+# 叢集裡再架一套 Mimir/Loki/Tempo 只是重複；deploy/k8s/overlays/kind/up.sh 把 kind 節點接上那組的 Docker 網路，
+# 這裡的 ExternalName 再把短名字 mimir、loki、tempo 指到容器名稱。
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: talkcal-ops
+
+resources:
+  - ../../base
+  - stores.yaml
+
+patches:
+  - target: {kind: DaemonSet, name: alloy}
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/1/value
+        value: kind

@@ -148,11 +148,13 @@ docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新
 
 ## 對照雲端
 
+已經實際翻成 k8s 設定、在 kind 上跑過：[k8s/](k8s/README.md)（kustomize base + overlays，EKS 沿用同一份 base）。
+
 | 這裡 | 雲端（k8s）上對應的東西 |
 |------|------------------------|
 | `image: talkcal/llama-server:b10964-cuda13.0.1` 釘版本 | Deployment 的 image tag，同樣要釘；image 推到同區的 registry |
 | `deploy.resources...driver: nvidia` | `resources.limits: nvidia.com/gpu: 1` |
-| `healthcheck` 打 `/health` | readinessProbe（載模型期間不導流量進來） |
+| `healthcheck` 打 `/health` | 拆成 startupProbe / livenessProbe / readinessProbe（[k8s/](k8s/README.md#三種探針各回答什麼)） |
 | `start_period: 120s` | startupProbe / `initialDelaySeconds` |
 | log 寫 stdout、不寫檔 | 平台的 log 收集器負責收 |
 | `model-seed` 跑完才啟動模型服務 | initContainer（從 S3/GCS 拉模型） |
@@ -169,7 +171,7 @@ docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新
 3. ~~app 也進容器，分環境，容器間用服務名稱溝通~~ ✅
 4. ~~三個服務的 log 接進 Loki~~ ✅（見 `ops/README.md`）
 5. 搬上一台 AWS EC2，同樣用 compose（[#57](https://github.com/Anderson-chen/talkcal/issues/57)）
-6. 換成本機 k8s（kind）跑同一套（[#56](https://github.com/Anderson-chen/talkcal/issues/56)）
+6. ~~換成本機 k8s（kind）跑同一套~~ ✅（[#56](https://github.com/Anderson-chen/talkcal/issues/56)，見 [k8s/](k8s/README.md)）
 7. 部署到 EKS（[#58](https://github.com/Anderson-chen/talkcal/issues/58)）
 
 5、7 的規劃見 [infra/](../infra/README.md)。

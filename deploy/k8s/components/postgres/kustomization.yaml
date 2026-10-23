@@ -1,0 +1,8 @@
+# 資料庫在叢集裡跑：一個 PostgreSQL StatefulSet。只給 kind 用。
+# EKS（#58）不用這個，改連 RDS（deploy/README.md「對照雲端」：備份、修補、故障轉移交給託管服務）。
+# 密碼來自 Secret talkcal-db，不進 git：kind 由 overlays/kind/up.sh 從 deploy/.env 建，EKS 由 External Secrets 從 Secrets Manager 建。
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - postgres.yaml

@@ -1,0 +1,18 @@
+# 觀測的收集端在 k8s 上：Alloy DaemonSet。存的三個（Mimir、Loki、Tempo）和 Grafana 各環境不同，放 overlay：
+#   kind —— 指到主機上 ops/compose.yaml 那組容器（overlays/kind）
+#   EKS  —— 叢集裡自己架、區塊存 S3（#58）
+# 跟 deploy/k8s 分開，理由跟 ops/ 和 deploy/ 分開一樣：這裡是看別人的，那裡是被看的。
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: talkcal-ops
+
+resources:
+  - namespace.yaml
+  - alloy.yaml
+
+# 設定檔內容一改，ConfigMap 名稱後面的雜湊就變，DaemonSet 跟著換新的 Pod —— 不必手動重啟 Alloy
+configMapGenerator:
+  - name: alloy-config
+    files:
+      - config.alloy

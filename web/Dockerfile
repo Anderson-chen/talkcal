@@ -26,8 +26,13 @@ FROM nginx:1.30-alpine AS runtime
 # 代價是同一份 Dockerfile 不同天 build 出的套件版本可能不同 —— 換來的是不必等上游
 RUN apk upgrade --no-cache
 
-# 官方映像檔會把 /etc/nginx/conf.d/*.conf 載入，蓋掉它附的 default.conf 就換成我們的設定
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# 放成 template：官方映像檔啟動時把 /etc/nginx/templates/*.template 的 ${環境變數} 換掉，
+# 寫成 /etc/nginx/conf.d/default.conf（蓋掉它附的那份）。同一個映像檔在 compose 和 k8s 上都能跑（#56），差別只在環境變數。
+COPY nginx.conf /etc/nginx/templates/default.conf.template
+# NGINX_ENTRYPOINT_LOCAL_RESOLVERS：讓官方的啟動腳本從 /etc/resolv.conf 讀出 DNS，填進 NGINX_LOCAL_RESOLVERS
+# NGINX_ENVSUBST_FILTER：只換這兩個名字。不限的話，任何剛好跟 nginx 變數同名的環境變數都會被換掉
+# TALKCAL_APP_UPSTREAM：compose 的預設值；k8s 由 Deployment 的 env 蓋掉
+ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1     NGINX_ENVSUBST_FILTER="^(TALKCAL_APP_UPSTREAM|NGINX_LOCAL_RESOLVERS)$"     TALKCAL_APP_UPSTREAM=app:8090
 COPY --from=build /src/dist /usr/share/nginx/html
 
 # 不必自己寫 ENTRYPOINT / USER：官方映像檔的 nginx 主程序以 root 起來只為了綁 80 埠，
