@@ -1,0 +1,44 @@
+# EKS + 叢集內的 GPU 模型（infra/envs/2-eks 用 -var model_backend=gpu 時，ADR 0002）。
+# 在 ../eks 上面再加 #56 的 components/llm-chat-gpu（llama-server Pod + initContainer 從 S3 拉模型 + PVC），
+# 補上它留給 overlay 的值：模型 bucket、StorageClass、ServiceAccount（Pod Identity 讀 S3 用）、ECR 的映像檔位址。
+#
+# app 不用改：Terraform 在 gpu 時把 talkcal/app 的 ai_base_url 設成 http://llm-chat:8080/v1。
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: talkcal
+
+resources:
+  - ../eks
+  - service-account.yaml
+
+components:
+  - ../../components/llm-chat-gpu
+
+patches:
+  - target: {kind: PersistentVolumeClaim, name: llm-chat-models}
+    patch: |-
+      - op: add
+        path: /spec/storageClassName
+        value: gp3
+  - target: {kind: Deployment, name: llm-chat}
+    patch: |-
+      - op: add
+        path: /spec/template/spec/serviceAccountName
+        value: llm-chat
+
+# registry 和版本由 workflow 改（跟 ../eks 的 talkcal/app 一樣）
+images:
+  - name: talkcal/llama-server
+    newName: REPLACE-BY-WORKFLOW/talkcal/llama-server
+
+replacements:
+  - source:
+      kind: ConfigMap
+      name: eks-params
+      fieldPath: data.MODELS_S3_URI
+    targets:
+      - select:
+          kind: ConfigMap
+          name: llm-chat-model
+        fieldPaths: [data.MODEL_S3_URI]
