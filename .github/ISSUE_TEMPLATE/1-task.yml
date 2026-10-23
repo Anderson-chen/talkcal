@@ -33,7 +33,7 @@ body:
     id: acceptance
     attributes:
       label: Acceptance Criteria
-      description: How to prove it's done. One checkbox per item, each clearly pass or fail; add a counter-example for each check (what should be blocked is blocked, what's normal isn't). Tick each one as it's done.
+      description: How to prove it's done. One checkbox per item, each clearly pass or fail; add a counter-example for each check (what should be blocked is blocked, and normal input isn't blocked). Tick each one as it's done.
       placeholder: |
         - [ ] The expected behavior happens
         - [ ] Counter-example: what should be blocked is blocked; normal input passes

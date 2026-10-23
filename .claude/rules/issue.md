@@ -1,6 +1,6 @@
 # issue 規則
 
-- issue 標題：寫做完之後變成怎樣，跟 PR 標題同一種寫法但不加 `類型(範圍):`（類型等開 PR 時再決定），PR 標題才能直接從它改寫。
+- issue 標題：寫做完之後變成怎樣，跟 PR 標題同一種寫法（見 `commit.md`）但不加 `類型(範圍):`（類型等開 PR 時再決定），PR 標題才能直接從它改寫。
   - 問題寫看得到的症狀，例如 `app 換 IP 後 nginx 還連舊的，API 回 502`。
   - epic 寫 `epic(範圍): 名稱`，例如 `epic(run): 上線後觀測`；範圍有對應的 `stage:`、`product:` label 就用同一個字。
   - 網頁上開 issue 選 `.github/ISSUE_TEMPLATE/` 的模板（有寫入權限的人選單裡還有空白 issue，不要選）。
