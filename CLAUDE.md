@@ -5,10 +5,11 @@
   - 寫改完的行為，不列做了什麼；不放 issue 編號。
   - 一個 commit 只做一種類型（修 bug 和加功能分開）；驗證改動的測試跟改動放同一個 commit。
   - commit 內文只寫為什麼（1～3 行），細節放 PR 描述。
-- issue 標題：寫做完之後變成怎樣，跟 PR 標題同一種寫法但不加 `類型(範圍):`（類型看 label），PR 標題才能直接從它改寫。
+- issue 標題：寫做完之後變成怎樣，跟 PR 標題同一種寫法但不加 `類型(範圍):`（類型等開 PR 時再決定），PR 標題才能直接從它改寫。
   - 問題寫看得到的症狀，例如 `app 換 IP 後 nginx 還連舊的，API 回 502`。
   - epic 寫 `epic(範圍): 名稱`，例如 `epic(run): 上線後觀測`；範圍有對應的 `stage:`、`product:` label 就用同一個字。
-  - 網頁上開 issue 會先選 `.github/ISSUE_TEMPLATE/` 的模板；`gh issue create` 不經過模板，要自己照這裡寫。
+  - 網頁上開 issue 選 `.github/ISSUE_TEMPLATE/` 的模板（有寫入權限的人選單裡還有空白 issue，不要選）；
+    用 `gh issue create --title --body` 開的不經過模板，要自己照這裡寫。
 - PR 描述照 `.github/pull_request_template.md`：大標題用英文（`Summary`、`Depends On`、`Evidence`、`Test Plan`、`Merge Danger`），
   內文用中文，不適用的段落整段拿掉。演練時間軸這類很長的紀錄收進 `<details>`。
 - 開 PR 之前先做一輪獨立審查，審這個分支相對 `master` 的 diff：

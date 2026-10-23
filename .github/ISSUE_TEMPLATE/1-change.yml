@@ -2,14 +2,14 @@
 # 欄位照現有 issue 的寫法（例如 #188）：目的、現況、做完的證據。
 name: 一般 issue
 description: 新功能、改進、文件、流程
-# 開完直接出現在 talkcal-to-product 看板上，不用再手動加
+# 開完直接加進 talkcal-to-product 看板（開的人要對看板有寫入權限，沒有的話不會加、也不會報錯）
 projects: ["Anderson-chen/6"]
 body:
   - type: markdown
     attributes:
       value: |
         **標題**寫做完之後變成怎樣，例如 `多個副本時限流上限不會倍增`。
-        不用加 `feat:` 這類前綴，類型交給 label；PR 標題會從這句改寫。
+        不用加 `feat:` 這類前綴，類型等開 PR 時再決定；PR 標題會從這句改寫。
   - type: textarea
     id: goal
     attributes:
