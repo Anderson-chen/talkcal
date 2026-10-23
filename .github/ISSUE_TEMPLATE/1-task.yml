@@ -1,0 +1,41 @@
+# 一般的 issue：新功能、改進、文件、流程。檔名的數字決定在選單裡的順序。
+# 欄位照現有 issue 的寫法（例如 #188）：目的（Goal）、現況（Context）、做法（Proposed Solution）、做完的證據（Acceptance Criteria）。
+# 表單上看得到的文字（欄位名稱、說明）用英文，填的內容用中文。欄位名稱取 2026 年主流 repo 的用法（kubernetes、terraform、grafana…）。
+# Acceptance Criteria 寫成 checkbox，見 #207。
+name: Task
+description: Feature, improvement, docs, or process
+# 開完直接加進 talkcal-to-product 看板（開的人要對看板有寫入權限，沒有的話不會加、也不會報錯）
+projects: ["Anderson-chen/6"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Title:** the outcome once this is done, e.g. `多個副本時限流上限不會倍增`.
+        No `feat:` prefix; the type is decided when the PR is opened, and the PR title is rewritten from this one.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: Once done, who can do what, or what hassle goes away.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: How things are now and what's missing; link related files or issues.
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: The plan, why this approach, and what's deliberately left out. Can stay empty until known.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: How to prove it's done. One checkbox per item, each clearly pass or fail; add a counter-example for each check (what should be blocked is blocked, what's normal isn't). Tick each one as it's done.
+      placeholder: |
+        - [ ] The expected behavior happens
+        - [ ] Counter-example: what should be blocked is blocked; normal input passes
+    validations:
+      required: true
