@@ -13,6 +13,7 @@
 - issue 內文：照對應模板的欄位，用 `### 欄位名稱` 分段（名稱跟模板的 `label` 一樣），沒內容的欄位寫 `_No response_`。
   網頁表單產生的就是這個格式而且改不了，CLI 開的跟著它，兩邊才一致。
   - 「做完的證據」一條一個 `- [ ]`，每條都能判斷過或沒過，反例也各寫一條；做完一條勾一條，看 issue 就知道還剩幾條。
+    一般 issue 的這一欄不能寫 `_No response_`（網頁表單是必填）；問題回報還沒查到原因可以先空著。
   - 卡在別張 issue 時，設 blocked by 關係，內文不另外寫依賴；issue 標題下方會顯示 `Blocked by` 和在等哪一張。
     網頁在 issue 右側的 `Relationships` 設；CLI 用 `gh api -X POST repos/{owner}/{repo}/issues/<被卡住的>/dependencies/blocked_by -F issue_id=<卡住它的 issue 的 id>`（`id` 不是編號，用 `gh api repos/{owner}/{repo}/issues/<編號> -q .id` 查）。
   - 欄位以外的小段落（參考資料、刻意不做…）用 `####` 放在最接近的欄位底下，不另外開 `###`，欄位才對得上模板。
