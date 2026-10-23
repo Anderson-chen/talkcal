@@ -1,5 +1,5 @@
 # 一般的 issue：新功能、改進、文件、流程。檔名的數字決定在選單裡的順序。
-# 欄位照現有 issue 的寫法（例如 #188）：目的、現況、做法、做完的證據。
+# 欄位照現有 issue 的寫法（例如 #188）：目的、現況、做法、做完的證據；做完的證據寫成 checkbox，見 #207。
 name: 一般 issue
 description: 新功能、改進、文件、流程
 # 開完直接加進 talkcal-to-product 看板（開的人要對看板有寫入權限，沒有的話不會加、也不會報錯）
@@ -31,4 +31,9 @@ body:
     id: evidence
     attributes:
       label: 做完的證據
-      description: 怎麼證明做到了；要有反例（該擋的會擋、正常的不被誤擋）
+      description: 怎麼證明做到了；一條一個 checkbox，每條都能判斷過或沒過，反例（該擋的會擋、正常的不被誤擋）也各寫一條；做完一條勾一條
+      placeholder: |
+        - [ ] 該做到的事，做到了
+        - [ ] 反例：該擋的會擋、正常的不被誤擋
+    validations:
+      required: true
