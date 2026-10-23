@@ -12,6 +12,7 @@
     用 `gh issue create --title --body` 開的不經過模板，要自己照這裡寫。
 - issue 內文：照對應模板的欄位，用 `### 欄位名稱` 分段（名稱跟模板的 `label` 一樣），沒內容的欄位寫 `_No response_`。
   網頁表單產生的就是這個格式而且改不了，CLI 開的跟著它，兩邊才一致。
+  - 欄位以外的小段落（參考資料、刻意不做…）用 `####` 放在最接近的欄位底下，不另外開 `###`，欄位才對得上模板。
 - PR 描述照 `.github/pull_request_template.md`：大標題用英文（`Summary`、`Depends On`、`Evidence`、`Test Plan`、`Merge Danger`），
   內文用中文，不適用的段落整段拿掉。演練時間軸這類很長的紀錄收進 `<details>`。
 - 開 PR 之前先做一輪獨立審查，審這個分支相對 `master` 的 diff：
