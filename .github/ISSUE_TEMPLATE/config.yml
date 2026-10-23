@@ -1,0 +1,7 @@
+# 網頁上開 issue 時只列模板：標題寫法、label、加進看板都由模板帶好，不用記規則（規則本身見 CLAUDE.md）。
+# 有寫入權限的人（包括 repo 擁有者）選單裡還是有「Blank issue（Maintainers only）」，這裡擋不住，要自己選模板。
+# 只管網頁；gh issue create 和 API 不受影響。
+#
+# 模板的 name 至少要 3 個字：2026-10-23 實測「AB」「一般」「問題」在檔案頁的 Preview 都解析不出表單、只顯示原始碼，
+# 「Bug」「一般類」就可以（GitHub 文件沒寫這個限制）。
+blank_issues_enabled: false

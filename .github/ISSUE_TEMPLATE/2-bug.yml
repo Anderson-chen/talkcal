@@ -1,0 +1,28 @@
+# 問題：壞掉、跟預期不一樣。欄位照現有 issue 的寫法（例如 #90）。
+name: 問題回報
+description: 壞掉、跟預期不一樣
+labels: [bug]
+projects: ["Anderson-chen/6"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **標題**寫看得到的症狀，例如 `app 換 IP 後 nginx 還連舊的，API 回 502`。
+        原因還不確定也沒關係，先寫看到什麼。
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 症狀
+      description: 看到什麼、原本預期是什麼
+    validations:
+      required: true
+  - type: textarea
+    id: found
+    attributes:
+      label: 怎麼發現的
+      description: 什麼時候、在哪個環境（本機、EC2）、當時在做什麼
+  - type: textarea
+    id: repro
+    attributes:
+      label: 重現
+      description: 照著做就會發生的步驟；還重現不出來就寫「還沒重現」
