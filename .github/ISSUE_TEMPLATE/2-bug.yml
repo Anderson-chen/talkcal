@@ -1,0 +1,46 @@
+# 問題：壞掉、跟預期不一樣。欄位照現有的問題回報（例如 #76）：症狀、怎麼發現的、重現、原因、做法、做完的證據；做完的證據寫成 checkbox，見 #207。
+name: 問題回報
+description: 壞掉、跟預期不一樣
+labels: [bug]
+projects: ["Anderson-chen/6"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **標題**寫看得到的症狀，例如 `app 換 IP 後 nginx 還連舊的，API 回 502`。
+        原因還不確定也沒關係，先寫看到什麼。
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 症狀
+      description: 看到什麼、原本預期是什麼
+    validations:
+      required: true
+  - type: textarea
+    id: found
+    attributes:
+      label: 怎麼發現的
+      description: 什麼時候、在哪個環境（本機、EC2）、當時在做什麼
+  - type: textarea
+    id: repro
+    attributes:
+      label: 重現
+      description: 照著做就會發生的步驟；還重現不出來就寫「還沒重現」
+  - type: textarea
+    id: cause
+    attributes:
+      label: 原因
+      description: 查到的原因；開的時候還不知道就先空著
+  - type: textarea
+    id: approach
+    attributes:
+      label: 做法
+      description: 打算怎麼修；開的時候還不知道就先空著
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 做完的證據
+      description: 怎麼證明修好了；一條一個 checkbox，例如照重現步驟再做一次不會發生、反例（拿掉修正就會再發生）；做完一條勾一條。還沒查到原因可以先空著
+      placeholder: |
+        - [ ] 照重現步驟再做一次，不會發生
+        - [ ] 反例：拿掉修正就會再發生
