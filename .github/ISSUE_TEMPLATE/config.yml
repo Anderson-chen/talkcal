@@ -1,3 +1,5 @@
 # 網頁上開 issue 一定要先選一個模板：標題寫法、label、加進看板都由模板帶好，不用記規則（規則本身見 CLAUDE.md）。
 # 只管網頁；gh issue create 和 API 不受影響。
+#
+# 模板的 name 至少要 3 個字：「問題」這種 2 個字的，GitHub 不當成表單（檔案頁的 Preview 也只顯示原始碼）。
 blank_issues_enabled: false

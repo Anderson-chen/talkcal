@@ -1,6 +1,6 @@
 # 一般的 issue：新功能、改進、文件、流程。檔名的數字決定在選單裡的順序。
 # 欄位照現有 issue 的寫法（例如 #188）：目的、現況、做完的證據。
-name: 一般
+name: 一般 issue
 description: 新功能、改進、文件、流程
 # 開完直接出現在 talkcal-to-product 看板上，不用再手動加
 projects: ["Anderson-chen/6"]

@@ -1,5 +1,5 @@
 # 問題：壞掉、跟預期不一樣。欄位照現有 issue 的寫法（例如 #90）。
-name: 問題
+name: 問題回報
 description: 壞掉、跟預期不一樣
 labels: [bug]
 projects: ["Anderson-chen/6"]
