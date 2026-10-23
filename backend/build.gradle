@@ -240,6 +240,8 @@ testing {
             targets.configureEach {
                 testTask.configure {
                     shouldRunAfter tasks.named('integrationTest')
+                    // 不量覆蓋率：eval 量的是模型答得好不好，不是程式有沒有被走到（見 docs/test-coverage.md）
+                    jacoco { enabled = false }
                     // 模型在外面，程式沒變結果也可能變（換了模型檔、換了雲端模型），所以每次都真的跑，不沿用上次的結果
                     outputs.upToDateWhen { false }
                     // 跑哪個模型：沒給就是本機 llama-server 的 qwen3-8b。要評雲端的就給這三個（名字跟 Spring 認得的一樣）
