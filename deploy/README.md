@@ -178,7 +178,10 @@ docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新
 
 app 把行程（`calendar_event`）和 AI 助理的對話記憶（`calendar_assistant_message`，一則訊息一列、連工具呼叫一起存）
 存進 `postgres` 容器，資料表由 Flyway 在 app 啟動時自動建（`backend/src/main/resources/db/migration`）。
-本機 bootRun 的 app 也連同一個資料庫（`127.0.0.1:5432`），所以要先 `docker compose up -d postgres`。
+本機 bootRun 的 app 也連這個 PostgreSQL（`127.0.0.1:5432`），所以要先 `docker compose up -d postgres`。
+但不是同一個 database：主資料夾用 `talkcal`，其他 worktree 各用一個自己的（`talkcal_<資料夾名稱>`，第一次 bootRun 時自動建），
+好幾個 worktree 同時開發不會改到彼此的資料，見 [docs/parallel-dev.md](../docs/parallel-dev.md)。
+worktree 刪掉之後它的 database 還在，要清：`docker compose exec postgres dropdb -U talkcal talkcal_<資料夾名稱>`。
 
 直接看資料：
 

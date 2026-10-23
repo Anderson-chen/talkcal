@@ -11,10 +11,13 @@ export default mergeConfig(
   viteConfig,
   defineConfig({
     test: {
-      // 只找 src 底下的 *.test.ts。不寫的話 Vitest 預設也會撿 *.spec.ts，
-      // 會把 Playwright 的測試（e2e/*.spec.ts）也拿來跑
-      include: ['src/**/*.test.ts'],
+      // 只找 src（前端）和 dev（開發工具，例如 vite 的 proxy 轉去哪）底下的 *.test.ts。
+      // 不寫的話 Vitest 預設也會撿 *.spec.ts，會把 Playwright 的測試（e2e/*.spec.ts）也拿來跑
+      include: ['src/**/*.test.ts', 'dev/**/*.test.ts'],
       environment: 'node',
+      // 預設開「核心數 − 1」個 worker（這台 31 個），但測試檔只有幾個、全部不到一秒。
+      // 限 4 個：好幾個 worktree 同時跑不會一次冒出上百個 Node 程序（#109，docs/parallel-dev.md）。--maxWorkers 可以覆蓋
+      maxWorkers: 4,
     },
   }),
 )
