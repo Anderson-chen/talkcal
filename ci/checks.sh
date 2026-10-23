@@ -17,7 +17,8 @@ echo "── 後端：單元測試、架構規則、整合測試（編譯時 Err
 # 要真模型的那幾支，連不到 llama-server 就自動跳過（Assumptions），下面的摘要會列出來
 # evalClasses：AI eval（./gradlew eval）不在這裡跑（要真模型、跑一分多鐘），但至少要編得過，
 # 不然改了 CalendarAssistant 的方法簽名，eval 壞了沒人知道，直到下次有人想跑它
-(cd backend && ./gradlew --no-daemon test integrationTest evalClasses) || status=1
+# jacocoTestReport：單元＋整合測試合併的覆蓋率報告（#23），不會讓 CI 紅，總數貼在下面的摘要
+(cd backend && ./gradlew --no-daemon test integrationTest evalClasses jacocoTestReport) || status=1
 
 # AI eval：只有 pre-push 發現這次改到 prompt 或模型相關的檔案時才跑（它設 RUN_EVAL=1，見 .githooks/pre-push）。
 # GitHub 上不跑：沒有模型。基準線裡的題目沒過才會紅；報告在 backend/build/eval/report.md（run.sh 會拿回 ci/build/eval/）
@@ -60,6 +61,25 @@ skipped_list() { # 列出被跳過的測試：類別 › 名稱
     done
 }
 
+backend_coverage() { # 後端的「行 | 分支」兩欄：把 JaCoCo CSV 每個類別的那一列加總
+    # 欄位：GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,…
+    local csv=backend/build/reports/jacoco/test/jacocoTestReport.csv
+    [ -f "$csv" ] || { echo "（沒有報告） | （沒有報告）"; return; }
+    awk -F, '
+        function pct(c, t) { return sprintf("%.1f%% (%d/%d)", t ? 100 * c / t : 0, c, t) }
+        NR > 1 { bm += $6; bc += $7; lm += $8; lc += $9 }
+        END { print pct(lc, lm + lc) " | " pct(bc, bm + bc) }
+    ' "$csv"
+}
+
+web_coverage() { # 前端的「行 | 分支」兩欄：讀 Vitest 的 json-summary
+    local json=web/coverage/coverage-summary.json
+    [ -f "$json" ] || { echo "（沒有報告） | （沒有報告）"; return; }
+    node -e 'const t = require(process.argv[1]).total
+        const pct = (k) => `${t[k].pct}% (${t[k].covered}/${t[k].total})`
+        console.log(`${pct("lines")} | ${pct("branches")}`)' "$PWD/$json"
+}
+
 {
     echo "## 測試結果"
     echo
@@ -82,6 +102,15 @@ skipped_list() { # 列出被跳過的測試：類別 › 名稱
     else
         echo "沒有跳過任何測試。"
     fi
+
+    # 覆蓋率（#23）：只列總數，不設門檻。要看哪一行沒跑到、報告在哪，見 docs/test-coverage.md
+    echo
+    echo "## 測試覆蓋率"
+    echo
+    echo "| | 行 | 分支 | 報告 |"
+    echo "|---|---|---|---|"
+    echo "| 後端（單元＋整合） | $(backend_coverage) | \`reports/jacoco/test/html/\` |"
+    echo "| 前端（Vitest，只算 .ts） | $(web_coverage) | \`web-coverage/\` |"
 } > "$summary"
 
 echo
