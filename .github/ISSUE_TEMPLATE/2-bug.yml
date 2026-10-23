@@ -26,3 +26,13 @@ body:
     attributes:
       label: 重現
       description: 照著做就會發生的步驟；還重現不出來就寫「還沒重現」
+  - type: textarea
+    id: cause
+    attributes:
+      label: 原因
+      description: 查到的原因；開的時候還不知道就先空著
+  - type: textarea
+    id: approach
+    attributes:
+      label: 做法
+      description: 打算怎麼修，以及怎麼證明修好了（要有反例）
