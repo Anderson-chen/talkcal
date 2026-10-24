@@ -16,6 +16,7 @@
 #
 # 一輪做的事：
 #   1. 問 GitHub：master 上最新一個 CI 綠燈的 commit 是哪個
+#      （env 檔有 PROMOTE_FROM 的話改問：那個環境最近一次部署成功的是哪個 commit。正式環境靠這個只拿 staging 驗過的版本）
 #   2. 跟上次試過的比，一樣就結束（成功或失敗都不重試：失敗要人來看，不該每五分鐘重 build 一次）
 #   3. checkout 那個 commit，跑「那個 commit 的」cd/apply.sh
 #   4. 結果寫回 GitHub Deployments：GitHub 頁面上看得到哪個版本部署到哪、成功沒有
@@ -40,7 +41,7 @@ main() {
   local env_file="cd/envs/$env_name.env"
   [ -f "$env_file" ] || { echo "沒有這個環境：$env_file" >&2; return 1; }
   # shellcheck source=/dev/null
-  source "$env_file"   # 這裡只用到 SITE_URL；部署本身由 apply.sh 讀 checkout 之後的版本
+  source "$env_file"   # 這裡只用到 SITE_URL、PROMOTE_FROM；部署本身由 apply.sh 讀 checkout 之後的版本
 
   # 寫進 log：排程跑的時候沒有人看螢幕，事後要能查。
   # 手動跑時畫面和 log 都要有，用 tee；排程（conhost --headless）底下 stdout 不是有效的 handle，
@@ -80,13 +81,26 @@ main() {
     return 0
   fi
 
-  # 1. master 上最新一個 CI 綠燈的 commit。只看 push 事件：PR 的 run 跑的是合併前的版本
+  local repo
+  repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+
+  # 1. 要部署哪個 commit
   local sha
-  sha="$(gh run list --workflow "$workflow" --branch "$branch" --event push --status success \
-           --limit 1 --json headSha --jq '.[0].headSha // empty')"
-  if [ -z "$sha" ]; then
-    echo "$branch 還沒有綠燈的 CI，沒東西可部署"
-    return 0
+  if [ -n "${PROMOTE_FROM:-}" ]; then
+    # 晉升：上游環境（staging）部署成功過的才拿。上游自己就只拿綠燈的，所以這裡不必再查 CI
+    sha="$(last_success_sha "$repo" "$PROMOTE_FROM")"
+    if [ -z "$sha" ]; then
+      echo "$PROMOTE_FROM 還沒有部署成功的版本，沒東西可晉升"
+      return 0
+    fi
+  else
+    # master 上最新一個 CI 綠燈的 commit。只看 push 事件：PR 的 run 跑的是合併前的版本
+    sha="$(gh run list --workflow "$workflow" --branch "$branch" --event push --status success \
+             --limit 1 --json headSha --jq '.[0].headSha // empty')"
+    if [ -z "$sha" ]; then
+      echo "$branch 還沒有綠燈的 CI，沒東西可部署"
+      return 0
+    fi
   fi
 
   # 2. 跟上次試過的比
@@ -96,10 +110,8 @@ main() {
     echo "最新的綠燈版本 ${sha:0:7} 已經試過，不動"
     return 0
   fi
-  echo "新版本：${last:0:7} → ${sha:0:7}"
+  echo "新版本：${last:0:7} → ${sha:0:7}${PROMOTE_FROM:+（從 $PROMOTE_FROM 晉升）}"
 
-  local repo
-  repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
   local deployment_id
   deployment_id="$(create_deployment "$repo" "$sha" "$env_name")"
   set_status "$repo" "$deployment_id" in_progress "部署中"
@@ -140,6 +152,20 @@ create_deployment() {
 {"ref": "$sha", "environment": "$env_name", "auto_merge": false, "required_contexts": [],
  "description": "cd/triggers/watch.sh"}
 EOF
+}
+
+# 某個環境最近一次「最後狀態是 success」的部署是哪個 commit，沒有就印空字串。
+# GitHub 回的部署由新到舊；一筆部署可以有好幾個狀態（in_progress → success），最新的狀態排第一個。
+# 跳過失敗、還在跑的：staging 壞掉的版本不該被晉升，staging 下一個成功的版本出來之前，正式環境停在原地
+last_success_sha() {
+  local repo="$1" env_name="$2" id sha state
+  while read -r id sha; do
+    state="$(gh api "repos/$repo/deployments/$id/statuses?per_page=1" --jq '.[0].state // empty')"
+    if [ "$state" = success ]; then
+      echo "$sha"
+      return 0
+    fi
+  done < <(gh api "repos/$repo/deployments?environment=$env_name&per_page=20" --jq '.[] | "\(.id) \(.sha)"')
 }
 
 set_status() {
