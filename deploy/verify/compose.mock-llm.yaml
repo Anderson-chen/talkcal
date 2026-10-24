@@ -1,0 +1,30 @@
+# 疊在 deploy/compose.yaml 上面，給「沒有 NVIDIA GPU 的機器」驗證整套部署用（deploy/verify/clean-linux.sh）。
+# 不是正式的部署方式：模型換成 mock_llm.py，回答跟問題無關。
+#
+#   docker compose -f deploy/compose.yaml -f deploy/verify/compose.mock-llm.yaml up -d
+#
+# 只換掉「需要 GPU」的部分，其他照正式的跑：
+#   model-seed —— 腳本、MODELS_DIR、SHA256 驗證全部照舊；只是映像檔換成一般的 ubuntu，
+#                 不必為了 bash 和 sha256sum 去 build 4.3GB 的 CUDA 映像檔（沒 GPU 的機器也跑不了它）
+#   llm-chat   —— 換成 mock：沒 GPU 起不了 CUDA 版的 llama-server。/health 照樣要看到 model-seed 播好的模型檔
+#   postgres、app、web —— 完全沒動，build 的就是正式的映像檔
+# 相對路徑以第一個檔案（deploy/）為準，所以下面寫 ./verify/。
+
+services:
+  model-seed:
+    image: ubuntu:24.04
+    build: !reset null
+
+  llm-chat:
+    image: python:3.13-alpine
+    build: !reset null
+    deploy: !reset {}               # 不跟 Docker 要 GPU：沒有 GPU 的機器要了就起不來
+    entrypoint: ["python", "/mock/mock_llm.py"]
+    command: !reset []
+    volumes:
+      - ./verify/mock_llm.py:/mock/mock_llm.py:ro
+    healthcheck:
+      # python:alpine 沒有 curl，用 busybox 的 wget。寫 127.0.0.1 不寫 localhost：busybox 先試 ::1，
+      # mock 只聽 IPv4，會一直 Connection refused（第一次在乾淨 Linux 跑就是卡在這裡變 unhealthy）
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      start_period: 10s

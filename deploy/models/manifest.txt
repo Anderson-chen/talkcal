@@ -1,0 +1,9 @@
+# 模型檔清單：download.sh 照這份下載、驗證。一行一個檔案：SHA256  檔名  下載網址
+#
+# 網址釘在 Hugging Face repo 的某個 commit（resolve/<commit>/），不用 resolve/main：
+# 上游哪天重新量化、換掉同名的檔案，main 拿到的就不是這份；釘住 commit，換一台電腦下載到的一定是同一個 byte。
+# SHA256 是 Hugging Face 在這個 commit 記錄的 LFS 雜湊（api/models/Qwen/Qwen3-8B-GGUF/tree/<commit> 的 lfs.oid），
+# 也跟作者電腦上一直在用的那份一樣（5,027,783,488 bytes）。
+#
+# 換模型：llm-chat 的 -m（deploy/compose.yaml）、model-seed 檢查的檔名、這一行，三個一起改。
+d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785  Qwen3-8B-Q4_K_M.gguf  https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/7c41481f57cb95916b40956ab2f0b139b296d974/Qwen3-8B-Q4_K_M.gguf
