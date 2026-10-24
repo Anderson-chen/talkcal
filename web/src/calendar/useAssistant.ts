@@ -12,7 +12,8 @@
 import { inject, ref, type InjectionKey } from 'vue'
 import { me } from '../auth'
 import { assistantHistory, talkToAssistant, type EventFields } from '../calendar'
-import { message, type CalendarState } from './useCalendar'
+import { problemOf, type Problem } from '../http'
+import { type CalendarState } from './useCalendar'
 
 export type ProposalStatus = 'pending' | 'added' | 'removed'
 
@@ -27,7 +28,10 @@ export interface ChatMessage {
   text: string
   proposals: Proposal[]
   // 加入行事曆失敗時的原因，顯示在卡片下面；草稿留著讓使用者再按一次
-  error: string | null
+  error: Problem | null
+  // 這則訊息是哪一次請求回的（#42）：助理的回覆、回不了的錯誤訊息都有，訊息底下顯示成可複製的追蹤碼。
+  // 開場白、使用者自己說的話、重新整理後讀回來的舊訊息沒有 —— 讀回來時那次請求的 trace 是「讀紀錄」，不是當初回這句的那一次
+  traceId: string | null
 }
 
 // 三種能做的事各舉一個例子：新增、查詢、找空檔
@@ -60,8 +64,8 @@ function saveConversationId(id: string | undefined) {
 
 export function useAssistant(calendar: CalendarState) {
   let nextId = 1
-  const say = (role: ChatMessage['role'], text: string, proposals: Proposal[] = []): ChatMessage =>
-    ({ id: nextId++, role, text, proposals, error: null })
+  const say = (role: ChatMessage['role'], text: string, proposals: Proposal[] = [], traceId: string | null = null): ChatMessage =>
+    ({ id: nextId++, role, text, proposals, error: null, traceId })
 
   const messages = ref<ChatMessage[]>([say('ai', GREETING)])
   const input = ref('')
@@ -84,7 +88,8 @@ export function useAssistant(calendar: CalendarState) {
       }
       messages.value = [say('ai', GREETING), ...history.messages.map((m) => say(m.role === 'user' ? 'me' : 'ai', m.text))]
     } catch (e) {
-      messages.value.push(say('ai', `讀不回上次的對話：${message(e)}。可以直接開始新的對話。`))
+      const failure = problemOf(e)
+      messages.value.push(say('ai', `讀不回上次的對話：${failure.text}。可以直接開始新的對話。`, [], failure.traceId))
     } finally {
       typing.value = false
     }
@@ -111,9 +116,10 @@ export function useAssistant(calendar: CalendarState) {
       const answer = await talkToAssistant(said, conversationId)
       conversationId = answer.conversationId
       saveConversationId(conversationId)
-      messages.value.push(say('ai', answer.reply, answer.proposals.map((draft) => ({ draft, status: 'pending' }))))
+      messages.value.push(say('ai', answer.reply, answer.proposals.map((draft) => ({ draft, status: 'pending' })), answer.traceId))
     } catch (e) {
-      messages.value.push(say('ai', `助理暫時沒辦法回應：${message(e)}。可以稍後再試一次。`))
+      const failure = problemOf(e)
+      messages.value.push(say('ai', `助理暫時沒辦法回應：${failure.text}。可以稍後再試一次。`, [], failure.traceId))
     } finally {
       typing.value = false
     }
@@ -129,7 +135,7 @@ export function useAssistant(calendar: CalendarState) {
       await calendar.add(pending.map((p) => p.draft))
       for (const p of pending) p.status = 'added'
     } catch (e) {
-      msg.error = message(e)
+      msg.error = problemOf(e)
     } finally {
       saving.value = false
     }
