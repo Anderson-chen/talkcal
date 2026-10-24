@@ -29,6 +29,19 @@ schema_config:
         prefix: index_
         period: 24h
 
+# 保留期限：7 天（#52）。以前沒設 = 永遠不刪 —— log 裡的東西（就算已經不記對話內容，還有帳號 ID、路徑、時間）
+# 會比使用者的帳號活得還久。7 天夠回頭查「上週出了什麼事」；更久的趨勢看 Mimir 的指標，不必留原始 log。
+# Loki 本身不刪過期資料，要開 compactor 的 retention 它才會刪（單機模式 compactor 跟其他元件在同一個程序裡）。
+# 保留期限、為什麼是這個數字，整理在 docs/privacy.md
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true
+  # 開了 retention 就要指定「刪除請求」存在哪；單機存本機檔案
+  delete_request_store: filesystem
+
+limits_config:
+  retention_period: 168h
+
 # 關掉「用量回報」，跟 Grafana 那邊同個理由：學習環境不往外送任何東西
 analytics:
   reporting_enabled: false

@@ -53,8 +53,10 @@ import java.util.regex.Pattern;
  */
 public final class CalendarAssistant {
 
-    // agent 內部做了什麼（叫了哪個工具、帶什麼參數、有沒有說謊被擋下）。access log 只看得到「HTTP 200、回了一段話」，
-    // 模型只說不做時從外面看不出來 —— 使用者回報「說已加入卻沒有卡片」時，log 裡什麼都沒有
+    // agent 內部做了什麼（走了幾步、叫了哪個工具、有沒有說謊被擋下）。access log 只看得到「HTTP 200、回了多少 byte」，
+    // 模型只說不做時從外面看不出來 —— 使用者回報「說已加入卻沒有卡片」時，log 裡什麼都沒有。
+    // 只記「發生了什麼」，不記「說了什麼」（#52）：回覆的文字、工具的參數都是使用者的行程和對話，
+    // 記下來就跟著進了 Loki。要看內容，用 conversation id 到資料庫裡那個人自己的對話看（docs/privacy.md）
     private static final Logger log = LoggerFactory.getLogger(CalendarAssistant.class);
 
     /**
@@ -216,11 +218,11 @@ public final class CalendarAssistant {
                     // 這一輪查過行事曆就不檢查：使用者問「剛剛那個加了嗎」，查到了照實說「已加入」是對的
                     if (tools.proposals().isEmpty() && !tools.checkedCalendar() && CLAIMS_ACTION.matcher(text).find()) {
                         if (correction.isEmpty()) {
-                            log.warn("AI 助理沒呼叫工具卻說有卡片或已加入，提醒它重來：conversation={} reply={}", conversationId, text);
+                            log.warn("AI 助理沒呼叫工具卻說有卡片或已加入，提醒它重來：conversation={}", conversationId);
                             correction = List.of(answer, new UserMessage(CORRECTION));
                             continue;
                         }
-                        log.warn("AI 助理提醒過還是說有卡片或已加入，改成固定回覆：conversation={} reply={}", conversationId, text);
+                        log.warn("AI 助理提醒過還是說有卡片或已加入，改成固定回覆：conversation={}", conversationId);
                         answer = new AssistantMessage(HONEST_FALLBACK);
                         text = HONEST_FALLBACK;
                     }
@@ -229,27 +231,27 @@ public final class CalendarAssistant {
                     // prompt 擋不住就由程式擋：行事曆助理沒有理由主動給出使用者沒講過的網址。
                     // 不提醒它重來：藏指令的資料還在對話裡，重來多半再講一次
                     if (hasLinkUserNeverSaid(text, userSaid)) {
-                        log.warn("AI 助理的回覆裡有使用者沒講過的網址，可能是行程資料裡的 prompt injection，改成固定回覆：conversation={} reply={}",
-                                conversationId, text);
+                        log.warn("AI 助理的回覆裡有使用者沒講過的網址，可能是行程資料裡的 prompt injection，改成固定回覆：conversation={}",
+                                conversationId);
                         answer = new AssistantMessage(UNSAFE_LINK_FALLBACK);
                         text = UNSAFE_LINK_FALLBACK;
                     }
                     // 內部設定不能從產品裡被問出來（OWASP LLM07 System Prompt Leakage）：
                     // prompt 叫它不要講只是請求，模型照樣會講，所以由程式比對回覆
                     if (revealsInternals(text, system.getText())) {
-                        log.warn("AI 助理的回覆在講內部設定（工具名稱或照念指示），改成固定回覆：conversation={} reply={}",
-                                conversationId, text);
+                        log.warn("AI 助理的回覆在講內部設定（工具名稱或照念指示），改成固定回覆：conversation={}",
+                                conversationId);
                         answer = new AssistantMessage(INTERNALS_FALLBACK);
                         text = INTERNALS_FALLBACK;
                     }
                     conversation.add(answer);
                     memory.saveAll(conversationId, recentTurns(conversation));
-                    log.info("AI 助理回覆：conversation={} steps={} proposals={} reply={}",
-                            conversationId, step + 1, tools.proposals().size(), text);
+                    log.info("AI 助理回覆：conversation={} steps={} proposals={} chars={}",
+                            conversationId, step + 1, tools.proposals().size(), text.length());
                     return new Reply(text.strip(), tools.proposals());
                 }
                 for (AssistantMessage.ToolCall call : response.getResult().getOutput().getToolCalls()) {
-                    log.info("AI 助理呼叫工具：conversation={} tool={} arguments={}", conversationId, call.name(), call.arguments());
+                    log.info("AI 助理呼叫工具：conversation={} tool={}", conversationId, call.name());
                 }
                 // 執行工具；回來的歷史 = 這次送出的訊息 + 助理的工具呼叫 + 工具結果。
                 // system 和提醒那兩則都拿掉：提醒只對這一次有用，留在記憶裡會讓下一輪的模型看到一句假話

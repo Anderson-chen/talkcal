@@ -221,7 +221,8 @@ public final class JdbcAssistantMemoryRepository {
         try {
             return JSON.readValue(json, type);
         } catch (JacksonException e) {
-            throw new IllegalStateException("資料庫裡的工具訊息讀不懂：" + json, e);
+            // 不把 json 本身放進訊息：裡面是使用者的行程，例外會被印進 log（#52）
+            throw new IllegalStateException("資料庫裡的工具訊息讀不懂（" + json.length() + " 字）", e);
         }
     }
 
