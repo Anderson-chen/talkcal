@@ -7,7 +7,15 @@
 #     不開網路、不讀外部輸入；標準函式庫的漏洞要被利用，得先有程式拿它去處理攻擊者給的資料
 #   - postgres 的埠只綁在 127.0.0.1（deploy/compose.yaml），外面連不到
 # paths 限定在 gosu：同一個 CVE 出現在別的地方（例如 app 自己的程式）照樣會報
+#
+# brotli-libs（CVE-2026-111497）—— 2026-10-24 評估：
+#   - 還升不了：Alpine 已經有修補版 1.2.1-r0，但 postgres:18.6-alpine 最近一次 build 是 2026-10-22，裡面還是 1.2.0-r1
+#   - 碰不到：brotli 是 libcurl 帶進來的，PG18 用 libcurl 只為了 libpq 的 OAuth 登入流程；我們用密碼登入，埠只綁 127.0.0.1
+#   - 到期日只給兩週：官方映像檔重新 build 後這條就該拿掉，到期 CI 變紅會逼人回來看
 vulnerabilities:
+  - id: CVE-2026-111497
+    statement: libcurl 帶進來，只給 libpq 的 OAuth 用；我們用密碼登入。等 postgres 官方映像檔重新 build，見檔案開頭
+    expired_at: 2026-11-07
   - id: CVE-2025-61726
     paths: [usr/local/bin/gosu]
     statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
