@@ -8,6 +8,7 @@ import { computed, ref } from 'vue'
 import { logOut, me } from '../auth'
 import type { Category, SavedEvent } from '../calendar'
 import { dayLabel, monthDayLabel, timeOf, weekdayName, weekOf } from '../monthGrid'
+import TraceId from '../TraceId.vue'
 import AssistantChat from './AssistantChat.vue'
 import ClearChatButton from './ClearChatButton.vue'
 import EventDetail from './EventDetail.vue'
@@ -98,7 +99,11 @@ const dotColor = (category: Category) => theme.colors.value[category].color
       </template>
 
       <ViewTabs wide class="tabs" />
-      <p v-if="calendar.loadError.value" role="alert" class="error">讀不到行程：{{ calendar.loadError.value }}</p>
+      <p v-if="calendar.loadError.value" role="alert" class="error">
+        讀不到行程：{{ calendar.loadError.value.text }}
+        <TraceId v-if="calendar.loadError.value.traceId" :id="calendar.loadError.value.traceId" />
+        <button type="button" class="reload" @click="calendar.reload()">重新讀取</button>
+      </p>
 
       <!-- 月視圖 -->
       <template v-if="calendar.view.value === 'month'">
@@ -223,6 +228,7 @@ h1.small { font-size: 22px; line-height: 1.3; white-space: nowrap; }
 .day-title { margin: 0 20px 8px; font-size: 26px; }
 .tabs { margin: 4px 20px 12px; }
 .error { margin: 0 20px 8px; padding: 10px 12px; border-radius: 10px; background: var(--dangerSoft); color: var(--danger); font-size: 14px; }
+.error .reload { display: block; margin-top: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--danger); border-radius: 8px; background: transparent; color: var(--danger); font-size: 13px; font-weight: 700; }
 
 .month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 0 12px; row-gap: 2px; }
 .weekday { text-align: center; font-size: 12px; color: var(--muted); font-weight: 500; padding: 4px 0; }

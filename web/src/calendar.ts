@@ -1,4 +1,4 @@
-import { send } from './http'
+import { send, traceIdOf } from './http'
 
 // 404 的錯誤型別搬到 http.ts（每個 API 共用），這裡轉出去，useCalendar 照舊從這裡 import
 export { NotFoundError } from './http'
@@ -36,6 +36,8 @@ export interface AssistantReply {
   conversationId: string
   reply: string
   proposals: EventFields[]
+  // 這一輪請求的 trace id（從回應的 header 拿，不在 body 裡）：助理答得怪，使用者要能說出是哪一次（#42）
+  traceId: string | null
 }
 
 /**
@@ -44,8 +46,8 @@ export interface AssistantReply {
  */
 export async function talkToAssistant(message: string, conversationId?: string): Promise<AssistantReply> {
   const res = await send('/api/calendar/assistant', { method: 'POST', body: JSON.stringify({ message, conversationId }) })
-  const body = (await res.json()) as AssistantReply
-  return { ...body, proposals: body.proposals.map(normalize) }
+  const body = (await res.json()) as Omit<AssistantReply, 'traceId'>
+  return { ...body, proposals: body.proposals.map(normalize), traceId: traceIdOf(res) }
 }
 
 /** 一段對話給人看的部分（工具呼叫、提議過的卡片不在裡面）。 */

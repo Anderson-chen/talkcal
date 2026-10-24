@@ -178,6 +178,22 @@ Grafana 的「talkcal — 壓測（k6）」上，紅線是舊 app 收到 SIGTERM
 
 `RATE_PER_MIN` 要低於容量：每分鐘 60 人、問題隨機混合時模型的 KV cache 會塞爆、回 502，跟部署無關的失敗混進來就分不清了。
 
+### outage：模型掛掉演練（#44）
+
+模型斷線或卡住的時候，助理是不是快速失敗、行程 API 是不是照常可用。同時跑兩群人：每分鐘 `RATE_PER_MIN` 個人（預設 20）跟助理說一句，
+每秒 1 個人讀行程。故障由你在另一個終端機製造，每一句的結果都印一行（帶時間），對著看：
+
+```bash
+k6 run perf/outage.js
+# 跑起來大約一分鐘後，另一個終端機：
+docker stop talkcal-llm-chat      # 斷線；卡住用 docker pause（要等 2 分鐘逾時，DURATION_S 拉長）
+# 再過兩分鐘：
+docker start talkcal-llm-chat     # 或 docker unpause
+```
+
+收工的表：助理的 200、502、503（MODEL_UNAVAILABLE／MODEL_BUSY）各幾個、中位數和最久花多久；行程 API 有門檻（0 失敗、p95 < 1 秒）。
+熔斷的門檻和理由在 `backend/src/main/resources/application.properties` 的 `talkcal.model.*`。
+
 ## 怎麼讀結果
 
 k6 收工時印一張表，看三個地方就夠：
@@ -233,6 +249,7 @@ launch.json 的原生 llama-server 沒帶 `-np`，是 llama.cpp 的預設值（4
 - **`load.js`** —— 三段平台找併發上限，暖身不算數。
 - **`concurrent.js`** —— 一波人在短時間內各說一句，看尖峰時最後來的人等多久。
 - **`knee.js`** —— 同時數逐階往上加，印出每階的延遲與吞吐量，找臨界值。
+- **`outage.js`** —— 模型斷線、卡住時，助理多快失敗、熔斷有沒有打開又關回來、行程 API 有沒有被拖累。
 - **`lib/assistant.js`** —— 各腳本共用的位址、訊息池、請求參數、正常回覆的檢查。
 - **`lib/docker-target.js`** —— 把預設位址改成 docker 那台 app，有給 `BASE_URL` 就尊重它。
 
@@ -255,5 +272,6 @@ perf/
 ├── concurrent.js   # 一波人在短時間內各說一句（尖峰）
 ├── knee.js         # 同時數逐階往上加，找臨界值
 ├── deploy.js       # 邊壓邊部署：部署期間有幾個人受影響
+├── outage.js       # 模型掛掉演練：助理快速失敗、行程 API 照常
 └── run-to-grafana.sh  # 跑任何一支腳本，指標同時送進 ops/ 的 Grafana
 ```

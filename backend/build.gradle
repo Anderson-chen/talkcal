@@ -63,6 +63,13 @@ dependencies {
     // 改由 Spring AI 自己的 gen_ai.* 觀測（每次呼叫一個 span，外加 token 用量指標）。
     implementation 'org.springframework.ai:spring-ai-starter-model-openai'
 
+    // 模型掛了不要拖垮整個 app（#44）：circuit breaker（連續失敗就先停叫一陣子）和 bulkhead（同時等模型的上限）。
+    // 只拿核心函式庫自己 new（見 ModelResilienceConfiguration），不用 Spring Boot starter 的註解 + AOP。
+    // micrometer 那包把 breaker 狀態、bulkhead 剩幾個位子變成指標。版號要自己寫：不在 Boot 的 BOM 裡，三個要一致
+    ['resilience4j-circuitbreaker', 'resilience4j-bulkhead', 'resilience4j-micrometer'].each {
+        implementation "io.github.resilience4j:${it}:2.4.0"
+    }
+
     // 認證與授權（#11）：沒登入就用不了 /api。登入方式是可以換的 adapter（本機帳密、之後的 Google／GitHub、AWS 上的 Cognito），
     // 由 app.config 依 talkcal.auth.provider 組裝其中一套 SecurityFilterChain。auth 模組的規則（帳號名稱、密碼長度）不碰 Spring
     implementation 'org.springframework.boot:spring-boot-starter-security'

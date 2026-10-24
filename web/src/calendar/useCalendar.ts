@@ -4,8 +4,9 @@
 // 由 CalendarView 建一份、provide 給底下所有元件，元件之間不必一層一層傳 props。
 // 螢幕寬度跨過分界、版面整個換掉時，狀態也還在（選的日期、看的月份不會跳回今天）。
 
-import { computed, inject, ref, watch, type InjectionKey } from 'vue'
+import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
 import { addEvents, listEvents, NotFoundError, removeEvent, type Category, type EventFields, type SavedEvent } from '../calendar'
+import { problemOf, type Problem } from '../http'
 import { addDays, daysCovered, gridRange, monthGrid, toIsoDate } from '../monthGrid'
 
 export type View = 'month' | 'week' | 'day'
@@ -26,7 +27,7 @@ export function useCalendar() {
   // 現在載入的是哪個月的月曆頁。週、日視圖也靠它：任何一天所在的那一週，一定落在它那個月的 42 格裡
   const shown = ref(monthOf(today))
   const events = ref<SavedEvent[]>([])
-  const loadError = ref<string | null>(null)
+  const loadError = ref<Problem | null>(null)
   const hidden = ref<Partial<Record<Category, boolean>>>({})
   const detailId = ref<string | null>(null)
   const form = ref<FormRequest | null>(null)
@@ -49,11 +50,18 @@ export function useCalendar() {
       loadError.value = null
     } catch (e) {
       if (ticket !== latestLoad) return
-      loadError.value = message(e)
+      loadError.value = problemOf(e)
     }
   }, { immediate: true })
 
   const reload = () => version.value++
+
+  // 讀失敗之後網路回來了（瀏覽器的 online 事件），自己重讀一次，不必等使用者按「重新讀取」（#43）
+  const reloadIfFailed = () => {
+    if (loadError.value) reload()
+  }
+  window.addEventListener('online', reloadIfFailed)
+  onScopeDispose(() => window.removeEventListener('online', reloadIfFailed))
 
   // ── 查詢 ──────────────────────────────────────────────
   const visible = computed(() => events.value.filter((e) => !hidden.value[e.category]))
@@ -159,8 +167,4 @@ export function blankDraft(day: string): EventFields {
 
 export function monthOf(day: string) {
   return { year: Number(day.slice(0, 4)), month: Number(day.slice(5, 7)) }
-}
-
-export function message(e: unknown): string {
-  return e instanceof Error ? e.message : String(e)
 }
