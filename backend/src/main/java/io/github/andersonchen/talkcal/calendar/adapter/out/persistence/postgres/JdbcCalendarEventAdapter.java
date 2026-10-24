@@ -33,6 +33,9 @@ import java.util.UUID;
  * 交易用 TransactionTemplate（類別是 final，@Transactional 的代理包不了）。
  *
  * 一個類別實作讀、存、刪三個 port：碰的是同一張表，「這張表長什麼樣」的知識只該在一個地方。
+ *
+ * 沒有修改（UPDATE）：只有新增和刪除，兩個分頁同時動也不會互相蓋掉（#50）。
+ * 之後要加修改，先照 ConcurrentEditRuleTest 寫的規則加 version 欄位做樂觀鎖，那個測試會擋沒帶 version 的 UPDATE。
  */
 public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEventsPort, DeleteEventPort {
 
