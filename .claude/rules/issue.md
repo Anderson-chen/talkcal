@@ -23,5 +23,6 @@
   | 特殊種類 | `epic`、`bug` | 是才貼 | Epic、Bug 模板會自動帶 |
 
   - 「放在哪」選不出來，先回頭看 README：要問工程才能決定的放 `stage:`，要問使用者才能決定的放 `product:`；兩邊都有的拆成兩張，互相連結。
+  - 表格以外的 label（GitHub 預設的 `enhancement`、`question`、`wontfix`…，和舊的 `product`）不要貼：決定不做的用 close as not planned，理由寫在 epic。
   - 要新的 label 時，先確認現有的真的放不下；新增時說明（description）寫判斷用的問句或範圍，跟 README 用同一個名字。
   - 做到一半發現放錯段，直接改 label，sub-issue 也搬到對的 epic 底下。

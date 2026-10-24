@@ -146,7 +146,7 @@ CI 在每次 push、PR 時於 GitHub 上跑，本機則由 pre-push hook 在推�
 
 | 段 | 判斷問題（答「是」就放這段） | AWS Well-Architected 營運卓越支柱 | ITIL v3 服務生命週期 |
 |---|---|---|---|
-| ① Ready | 少了它，這個版本就不該給使用者用嗎？（版本本身對不對、安不安全） | Prepare：Design for operations、Operational readiness | Service Design |
+| ① Ready | 少了它，這個版本就不該給使用者用嗎？（版本本身對不對、安不安全） | Prepare：Design for operations、Operational readiness | Service Design、Service Transition 的 Validation and Testing |
 | ② Release | 它管的是一個改動從開 issue、寫程式、審查到上線、退版的路嗎？ | Prepare：Mitigate deployment risks | Service Transition |
 | ③ Run | 沒出事的平常日也要一直看、一直付的嗎？ | Operate：Utilizing workload observability、Understanding operational health | Service Operation（監控） |
 | ④ Respond | 出事的那一刻才用得到嗎？ | Operate：Responding to events | Service Operation（事故、問題管理） |
@@ -154,7 +154,7 @@ CI 在每次 push、PR 時於 GitHub 上跑，本機則由 pre-push hook 在推�
 
 ITIL 4 已經把 v3 的五段改成不分先後的價值鏈，這裡對照 v3，是因為它的分段最常被拿來講服務的生命週期。
 
-為什麼不像 Mercari 那樣照屬性（Observability、Security…）分：被問到「上線要注意什麼」時，照時間走一輪，比較不會整塊漏掉；屬性改用 `area:` label 標，一張 issue 可以貼好幾個（見 [`.claude/rules/issue.md`](.claude/rules/issue.md)）。
+為什麼不像 Mercari 那樣照屬性（Observability、Security…）分：被問到「上線要注意什麼」時，照時間走一輪，比較不會整塊漏掉。改到哪塊技術（CI、前端、資料庫…）改用 `area:` label 標，一張 issue 可以貼好幾個（見 [`.claude/rules/issue.md`](.claude/rules/issue.md)）。
 
 一件事碰到好幾段時：
 
@@ -168,7 +168,7 @@ ITIL 4 已經把 v3 的五段改成不分先後的價值鏈，這裡對照 v3，
 ### 參考資料
 
 - [AWS Well-Architected：Operational Excellence Pillar](https://docs.aws.amazon.com/wellarchitected/latest/operational-excellence-pillar/welcome.html)：營運分成 Prepare、Operate、Evolve，Operate 底下再分平常看健康和處理事件，是五段分法的主要對照
-- [ITIL v3 服務生命週期](https://vivantio.com/blog/itil-service-lifecycle/)：Strategy、Design、Transition、Operation、Continual Improvement 五段（ITIL 4 已改成價值鏈）
+- [ITIL v3 服務生命週期](https://en.wikipedia.org/wiki/ITIL)：Strategy、Design、Transition、Operation、Continual Improvement 五段（ITIL 4 已改成價值鏈）
 - [Google SRE Book：Launch Coordination Checklist](https://sre.google/sre-book/launch-checklist/)：Google 上線前逐項確認的清單，涵蓋容量、故障演練、相依服務、漸進式發布、監控監控本身
 - [Mercari Production Readiness Checklist](https://github.com/mercari/production-readiness-checklist)：公開在 GitHub 上、實際在用的版本。分成 Maintainability、Observability、Reliability、Security、Data Storage，依 SLO 分等級決定要做到哪些
 - [AWS Well-Architected Generative AI Lens](https://docs.aws.amazon.com/wellarchitected/latest/generative-ai-lens/generative-ai-lens.html)：把六根支柱套在生成式 AI 的生命週期上（選模型、prompt、整合、部署、持續改進）
