@@ -178,6 +178,20 @@ Grafana 的「talkcal — 壓測（k6）」上，紅線是舊 app 收到 SIGTERM
 
 `RATE_PER_MIN` 要低於容量：每分鐘 60 人、問題隨機混合時模型的 KV cache 會塞爆、回 502，跟部署無關的失敗混進來就分不清了。
 
+### slo：平常流量，量 SLO 的基準、驗 burn-rate 告警
+
+行程 CRUD 為主（每秒 `CRUD_RPS` 個，預設 10）、每分鐘跟助理說 `ASSIST_PER_MIN` 句（預設 6），跑 `DURATION`（預設 2m）。
+用固定到達速率：使用者照常來，不會因為 server 變慢就少來，SLO 算的「幾成被好好服務」才對。
+收工分開印行程 API 和助理的 p95、p99、失敗率，[docs/slo.md](../docs/slo.md) 的門檻就是從這裡量出來的。
+
+```bash
+k6 run perf/slo.js
+CRUD_RPS=50 ASSIST_PER_MIN=0 DURATION=60s k6 run perf/slo.js     # 只壓行程 API，5 倍量
+```
+
+開著它當背景流量，再弄壞一個依賴（停資料庫、模型位址指錯），SLO 儀表板的 burn rate 會往上衝、告警進 firing；
+依賴恢復、只剩這支的時候不該響。做法和結果見 docs/slo.md 的「驗證」。
+
 ## 怎麼讀結果
 
 k6 收工時印一張表，看三個地方就夠：
@@ -255,5 +269,6 @@ perf/
 ├── concurrent.js   # 一波人在短時間內各說一句（尖峰）
 ├── knee.js         # 同時數逐階往上加，找臨界值
 ├── deploy.js       # 邊壓邊部署：部署期間有幾個人受影響
+├── slo.js          # 平常流量：量 SLO 的基準、驗 burn-rate 告警
 └── run-to-grafana.sh  # 跑任何一支腳本，指標同時送進 ops/ 的 Grafana
 ```
