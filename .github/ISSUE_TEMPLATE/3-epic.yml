@@ -12,6 +12,8 @@ body:
       value: |
         **Title:** `epic(scope): name`, e.g. `epic(run): 上線後觀測`.
         Scope is lowercase English; if a matching `stage:` or `product:` label exists, use the same word and add that label.
+
+        **Labels:** `epic` is added for you; also add the matching `stage:` or `product:` and one of `p0`/`p1`. Sub-issues use the same `stage:` or `product:` label as their epic.
   - type: textarea
     id: goal
     attributes:

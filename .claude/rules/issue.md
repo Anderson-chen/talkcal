@@ -13,3 +13,15 @@
     - 網頁：issue 右側的 `Relationships`。
     - CLI（Bash）：`gh api -X POST repos/{owner}/{repo}/issues/<被卡住的編號>/dependencies/blocked_by -F issue_id=$(gh api repos/{owner}/{repo}/issues/<卡住它的編號> -q .id)`（`issue_id` 要的是內部 id，不是編號）。
   - 欄位以外的小段落（參考資料、刻意不做…）用 `####` 放在最接近的欄位底下，不另外開 `###`，欄位才對得上模板。
+- label：開的時候就貼好，看板和 issue 列表才篩得出來。每一種貼幾個：
+
+  | 種類 | label | 每張 issue | 怎麼選 |
+  |---|---|---|---|
+  | 放在哪 | `stage: …` 或 `product: …` | 剛好一個，兩種擇一 | 照 README 的「分段的依據」「面向的依據」判斷；子 issue 跟它的 epic 用同一個 |
+  | 優先度 | `p0`、`p1` | 剛好一個 | `p0`：這一輪要做完；`p1`：先記下來，`p0` 做完再排 |
+  | 改到哪塊 | `area: …` | 零到多個 | 會動到的技術領域，可以疊；都沒有就不貼 |
+  | 特殊種類 | `epic`、`bug` | 是才貼 | Epic、Bug 模板會自動帶 |
+
+  - 「放在哪」選不出來，先回頭看 README：要問工程才能決定的放 `stage:`，要問使用者才能決定的放 `product:`；兩邊都有的拆成兩張，互相連結。
+  - 要新的 label 時，先確認現有的真的放不下；新增時說明（description）寫判斷用的問句或範圍，跟 README 用同一個名字。
+  - 做到一半發現放錯段，直接改 label，sub-issue 也搬到對的 epic 底下。

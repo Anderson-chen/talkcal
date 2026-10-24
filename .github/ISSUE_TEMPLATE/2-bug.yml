@@ -12,6 +12,8 @@ body:
       value: |
         **Title:** the visible symptom, e.g. `app 換 IP 後 nginx 還連舊的，API 回 502`.
         It's fine if the cause isn't known yet; write what you saw first.
+
+        **Labels:** `bug` is added for you; also add exactly one `stage:` or `product:` (how to choose: README), exactly one of `p0`/`p1`, and any `area:` it touches.
   - type: textarea
     id: actual
     attributes:
