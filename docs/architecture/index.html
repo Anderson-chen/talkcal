@@ -199,7 +199,7 @@ footer{margin-top:28px;font-size:12px;color:var(--text-muted)}
 <span><i class="sw" style="background:var(--surface-1);border:0.5px solid var(--border-strong);opacity:.3"></i>目前 model_backend 不建</span>
 </div>
 <div id="panel"></div>
-<footer><p id="checked">最後核對：2026-10-16（行號以 master 為準；業界說法於同日查證，來源附在每個元件下）</p></footer>
+<footer><p id="checked">最後核對：2026-10-17（行號以 master 為準；業界說法於同日查證，來源附在每個元件下）</p></footer>
 <dialog id="code" aria-labelledby="code-title">
 <div class="dlg">
 <div class="dlg-h">
@@ -234,7 +234,7 @@ sg:{n:"aws_security_group.app + rules",d:"有狀態防火牆，只放 Caddy。",
 eip:{n:"aws_eip.main + association",d:"固定公有 IP，網址從它算。",deps:[],p:[["domain","vpc","VPC 用的 EIP"],["association","拆開","先有 IP 才能在開機前算好網址"]],ind:"ALB＋Route 53 alias，機器 IP 不重要。",when:"有 ALB 或自有網域時。",chk:"na",src:[]},
 ec2:{n:"aws_instance.app",d:"唯一一台機器，跑整組 compose。",deps:["ami","subnet","sg","profile","dotenv","s3m"],p:[["instance_type",{bedrock:"m7i-flex.large",gpu:"g6.xlarge"},{bedrock:"8GB 放得下 app、DB、Caddy、觀測",gpu:"L4 是 sm_89，映像檔不用重編"}],["root_volume_size",{bedrock:"30GB",gpu:"150GB"},{bedrock:"放映像檔和資料",gpu:"Deep Learning AMI 本身就 75GB"}],["http_tokens","required","強制 IMDSv2，擋 SSRF 偷憑證"],["hop_limit","1","容器碰不到 IMDS"],["user_data_replace_on_change","false","重建會掉 volume 裡的資料"],["ignore_changes","[ami]","新 AMI 不觸發重建"]],ind:"IMDSv2 是基線；AWS 帳號層級預設的 hop limit 是 2（讓容器拿角色），talkcal 刻意設 1。小團隊跑容器多選 ECS Fargate。",when:"要水平擴展時。",chk:"ok",src:["imds","imds2","ecs"]},
 ami:{n:"data.aws_ssm_parameter.ubuntu / dlami",d:"查最新 AMI，不寫死。",deps:[],p:[["dlami","…/deeplearning/…/latest/ami-id","gpu：驅動、Docker、NVIDIA toolkit 都裝好"],["ubuntu","…/ubuntu/server/24.04/…","bedrock：小、開機快"]],ind:"golden AMI：只用 AWS 選 EC2 Image Builder，跨雲選 Packer。",when:"開機安裝太慢時。",chk:"ok",src:["pk"]},
-dotenv:{n:"aws_ssm_parameter.dotenv",d:"整份 .env 存成 SecureString。",deps:["eip","pwd","bkey"],p:[["site_address","talkcal.<IP>.sslip.io","不買網域也拿得到 Let's Encrypt 憑證"],["name","/talkcal/dotenv","EC2 角色只准讀這一個路徑"],["type","SecureString","AWS 代管金鑰加密，免費"],["GOOGLE_*、GITHUB_*","sensitive 變數","Google、GitHub 登入的 client id／secret；沒給就不開（#127）"]],ind:"要輪替放 Secrets Manager（$0.40/個/月），不輪替放 Parameter Store（標準層免費）。",when:"需要輪替時。",chk:"ok",src:["sm"]},
+dotenv:{n:"aws_ssm_parameter.dotenv",d:"整份 .env 存成 SecureString。",deps:["eip","pwd","bkey"],p:[["site_address","talkcal.<IP>.sslip.io","不買網域也拿得到 Let's Encrypt 憑證"],["name","/talkcal/dotenv","EC2 角色只准讀這一個路徑"],["type","SecureString","AWS 代管金鑰加密，免費"],["GOOGLE_*、GITHUB_*","sensitive 變數","Google、GitHub 登入的 client id／secret；沒給就不開（#127）"],["ALERT_SMTP_*、ALERT_EMAIL_TO","sensitive 變數","Grafana 寄告警信的 SMTP 和收件人；沒給就不寄（#121）"]],ind:"要輪替放 Secrets Manager（$0.40/個/月），不輪替放 Parameter Store（標準層免費）。",when:"需要輪替時。",chk:"ok",src:["sm"]},
 bsvc:{n:"Bedrock（mantle 端點）",only:"bedrock",d:"AWS 代管模型，不是 Terraform 建的。",deps:["bkey"],p:[["BEDROCK_BASE_URL","bedrock-mantle.ap-northeast-1.api.aws/v1","OpenAI 相容端點，程式不用改"],["BEDROCK_MODEL","qwen.qwen3-32b","東京實測 json_schema、工具呼叫都能動"]],ind:"Mantle 提供 OpenAI 相容端點。AWS：長期 key 只建議探索用，正式環境用短期 key（≤12 小時）或 IAM 角色。",when:"上正式前（#72）。",chk:"fix",fix:"AWS 自己就把長期 key 定位為探索用途。",src:["brk"]},
 s3m:{n:"aws_s3_bucket.models",only:"gpu",d:"GGUF 模型來源。",deps:[],p:[["count","gpu 才建","bedrock 時機器上沒有模型檔"],["bucket","talkcal-models-<帳號ID>","bucket 名稱全球唯一"]],ind:"EKS 上可用 Mountpoint for S3 CSI driver 掛載。",when:"多台共用模型時。",chk:"ok",src:["mp"]},
 tfstate:{n:"aws_s3_bucket.tfstate（+ versioning / 加密 / 公開封鎖）",d:"所有階段的 state。",deps:[],p:[["bucket","talkcal-tfstate-<帳號ID>","帶帳號 ID 不撞名"],["prevent_destroy","true","state 掉了就失去所有資源的管理權"],["versioning","Enabled","state 寫壞了可以拿回舊版"],["sse_algorithm","AES256","state 裡有 DB 密碼和 API key"]],ind:"一樣；use_lockfile 需要對 .tflock 的 get / put / delete 權限。",when:"—",chk:"ok",src:["tfs3"]},
@@ -249,7 +249,7 @@ app:{n:"services.app（Spring）",d:"talkcal 本體：行程與 AI 助理。",de
 postgres:{n:"services.postgres",d:"行程與對話記憶。",deps:["dotenv"],p:[["image","postgres:18.6-alpine","釘版本；alpine 較小"],["POSTGRES_PASSWORD","${DB_PASSWORD}","Terraform 隨機產生，不再寫死"],["密碼同步","ALTER ROLE","映像檔只在第一次初始化時讀密碼"]],ind:"RDS / Aurora；manage_master_user_password（replica、Blue/Green 不支援）。",when:"需要備份 SLA 時。",chk:"ok",src:["rds"]},
 llm:{n:"services.llm-chat",only:"gpu",d:"自己跑的 llama-server。",deps:["seed"],p:[["-ngl","99","全部層放 GPU"],["-c / -np","32768 / 200","同時處理的請求數"],["--kv-unified","開","給了 -np 就要明講，不然 context 被均分到每個 slot 只剩約 163"]],ind:"多人 API 多選 vLLM；llama.cpp 強在 GGUF 與單人延遲。",when:"GPU 配額下來時。",chk:"ok",src:["vllm"]},
 seed:{n:"services.model-seed",only:"gpu",d:"複製模型並驗 SHA256。",deps:["s3m"],p:[["sha256sum -c","驗證","確定模型檔沒有傳壞或被換掉"]],ind:"k8s initContainer 或 Mountpoint for S3。",when:"上 EKS 時。",chk:"ok",src:["mp"]},
-obs:{n:"ops/compose.yaml",d:"觀測堆疊：跟本機同一份。",deps:["app"],p:[["Alloy","v1.11.0","收集三種訊號"],["Mimir","3.2.1","存指標"],["Loki","3.3.0","存日誌"],["Tempo","3.1.0","存追蹤"],["Grafana","11.4.0","畫圖；版本都釘死，換機器拉到同一版"],["Grafana 埠","127.0.0.1:3000","不對外，走 SSM port forwarding"]],ind:"放在被觀測系統之外：Amazon Managed Prometheus / Grafana、Grafana Cloud、CloudWatch、Datadog。",when:"上正式環境時。",chk:"ok",src:["amg"]}
+obs:{n:"ops/compose.yaml",d:"觀測堆疊：跟本機同一份。",deps:["app"],p:[["Alloy","v1.11.0","收集三種訊號"],["Mimir","3.2.1","存指標"],["Loki","3.3.0","存日誌"],["Tempo","3.1.0","存追蹤"],["Grafana","11.4.0","畫圖；版本都釘死，換機器拉到同一版"],["Grafana 埠","127.0.0.1:3000","不對外，走 SSM port forwarding"],["告警","4 條規則 → email","SMTP 從同一份 .env（--env-file）；沒填就不寄、只在 Grafana 上看（#121）"]],ind:"放在被觀測系統之外：Amazon Managed Prometheus / Grafana、Grafana Cloud、CloudWatch、Datadog。",when:"上正式環境時。",chk:"ok",src:["amg"]}
 };
 const FP={
 "infra/bootstrap/main.tf":"整個帳號只跑一次：建放 state 的 S3 bucket 和每月花費告警。用本機 state，解掉「state bucket 誰來建」的雞生蛋問題。",
@@ -258,14 +258,14 @@ const FP={
 "infra/envs/1-ec2/backend.tf":"Terraform 和 provider 的版本，以及 state 放哪、怎麼上鎖。",
 "infra/envs/1-ec2/backend.hcl.example":"backend.hcl 的範本。bucket 名稱帶帳號 ID，實際的 backend.hcl 已 gitignore。",
 "infra/envs/1-ec2/providers.tf":"AWS provider：區域、CLI 設定檔、每個資源自動貼的標籤。",
-"infra/envs/1-ec2/variables.tf":"這個階段的所有輸入：model_backend，和依它決定預設值的機型、磁碟、模型；Google、GitHub 登入的 client id／secret（sensitive）。",
+"infra/envs/1-ec2/variables.tf":"這個階段的所有輸入：model_backend，和依它決定預設值的機型、磁碟、模型；Google、GitHub 登入的 client id／secret（sensitive）；Grafana 寄告警信的 SMTP 和收件人。",
 "infra/envs/1-ec2/outputs.tf":"apply 完要用的值：網址、IP、SSM 連線用的 instance id、Grafana 通道指令、要登記的 OAuth 回呼網址。",
 "infra/envs/1-ec2/vpc.tf":"網路：一個公有子網的最小 VPC，不建 NAT；可用區自動挑有這個機型的。",
 "infra/envs/1-ec2/security-groups.tf":"防火牆：對外只開 80/443（含 HTTP/3 的 UDP），22 預設關。",
 "infra/envs/1-ec2/ec2.tf":"機器本身：AMI、機型、磁碟、強制 IMDSv2，和固定的 Elastic IP。",
 "infra/envs/1-ec2/iam.tf":"機器的角色：SSM 連線、讀 .env，gpu 時再加讀模型 bucket。",
 "infra/envs/1-ec2/bedrock.tf":"（bedrock）只能呼叫模型的專用 IAM user，和它的 Bedrock API key。",
-"infra/envs/1-ec2/secrets.tf":"產生 DB 密碼，連同網址、Bedrock 設定、Google／GitHub 的 client secret 寫成一份 .env 存進 SSM。",
+"infra/envs/1-ec2/secrets.tf":"產生 DB 密碼，連同網址、Bedrock 設定、Google／GitHub 的 client secret、告警寄信的 SMTP 寫成一份 .env 存進 SSM。",
 "infra/envs/1-ec2/s3.tf":"（gpu）模型檔的 bucket。",
 "infra/envs/1-ec2/user-data.sh.tftpl":"第一次開機跑一次：裝或驗證 Docker、clone repo、呼叫 deploy.sh。",
 "infra/envs/1-ec2/deploy.sh":"在機器上跑的部署：拉版本 →（gpu）拉模型 → 拉 .env → 同步 DB 密碼 → 兩組 compose up。",
@@ -275,7 +275,7 @@ const FP={
 "infra/envs/1-ec2/Caddyfile":"HTTPS 入口：網址、壓縮，全部轉給 web。",
 "deploy/compose.yaml":"本機和雲端共用的服務定義：模型、postgres、app、web。",
 "web/nginx.conf":"前端的 nginx：送靜態檔、/api 轉給 app、AI 發問和登入註冊限流。",
-"ops/compose.yaml":"觀測堆疊：Alloy 收集，Mimir / Loki / Tempo 存，Grafana 畫圖。"
+"ops/compose.yaml":"觀測堆疊：Alloy 收集，Mimir / Loki / Tempo 存，Grafana 畫圖、出事寄告警信。"
 };
 const F={
 "infra/bootstrap/main.tf":[["5–14","terraform 區塊（無 backend → 本機 state）",null],["16–26","bootstrap 自己的 provider（不是圖上那個）",null],["28","data aws_caller_identity（拼 bucket 名）","tfstate"],["32–38","aws_s3_bucket.tfstate","tfstate"],["40–46","versioning","tfstate"],["48–56","加密","tfstate"],["58–65","公開封鎖","tfstate"],["69–91","aws_budgets_budget.monthly","budget"]],
@@ -284,24 +284,24 @@ const F={
 "infra/envs/1-ec2/backend.tf":[["2","required_version","backend"],["9–12","backend \"s3\"","backend"],["14–24","required_providers","backend"]],
 "infra/envs/1-ec2/backend.hcl.example":[["3","bucket（帳號 ID 不進 repo）","backend"],["4–5","region、profile","backend"]],
 "infra/envs/1-ec2/providers.tf":[["1–12","provider \"aws\"","provider"],["14","data aws_caller_identity（拼 bucket 名）","s3m"]],
-"infra/envs/1-ec2/variables.tf":[["1–8","region","provider"],["10–14","aws_profile","provider"],["16–20","project","provider"],["22–37","model_backend（上方切換）",null],["39–49","instance_type","ec2"],["51–60","root_volume_size","ec2"],["62–69","bedrock_model","bsvc"],["71–79","bedrock_key_days","bkey"],["81–85","repo_url","ec2"],["87–91","git_ref","ec2"],["93–100","allow_ssh","sg"],["102–106","ssh_cidr","sg"],["108–135","google_／github_client_id、_secret（sensitive，#127）","dotenv"]],
+"infra/envs/1-ec2/variables.tf":[["1–8","region","provider"],["10–14","aws_profile","provider"],["16–20","project","provider"],["22–37","model_backend（上方切換）",null],["39–49","instance_type","ec2"],["51–60","root_volume_size","ec2"],["62–69","bedrock_model","bsvc"],["71–79","bedrock_key_days","bkey"],["81–85","repo_url","ec2"],["87–91","git_ref","ec2"],["93–100","allow_ssh","sg"],["102–106","ssh_cidr","sg"],["108–135","google_／github_client_id、_secret（sensitive，#127）","dotenv"],["137–168","alert_smtp_*、alert_email_to（告警寄信，sensitive，#121）","dotenv"]],
 "infra/envs/1-ec2/outputs.tf":[["1–4","instance_id","ec2"],["6–8","public_ip","eip"],["10–13","app_url","caddy"],["15–17","model_backend",null],["19–22","models_bucket","s3m"],["24–27","availability_zone","az"],["29–32","grafana_tunnel","obs"],["34–40","oauth_callback_urls（要在 Google、GitHub 登記的回呼網址）","caddy"]],
 "infra/envs/1-ec2/vpc.tf":[["5–13","aws_vpc.main","vpc"],["15–21","aws_internet_gateway.main","igw"],["25–32","data instance_type_offerings","az"],["34–36","locals.availability_zone","az"],["38–47","aws_subnet.public","subnet"],["49–60","aws_route_table.public","rt"],["62–65","route_table_association","rt"]],
 "infra/envs/1-ec2/security-groups.tf":[["3–11","aws_security_group.app","sg"],["14–21","ingress 80/tcp","sg"],["23–30","ingress 443/tcp","sg"],["33–40","ingress 443/udp","sg"],["43–59","ingress 22（count）","sg"],["62–67","egress all","sg"]],
 "infra/envs/1-ec2/ec2.tf":[["2–8","locals（gpu、機型、磁碟、ami）","ec2"],["18–21","data dlami","ami"],["25–28","data ubuntu","ami"],["33–39","aws_eip.main","eip"],["41–84","aws_instance.app","ec2"],["86–89","aws_eip_association","eip"]],
 "infra/envs/1-ec2/iam.tf":[["5–16","aws_iam_role.ec2","role"],["18–21","SSM attachment","role"],["24–55","role_policy.deploy","role"],["57–60","instance_profile","profile"]],
 "infra/envs/1-ec2/bedrock.tf":[["13–17","aws_iam_user.bedrock","buser"],["19–49","aws_iam_user_policy.bedrock","buser"],["54–59","service_specific_credential","bkey"]],
-"infra/envs/1-ec2/secrets.tf":[["7–23","locals（site_address、backend_env）","dotenv"],["11","site_address（也是 Caddy 的網址）","caddy"],["25–28","random_password.db","pwd"],["31–47","aws_ssm_parameter.dotenv（含 Google、GitHub 的 client id／secret）","dotenv"]],
+"infra/envs/1-ec2/secrets.tf":[["7–23","locals（site_address、backend_env）","dotenv"],["11","site_address（也是 Caddy 的網址）","caddy"],["25–28","random_password.db","pwd"],["31–53","aws_ssm_parameter.dotenv（含 Google、GitHub 的 client id／secret、告警寄信的 SMTP）","dotenv"]],
 "infra/envs/1-ec2/s3.tf":[["7–10","aws_s3_bucket.models","s3m"],["12–21","加密","s3m"],["23–31","公開封鎖","s3m"]],
 "infra/envs/1-ec2/user-data.sh.tftpl":[["全檔","第一次開機腳本","ec2"]],
-"infra/envs/1-ec2/deploy.sh":[["53","從 SSM 拉 .env","dotenv"],["65","疊三份 compose","ec2"],["76–82","起 postgres、ALTER ROLE","postgres"],["85","up -d --build","app"],["89","起觀測","obs"]],
+"infra/envs/1-ec2/deploy.sh":[["53","從 SSM 拉 .env","dotenv"],["65","疊三份 compose","ec2"],["76–82","起 postgres、ALTER ROLE","postgres"],["85","up -d --build","app"],["91","起觀測（--env-file 帶告警寄信的 SMTP）","obs"]],
 "infra/envs/1-ec2/compose.ec2.yaml":[["18–20","postgres 密碼","postgres"],["22–30","app 密碼、session cookie Secure、mem_limit","app"],["36–53","caddy","caddy"],["55–57","caddy volumes","caddy"]],
 "infra/envs/1-ec2/compose.bedrock.yaml":[["11–12","model-seed 不起","seed"],["13–14","llm-chat 不起","llm"],["16–25","app 改打 Bedrock","app"]],
 "infra/envs/1-ec2/compose.gpu.yaml":[["8–10","model-seed 改掛 S3 拉下來的資料夾","seed"]],
 "infra/envs/1-ec2/Caddyfile":[["3–10","網域、encode、reverse_proxy","caddy"]],
 "deploy/compose.yaml":[["22–25","x-llama-server","llm"],["29","x-gpu","llm"],["50–84","model-seed","seed"],["86–151","llm-chat","llm"],["154–175","postgres","postgres"],["178–223","app","app"],["227–251","web","web"],["253–259","volumes","postgres"]],
 "web/nginx.conf":[["27–28","兩道限流 zone（每 IP、全站）","web"],["32–37","登入、註冊的限流 zone（每 IP）","web"],["44","超過回 429","web"],["52–53","真實 IP 取自 X-Forwarded-For","web"],["59–62","原本的 scheme（Caddy 帶的 X-Forwarded-Proto，沒有就 $scheme）","web"],["75","resolver","web"],["83","X-Forwarded-Proto 照轉，回呼網址才是 https（#127）","web"],["90","proxy_read_timeout","web"],["93–96","限流套到 /api","web"]],
-"ops/compose.yaml":[["22","mimir","obs"],["40","loki","obs"],["54","tempo","obs"],["67–74","grafana","obs"],["98","alloy","obs"]]
+"ops/compose.yaml":[["22","mimir","obs"],["40","loki","obs"],["54","tempo","obs"],["67–74","grafana","obs"],["83–95","grafana 告警寄信的 SMTP、收件人（#121）","obs"],["111","alloy","obs"],["147–160","mailpit（試寄信用，--profile mailtest 才起）","obs"]]
 };
 const E="infra/envs/1-ec2/",B="infra/bootstrap/",D="deploy/compose.yaml",O="ops/compose.yaml";
 const L={
@@ -317,7 +317,7 @@ sg:{"80/tcp":E+"security-groups.tf:14","443/tcp、443/udp":E+"security-groups.tf
 eip:{"domain":E+"ec2.tf:34","association":E+"ec2.tf:86"},
 ec2:{"instance_type":E+"ec2.tf:5","root_volume_size":E+"ec2.tf:6","http_tokens":E+"ec2.tf:55","hop_limit":E+"ec2.tf:59","user_data_replace_on_change":E+"ec2.tf:74","ignore_changes":E+"ec2.tf:78"},
 ami:{"dlami":E+"ec2.tf:20","ubuntu":E+"ec2.tf:27"},
-dotenv:{"site_address":E+"secrets.tf:11","name":E+"secrets.tf:32","type":E+"secrets.tf:34","GOOGLE_*、GITHUB_*":E+"secrets.tf:42"},
+dotenv:{"site_address":E+"secrets.tf:11","name":E+"secrets.tf:32","type":E+"secrets.tf:34","GOOGLE_*、GITHUB_*":E+"secrets.tf:42","ALERT_SMTP_*、ALERT_EMAIL_TO":E+"secrets.tf:47"},
 bsvc:{"BEDROCK_BASE_URL":E+"secrets.tf:19","BEDROCK_MODEL":E+"variables.tf:68"},
 s3m:{"count":E+"s3.tf:8","bucket":E+"s3.tf:9"},
 tfstate:{"bucket":B+"main.tf:33","prevent_destroy":B+"main.tf:36","versioning":B+"main.tf:44","sse_algorithm":B+"main.tf:53"},
@@ -332,7 +332,7 @@ app:{"mem_limit":E+"compose.ec2.yaml:30","SESSION_COOKIE_SECURE":E+"compose.ec2.
 postgres:{"image":D+":155","POSTGRES_PASSWORD":E+"compose.ec2.yaml:20","密碼同步":E+"deploy.sh:81"},
 llm:{"-ngl":D+":101","-c / -np":D+":103","--kv-unified":D+":110"},
 seed:{"sha256sum -c":D+":74"},
-obs:{"Alloy":O+":99","Mimir":O+":23","Loki":O+":41","Tempo":O+":55","Grafana":O+":68","Grafana 埠":O+":74"}
+obs:{"Alloy":O+":112","Mimir":O+":23","Loki":O+":41","Tempo":O+":55","Grafana":O+":68","Grafana 埠":O+":74","告警":O+":87"}
 };
 // t：步驟標題（短）；d：說明。依 model_backend 不同的寫成 {bedrock, gpu}
 const ROUTES={
@@ -360,7 +360,7 @@ secret:{n:"密碼怎麼傳",intro:"明碼不進 git、不進 user_data、不進�
  {k:"dotenv",t:"存進 SSM",d:"全部組成一份 .env，存成 SecureString（AWS 代管金鑰，免費）。"},
  {k:"role",t:"誰能讀",d:"EC2 的角色只准 GetParameter 這一個參數。hop limit 設 1，容器拿不到機器的角色憑證。"},
  {k:"ec2",t:"寫到主機",d:"deploy.sh 在主機上拉 .env，umask 077 只給 root 讀；compose 再把變數交給各容器。"},
- {k:"postgres",t:"交給容器",d:"postgres、app 拿 DB_PASSWORD；app 另外拿 BEDROCK_API_KEY；Caddy 拿 SITE_ADDRESS。"},
+ {k:"postgres",t:"交給容器",d:"postgres、app 拿 DB_PASSWORD；app 另外拿 BEDROCK_API_KEY；Caddy 拿 SITE_ADDRESS；Grafana 拿 ALERT_SMTP_*（ops/ 用 --env-file 讀同一份）。"},
  {k:"tfstate",t:"state 的代價",d:"state 裡有明碼，所以 state bucket 一定要加密、封鎖公開，並開版本控制。"}]},
 cost:{n:"每月花多少",intro:"平常關機、展示才開：關機時只剩磁碟和 IP 在收錢。數字是東京的約略值。",steps:[
  {k:"ec2",t:"機器",d:{bedrock:"m7i-flex.large 約 0.1 USD/小時，24 小時開著一個月約 73 USD，所以平常關機。",gpu:"g6.xlarge 約 0.8–1 USD/小時，24 小時開著一個月要 600 USD 以上，所以平常關機。"}},

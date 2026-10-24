@@ -80,7 +80,7 @@ Mimir 只放得下「標籤 + 一個數字」，Loki 放的是一行一行文字
 
 ```bash
 cd deploy && docker compose up -d   # 先起被觀測的那組：它會建立 Alloy 要加入的網路
-cd ops && docker compose up -d      # 再起這組
+cd ops && docker compose --env-file ../deploy/.env up -d   # 再起這組；--env-file 帶告警寄信的 SMTP（沒帶就只是不寄信）
 docker compose ps                   # 看狀態
 docker compose logs -f              # 追 log（Ctrl+C 離開，不會關容器）
 docker compose down                 # 關掉（資料留著）
@@ -222,6 +222,34 @@ Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](..
 | log（Loki 的 access log） | trace | 展開一行 → **到 Tempo 看這個請求** | Loki 資料源的 derived field 從內容抓出 `traceId` |
 | trace（Tempo） | log | span 旁的 **Logs for this span** | Tempo 資料源用 trace id 去 Loki 搜內容 |
 
+## 告警：出事寄信
+
+規則、收件人、寄信節奏都用 provisioning 管（`grafana/provisioning/alerting/`），Grafana 一啟動就建好，UI 上唯讀。
+
+| 規則 | 查詢（都用 `job="talkcal-app"`，不依賴埠號） | 門檻 | 持續 | 沒資料時 |
+|------|------|------|------|------|
+| app 掛了或抓不到指標 | `max(up)` | < 1 | 1 分鐘 | **算出事**（Alloy 掛了也看不到 app） |
+| 5xx 比例 | 5xx ÷ 全部，5 分鐘至少 20 個請求才評估 | > 5% | 5 分鐘 | 正常（沒流量） |
+| 行程 API p95（不含 AI 助理） | `histogram_quantile(0.95, …)` | > 1 秒 | 10 分鐘 | 正常 |
+| AI 助理 p95 | 同上，只看 `/api/calendar/assistant` | > 30 秒 | 10 分鐘 | 正常 |
+
+每條門檻的理由寫在 `rules.yaml` 的註解。這些是依實測值留餘裕的暫時值；
+SLO 定下來（[#34](https://github.com/Anderson-chen/talkcal/issues/34)）之後改成照錯誤預算燒得多快來告警。
+
+寄信走 Grafana 內建的 SMTP，設定在不進 git 的 `deploy/.env`（`ALERT_SMTP_*`、`ALERT_EMAIL_TO`，範本 `deploy/.env.example`），
+所以起這組要帶 `--env-file ../deploy/.env`。雲端由 Terraform 寫進 SSM 的同一份 `.env`（`infra/envs/1-ec2/alerting.auto.tfvars.example`）。
+
+想試寄信、又不想動真的信箱：
+
+```bash
+# deploy/.env 填 ALERT_SMTP_HOST=mailpit:1025，其他 ALERT_SMTP_* 留空
+docker compose --env-file ../deploy/.env --profile mailtest up -d   # 多起一台只收不寄的 Mailpit
+# 收件匣：http://localhost:8025
+```
+
+Grafana 的 **Alerting → Alert rules** 看每條規則現在是 Normal / Pending / Firing；
+**Contact points** 那一頁的 **Test** 可以不等規則觸發，直接寄一封測試信。
+
 ## 下一步（一次一件）
 
 1. **app 記錄送給模型的完整 prompt**：access log 已經記了使用者說了什麼（請求 body），
@@ -236,12 +264,13 @@ Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](..
 
 ```
 ops/
-├── compose.yaml                              # 五個服務的定義
+├── compose.yaml                              # 五個服務的定義（加上試寄信用的 mailpit，平常不起）
 ├── alloy/config.alloy                        # 三條管線：抓誰的指標、收哪些容器的 log、trace 轉給誰
 ├── mimir/mimir.yaml                          # 指標：單機最小設定（關掉多租戶、複製、物件儲存）
 ├── loki/loki-config.yaml                     # 日誌：單機最小設定
 ├── tempo/tempo.yaml                          # 追蹤：單機最小設定
 └── grafana/provisioning/
     ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
+    ├── alerting/                             # 告警：rules（什麼算出事）、contact-points（寄給誰）、policies（多久寄一次）
     └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces（trace）、talkcal-k6（壓測）
 ```
