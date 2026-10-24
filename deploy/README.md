@@ -194,3 +194,16 @@ ORDER BY created_at DESC, position;
 ```
 
 `docker compose down` 不會刪資料；`down -v` 會連 `postgres-data` 一起清掉（模型的 volume 也會清，下次要重新播種）。
+
+### 備份與還原
+
+`down -v` 之前、或要動資料之前，先備份一份（[#45](https://github.com/Anderson-chen/talkcal/issues/45)）：
+
+```bash
+bash deploy/backup/pg-backup.sh                                             # 寫到 ~/talkcal-backups（repo 外、volume 外）
+bash deploy/backup/pg-restore.sh ~/talkcal-backups/<檔>.dump --verify-only   # 演練：還原到暫存庫，線上不動
+bash deploy/backup/pg-restore.sh ~/talkcal-backups/<檔>.dump                 # 真的還原（自己停、起 talkcal-app）
+bash deploy/backup/drill.sh                                                 # 在獨立容器上演練整輪（含反例）
+```
+
+雲端每小時、關機前、部署前會自動備份到 S3。完整步驟、RPO／RTO 和選型理由：[docs/runbooks/backup-restore.md](../docs/runbooks/backup-restore.md)。
