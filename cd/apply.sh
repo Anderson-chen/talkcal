@@ -43,6 +43,12 @@ default_timeout() {
 for svc in "${services[@]}"; do
   timeout="${WAIT_TIMEOUT:-$(default_timeout "$svc")}"
   echo "── 部署 $svc（$env_name，最多等 ${timeout} 秒）"
+  # app 改走零停機：先起另一個 slot、healthy 了才切流量、再關舊的（#20，見 cd/bluegreen.sh）。
+  # 由 env 檔決定，沒設的環境（例如 staging）照舊先關再開
+  if [ "$svc" = app ] && [ "${APP_STRATEGY:-}" = bluegreen ]; then
+    WAIT_TIMEOUT="$timeout" cd/bluegreen.sh "$env_name"
+    continue
+  fi
   # --build：映像檔有變才重 build；換了映像檔的容器才會被替換，沒變就什麼都不做。
   # --wait：等 compose 裡的 healthcheck 通過才結束。沒有它，Spring 啟動失敗也會顯示成功。
   docker compose "${compose_args[@]}" up -d --build --no-deps --wait --wait-timeout "$timeout" "$svc"
