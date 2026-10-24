@@ -60,13 +60,14 @@ resource "aws_instance" "app" {
   }
 
   user_data = templatefile("${path.module}/user-data.sh.tftpl", {
-    project       = var.project
-    region        = var.region
-    repo_url      = var.repo_url
-    git_ref       = var.git_ref
-    model_backend = var.model_backend
-    models_bucket = local.gpu ? aws_s3_bucket.models[0].bucket : ""
-    dotenv_param  = aws_ssm_parameter.dotenv.name
+    project        = var.project
+    region         = var.region
+    repo_url       = var.repo_url
+    git_ref        = var.git_ref
+    model_backend  = var.model_backend
+    models_bucket  = local.gpu ? aws_s3_bucket.models[0].bucket : ""
+    dotenv_param   = aws_ssm_parameter.dotenv.name
+    backups_bucket = aws_s3_bucket.backups.bucket
   })
 
   # user_data 只在第一次開機跑：準備環境、clone、第一次部署。

@@ -21,6 +21,11 @@ output "models_bucket" {
   value       = local.gpu ? aws_s3_bucket.models[0].bucket : null
 }
 
+output "backups_bucket" {
+  description = "資料庫備份（pg_dump）放在這裡的 postgres/ 底下。還原步驟：docs/runbooks/backup-restore.md"
+  value       = aws_s3_bucket.backups.bucket
+}
+
 output "availability_zone" {
   description = "機器開在哪個可用區（自動挑有這個機型的）"
   value       = local.availability_zone
