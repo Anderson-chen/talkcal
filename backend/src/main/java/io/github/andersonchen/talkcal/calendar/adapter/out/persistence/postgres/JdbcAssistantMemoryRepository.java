@@ -22,7 +22,10 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -60,30 +63,140 @@ public final class JdbcAssistantMemoryRepository {
     }
 
     /**
-     * 刪掉 cutoff 之前就沒再說過話的對話，回傳刪了幾段。不分擁有者：這是這張表自己的維護工作，不是誰的請求。
+     * 找出 cutoff 之前就沒再說過話的對話（#54：歸檔之後才刪，見 app.job.AssistantMemoryArchive），最多 limit 段，最舊的先。
+     * 不分擁有者：這是這張表自己的維護工作，不是誰的請求。
      *
      * 「最後說話的時間」= 那段對話最新一列的 created_at：saveAll 每一輪都整段刪掉重插，
      * 所以一段對話的每一列其實都是最後那一輪的時間。用 max 而不是隨便一列，是不想依賴這個巧合 ——
-     * 哪天改成只插新的那幾則，這裡照樣對。整段一起刪，不會留下只剩後半截、開頭被砍掉的對話。
+     * 哪天改成只插新的那幾則，這裡照樣對。整段一起拿，不會歸檔到只剩後半截、開頭被砍掉的對話。
      * 一段對話是 (owner_id, conversation_id) 一組：兩個人剛好用了同一個 conversation_id，也是各算各的。
+     *
+     * 讀出來的是資料庫裡原本的樣子（工具呼叫是 JSON 字串、帶著 created_at），不翻成 Spring AI 的 Message：
+     * 歸檔要的是「原封不動的備份」，還原時照原樣插回去，不必經過框架的型別再翻一次。
      */
-    public int deleteInactiveSince(Instant cutoff) {
+    public List<StoredConversation> findInactiveSince(Instant cutoff, int limit) {
         Objects.requireNonNull(cutoff, "cutoff 不可為 null");
-        return jdbc.sql("""
-                        WITH inactive AS (
-                            SELECT owner_id, conversation_id FROM calendar_assistant_message
-                            GROUP BY owner_id, conversation_id
-                            HAVING max(created_at) < :cutoff
-                        )
-                        DELETE FROM calendar_assistant_message m
-                        USING inactive
-                        WHERE m.owner_id = inactive.owner_id AND m.conversation_id = inactive.conversation_id
-                        RETURNING m.owner_id, m.conversation_id
-                        """)
-                .param("cutoff", OffsetDateTime.ofInstant(cutoff, ZoneOffset.UTC))
-                .query((rs, rowNum) -> List.of(rs.getObject(1, UUID.class), rs.getObject(2, UUID.class)))
-                .set()
-                .size();
+        List<StoredRow> rows;
+        try {
+            rows = jdbc.sql("""
+                            WITH inactive AS (
+                                SELECT owner_id, conversation_id, max(created_at) AS last_active
+                                FROM calendar_assistant_message
+                                GROUP BY owner_id, conversation_id
+                                HAVING max(created_at) < :cutoff
+                                ORDER BY last_active, owner_id, conversation_id
+                                LIMIT :limit
+                            )
+                            SELECT m.owner_id, m.conversation_id, inactive.last_active, m.position, m.type, m.content,
+                                   m.tool_calls::text AS tool_calls, m.tool_responses::text AS tool_responses, m.created_at
+                            FROM calendar_assistant_message m
+                            JOIN inactive USING (owner_id, conversation_id)
+                            ORDER BY inactive.last_active, m.owner_id, m.conversation_id, m.position
+                            """)
+                    .param("cutoff", OffsetDateTime.ofInstant(cutoff, ZoneOffset.UTC))
+                    .param("limit", limit)
+                    .query((rs, rowNum) -> new StoredRow(
+                            new OwnerId(rs.getObject("owner_id", UUID.class)), rs.getObject("conversation_id", UUID.class),
+                            rs.getObject("last_active", OffsetDateTime.class).toInstant(),
+                            new StoredMessage(rs.getInt("position"), rs.getString("type"), rs.getString("content"),
+                                    rs.getString("tool_calls"), rs.getString("tool_responses"),
+                                    rs.getObject("created_at", OffsetDateTime.class).toInstant())))
+                    .list();
+        } catch (DataAccessException e) {
+            throw new IllegalStateException("讀取要歸檔的對話失敗", e);
+        }
+        // 一列一則訊息 → 一段對話一個物件。SQL 已經依對話排好，同一段的訊息是連在一起的
+        Map<List<Object>, List<StoredMessage>> messages = new LinkedHashMap<>();
+        Map<List<Object>, StoredRow> firstRow = new LinkedHashMap<>();
+        for (StoredRow row : rows) {
+            List<Object> key = List.of(row.owner(), row.conversationId());
+            firstRow.putIfAbsent(key, row);
+            messages.computeIfAbsent(key, k -> new ArrayList<>()).add(row.message());
+        }
+        return firstRow.entrySet().stream()
+                .map(e -> new StoredConversation(e.getValue().owner(), e.getValue().conversationId(),
+                        e.getValue().lastActive(), List.copyOf(messages.get(e.getKey()))))
+                .toList();
+    }
+
+    /**
+     * 刪掉一段已經歸檔好的對話，但只在它「現在」還是 cutoff 之前就沒說過話的時候。回傳有沒有刪。
+     *
+     * 這個條件擋的是：讀出來、上傳的那幾秒之間，使用者剛好又接著聊了 —— 那段已經不舊了，刪掉就是刪掉正在聊的對話。
+     * 條件和刪除在同一句 SQL 裡，不是先查再刪。
+     */
+    public boolean deleteIfInactiveSince(OwnerId owner, UUID conversationId, Instant cutoff) {
+        try {
+            return jdbc.sql("""
+                            DELETE FROM calendar_assistant_message
+                            WHERE owner_id = :owner AND conversation_id = :id
+                              AND (SELECT max(created_at) FROM calendar_assistant_message
+                                   WHERE owner_id = :owner AND conversation_id = :id) < :cutoff
+                            """)
+                    .param("owner", owner.value())
+                    .param("id", conversationId)
+                    .param("cutoff", OffsetDateTime.ofInstant(cutoff, ZoneOffset.UTC))
+                    .update() > 0;
+        } catch (DataAccessException e) {
+            throw new IllegalStateException("刪除已歸檔的對話失敗：" + conversationId, e);
+        }
+    }
+
+    /**
+     * 把歸檔裡的一段對話照原樣插回去（連 created_at 一起）。回傳有沒有放回去。
+     *
+     * 這個人名下已經有同一個 conversation_id 的對話（還原過、或還沒被刪）就整段跳過：
+     * 線上那份可能比歸檔新，不能拿舊的蓋掉；跳過也讓還原按幾次結果都一樣。
+     */
+    public boolean restore(StoredConversation conversation) {
+        try {
+            Boolean restored = transaction.execute(status -> {
+                boolean exists = jdbc.sql("""
+                                SELECT EXISTS (SELECT 1 FROM calendar_assistant_message
+                                               WHERE owner_id = :owner AND conversation_id = :id)
+                                """)
+                        .param("owner", conversation.owner().value())
+                        .param("id", conversation.conversationId())
+                        .query(Boolean.class)
+                        .single();
+                if (exists) {
+                    return false;
+                }
+                for (StoredMessage m : conversation.messages()) {
+                    jdbc.sql("""
+                                    INSERT INTO calendar_assistant_message
+                                        (owner_id, conversation_id, position, type, content, tool_calls, tool_responses, created_at)
+                                    VALUES (:owner, :id, :position, :type, :content,
+                                            CAST(:toolCalls AS jsonb), CAST(:toolResponses AS jsonb), :createdAt)
+                                    """)
+                            .param("owner", conversation.owner().value())
+                            .param("id", conversation.conversationId())
+                            .param("position", m.position())
+                            .param("type", m.type())
+                            .param("content", m.content())
+                            .param("toolCalls", m.toolCalls())
+                            .param("toolResponses", m.toolResponses())
+                            .param("createdAt", OffsetDateTime.ofInstant(m.createdAt(), ZoneOffset.UTC))
+                            .update();
+                }
+                return true;
+            });
+            return Boolean.TRUE.equals(restored);
+        } catch (DataAccessException | TransactionException e) {
+            throw new IllegalStateException("還原 AI 助理的對話失敗：" + conversation.conversationId(), e);
+        }
+    }
+
+    /** 一段對話在資料庫裡原本的樣子（歸檔、還原用）。lastActive 是最後一次說話的時間。 */
+    public record StoredConversation(OwnerId owner, UUID conversationId, Instant lastActive, List<StoredMessage> messages) {
+    }
+
+    /** 一則訊息在資料庫裡原本的樣子。toolCalls、toolResponses 是 JSONB 的原文，沒有就是 null。 */
+    public record StoredMessage(int position, String type, String content, String toolCalls, String toolResponses,
+                                Instant createdAt) {
+    }
+
+    private record StoredRow(OwnerId owner, UUID conversationId, Instant lastActive, StoredMessage message) {
     }
 
     private final class OwnedMemory implements ChatMemoryRepository {

@@ -1,24 +1,36 @@
 package io.github.andersonchen.talkcal.app.config;
 
 import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.CalendarAssistant;
+import io.github.andersonchen.talkcal.calendar.adapter.in.web.ArchiveController;
+import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.ArchiveBucket;
+import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.S3EventArchiveAdapter;
 import io.github.andersonchen.talkcal.calendar.adapter.out.extraction.springai.SpringAiExtractEventsAdapter;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcCalendarEventAdapter;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.AddEventsService;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.ArchiveEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.FindFreeSlotsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ListEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ParseEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.RemoveEventService;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.RestoreEventsService;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.ArchiveEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlotsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ParseEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.RemoveEventUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.RestoreEventsUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteArchivedEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteEventPort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.EventArchivePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.ExtractEventsPort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEndedEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventsPort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.RestoreEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPort;
-import io.github.andersonchen.talkcal.app.job.AssistantMemoryCleanup;
+import io.github.andersonchen.talkcal.app.job.AssistantMemoryArchive;
+import io.github.andersonchen.talkcal.app.job.EventArchiveJob;
 
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,6 +43,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Period;
 import java.time.ZoneId;
 
 /**
@@ -46,9 +59,9 @@ import java.time.ZoneId;
  *
  * 這裡要下的決定：
  * - ExtractEventsPort 用 Spring AI 的 ChatModel（跟 AI 助理共用同一個，自動組裝的那一個）
- * - 行程存 PostgreSQL（一個實作同時當 Save / Load / DeleteEventPort）
+ * - 行程存 PostgreSQL（一個實作同時當 Save / Load / DeleteEventPort，和歸檔要的那三個）
  * - 「現在」用哪個時區的時鐘
- * - AI 助理的舊對話留多久（AssistantMemoryCleanup 每天清一次，所以要開排程）
+ * - 舊資料歸檔到哪（S3 相容的物件儲存）、AI 助理的對話和行程各留多久（#54；排程每天搬一次，所以要開排程）
  */
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
@@ -99,13 +112,15 @@ class CalendarConfiguration {
         return new CalendarAssistant(chatModel, assistantMemory::of, parseEvents, listEvents, findFreeSlots, Clock.system(zone));
     }
 
+    // 時鐘帶 calendar.zone：對話歸檔的 key 依「最後說話的月份」分，月份要用使用者看到的那個時區算
     @Bean
-    AssistantMemoryCleanup assistantMemoryCleanup(JdbcAssistantMemoryRepository assistantMemory,
-                                                  @Value("${calendar.assistant.retention}") Duration retention) {
-        return new AssistantMemoryCleanup(assistantMemory, retention, Clock.systemUTC());
+    AssistantMemoryArchive assistantMemoryArchive(JdbcAssistantMemoryRepository assistantMemory, ArchiveBucket archiveBucket,
+                                                  @Value("${calendar.assistant.retention}") Duration retention,
+                                                  @Value("${calendar.zone}") ZoneId zone) {
+        return new AssistantMemoryArchive(assistantMemory, archiveBucket, retention, Clock.system(zone));
     }
 
-    // 助理讀寫、清理工作刪除，用的是同一張表、同一個實作
+    // 助理讀寫、歸檔工作搬走，用的是同一張表、同一個實作
     @Bean
     JdbcAssistantMemoryRepository assistantMemory(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
         return new JdbcAssistantMemoryRepository(jdbcClient, new TransactionTemplate(transactionManager));
@@ -124,5 +139,52 @@ class CalendarConfiguration {
     @Bean
     RemoveEventUseCase removeEvent(DeleteEventPort deleteEventPort) {
         return new RemoveEventService(deleteEventPort);
+    }
+
+    // ── 資料歸檔（#54）─────────────────────────────────────────────────────
+
+    /**
+     * 歸檔用的 bucket：行程和 AI 助理的對話共用一個。連到哪是設定（talkcal.archive.*）：
+     * 本機是 compose 的 RustFS，雲端是 S3（endpoint 空白）。建這個物件不會連線，連不上要到真的上傳時才知道 ——
+     * 物件儲存掛了不該讓整個 app 起不來，歸檔晚一天沒關係（沒存好的不會被刪）。
+     */
+    @Bean
+    ArchiveBucket archiveBucket(@Value("${talkcal.archive.endpoint}") String endpoint,
+                                @Value("${talkcal.archive.region}") String region,
+                                @Value("${talkcal.archive.bucket}") String bucket,
+                                @Value("${talkcal.archive.access-key}") String accessKey,
+                                @Value("${talkcal.archive.secret-key}") String secretKey) {
+        return ArchiveBucket.connect(endpoint, region, bucket, accessKey, secretKey);
+    }
+
+    // 歸檔的檔名帶著「存的時間」，用 UTC：跟 S3 自己記的時間同一個基準，不必換算
+    @Bean
+    EventArchivePort eventArchive(ArchiveBucket archiveBucket) {
+        return new S3EventArchiveAdapter(archiveBucket, Clock.systemUTC());
+    }
+
+    // 一批 500 筆：一筆行程不到 1KB，一批讀進記憶體也才幾百 KB
+    @Bean
+    ArchiveEventsUseCase archiveEvents(LoadEndedEventsPort loadEndedEvents, EventArchivePort eventArchive,
+                                       DeleteArchivedEventsPort deleteArchivedEvents) {
+        return new ArchiveEventsService(loadEndedEvents, eventArchive, deleteArchivedEvents, 500);
+    }
+
+    @Bean
+    RestoreEventsUseCase restoreEvents(EventArchivePort eventArchive, RestoreEventsPort restoreEventsPort) {
+        return new RestoreEventsService(eventArchive, restoreEventsPort);
+    }
+
+    @Bean
+    EventArchiveJob eventArchiveJob(ArchiveEventsUseCase archiveEvents,
+                                    @Value("${calendar.event.retention}") Period retention,
+                                    @Value("${calendar.zone}") ZoneId zone) {
+        return new EventArchiveJob(archiveEvents, retention, Clock.system(zone));
+    }
+
+    // 還原 API 要的對話那一半：controller 不認識 app.job，這裡把方法接過去（跟 assistantMemory::of 同一個做法）
+    @Bean
+    ArchiveController.RestoreConversations restoreConversations(AssistantMemoryArchive assistantMemoryArchive) {
+        return assistantMemoryArchive::restore;
     }
 }

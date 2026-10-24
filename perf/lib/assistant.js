@@ -10,7 +10,7 @@
 //     所以同一個併發數下，延遲比一問一答長，而且看句子差很多（查行程 vs 提議新行程）。
 //   - 會讀寫 PostgreSQL：讀行程、存這段對話的記憶。資料庫要先起來。
 //   - 每個請求都不帶 conversationId，等於開一段新對話。壓一次就會在 calendar_assistant_message 留下一堆對話，
-//     AssistantMemoryCleanup 會在 30 天後清掉；不想留就對著用完即丟的資料庫壓。
+//     AssistantMemoryArchive 會在 30 天後搬到歸檔；不想留就對著用完即丟的資料庫壓。
 //   - 不會新增行程：助理只「提議」，要使用者確認、另外送 POST /api/calendar/events 才會存。
 
 import http from 'k6/http';

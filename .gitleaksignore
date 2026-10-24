@@ -1,0 +1,5 @@
+# gitleaks 的誤判（ci/secrets.sh 讀這份）。一行一個 Fingerprint（commit:檔案:規則:行號），上面一行註明為什麼是誤判。
+
+# PR #170（#54 資料歸檔）的 deploy/compose.yaml：archive-init 用 curl --user 建 bucket，帳密是 compose 的變數參照
+# （$$ARCHIVE_ACCESS_KEY:$$ARCHIVE_SECRET_KEY，值在不進 git 的 deploy/.env），不是寫死的值。這一筆留在歷史裡改不掉（不改寫歷史），所以在這裡標成誤判
+3066a84af8eb3c7320e25cf206c2f26856a4b77c:deploy/compose.yaml:curl-auth-user:214
