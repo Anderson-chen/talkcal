@@ -94,6 +94,14 @@ class ArchitectureTest {
                     .because("用哪個模型解析行程是組裝時的決定；日期表、JSON Schema 這些只對某顆模型有效的手法，"
                             + "只該出現在 extraction 這一包");
 
+    // RecordUsagePort 的實作們（目前只有 Micrometer 那個，#36）
+    @ArchTest
+    static final ArchRule onlyTheCompositionRootMayKnowTheMetricsAdapters =
+            noClasses().that().resideOutsideOfPackages(CONFIG, JOB, "..adapter.out.metrics..")
+                    .should().dependOnClassesThat().resideInAPackage("..adapter.out.metrics..")
+                    .because("用量記到哪（Micrometer、別的分析系統）是組裝時的決定；"
+                            + "指標名稱和標籤只該出現在 metrics 這一包");
+
     /**
      * Adapter 這個字尾是有意義的，不是隨手加的裝飾。
      *

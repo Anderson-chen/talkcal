@@ -7,11 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.EventOrigin;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
+import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsagePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPort;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -29,6 +32,28 @@ class AddEventsServiceTest {
             CalendarEvent.startingAt("看牙醫", LocalDateTime.of(2026, 10, 14, 9, 0));
 
     private static final SaveEventsPort MUST_NOT_SAVE = (owner, events) -> fail("不該存檔");
+
+    // 假的用量紀錄：記成「ASSISTANT 2」這種字串
+    private static final class RecordingUsage implements RecordUsagePort {
+        final List<String> events = new ArrayList<>();
+
+        @Override
+        public void proposalsShown(int count) {
+            events.add("shown " + count);
+        }
+
+        @Override
+        public void proposalsDismissed(int count) {
+            events.add("dismissed " + count);
+        }
+
+        @Override
+        public void eventsAdded(EventOrigin origin, int count) {
+            events.add(origin + " " + count);
+        }
+    }
+
+    private final RecordingUsage usage = new RecordingUsage();
 
     // 假資料庫：記下每次收到的那一批
     private static final class RecordingPort implements SaveEventsPort {
@@ -49,7 +74,7 @@ class AddEventsServiceTest {
     void schedulesAndSavesAllInOneCall() {
         RecordingPort port = new RecordingPort();
 
-        List<ScheduledEvent> result = new AddEventsService(port).addEvents(OWNER, List.of(DINNER, DENTIST));
+        List<ScheduledEvent> result = new AddEventsService(port, usage).addEvents(OWNER, List.of(DINNER, DENTIST), EventOrigin.MANUAL);
 
         assertEquals(1, port.calls);
         assertEquals(OWNER, port.owner);
@@ -60,17 +85,19 @@ class AddEventsServiceTest {
     @Test
     @DisplayName("空清單：什麼都不做，不驚動資料庫")
     void emptyListDoesNothing() {
-        assertTrue(new AddEventsService(MUST_NOT_SAVE).addEvents(OWNER, List.of()).isEmpty());
+        assertTrue(new AddEventsService(MUST_NOT_SAVE, usage).addEvents(OWNER, List.of(), EventOrigin.ASSISTANT).isEmpty());
+        assertEquals(List.of(), usage.events, "什麼都沒存，就什麼都不記");
     }
 
     @Test
-    @DisplayName("擁有者是 null、清單是 null 或含 null：IllegalArgumentException，不存檔")
+    @DisplayName("擁有者、來源是 null，清單是 null 或含 null：IllegalArgumentException，不存檔")
     void rejectsNulls() {
-        AddEventsService service = new AddEventsService(MUST_NOT_SAVE);
+        AddEventsService service = new AddEventsService(MUST_NOT_SAVE, usage);
 
-        assertThrows(IllegalArgumentException.class, () -> service.addEvents(null, List.of(DINNER)));
-        assertThrows(IllegalArgumentException.class, () -> service.addEvents(OWNER, null));
-        assertThrows(IllegalArgumentException.class, () -> service.addEvents(OWNER, Arrays.asList(DINNER, null)));
+        assertThrows(IllegalArgumentException.class, () -> service.addEvents(null, List.of(DINNER), EventOrigin.MANUAL));
+        assertThrows(IllegalArgumentException.class, () -> service.addEvents(OWNER, null, EventOrigin.MANUAL));
+        assertThrows(IllegalArgumentException.class, () -> service.addEvents(OWNER, Arrays.asList(DINNER, null), EventOrigin.MANUAL));
+        assertThrows(IllegalArgumentException.class, () -> service.addEvents(OWNER, List.of(DINNER), null));
     }
 
     @Test
@@ -78,7 +105,7 @@ class AddEventsServiceTest {
     void worksWithImmutableLists() {
         RecordingPort port = new RecordingPort();
 
-        new AddEventsService(port).addEvents(OWNER, List.of(DINNER));
+        new AddEventsService(port, usage).addEvents(OWNER, List.of(DINNER), EventOrigin.MANUAL);
 
         assertEquals(1, port.saved.size());
     }
@@ -92,6 +119,18 @@ class AddEventsServiceTest {
         };
 
         assertSame(failure, assertThrows(IllegalStateException.class,
-                () -> new AddEventsService(broken).addEvents(OWNER, List.of(DINNER))));
+                () -> new AddEventsService(broken, usage).addEvents(OWNER, List.of(DINNER), EventOrigin.ASSISTANT)));
+        assertEquals(List.of(), usage.events, "沒存進去的不算採納");
+    }
+
+    @Test
+    @DisplayName("#36 存好之後記下幾筆、從哪來的：採納助理的記 ASSISTANT，手動的記 MANUAL")
+    void recordsUsageByOrigin() {
+        AddEventsService service = new AddEventsService(new RecordingPort(), usage);
+
+        service.addEvents(OWNER, List.of(DINNER, DENTIST), EventOrigin.ASSISTANT);
+        service.addEvents(OWNER, List.of(DINNER), EventOrigin.MANUAL);
+
+        assertEquals(List.of("ASSISTANT 2", "MANUAL 1"), usage.events);
     }
 }

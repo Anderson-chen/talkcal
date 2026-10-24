@@ -28,6 +28,8 @@ test('手機版新增：從沒有行程的那天點進去，整頁表單填好�
 
   await expect(page.getByRole('heading', { name: '新增行程' })).toBeHidden()
   expect(api.saved).toEqual([[expect.objectContaining({ title: '晨跑', start: '2026-10-06T10:00' })]])
+  // 從「新增行程」填的是手動，不能算成採納助理的提議（#36 的採納率）
+  expect(api.origins).toEqual(['MANUAL'])
 })
 
 test('手機版沒填標題：整頁表單裡顯示錯誤，沒有送出', async ({ page }) => {

@@ -46,7 +46,7 @@ async function save() {
   saving.value = true
   error.value = null
   try {
-    const [saved] = await calendar.add([result.draft])
+    const [saved] = await calendar.add([result.draft], request.origin)
     request.onSaved?.(saved)
     close()
     // 存好直接打開它的詳情（照設計稿），使用者看得到存進去的樣子

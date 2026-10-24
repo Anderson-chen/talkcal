@@ -1,9 +1,11 @@
 package io.github.andersonchen.talkcal.calendar.application.domain.service;
 
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.EventOrigin;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsagePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPort;
 
 import java.util.List;
@@ -13,21 +15,27 @@ import java.util.Objects;
  * 實作「把確認過的行程排進行事曆」。
  * 約定：service 只呼叫 model 的方法與 port，不自己判斷業務規則。
  *
- * 流程只有兩步：每筆排進去（發 id）→ 一次存起來。
+ * 流程只有三步：每筆排進去（發 id）→ 一次存起來 → 記下用量（幾筆、從哪來的）。
+ * 用量在存好之後才記：存檔失敗的不算數，不然「採納」會把沒存進去的也算進來。
  * 行程本身的規則已經在 CalendarEvent 建構時檢查過，這裡不再看第二次。
  */
 public final class AddEventsService implements AddEventsUseCase {
 
     private final SaveEventsPort saveEventsPort;
+    private final RecordUsagePort usage;
 
-    public AddEventsService(SaveEventsPort saveEventsPort) {
+    public AddEventsService(SaveEventsPort saveEventsPort, RecordUsagePort usage) {
         this.saveEventsPort = Objects.requireNonNull(saveEventsPort, "saveEventsPort 不可為 null");
+        this.usage = Objects.requireNonNull(usage, "usage 不可為 null");
     }
 
     @Override
-    public List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events) {
+    public List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events, EventOrigin origin) {
         if (owner == null) {
             throw new IllegalArgumentException("擁有者不可為 null");
+        }
+        if (origin == null) {
+            throw new IllegalArgumentException("行程的來源不可為 null");
         }
         // 這是呼叫端違約（契約說不可為 null），不是業務規則，所以在這裡擋、而不是在 model。
         // 丟 IllegalArgumentException 而不是 NullPointerException：跟其他「輸入不合規」同一種，HTTP 那頭對應 400
@@ -41,6 +49,7 @@ public final class AddEventsService implements AddEventsUseCase {
         }
         List<ScheduledEvent> scheduled = events.stream().map(ScheduledEvent::schedule).toList();
         saveEventsPort.save(owner, scheduled);
+        usage.eventsAdded(origin, scheduled.size());
         return scheduled;
     }
 }

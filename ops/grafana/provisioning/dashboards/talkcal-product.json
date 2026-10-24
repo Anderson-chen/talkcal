@@ -1,0 +1,688 @@
+{
+  "uid": "talkcal-product",
+  "title": "talkcal — 產品指標",
+  "description": "功能有沒有人用、助理的提議有沒有用處（#36）。指標怎麼埋、為什麼這樣定，見 ops/README.md 的「產品指標」。",
+  "tags": [
+    "talkcal",
+    "product"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "活躍使用者（日／週）",
+      "description": "talkcal_active_users{window}：最近 1 天、7 天內跟助理說過話或存過行程的人數（不同的人，同一個人只算一次）。抓的當下從資料庫數，所以不受時間範圍影響。只看月曆不算（讀取沒有留下紀錄）。",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "max(talkcal_active_users{job=\"talkcal-app\",window=\"1d\"})",
+          "legendFormat": "日活",
+          "instant": true,
+          "range": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "max(talkcal_active_users{job=\"talkcal-app\",window=\"7d\"})",
+          "legendFormat": "週活",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "助理對話次數",
+      "description": "助理成功回了幾句話（POST /api/calendar/assistant 的 200）。直接用 Spring 本來就有的 http_server_requests，不另外埋一個一樣的 counter。代價：這條序列要等第一個請求才出現，increase() 會少算 app 啟動後的第一句。數的是右上角選的時間範圍（用 increase()，會依抓取間隔外插，數字小時可能差一兩個）。",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 6,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(increase(http_server_requests_seconds_count{job=\"talkcal-app\",uri=\"/api/calendar/assistant\",method=\"POST\",status=\"200\"}[$__range]))",
+          "legendFormat": "對話",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "提議卡片",
+      "description": "talkcal_assistant_proposals_shown_total：助理的回覆裡真的出現在畫面上的卡片張數（工具解析出來但因為沒講早上晚上被擋下的、回覆失敗的都不算）。數的是右上角選的時間範圍（用 increase()，會依抓取間隔外插，數字小時可能差一兩個）。",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 10,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(increase(talkcal_assistant_proposals_shown_total{job=\"talkcal-app\"}[$__range]))",
+          "legendFormat": "提議",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "採納／拒絕",
+      "description": "採納 = talkcal_calendar_events_added_total{origin=\"assistant\"}：從卡片按「加入行事曆」或「修改」後存的。拒絕 = talkcal_assistant_proposals_dismissed_total：按「取消」「移除」的。沒表態的（直接清空對話）兩邊都不算。數的是右上角選的時間範圍（用 increase()，會依抓取間隔外插，數字小時可能差一兩個）。",
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 14,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(increase(talkcal_calendar_events_added_total{job=\"talkcal-app\",origin=\"assistant\"}[$__range]))",
+          "legendFormat": "採納",
+          "instant": true,
+          "range": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(increase(talkcal_assistant_proposals_dismissed_total{job=\"talkcal-app\"}[$__range]))",
+          "legendFormat": "拒絕",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "採納率",
+      "description": "有表態的卡片裡，被採納的比例：採納 ÷（採納 + 拒絕）。這是「助理提議得準不準」的主指標。下面的「對提議的採納率」分母是全部提議，連沒表態的也算進去。數的是右上角選的時間範圍（用 increase()，會依抓取間隔外插，數字小時可能差一兩個）。沒有任何表態時沒有值（不是 0%）。",
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 19,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(increase(talkcal_calendar_events_added_total{job=\"talkcal-app\",origin=\"assistant\"}[$__range])) / (sum(increase(talkcal_calendar_events_added_total{job=\"talkcal-app\",origin=\"assistant\"}[$__range])) + sum(increase(talkcal_assistant_proposals_dismissed_total{job=\"talkcal-app\"}[$__range])))",
+          "legendFormat": "採納率",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 0.7
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "卡片的去向（每小時）",
+      "description": "每小時提議了幾張、採納幾張、拒絕幾張。提議比採納＋拒絕多出來的，就是沒表態的卡片。",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(increase(talkcal_assistant_proposals_shown_total{job=\"talkcal-app\"}[1h]))",
+          "legendFormat": "提議"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(increase(talkcal_calendar_events_added_total{job=\"talkcal-app\",origin=\"assistant\"}[1h]))",
+          "legendFormat": "採納"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(increase(talkcal_assistant_proposals_dismissed_total{job=\"talkcal-app\"}[1h]))",
+          "legendFormat": "拒絕"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "piechart",
+      "title": "新增的行程從哪來",
+      "description": "talkcal_calendar_events_added_total 依 origin：assistant 是採納助理的提議，manual 是自己用表單填的（直接打 API、沒帶 origin 的也算 manual）。助理那塊越大，代表大家越習慣用講的建行程。數的是右上角選的時間範圍（用 increase()，會依抓取間隔外插，數字小時可能差一兩個）。",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum by (origin) (increase(talkcal_calendar_events_added_total{job=\"talkcal-app\"}[$__range]))",
+          "legendFormat": "{{origin}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "donut",
+        "displayLabels": [
+          "percent"
+        ],
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "對提議的採納率",
+      "description": "採納 ÷ 全部提議（含沒表態的）。跟右上角的採納率差很多，代表很多卡片沒人理 —— 可能是提議太多、或使用者只是在試。數的是右上角選的時間範圍（用 increase()，會依抓取間隔外插，數字小時可能差一兩個）。",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(increase(talkcal_calendar_events_added_total{job=\"talkcal-app\",origin=\"assistant\"}[$__range])) / sum(increase(talkcal_assistant_proposals_shown_total{job=\"talkcal-app\"}[$__range]))",
+          "legendFormat": "對提議的採納率",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "每句對話平均提議幾張",
+      "description": "提議卡片 ÷ 助理對話次數。很低代表大家多半在查行程、找空檔，不是在新增。數的是右上角選的時間範圍（用 increase()，會依抓取間隔外插，數字小時可能差一兩個）。",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 9
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(increase(talkcal_assistant_proposals_shown_total{job=\"talkcal-app\"}[$__range])) / sum(increase(http_server_requests_seconds_count{job=\"talkcal-app\",uri=\"/api/calendar/assistant\",method=\"POST\",status=\"200\"}[$__range]))",
+          "legendFormat": "每句提議",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "活躍使用者",
+      "description": "talkcal_active_users：日活、週活、月活隨時間的變化。30 天剛好是助理對話的保留期限，再長就數不準了。",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "max(talkcal_active_users{job=\"talkcal-app\",window=\"1d\"})",
+          "legendFormat": "日活"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "max(talkcal_active_users{job=\"talkcal-app\",window=\"7d\"})",
+          "legendFormat": "週活"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "max(talkcal_active_users{job=\"talkcal-app\",window=\"30d\"})",
+          "legendFormat": "月活"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    }
+  ]
+}
