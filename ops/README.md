@@ -80,7 +80,7 @@ Mimir 只放得下「標籤 + 一個數字」，Loki 放的是一行一行文字
 
 ```bash
 cd deploy && docker compose up -d   # 先起被觀測的那組：它會建立 Alloy 要加入的網路
-cd ops && docker compose up -d      # 再起這組
+cd ops && docker compose --env-file ../deploy/.env up -d   # 再起這組；--env-file 帶告警寄信的 SMTP（沒帶就只是不寄信）
 docker compose ps                   # 看狀態
 docker compose logs -f              # 追 log（Ctrl+C 離開，不會關容器）
 docker compose down                 # 關掉（資料留著）
@@ -96,6 +96,8 @@ Alloy 加入了 deploy/ 的網路（`talkcal-deploy_default`）：用服務名�
 |-----|------|------|
 | `talkcal-app` | `app:8090/actuator/prometheus` | deploy/ 的 app 容器 |
 | `llama-cpp` | `llm-chat:8080/metrics` | Qwen3-8B（deploy/ 的 llm-chat） |
+| `alloy` | Alloy 自己（`prometheus.exporter.self`） | 收集器本身，給「監控本身掛掉」用 |
+| `mimir`、`loki`、`tempo`、`grafana` | `<服務名>:<HTTP 埠>/metrics` | ops/ 這組自己，同上 |
 
 每 15 秒抓一次，用 `remote_write` 推進 Mimir。本機 bootRun 的 app 不在 deploy/ 的網路裡，不會被抓。
 
@@ -214,6 +216,82 @@ Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](..
 
 驗過準不準：同一次 knee 壓測，Grafana 算出的 p95（792ms → 1572ms → 3360ms）跟 k6 收工印的表一致。
 
+## SLO：怎樣才算「夠好」
+
+四個 SLO（一般 API 與跟助理說話，各一個可用性、一個延遲），滾動 28 天。目標、數字怎麼從壓測推出來、
+告警門檻怎麼算，都寫在 [docs/slo.md](../docs/slo.md)。這裡只記它在觀測堆疊裡怎麼接：
+
+| 誰 | 做什麼 | 檔案 |
+|----|--------|------|
+| app | 延遲直方圖多兩個剛好在門檻上的 bucket（300ms、8s） | `backend/.../application.properties` |
+| Mimir 的 ruler | 每分鐘把 SLI、burn rate、error budget 算好，寫回成新的序列（`slo:*`） | `mimir/rules/anonymous/slo.yaml` |
+| Grafana 告警 | 讀 `slo:burn_rate:*`，長短兩個視窗都超過門檻就進 firing（multi-window, multi-burn-rate） | `grafana/provisioning/alerting/slo-burn-rate.yaml` |
+| Grafana 儀表板 | **talkcal — SLO**：budget 還剩多少、燒多快、告警狀態 | `grafana/provisioning/dashboards/talkcal-slo.json` |
+
+為什麼錄製規則放 Mimir、告警規則放 Grafana：錄製是「算數字」，放在存資料的地方算最省（不必每次把原始資料拉出來）；
+告警要接通知管道（contact point、policy），那些都在 Grafana，規則放一起才看得到「哪條規則送去哪」。
+Mimir 的 ruler 也能發告警，但那樣要再架一個 Alertmanager，通知設定就分散在兩個地方。
+
+改了 `slo.yaml` 要 `docker compose restart mimir`（ruler 只在啟動時讀）；Grafana 的告警規則檔同樣重啟 grafana 才會重讀。
+
+## 監控本身掛掉：誰來發現
+
+Alloy 或 Mimir 停了，dashboard 只會一片空白，看起來跟「半夜沒流量」一樣（Google SRE 說的 monitoring the monitoring）。
+所以 ops/ 自己的每個元件也被抓指標，再加四條告警（`grafana/provisioning/alerting/meta-monitoring.yaml`）：
+
+| 停掉的 | 怎麼看出來 | 誰通知 | 多久 |
+|--------|-----------|--------|------|
+| Loki、Tempo | Alloy 還在，`up{job="loki"}` = 0 | Grafana 寄信（warning） | 約 3 分鐘 |
+| Alloy | 最後一筆 `up{job="alloy"}` 離現在超過 60 秒 | Grafana 寄信（critical） | 約 3～4 分鐘 |
+| Mimir | Grafana 的查詢直接失敗（規則的 `execErrState: Alerting`） | Grafana 寄信（critical） | 約 3 分鐘 |
+| **Grafana 自己**、整台機器 | Watchdog 每分鐘打的 heartbeat 停了 | **外部服務**寄信 | 約 6 分鐘 |
+
+Alloy 不能用 `up < 1`：它死掉時不會再寫 up，Mimir 查詢往回找 5 分鐘、一直拿到最後那個 1。改看「最後一個點有多舊」，停掉一分鐘就看得出來。
+Alloy 只重啟一下（幾秒）不會響：要連續 60 秒沒資料、再持續 2 分鐘才寄。
+
+### 為什麼需要監控系統外面的東西
+
+負責寄信的是 Grafana。Grafana 掛了、機器整台斷線，就沒有人寄信 —— 監控系統沒辦法回報「我自己死了」。
+做法是反過來（dead man's switch）：一條**永遠在響**的 Watchdog 告警，每分鐘打一次外部服務的網址；
+外部服務超過寬限時間沒收到，就自己寄信。它不靠我們這台機器上的任何東西，所以 Grafana 怎麼死都會被發現。
+
+Watchdog 用規則上的 `notification_settings` 直接送給 `heartbeat` 這個 contact point，不經過 notification policy：
+不會混進 email，也不必改寄信那棵 policy 樹。Mimir 掛掉時 Watchdog 照樣響（查詢失敗算 Alerting），
+因為那個情況上面那條已經寄信了，heartbeat 只負責「Grafana 和它的通知管線還活著」，不重複吵同一件事。
+
+### 外部服務選 Healthchecks.io
+
+| | Healthchecks.io | Better Stack | Cronitor、Dead Man's Snitch |
+|---|---|---|---|
+| 免費額度 | 20 個 check，每個留 100 筆 ping 紀錄 | 10 個 heartbeat（另含網站監控） | 免費版很小或沒有（各家比較表說法不一，2026） |
+| 通知方式（免費） | email、Slack、Discord、Telegram、webhook… | email、Slack… | email |
+| 開源、可自架 | **是**（BSD） | 否 | 否 |
+| 只要一個網址 | 是（`https://hc-ping.com/<uuid>`，GET/POST 都收） | 是 | 是 |
+
+選 Healthchecks.io：我們只要 1 個 check，免費額度綽綽有餘；**開源可自架**，所以本機驗證用的是同一套軟體的 docker 映像
+（`healthchecks/healthchecks`），證據不是拿假的接收端湊的；以後不想依賴它的雲端，也能搬到另一台機器自己跑。
+Better Stack 也夠用，但它是整套觀測平台，只為一個 heartbeat 註冊、多一套 UI 不划算。
+
+設定（使用者自己註冊，repo 裡沒有任何帳號或 token）：
+
+1. 到 <https://healthchecks.io> 註冊、新增一個 check：**Period 1 minute、Grace 5 minutes**
+   （Grafana 重啟、拉新映像約 30 秒，5 分鐘寬限不會誤報；真的停了 6 分鐘內寄信）
+2. 把 Ping URL 填進 `deploy/.env` 的 `HEARTBEAT_URL`（雲端填 `infra/envs/1-ec2` 的 `heartbeat_url`）
+3. `cd ops && docker compose --env-file ../deploy/.env up -d`
+
+這串網址本身就是祕密：拿到的人可以一直替我們打 heartbeat，讓「Grafana 掛了」永遠不會被發現，所以跟密碼一樣不進 git。
+沒設時 compose 給 `.invalid` 的位址，Grafana 照常啟動，只是 heartbeat 打不出去（Grafana log 裡會一直有送不出去的 error）。
+
+**排程關機**（雲端平常關機）：關機前到 Healthchecks.io 按 **Pause**，不然 6 分鐘後會收到「掛了」的信。
+開機後 Grafana 的第一個 heartbeat 會讓 check 自動恢復監控，不必再按（本機實測過）。
+
+### 還沒蓋到的
+
+- **寄信本身壞了**（SMTP 帳密過期）：Grafana 活著、heartbeat 照打，但 email 寄不出去。要蓋到得讓 heartbeat 也走 email（例如寄到外部服務的收信位址），目前不做。
+- **Alloy 活著但送不出去**（remote_write 一直失敗）：跟 Alloy 停了一樣是「最後一個點越來越舊」，同一條會響。
+  log、trace 那兩條送不出去（Loki、Tempo 活著但拒收）目前只看得到 Alloy 自己的指標（`loki_write_dropped_entries_total` 這類），沒有告警。
+- Alloy 停掉時 app 那條「抓不到指標」（#121）也會一起響：Grafana 管理的告警沒有 inhibit（抑制）規則，同一件事會收到兩封。
+
 ## 三種訊號之間怎麼跳
 
 | 從 | 到 | 怎麼點 | 靠什麼接起來 |
@@ -221,6 +299,41 @@ Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](..
 | 指標（talkcal-app 儀表板的 p95 圖） | trace | 圖上的小菱形（exemplar）→ 點 trace_id | app 吐指標時在 histogram 的點上附 trace id，Mimir 存下來（`max_global_exemplars_per_user`） |
 | log（Loki 的 access log） | trace | 展開一行 → **到 Tempo 看這個請求** | Loki 資料源的 derived field 從內容抓出 `traceId` |
 | trace（Tempo） | log | span 旁的 **Logs for this span** | Tempo 資料源用 trace id 去 Loki 搜內容 |
+
+## 告警：出事寄信
+
+規則、收件人、寄信節奏都用 provisioning 管（`grafana/provisioning/alerting/`），Grafana 一啟動就建好，UI 上唯讀。
+
+| 規則 | 查詢（都用 `job="talkcal-app"`，不依賴埠號） | 門檻 | 持續 | 沒資料時 |
+|------|------|------|------|------|
+| app 掛了或抓不到指標 | `max(up)` | < 1 | 1 分鐘 | **算出事**（Alloy 掛了也看不到 app） |
+| 5xx 比例 | 5xx ÷ 全部，5 分鐘至少 20 個請求才評估 | > 5% | 5 分鐘 | 正常（沒流量） |
+| 行程 API p95（不含 AI 助理） | `histogram_quantile(0.95, …)` | > 1 秒 | 10 分鐘 | 正常 |
+| AI 助理 p95 | 同上，只看 `/api/calendar/assistant` | > 30 秒 | 10 分鐘 | 正常 |
+
+每條門檻的理由寫在 `rules.yaml` 的註解。這些是依實測值留餘裕的暫時值；
+SLO 定下來（[#34](https://github.com/Anderson-chen/talkcal/issues/34)）之後改成照錯誤預算燒得多快來告警。
+
+上面四條之外還有 SLO 的 burn-rate（`slo-burn-rate.yaml`）、資料庫／連線池／模型熔斷／備份（`respond.yaml`），
+**所有告警的總表**（式子、門檻、severity、為什麼要有）在 [docs/alerts.md](../docs/alerts.md)。
+
+備份太久沒成功那條要的指標，是 `infra/envs/1-ec2/backup-to-s3.sh` 成功時寫的 `.prom` 檔，
+Alloy 用 textfile collector 讀（`config.alloy` 的 (3)）。雲端 `deploy.sh` 用 `TEXTFILE_DIR` 把那個資料夾掛給 Alloy；
+本機沒有備份排程，沒給 `TEXTFILE_DIR` 就掛一個空的 volume，那條告警的查詢是空的、維持正常。
+
+寄信走 Grafana 內建的 SMTP，設定在不進 git 的 `deploy/.env`（`ALERT_SMTP_*`、`ALERT_EMAIL_TO`，範本 `deploy/.env.example`），
+所以起這組要帶 `--env-file ../deploy/.env`。雲端由 Terraform 寫進 SSM 的同一份 `.env`（`infra/envs/1-ec2/alerting.auto.tfvars.example`）。
+
+想試寄信、又不想動真的信箱：
+
+```bash
+# deploy/.env 填 ALERT_SMTP_HOST=mailpit:1025，其他 ALERT_SMTP_* 留空
+docker compose --env-file ../deploy/.env --profile mailtest up -d   # 多起一台只收不寄的 Mailpit
+# 收件匣：http://localhost:8025
+```
+
+Grafana 的 **Alerting → Alert rules** 看每條規則現在是 Normal / Pending / Firing；
+**Contact points** 那一頁的 **Test** 可以不等規則觸發，直接寄一封測試信。
 
 ## 下一步（一次一件）
 
@@ -236,12 +349,14 @@ Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](..
 
 ```
 ops/
-├── compose.yaml                              # 五個服務的定義
+├── compose.yaml                              # 五個服務的定義（加上試寄信用的 mailpit，平常不起）
 ├── alloy/config.alloy                        # 三條管線：抓誰的指標、收哪些容器的 log、trace 轉給誰
 ├── mimir/mimir.yaml                          # 指標：單機最小設定（關掉多租戶、複製、物件儲存）
+├── mimir/rules/anonymous/slo.yaml            # SLO 的錄製規則（SLI、burn rate、error budget）
 ├── loki/loki-config.yaml                     # 日誌：單機最小設定
 ├── tempo/tempo.yaml                          # 追蹤：單機最小設定
 └── grafana/provisioning/
     ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
-    └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces（trace）、talkcal-k6（壓測）
+    ├── alerting/                             # 告警：rules、slo-burn-rate、respond、meta-monitoring（什麼算出事，總表 docs/alerts.md）、contact-points（寄給誰）、policies（多久寄一次）
+    └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces（trace）、talkcal-k6（壓測）、talkcal-slo
 ```

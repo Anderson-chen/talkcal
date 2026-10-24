@@ -62,6 +62,7 @@ flowchart LR
 | `backend.tf`、`backend.hcl.example` | state 放 bootstrap 建的 S3 bucket；bucket 名稱帶帳號 ID，放在 gitignore 掉的 `backend.hcl` |
 | `variables.tf` | `model_backend` 和依它決定預設值的機型、磁碟；Google、GitHub 登入的 client id／secret（`sensitive`） |
 | `oauth.auto.tfvars.example` | 複製成 `oauth.auto.tfvars`（不進 git）填 Google、GitHub 的 client id／secret；沒填就只有帳密登入 |
+| `alerting.auto.tfvars.example` | 複製成 `alerting.auto.tfvars`（不進 git）填 Grafana 寄告警信的 SMTP 和收件人；沒填就不寄信（[#121](https://github.com/Anderson-chen/talkcal/issues/121)） |
 | `outputs.tf` | 網址、IP、instance id、Grafana 通道指令、要在 Google、GitHub 登記的回呼網址（`oauth_callback_urls`） |
 | `vpc.tf` | 一個公有子網，不建 NAT；可用區自動挑有這個機型的 |
 | `security-groups.tf` | 只開 80/443（含 HTTP/3 的 UDP 443）；22 預設關 |
@@ -89,6 +90,7 @@ flowchart LR
 | 登入機器 | 本機 | SSM Session Manager，不開 22 | `iam.tf` |
 | DB 密碼 | 自己填在不進 git 的 `deploy/.env`（[#123](https://github.com/Anderson-chen/talkcal/issues/123)） | Terraform 隨機產生 → SSM → 同一個位置的 `deploy/.env`（[#14](https://github.com/Anderson-chen/talkcal/issues/14)） | `secrets.tf`、`compose.ec2.yaml` |
 | Google、GitHub 登入 | client id／secret 填在 `deploy/.env`，回呼網址 `http://localhost:5173/...` | `oauth.auto.tfvars` → SSM → `deploy/.env`；回呼網址 `https://<網站>/...`，nginx 照轉 Caddy 的 `X-Forwarded-Proto`、app 信任它才組得出 https（[#127](https://github.com/Anderson-chen/talkcal/issues/127)） | `variables.tf`、`secrets.tf`、`web/nginx.conf` |
+| 告警寄信 | SMTP、收件人填在 `deploy/.env`，起 `ops/` 時帶 `--env-file ../deploy/.env`；試寄用 Mailpit（`--profile mailtest`） | `alerting.auto.tfvars` → SSM → `deploy/.env`，`deploy.sh` 起 `ops/` 時帶 `--env-file deploy/.env`（[#121](https://github.com/Anderson-chen/talkcal/issues/121)） | `variables.tf`、`secrets.tf`、`deploy.sh`、`ops/compose.yaml` |
 | app 記憶體 | 沒上限 | `mem_limit: 2g`：沒設的話 JVM 的 75% 是算整台（8GB 或 16GB） | `compose.ec2.yaml` |
 | 映像檔 | 本機 build | 在 EC2 上 build；做[版本 tag](https://github.com/Anderson-chen/talkcal/issues/25) 時再改成 CI 推到 ECR | `deploy.sh` |
 
@@ -110,6 +112,7 @@ cp backend.hcl.example backend.hcl        # 填入上一步輸出的 state_bucke
 terraform init -backend-config=backend.hcl
 # （要開 Google、GitHub 登入才做）cp oauth.auto.tfvars.example oauth.auto.tfvars 再填值，
 #  先 apply 一次拿到網址，再到 Google、GitHub 登記 terraform output oauth_callback_urls 印出來的回呼網址
+# （要收告警信才做）cp alerting.auto.tfvars.example alerting.auto.tfvars 再填 SMTP 和收件人
 terraform apply
 
 # 2.（只有 gpu）上傳模型檔（只要一次；SHA256SUMS 一起傳，model-seed 會驗）
@@ -144,10 +147,14 @@ sudo docker stats --no-stream && free -h       # gpu 再加 nvidia-smi
 terraform apply -replace='aws_iam_service_specific_credential.bedrock[0]'
 # 換 DB 密碼（例如懷疑外洩），再到機器上重跑 deploy.sh：它會把資料庫裡的密碼同步成新的那組
 terraform apply -replace=random_password.db
-# 換 Google、GitHub 的 secret（或第一次填）：改 oauth.auto.tfvars，apply 之後再到機器上重跑 deploy.sh
+# 換 Google、GitHub 的 secret、告警信的 SMTP（或第一次填）：改 oauth.auto.tfvars／alerting.auto.tfvars，apply 之後再到機器上重跑 deploy.sh
 terraform apply
 # Google、GitHub 要登記的回呼網址（Elastic IP 換了就會跟著換，要重新登記）
 terraform output oauth_callback_urls
+
+# 資料庫備份（自動：每小時、關機前、部署前）。看狀態、手動補一份；還原步驟見 docs/runbooks/backup-restore.md
+systemctl list-timers talkcal-backup.timer && cat /opt/talkcal/backups/last-success
+sudo bash /opt/talkcal/repo/infra/envs/1-ec2/backup-to-s3.sh manual
 
 # 看 Grafana：在本機跑這行，再開 http://localhost:3000
 terraform output -raw grafana_tunnel
@@ -163,8 +170,14 @@ aws ec2 stop-instances  --instance-ids "$(terraform output -raw instance_id)" --
 aws ec2 start-instances --instance-ids "$(terraform output -raw instance_id)" --region ap-northeast-1 --profile DEV
 ```
 
+關機前先到 Healthchecks.io 把 talkcal 那個 check 按 **Pause**（有設 `heartbeat_url` 的話）：關機後 heartbeat 停了，
+不按的話 5 分鐘後會收到一封「掛了」的信。開機後 Grafana 送出第一個 heartbeat，check 就自己恢復監控，不必再按（#40，本機實測過）。
+
 容器都設了 `restart: unless-stopped`，開機後會自己起來，不必重跑 deploy.sh；gpu 時模型要重新載入，第一個請求會等比較久。
-徹底收攤用 `terraform destroy`：IP 釋出、網址跟著換，資料庫資料也會一起消失。
+關機前 systemd 會先把資料庫備份到 S3（`talkcal-backup-on-shutdown`），所以關機這段時間的 RPO 是 0；關機要等它跑完（幾秒）。
+
+徹底收攤用 `terraform destroy`：IP 釋出、網址跟著換，機器上的資料庫也一起消失。
+備份 bucket 有東西時 destroy 會停在那裡（`force_destroy = false`，刻意的）：先決定要不要把備份下載回來，再清空 bucket 重跑。
 
 ## 代價
 
@@ -183,6 +196,7 @@ aws ec2 start-instances --instance-ids "$(terraform output -raw instance_id)" --
 | HTTPS | Caddy + sslip.io | 一個設定檔包辦憑證和續期，不必買網域；跟 cool-down 同一套做法 |
 | 觀測放哪 | 同一台，跟本機同一份 `ops/` | 最能證明「搬得動」；記憶體不夠再考慮 Grafana Cloud |
 | 映像檔從哪來 | 機器上 build | 不必先從家裡推幾 GB 的 CUDA 映像檔上 ECR；版本 tag 做了再改 |
+| 資料庫備份 | 每小時、關機前、部署前 `pg_dump` 到 S3（`backups.tf`），30 天；不做 EBS 自動快照 | 機器能從程式碼重建，要保護的只有資料庫；pg_dump 能只救一張表、跨版本還原。RPO：正常關機 0、當機 ≤ 1 小時。理由和還原步驟見 [runbook](../../../docs/runbooks/backup-restore.md)（[#45](https://github.com/Anderson-chen/talkcal/issues/45)） |
 | Region | 東京 ap-northeast-1 | 2026-10-13 查過：台北 ap-east-2 沒有任何 G 系列機型（g4dn、g5、g6 都沒有）；東京的 g6.xlarge 在 1a、1c 兩個可用區 |
 
 ## 待決定
@@ -190,7 +204,6 @@ aws ec2 start-instances --instance-ids "$(terraform output -raw instance_id)" --
 | 問題 | 選項 | 目前傾向 |
 |---|---|---|
 | 開機策略 | 常駐 / 平常關機、展示才開 | 平常關機 |
-| EBS 自動快照 | 現在沒有 / Data Lifecycle Manager 每天一次 | 跟 [#45 備份與還原](https://github.com/Anderson-chen/talkcal/issues/45) 一起做 |
 
 ## 疑難排解
 
