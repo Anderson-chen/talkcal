@@ -5,13 +5,16 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.CalendarAssistant;
+import io.github.andersonchen.talkcal.calendar.adapter.shared.ModelUnavailableException;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -102,7 +105,9 @@ class CalendarAssistantControllerTest {
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"嗨\",\"conversationId\":\"abc\"}"))
                 .andExpect(status().isBadRequest());
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"  \"}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.retryAfterSeconds").doesNotExist());
     }
 
     @Test
@@ -112,7 +117,34 @@ class CalendarAssistantControllerTest {
 
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"嗨\"}"))
                 .andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.error").exists());
+                .andExpect(jsonPath("$.error").exists())
+                .andExpect(jsonPath("$.code").value("ASSISTANT_FAILED"))
+                .andExpect(header().doesNotExist("Retry-After"));
+    }
+
+    @Test
+    @DisplayName("#44 熔斷打開（這次沒叫模型）：503 + Retry-After，code = MODEL_UNAVAILABLE，不是 502")
+    void circuitOpen() throws Exception {
+        failure.set(new ModelUnavailableException(ModelUnavailableException.Reason.CIRCUIT_OPEN, Duration.ofSeconds(30), null));
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"嗨\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(header().string("Retry-After", "30"))
+                .andExpect(jsonPath("$.code").value("MODEL_UNAVAILABLE"))
+                .andExpect(jsonPath("$.retryAfterSeconds").value(30))
+                .andExpect(jsonPath("$.error").value(Matchers.containsString("其他功能照常可用")));
+    }
+
+    @Test
+    @DisplayName("#44 同時等模型的滿了：503 + Retry-After，code = MODEL_BUSY")
+    void modelBusy() throws Exception {
+        failure.set(new ModelUnavailableException(ModelUnavailableException.Reason.BUSY, Duration.ofSeconds(5), null));
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"嗨\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(header().string("Retry-After", "5"))
+                .andExpect(jsonPath("$.code").value("MODEL_BUSY"))
+                .andExpect(jsonPath("$.retryAfterSeconds").value(5));
     }
 
     @Test
