@@ -44,6 +44,8 @@ export interface SendOptions {
   contentType?: string
   // 預設 401 會通知 App 回登入畫面。登入失敗也是 401，那時候不該跳走，要留在登入頁顯示錯誤
   notifyUnauthorized?: boolean
+  // 這個 API 自己要多帶的 header（例如新增行程的 Idempotency-Key）
+  headers?: Record<string, string>
 }
 
 /**
@@ -51,7 +53,7 @@ export interface SendOptions {
  * 拿不到（proxy 連不上 app，回的不是 JSON）就退回 HTTP 狀態碼。
  */
 export async function send(url: string, init: RequestInit, options: SendOptions = {}): Promise<Response> {
-  const headers: Record<string, string> = { 'Content-Type': options.contentType ?? 'application/json' }
+  const headers: Record<string, string> = { 'Content-Type': options.contentType ?? 'application/json', ...options.headers }
   if (needsCsrf(init.method)) {
     const token = await csrfToken()
     if (token) headers['X-XSRF-TOKEN'] = token

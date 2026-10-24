@@ -1,21 +1,31 @@
 package io.github.andersonchen.talkcal.calendar.application.domain.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.IdempotencyKey;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
+import io.github.andersonchen.talkcal.calendar.application.port.in.AddedEvents;
+import io.github.andersonchen.talkcal.calendar.application.port.in.IdempotencyKeyReusedException;
+import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsOncePort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsOncePort.AlreadySaved;
+import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsOncePort.KeyUsedForOtherContent;
+import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsOncePort.Saved;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPort;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 @DisplayName("AddEventsService")
@@ -29,6 +39,8 @@ class AddEventsServiceTest {
             CalendarEvent.startingAt("看牙醫", LocalDateTime.of(2026, 10, 14, 9, 0));
 
     private static final SaveEventsPort MUST_NOT_SAVE = (owner, events) -> fail("不該存檔");
+    private static final SaveEventsOncePort MUST_NOT_SAVE_ONCE = (owner, key, events) -> fail("沒帶冪等鍵，不該走 saveOnce");
+    private static final IdempotencyKey KEY = new IdempotencyKey("3f1c8a2e-6b0d-4d7e-9a51-2c4e8f7b9d10");
 
     // 假資料庫：記下每次收到的那一批
     private static final class RecordingPort implements SaveEventsPort {
@@ -49,7 +61,7 @@ class AddEventsServiceTest {
     void schedulesAndSavesAllInOneCall() {
         RecordingPort port = new RecordingPort();
 
-        List<ScheduledEvent> result = new AddEventsService(port).addEvents(OWNER, List.of(DINNER, DENTIST));
+        List<ScheduledEvent> result = new AddEventsService(port, MUST_NOT_SAVE_ONCE).addEvents(OWNER, List.of(DINNER, DENTIST));
 
         assertEquals(1, port.calls);
         assertEquals(OWNER, port.owner);
@@ -60,13 +72,13 @@ class AddEventsServiceTest {
     @Test
     @DisplayName("空清單：什麼都不做，不驚動資料庫")
     void emptyListDoesNothing() {
-        assertTrue(new AddEventsService(MUST_NOT_SAVE).addEvents(OWNER, List.of()).isEmpty());
+        assertTrue(new AddEventsService(MUST_NOT_SAVE, MUST_NOT_SAVE_ONCE).addEvents(OWNER, List.of()).isEmpty());
     }
 
     @Test
     @DisplayName("擁有者是 null、清單是 null 或含 null：IllegalArgumentException，不存檔")
     void rejectsNulls() {
-        AddEventsService service = new AddEventsService(MUST_NOT_SAVE);
+        AddEventsService service = new AddEventsService(MUST_NOT_SAVE, MUST_NOT_SAVE_ONCE);
 
         assertThrows(IllegalArgumentException.class, () -> service.addEvents(null, List.of(DINNER)));
         assertThrows(IllegalArgumentException.class, () -> service.addEvents(OWNER, null));
@@ -78,7 +90,7 @@ class AddEventsServiceTest {
     void worksWithImmutableLists() {
         RecordingPort port = new RecordingPort();
 
-        new AddEventsService(port).addEvents(OWNER, List.of(DINNER));
+        new AddEventsService(port, MUST_NOT_SAVE_ONCE).addEvents(OWNER, List.of(DINNER));
 
         assertEquals(1, port.saved.size());
     }
@@ -92,6 +104,72 @@ class AddEventsServiceTest {
         };
 
         assertSame(failure, assertThrows(IllegalStateException.class,
-                () -> new AddEventsService(broken).addEvents(OWNER, List.of(DINNER))));
+                () -> new AddEventsService(broken, MUST_NOT_SAVE_ONCE).addEvents(OWNER, List.of(DINNER))));
+    }
+
+    /**
+     * 帶冪等鍵的那條路（#51）。「同一個鍵真的只存一次」是資料庫的唯一約束保證的，
+     * 在 JdbcCalendarEventAdapterTest 對真的 PostgreSQL 測；這裡只測 service 把 port 的三種結果翻成什麼。
+     */
+    @Nested
+    @DisplayName("帶冪等鍵")
+    class WithIdempotencyKey {
+
+        @Test
+        @DisplayName("第一次：交給 saveOnce（不是 save），回存好的那幾筆，replayed = false")
+        void firstTimeSaves() {
+            List<OwnerId> owners = new ArrayList<>();
+            SaveEventsOncePort port = (owner, key, events) -> {
+                owners.add(owner);
+                assertEquals(KEY, key);
+                return new Saved(events);
+            };
+
+            AddedEvents added = new AddEventsService(MUST_NOT_SAVE, port).addEvents(OWNER, KEY, List.of(DINNER, DENTIST));
+
+            assertFalse(added.replayed());
+            assertEquals(List.of(DINNER, DENTIST), added.events().stream().map(ScheduledEvent::event).toList());
+            assertEquals(List.of(OWNER), owners);
+        }
+
+        @Test
+        @DisplayName("之前存過：回的是當時那幾筆（當時的 id），不是這次新發的，replayed = true")
+        void replayReturnsEarlierEvents() {
+            List<ScheduledEvent> earlier = List.of(ScheduledEvent.schedule(DINNER));
+            SaveEventsOncePort port = (owner, key, events) -> new AlreadySaved(earlier);
+
+            AddedEvents added = new AddEventsService(MUST_NOT_SAVE, port).addEvents(OWNER, KEY, List.of(DINNER));
+
+            assertTrue(added.replayed());
+            assertEquals(earlier, added.events());
+        }
+
+        @Test
+        @DisplayName("同一個鍵存過別的內容：IdempotencyKeyReusedException")
+        void otherContentIsRejected() {
+            SaveEventsOncePort port = (owner, key, events) -> new KeyUsedForOtherContent();
+
+            assertThrows(IdempotencyKeyReusedException.class,
+                    () -> new AddEventsService(MUST_NOT_SAVE, port).addEvents(OWNER, KEY, List.of(DENTIST)));
+        }
+
+        @Test
+        @DisplayName("空清單：不記下這個鍵、不驚動資料庫")
+        void emptyListDoesNothing() {
+            AddedEvents added = new AddEventsService(MUST_NOT_SAVE, MUST_NOT_SAVE_ONCE).addEvents(OWNER, KEY, List.of());
+
+            assertTrue(added.events().isEmpty());
+            assertFalse(added.replayed());
+        }
+
+        @Test
+        @DisplayName("鍵是 null、擁有者是 null、清單含 null：IllegalArgumentException，不存檔")
+        void rejectsNulls() {
+            AddEventsService service = new AddEventsService(MUST_NOT_SAVE, MUST_NOT_SAVE_ONCE);
+
+            assertThrows(IllegalArgumentException.class, () -> service.addEvents(OWNER, (IdempotencyKey) null, List.of(DINNER)));
+            assertThrows(IllegalArgumentException.class, () -> service.addEvents(null, KEY, List.of(DINNER)));
+            assertThrows(IllegalArgumentException.class, () -> service.addEvents(OWNER, KEY, Arrays.asList(DINNER, null)));
+        }
     }
 }

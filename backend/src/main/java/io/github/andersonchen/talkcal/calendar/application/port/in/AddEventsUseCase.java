@@ -1,6 +1,7 @@
 package io.github.andersonchen.talkcal.calendar.application.port.in;
 
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.IdempotencyKey;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 
@@ -26,4 +27,16 @@ import java.util.List;
 public interface AddEventsUseCase {
 
     List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events);
+
+    /**
+     * 同上，但帶著冪等鍵（#51）：同一個 owner 用同一個鍵再送一次同樣的行程，不會多存，回的是第一次存的那幾筆。
+     *
+     * 為什麼需要：按了「加入」之後後端存好了、回應卻沒送到（逾時、502、斷線），畫面只看到失敗，使用者自然會再按一次。
+     * 沒有鍵的話，後端分不出這是「同一次的重送」還是「真的要再加一筆一樣的」，只能照存 —— 行事曆上就多一筆。
+     *
+     * 額外的失敗：
+     * - 同一個鍵之前存的是不同的行程 → IdempotencyKeyReusedException（什麼都不存）
+     * - key 是 null → IllegalArgumentException
+     */
+    AddedEvents addEvents(OwnerId owner, IdempotencyKey key, List<CalendarEvent> events);
 }

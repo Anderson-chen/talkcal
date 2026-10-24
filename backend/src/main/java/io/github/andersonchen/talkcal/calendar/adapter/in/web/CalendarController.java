@@ -3,9 +3,13 @@ package io.github.andersonchen.talkcal.calendar.adapter.in.web;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.IdempotencyKey;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.AddedEvents;
 import io.github.andersonchen.talkcal.calendar.application.port.in.EventNotFoundException;
+import io.github.andersonchen.talkcal.calendar.application.port.in.IdempotencyKeyReusedException;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.RemoveEventUseCase;
 
@@ -26,6 +30,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -51,6 +56,10 @@ import java.util.Optional;
  *
  * 誰的行事曆（#104）由登入者決定，不收任何「擁有者」參數：網址、body 裡都沒有，想改也改不了。
  * 登入者怎麼變成擁有者見 SignedIn。
+ *
+ * POST /events 收選填的 Idempotency-Key header（#51，照 IETF 草案 draft-ietf-httpapi-idempotency-key-header 的名字）：
+ * 帶了的話，同一個鍵再送一次不會多存，回的是第一次存的那幾筆，回應多一個 Idempotent-Replayed: true。
+ * 選填而不是必填：前後端不一定同時部署（舊版前端沒帶），k6 這類腳本也不必為了壓測自己產鍵；不帶就跟以前一樣每次都存。
  */
 @RestController
 @RequestMapping("/api/calendar")
@@ -70,23 +79,38 @@ public final class CalendarController {
     }
 
     @PostMapping("/events")
-    // 201：這是在建立新資源。回應裡帶著每筆的 id，就是新資源的身分
-    @ResponseStatus(HttpStatus.CREATED)
+    // 201：這是在建立新資源。回應裡帶著每筆的 id，就是新資源的身分（寫在 ResponseEntity 裡，因為重送時要多帶 header）
     @Operation(summary = "把確認過的行程存進行事曆",
             description = "通常是 AI 助理提議、使用者確認過的行程（可能改過），或手動表單填的。全部存或全部不存。")
     @ApiResponse(responseCode = "201", description = "存好了，每筆都有了 id")
-    @ApiResponse(responseCode = "400", description = "某筆行程不合規（標題空白、缺時間、結束不晚於開始、分類不認得），一筆都沒存",
+    @ApiResponse(responseCode = "400", description = "某筆行程不合規（標題空白、缺時間、結束不晚於開始、分類不認得）或 Idempotency-Key 格式不對，一筆都沒存",
             content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
-    @ApiResponse(responseCode = "502", description = "資料庫出事，一筆都沒存；稍後重試",
+    @ApiResponse(responseCode = "422", description = "這個 Idempotency-Key 之前存的是另一批不同的行程，這次一筆都沒存；內容改過就換一個新的鍵",
             content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
-    public SavedEvents add(Principal signedIn, @RequestBody AddEventsRequest request) {
+    @ApiResponse(responseCode = "502", description = "資料庫出事，一筆都沒存；稍後重試（帶同一個 Idempotency-Key 重試不會多存）",
+            content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
+    public ResponseEntity<SavedEvents> add(
+            Principal signedIn,
+            @Parameter(description = "這一次新增的名字（1～100 個英數或 . _ : -，例如 UUID）。重送時帶同一個就不會多存，"
+                    + "回的是第一次存的那幾筆，並帶 Idempotent-Replayed: true。不帶就每次都存")
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestBody AddEventsRequest request) {
         if (request.events() == null) {
             throw new IllegalArgumentException("events 不可為 null");
         }
         // 「確認時重驗規則」就發生在這一行：每一筆都得先成為 CalendarEvent，
         // 使用者在確認卡片上改壞的（結束早於開始、清空標題）在這裡就丟 IllegalArgumentException → 400
         List<CalendarEvent> events = request.events().stream().map(CalendarController::toDomain).toList();
-        return SavedEvents.of(addEvents.addEvents(SignedIn.owner(signedIn), events));
+        OwnerId owner = SignedIn.owner(signedIn);
+        if (idempotencyKey == null) {
+            return ResponseEntity.status(HttpStatus.CREATED).body(SavedEvents.of(addEvents.addEvents(owner, events)));
+        }
+        AddedEvents added = addEvents.addEvents(owner, new IdempotencyKey(idempotencyKey), events);
+        // 重送也回 201、內容跟第一次一樣：IETF 草案和 Stripe 都是這樣，呼叫端不必為了重送多寫一條路。
+        // 想知道是不是重送，看 Idempotent-Replayed
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .header("Idempotent-Replayed", String.valueOf(added.replayed()))
+                .body(SavedEvents.of(added.events()));
     }
 
     @GetMapping("/events")
@@ -134,6 +158,12 @@ public final class CalendarController {
     public ResponseEntity<CalendarFailure> onEventNotFound(EventNotFoundException e) {
         log.warn("行程不存在，回 404：{}", e.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new CalendarFailure(e.getMessage()));
+    }
+
+    @ExceptionHandler(IdempotencyKeyReusedException.class)
+    public ResponseEntity<CalendarFailure> onIdempotencyKeyReused(IdempotencyKeyReusedException e) {
+        log.warn("同一個 Idempotency-Key 帶了不同的行程，回 422：{}", e.getMessage());
+        return ResponseEntity.status(422).body(new CalendarFailure(e.getMessage()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

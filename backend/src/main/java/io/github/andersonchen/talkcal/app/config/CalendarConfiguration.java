@@ -17,8 +17,10 @@ import io.github.andersonchen.talkcal.calendar.application.port.in.RemoveEventUs
 import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteEventPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.ExtractEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventsPort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsOncePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPort;
 import io.github.andersonchen.talkcal.app.job.AssistantMemoryCleanup;
+import io.github.andersonchen.talkcal.app.job.IdempotencyKeyCleanup;
 
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Value;
@@ -46,9 +48,10 @@ import java.time.ZoneId;
  *
  * 這裡要下的決定：
  * - ExtractEventsPort 用 Spring AI 的 ChatModel（跟 AI 助理共用同一個，自動組裝的那一個）
- * - 行程存 PostgreSQL（一個實作同時當 Save / Load / DeleteEventPort）
+ * - 行程存 PostgreSQL（一個實作同時當 Save / SaveOnce / Load / DeleteEventPort）
  * - 「現在」用哪個時區的時鐘
  * - AI 助理的舊對話留多久（AssistantMemoryCleanup 每天清一次，所以要開排程）
+ * - 新增行程的冪等鍵留多久（IdempotencyKeyCleanup，也是每天清一次）
  */
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
@@ -112,8 +115,14 @@ class CalendarConfiguration {
     }
 
     @Bean
-    AddEventsUseCase addEvents(SaveEventsPort saveEventsPort) {
-        return new AddEventsService(saveEventsPort);
+    IdempotencyKeyCleanup idempotencyKeyCleanup(JdbcCalendarEventAdapter calendarEventStore,
+                                                @Value("${calendar.idempotency.retention}") Duration retention) {
+        return new IdempotencyKeyCleanup(calendarEventStore, retention, Clock.systemUTC());
+    }
+
+    @Bean
+    AddEventsUseCase addEvents(SaveEventsPort saveEventsPort, SaveEventsOncePort saveEventsOncePort) {
+        return new AddEventsService(saveEventsPort, saveEventsOncePort);
     }
 
     @Bean

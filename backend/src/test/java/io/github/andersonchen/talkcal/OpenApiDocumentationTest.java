@@ -71,7 +71,12 @@ class OpenApiDocumentationTest {
                 .andExpect(jsonPath("$.paths['/api/calendar/events'].get.parameters.length()").value(2))
                 .andExpect(jsonPath("$.paths['/api/calendar/events/{id}'].delete.parameters.length()").value(1))
                 .andExpect(jsonPath("$.paths['/api/calendar/assistant/{conversationId}'].get.parameters.length()").value(1))
-                .andExpect(jsonPath("$.paths['/api/calendar/events'].post.parameters").doesNotExist())
+                // POST /events 唯一的參數是 #51 的 Idempotency-Key（選填的 header），一樣沒有擁有者
+                .andExpect(jsonPath("$.paths['/api/calendar/events'].post.parameters.length()").value(1))
+                .andExpect(jsonPath("$.paths['/api/calendar/events'].post.parameters[0].name").value("Idempotency-Key"))
+                .andExpect(jsonPath("$.paths['/api/calendar/events'].post.parameters[0].in").value("header"))
+                .andExpect(jsonPath("$.paths['/api/calendar/events'].post.parameters[0].required").value(false))
+                .andExpect(jsonPath("$.paths['/api/calendar/events'].post.responses['422']").exists())
                 .andExpect(jsonPath("$.paths['/api/calendar/assistant'].post.parameters").doesNotExist());
     }
 }
