@@ -96,6 +96,8 @@ Alloy 加入了 deploy/ 的網路（`talkcal-deploy_default`）：用服務名�
 |-----|------|------|
 | `talkcal-app` | `app:8090/actuator/prometheus` | deploy/ 的 app 容器 |
 | `llama-cpp` | `llm-chat:8080/metrics` | Qwen3-8B（deploy/ 的 llm-chat） |
+| `alloy` | Alloy 自己（`prometheus.exporter.self`） | 收集器本身，給「監控本身掛掉」用 |
+| `mimir`、`loki`、`tempo`、`grafana` | `<服務名>:<HTTP 埠>/metrics` | ops/ 這組自己，同上 |
 
 每 15 秒抓一次，用 `remote_write` 推進 Mimir。本機 bootRun 的 app 不在 deploy/ 的網路裡，不會被抓。
 
@@ -214,6 +216,64 @@ Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](..
 
 驗過準不準：同一次 knee 壓測，Grafana 算出的 p95（792ms → 1572ms → 3360ms）跟 k6 收工印的表一致。
 
+## 監控本身掛掉：誰來發現
+
+Alloy 或 Mimir 停了，dashboard 只會一片空白，看起來跟「半夜沒流量」一樣（Google SRE 說的 monitoring the monitoring）。
+所以 ops/ 自己的每個元件也被抓指標，再加四條告警（`grafana/provisioning/alerting/meta-monitoring.yaml`）：
+
+| 停掉的 | 怎麼看出來 | 誰通知 | 多久 |
+|--------|-----------|--------|------|
+| Loki、Tempo | Alloy 還在，`up{job="loki"}` = 0 | Grafana 寄信（warning） | 約 3 分鐘 |
+| Alloy | 最後一筆 `up{job="alloy"}` 離現在超過 60 秒 | Grafana 寄信（critical） | 約 3～4 分鐘 |
+| Mimir | Grafana 的查詢直接失敗（規則的 `execErrState: Alerting`） | Grafana 寄信（critical） | 約 3 分鐘 |
+| **Grafana 自己**、整台機器 | Watchdog 每分鐘打的 heartbeat 停了 | **外部服務**寄信 | 約 6 分鐘 |
+
+Alloy 不能用 `up < 1`：它死掉時不會再寫 up，Mimir 查詢往回找 5 分鐘、一直拿到最後那個 1。改看「最後一個點有多舊」，停掉一分鐘就看得出來。
+Alloy 只重啟一下（幾秒）不會響：要連續 60 秒沒資料、再持續 2 分鐘才寄。
+
+### 為什麼需要監控系統外面的東西
+
+負責寄信的是 Grafana。Grafana 掛了、機器整台斷線，就沒有人寄信 —— 監控系統沒辦法回報「我自己死了」。
+做法是反過來（dead man's switch）：一條**永遠在響**的 Watchdog 告警，每分鐘打一次外部服務的網址；
+外部服務超過寬限時間沒收到，就自己寄信。它不靠我們這台機器上的任何東西，所以 Grafana 怎麼死都會被發現。
+
+Watchdog 用規則上的 `notification_settings` 直接送給 `heartbeat` 這個 contact point，不經過 notification policy：
+不會混進 email，也不必改寄信那棵 policy 樹。Mimir 掛掉時 Watchdog 照樣響（查詢失敗算 Alerting），
+因為那個情況上面那條已經寄信了，heartbeat 只負責「Grafana 和它的通知管線還活著」，不重複吵同一件事。
+
+### 外部服務選 Healthchecks.io
+
+| | Healthchecks.io | Better Stack | Cronitor、Dead Man's Snitch |
+|---|---|---|---|
+| 免費額度 | 20 個 check，每個留 100 筆 ping 紀錄 | 10 個 heartbeat（另含網站監控） | 免費版很小或沒有（各家比較表說法不一，2026） |
+| 通知方式（免費） | email、Slack、Discord、Telegram、webhook… | email、Slack… | email |
+| 開源、可自架 | **是**（BSD） | 否 | 否 |
+| 只要一個網址 | 是（`https://hc-ping.com/<uuid>`，GET/POST 都收） | 是 | 是 |
+
+選 Healthchecks.io：我們只要 1 個 check，免費額度綽綽有餘；**開源可自架**，所以本機驗證用的是同一套軟體的 docker 映像
+（`healthchecks/healthchecks`），證據不是拿假的接收端湊的；以後不想依賴它的雲端，也能搬到另一台機器自己跑。
+Better Stack 也夠用，但它是整套觀測平台，只為一個 heartbeat 註冊、多一套 UI 不划算。
+
+設定（使用者自己註冊，repo 裡沒有任何帳號或 token）：
+
+1. 到 <https://healthchecks.io> 註冊、新增一個 check：**Period 1 minute、Grace 5 minutes**
+   （Grafana 重啟、拉新映像約 30 秒，5 分鐘寬限不會誤報；真的停了 6 分鐘內寄信）
+2. 把 Ping URL 填進 `deploy/.env` 的 `HEARTBEAT_URL`（雲端填 `infra/envs/1-ec2` 的 `heartbeat_url`）
+3. `cd ops && docker compose --env-file ../deploy/.env up -d`
+
+這串網址本身就是祕密：拿到的人可以一直替我們打 heartbeat，讓「Grafana 掛了」永遠不會被發現，所以跟密碼一樣不進 git。
+沒設時 compose 給 `.invalid` 的位址，Grafana 照常啟動，只是 heartbeat 打不出去（Grafana log 裡會一直有送不出去的 error）。
+
+**排程關機**（雲端平常關機）：關機前到 Healthchecks.io 按 **Pause**，不然 6 分鐘後會收到「掛了」的信。
+開機後 Grafana 的第一個 heartbeat 會讓 check 自動恢復監控，不必再按（本機實測過）。
+
+### 還沒蓋到的
+
+- **寄信本身壞了**（SMTP 帳密過期）：Grafana 活著、heartbeat 照打，但 email 寄不出去。要蓋到得讓 heartbeat 也走 email（例如寄到外部服務的收信位址），目前不做。
+- **Alloy 活著但送不出去**（remote_write 一直失敗）：跟 Alloy 停了一樣是「最後一個點越來越舊」，同一條會響。
+  log、trace 那兩條送不出去（Loki、Tempo 活著但拒收）目前只看得到 Alloy 自己的指標（`loki_write_dropped_entries_total` 這類），沒有告警。
+- Alloy 停掉時 app 那條「抓不到指標」（#121）也會一起響：Grafana 管理的告警沒有 inhibit（抑制）規則，同一件事會收到兩封。
+
 ## 三種訊號之間怎麼跳
 
 | 從 | 到 | 怎麼點 | 靠什麼接起來 |
@@ -243,5 +303,6 @@ ops/
 ├── tempo/tempo.yaml                          # 追蹤：單機最小設定
 └── grafana/provisioning/
     ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
+    ├── alerting/meta-monitoring.yaml         # 監控本身掛掉：Alloy、Mimir、Loki、Tempo 的告警 + 打外部服務的 Watchdog
     └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces（trace）、talkcal-k6（壓測）
 ```
