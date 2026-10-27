@@ -16,6 +16,9 @@ cd/apply.sh local llm-chat               # 只換模型
 WAIT_TIMEOUT=600 cd/apply.sh local app   # 拉長等待
 ```
 
+映像檔的 tag 是 `cd/version.sh` 算的版本號（有 release tag 用 tag，沒有用 commit 前 7 碼），部署完 `docker inspect talkcal-app` 的 label 看得到是哪一版。
+規則、怎麼打 release tag（`cd/release.sh`）見 [docs/release.md](../docs/release.md)。
+
 平常用 Gradle 的快捷鍵就好（在 `backend/`）：`./gradlew deploy`、`deployApp`、`deployWeb`、`deployModels`，
 它們呼叫的就是上面這支，只多了 `deployApp` 先跑測試。用法見 [deploy/README.md](../deploy/README.md)。
 
@@ -116,7 +119,8 @@ cd C:/talkcal-deploy
 
 - `verify.sh`：部署後打一次 health 和 `/api/calendar`，不只看容器的 healthcheck
 - `envs/ec2.env`：把 [infra/envs/1-ec2/deploy.sh](../infra/envs/1-ec2/deploy.sh) 收進來，EC2 也跑 `apply.sh` 和同一支 watcher
-- 現在部署的是 checkout 的程式碼、在機器上 `--build`，還不是 build once；等[版本 tag](https://github.com/Anderson-chen/talkcal/issues/25) 有了，輸入改成映像檔 tag
+- 現在部署的是 checkout 的程式碼、在機器上 `--build`，還不是 build once：映像檔已經帶版本號（[docs/release.md](../docs/release.md)），
+  但沒有推到 registry，本機和 EC2 各自 build。rollback 換回舊 tag 的做法留給 [#19](https://github.com/Anderson-chen/talkcal/issues/19)
 
 ## 已知限制，決定不做
 
