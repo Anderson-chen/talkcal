@@ -1,7 +1,6 @@
 package io.github.andersonchen.talkcal.app.observability;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -57,7 +56,9 @@ class ActuatorInfoTest {
     @Test
     @DisplayName("打開 info 沒有順便打開其他端點：/actuator/env 拿不到")
     void otherEndpointsStayHidden() throws Exception {
-        assertNotEquals(200, get("/actuator/env").statusCode());
+        // 404 而不是「不是 200」：/actuator/** 是 permitAll，沒露出的端點就是找不到。
+        // 只斷言不是 200 的話，哪天 env 被露出、又剛好被擋成 401，測試照樣綠燈
+        assertEquals(404, get("/actuator/env").statusCode());
     }
 
     private HttpResponse<String> get(String path) throws Exception {
