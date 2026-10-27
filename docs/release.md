@@ -49,19 +49,24 @@ GitHub Deployments 記的是「watcher 想部署哪個 commit」，不是「容�
 
 ```
 git（tag、HEAD）
-  └─ cd/version.sh ─────────────── 算出 APP_VERSION、GIT_COMMIT
+  ├─ cd/version.sh ─────────────── 算出 APP_VERSION
+  └─ git rev-parse HEAD ────────── GIT_COMMIT
        └─ cd/apply.sh（本機）／infra/envs/1-ec2/deploy.sh（EC2）export 給 compose
             └─ deploy/compose.yaml
                  ├─ image: talkcal/app:<版本>、talkcal/web:<版本>     ← docker images 看得到
                  └─ build.args → Dockerfile
                       ├─ LABEL org.opencontainers.image.version / revision   ← docker inspect 看得到
-                      └─ gradle -PappVersion -PgitCommit → build-info.properties（jar 裡）
+                      └─ /app/build-info.properties（最後一層，蓋過 jar 裡那份 local / unknown）
                            └─ /actuator/info                         ← curl 看得到
 ```
 
 映像檔 build 的 context 是 `backend/`、`web/`，看不到 `.git`，所以不在 Dockerfile 或 Gradle 裡跑 git，
 一律從外面傳進去。同一個值走三條路是因為三種情況下各只看得到其中一種：
 容器沒在跑時只能看映像檔（tag、label），容器在跑但不確定是哪個映像檔時問 app 自己（info）。
+
+版本只用在 Dockerfile 的最後幾層、不傳進 Gradle：傳進去的話 jar 每個 commit 都不同，
+只改了前端或文件的 commit 也得整個重編一次。jar 裡 `build.gradle` 產生的那份永遠是 `local` / `unknown`（給 bootRun、測試），
+映像檔用 `SPRING_INFO_BUILD_LOCATION` 指向最後一層寫的那份。
 
 ### 怎麼查線上是哪一版
 
