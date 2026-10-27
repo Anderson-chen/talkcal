@@ -96,8 +96,8 @@ docker inspect talkcal-app --format '{{index .Config.Labels "org.opencontainers.
 ## 怎麼打 release tag
 
 ```bash
-cd/release.sh v0.2.0                          # 打在 origin/master 最新的 commit
-cd/release.sh v0.2.1 origin/hotfix/<分支>      # hotfix（docs/hotfix.md 情境 B）
+cd/release.sh v0.2.0             # 打在 origin/master 最新的 commit
+cd/release.sh v0.2.0 3f9c2ab     # 打在 master 上比較早、確認過的那個 commit
 ```
 
 [cd/release.sh](../cd/release.sh) 先檢查，過了才在**本機**建 annotated tag，最後印出推上去和開 GitHub Release 的指令：
@@ -113,9 +113,9 @@ gh release create v0.2.0 --verify-tag --generate-notes   # 依合併的 PR 自�
 |---|---|
 | 名字是 `v<主>.<次>.<修>` | 其他名字 `cd/version.sh` 不會當成版本 |
 | 本機和 GitHub 上都還沒有這個 tag | tag 推出去就不該移動：同一個名字指到兩個 commit，「線上是 v0.2.0」就沒意義了 |
-| commit 在 `origin/master` 或 `origin/hotfix/*` 上 | 沒走過 PR 或 hotfix 流程的東西不該變成 release |
+| commit 在 `origin/master` 上 | 沒走過 PR 的東西不該變成 release。CI 的 push 也只在 master 上跑，其他分支本來就過不了下一條 |
 | 那個 commit 的 CI（push 事件）綠燈 | 跟 watcher 部署的條件一樣 |
-| 版本號比「這個 commit 之前最近的 tag」大 | 跟所在那條線比，不跟全部比：hotfix 線上的 `v0.2.1` 可以在 `v0.3.0` 之後出現 |
+| 版本號比「這個 commit 之前最近的 tag」大 | `v0.3.0` 之後不能再出 `v0.2.9` |
 
 ### 什麼時候打、打在哪
 
@@ -199,16 +199,17 @@ compose 沒設 APP_VERSION → build args 整段不傳（用 Dockerfile 的預�
 
 **網站入口連不到**：`127.0.0.1:18080/actuator/info` → nginx 404；`/api/../actuator/info`、`/api/%2e%2e/actuator/info` 也是 404。
 
-**cd/release.sh**（在本機建 tag 後立刻刪掉，沒有推任何 tag）：
+**cd/release.sh**（2026-10-27 改成只認 master 後重跑；在本機建的 tag 立刻刪掉，沒有推任何 tag）：
 
 | 輸入 | 結果 |
 |---|---|
 | `1.0`、`v0.1` | ✗ 版本號格式 |
-| `v0.1.0 HEAD`（這條 PR 分支，不在 master） | ✗ 不在 origin/master 或 origin/hotfix/* 上 |
+| `v0.1.0 HEAD`（這條 PR 分支，不在 master） | ✗ 不在 origin/master 上 |
 | `v0.1.0 867cafe`（master 上沒有 CI 綠燈的 commit） | ✗ 沒有綠燈的 CI |
-| `v0.1.0`（origin/master 最新、CI 綠燈） | ✓ 建好本機 tag，印出推上去的指令 |
+| `v0.1.0 c26c85e`（master 上、CI 綠燈） | ✓ 建好本機 tag，印出推上去的指令 |
 | 再跑一次 `v0.1.0` | ✗ 本機已經有 v0.1.0 |
-| 先在 `origin/master~1` 放 `v0.2.0`，再跑 `v0.1.5` | ✗ 沒有比上一個 v0.2.0 大 |
+| 先在 `c26c85e~1` 放 `v0.2.0`，再跑 `v0.1.5 c26c85e` | ✗ 沒有比上一個 v0.2.0 大 |
+| 同上，跑 `v0.2.1 c26c85e` | ✓ 上一個是 v0.2.0，之間 1 個 commit |
 
 「GitHub 上已經有這個 tag」那條沒驗到：GitHub 上目前一個 tag 都沒有，驗它得真的推一個上去。
 
