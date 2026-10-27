@@ -43,22 +43,33 @@ class AccessLogFilterTest {
     }
 
     @Test
-    @DisplayName("記下請求的 body——controller 讀走之後也拿得到")
-    void logsRequestBody(CapturedOutput output) throws Exception {
+    @DisplayName("請求、回應的內容都不記（#52）：使用者的話、助理的回覆、行程標題會跟著 log 進 Loki；反例：大小、狀態碼照記，回應照樣送到客戶端")
+    void doesNotLogBodies(CapturedOutput output) throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/calendar/assistant");
         request.setContentType("application/json");
-        request.setContent("{\"message\":\"明天七點和 Amy 見面\"}".getBytes(StandardCharsets.UTF_8));
-        // 扮演 controller：把 body 整條讀完。ContentCachingRequestWrapper 是「讀了才存」，
-        // 用不讀 body 的 MockFilterChain 會測不出東西
-        FilterChain readsBody = (req, res) -> req.getInputStream().readAllBytes();
+        byte[] said = "{\"message\":\"明天陪王小明看身心科 0912-345-678\"}".getBytes(StandardCharsets.UTF_8);
+        request.setContent(said);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        byte[] reply = "{\"reply\":\"已提醒你打給王小明\"}".getBytes(StandardCharsets.UTF_8);
+        // 扮演 controller：讀完請求、寫出回覆
+        FilterChain controller = (req, res) -> {
+            req.getInputStream().readAllBytes();
+            res.setContentType("application/json");
+            res.getOutputStream().write(reply);
+        };
 
-        filter.doFilter(request, new MockHttpServletResponse(), readsBody);
+        filter.doFilter(request, response, controller);
 
-        assertTrue(output.getOut().contains("{\"message\":\"明天七點和 Amy 見面\"}"), output.getOut());
+        assertFalse(output.getOut().contains("王小明"), output.getOut());
+        assertFalse(output.getOut().contains("0912"), output.getOut());
+        assertTrue(output.getOut().contains("POST /api/calendar/assistant -> 200"), output.getOut());
+        assertTrue(output.getOut().contains(said.length + " B in, " + reply.length + " B out"), output.getOut());
+        // 只數、不攔：內容要原封不動送到客戶端
+        assertEquals(new String(reply, StandardCharsets.UTF_8), response.getContentAsString(StandardCharsets.UTF_8));
     }
 
     @Test
-    @DisplayName("註冊、登入的請求內容不記：裡面有密碼（JSON 和表單兩種都試），log 會被收進 Loki")
+    @DisplayName("註冊、登入的密碼也不會出現（JSON 和表單兩種都試）；反例：請求本身照樣有紀錄，誰在試登入要看得到")
     void doesNotLogCredentials(CapturedOutput output) throws Exception {
         FilterChain readsBody = (req, res) -> req.getInputStream().readAllBytes();
 
@@ -73,27 +84,36 @@ class AccessLogFilterTest {
         filter.doFilter(login, new MockHttpServletResponse(), readsBody);
 
         assertFalse(output.getOut().contains("secret-pass"), output.getOut());
-        // 請求本身照樣有紀錄（誰在試登入要看得到），只是內容換成說明
-        assertTrue(output.getOut().contains("/api/auth/login"), output.getOut());
-        assertTrue(output.getOut().contains("不記：可能有密碼"), output.getOut());
+        assertTrue(output.getOut().contains("POST /api/auth/login -> 200"), output.getOut());
     }
 
     @Test
-    @DisplayName("記下回應的 body，而且照樣送到客戶端")
-    void logsResponseBodyAndStillSendsIt(CapturedOutput output) throws Exception {
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/calendar/assistant");
+    @DisplayName("query string 不記：之後加了搜尋，查的字會在網址上；反例：路徑照記")
+    void doesNotLogQueryString(CapturedOutput output) throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/calendar/events");
+        request.setQueryString("q=%E7%8E%8B%E5%B0%8F%E6%98%8E");
+
+        filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+        assertFalse(output.getOut().contains("q="), output.getOut());
+        assertTrue(output.getOut().contains("GET /api/calendar/events -> 200"), output.getOut());
+    }
+
+    @Test
+    @DisplayName("用 getWriter() 寫的回應（Spring Security 擋下時的錯誤 JSON）也數得到大小，而且整段送到客戶端")
+    void countsWriterOutput(CapturedOutput output) throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
-        // 扮演 controller：寫出一段 JSON 回覆
-        FilterChain writesReply = (req, res) -> {
-            res.setContentType("application/json");
-            res.getOutputStream().write("{\"reply\":\"幫你排好了\"}".getBytes(StandardCharsets.UTF_8));
+        FilterChain rejects = (req, res) -> {
+            ((jakarta.servlet.http.HttpServletResponse) res).setStatus(401);
+            res.setCharacterEncoding("UTF-8");
+            res.getWriter().write("{\"error\":\"請先登入\"}");
         };
 
-        filter.doFilter(request, response, writesReply);
+        filter.doFilter(new MockHttpServletRequest("GET", "/api/auth/me"), response, rejects);
 
-        assertTrue(output.getOut().contains("{\"reply\":\"幫你排好了\"}"), output.getOut());
-        // 被攔下的內容一定要還給客戶端，不然 log 有了、回應卻是空的
-        assertEquals("{\"reply\":\"幫你排好了\"}", response.getContentAsString(StandardCharsets.UTF_8));
+        int bytes = "{\"error\":\"請先登入\"}".getBytes(StandardCharsets.UTF_8).length;
+        assertTrue(output.getOut().contains("-> 401") && output.getOut().contains(bytes + " B out"), output.getOut());
+        assertEquals("{\"error\":\"請先登入\"}", response.getContentAsString(StandardCharsets.UTF_8));
     }
 
     @Test

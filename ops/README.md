@@ -142,10 +142,11 @@ trace id **不是**標籤（每個請求都不同，放進標籤會讓索引爆�
 # app 的 log 是 JSON（docker profile 開的），| json 把欄位拆開，就能照等級篩
 {service="app"} | json | log_level=~"WARN|ERROR"
 
-# app 的 access log：每個請求一行，帶方法、路徑、請求與回應的 body、狀態碼、耗時、traceId（AccessLogFilter 寫的）
+# app 的 access log：每個請求一行，帶方法、路徑、狀態碼、耗時、請求與回應的大小、traceId（AccessLogFilter 寫的）。
+# 不帶 body：使用者的話、行程標題是個資，不進 Loki（#52，見 docs/privacy.md）
 {service="app"} | json | log_logger="access"
 
-# 只看失敗的請求，連同當時送了什麼、回了什麼
+# 只看失敗的請求
 {service="app"} | json | log_logger="access" | http_response_status_code >= 400
 
 # 超過 5 秒的慢請求（event_duration 是奈秒）
@@ -224,10 +225,8 @@ Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](..
 
 ## 下一步（一次一件）
 
-1. **app 記錄送給模型的完整 prompt**：access log 已經記了使用者說了什麼（請求 body），
-   但還看不到最後組出來送給 llm-chat 的 prompt（system 指示、日期表、工具結果）長什麼樣。
-   補上之後（帶著 traceId）就能從 trace 一路點到那次的 prompt，
-   也補回原生 `.bat` 的 `--log-prompts-dir` 拿掉後少掉的 prompt 紀錄。
+1. ~~app 記錄送給模型的完整 prompt~~：決定不做（#52）。prompt 裡就是使用者的話和行程，記進 Loki 等於把個資存到
+   另一個權限、保留期限都不一樣的地方。要看某次對話，用 conversation id 到資料庫看那個人自己的對話（docs/privacy.md）。
 2. **收集器備援練習**：起兩台 Alloy 抓同一批 target（HA pair），各帶 `__replica__` 標籤，
    開 Mimir 的 HA tracker，親眼看「兩台送一樣的資料、Mimir 只留一份、關掉一台自動切換」。
    這個練習只有 Mimir 做得出來（Prometheus 收到兩份就存兩份）。

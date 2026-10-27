@@ -1,24 +1,26 @@
 package io.github.andersonchen.talkcal.app.observability;
 
 import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletOutputStream;
+import jakarta.servlet.WriteListener;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletResponseWrapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.security.autoconfigure.web.servlet.SecurityFilterProperties;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import org.springframework.web.util.ContentCachingRequestWrapper;
-import org.springframework.web.util.ContentCachingResponseWrapper;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Access log：每個 HTTP 請求進來、出去時記一行「誰打了什麼、帶了什麼內容、回幾號、花多久」。
+ * Access log：每個 HTTP 請求進來、出去時記一行「誰打了什麼、回幾號、花多久、多大」。
  *
  * 為什麼是 Filter 而不是開 Tomcat 內建的 access log（server.tomcat.accesslog.*）：
  * Tomcat 那份不走 SLF4J，預設寫成檔案、格式是 Apache 那種一行文字。
@@ -28,8 +30,11 @@ import java.util.concurrent.TimeUnit;
  * 為什麼放在 app.observability、不放在某個模組的 adapter.in.web：它記的是整個應用的每一個請求，
  * 不屬於任何一門業務，跟 app.config 的 ObservationConfiguration 一樣是全站的觀測設定。core 照樣不知道有 HTTP 這回事。
  *
- * 請求內容（body）也一起記在同一行：一次請求的「送了什麼」和「回幾號、花多久」放在一起，
- * 在 Loki 查一筆就看得完整，不必再拿時間去對另一行 log。
+ * 請求、回應的內容（body）不記，只記大小（#52）。以前整包記下來：使用者對助理說的話、助理的回覆、
+ * 行程標題和備註（名字、電話、email、看什麼病）全都跟著進了 Loki ——
+ * 看 log 的人都看得到，保留期限、權限也跟資料庫不一樣，使用者要求刪除時也刪不到那裡（OWASP LLM02）。
+ * 要查「那個人送了什麼」：請使用者給畫面上的追蹤碼，用 trace id 找到請求，內容在資料庫（他自己的資料）裡看。
+ * 證據和查法見 docs/privacy.md。
  */
 @Component
 // 排序：緊貼在 Spring Security 外面（它是 SecurityFilterProperties.DEFAULT_FILTER_ORDER = -100，這裡是 -101）。
@@ -39,8 +44,7 @@ import java.util.concurrent.TimeUnit;
 // - 在 Spring 開 trace 的 ServerHttpObservationFilter 裡面：它排在最外層附近（HIGHEST_PRECEDENCE + 1），
 //   trace id 只在它的範圍內放進 MDC。排在它外面的話，這行 access log 印出來時 trace 已經結束，ECS JSON 裡就沒有 traceId，
 //   Loki 上那顆「到 Tempo 看這個請求」的按鈕也就不會出現。AccessLogTraceIdTest 守著這件事。
-// - 在 characterEncodingFilter（HIGHEST_PRECEDENCE）裡面：官方文件說會讀 body 的 filter 別放在 HIGHEST_PRECEDENCE，會跟編碼設定打架。
-// - 會包裝 request 的 filter，官方規定 order 不可大於 REQUEST_WRAPPER_FILTER_MAX_ORDER（0）：-101 在這條線以內。
+// - 會包裝 request、response 的 filter（這裡包 response 來數大小），官方規定 order 不可大於 REQUEST_WRAPPER_FILTER_MAX_ORDER（0）：-101 在這條線以內。
 // 用常數算、不寫死 -101：Spring Security 的位置改了，這裡跟著動。
 @Order(SecurityFilterProperties.DEFAULT_FILTER_ORDER - 1)
 final class AccessLogFilter extends OncePerRequestFilter {
@@ -49,67 +53,115 @@ final class AccessLogFilter extends OncePerRequestFilter {
     // 之後想單獨調它的等級或關掉也只要一行 logging.level.access=WARN。
     private static final Logger log = LoggerFactory.getLogger("access");
 
-    // body 最多記這麼多 byte。使用者的話是一兩句、助理的回覆是幾段文字加幾張提議卡片，8 KB 綽綽有餘；
-    // 設上限是怕一大包進出時，log 一行就爆掉。超過的部分照樣傳遞，只是不記。
-    private static final int MAX_BODY_BYTES = 8 * 1024;
-
-    // 這個路徑底下的請求內容不記：註冊、登入會帶著密碼
-    private static final String CREDENTIAL_PATHS = "/api/auth/";
-
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        // request 的 body 是一條串流，只能讀一次——controller 的 @RequestBody 讀走之後，這裡就讀不到了。
-        // 包一層 ContentCachingRequestWrapper：controller 照常讀，讀過的 byte 順手被存一份，事後再從這份拿出來記。
-        // 注意它是「讀了才存」，所以 body 只能在 chain 走完之後拿，不能在前面拿。
-        ContentCachingRequestWrapper cachingRequest = new ContentCachingRequestWrapper(request, MAX_BODY_BYTES);
-        // response 那頭反過來：controller 寫出去的 byte 一送出就拿不回來了。
-        // ContentCachingResponseWrapper 先把它們全部攔在記憶體裡，不送給客戶端，
-        // 所以最後一定要 copyBodyToResponse() 把攔下的內容真的送出去——漏了這步，客戶端會收到空的回應。
-        ContentCachingResponseWrapper cachingResponse = new ContentCachingResponseWrapper(response);
+        // 回應的大小要等寫完才知道，又不想為了一個數字把整包攔在記憶體裡（以前的 ContentCachingResponseWrapper）：
+        // 包一層只數 byte、照常往外送的 response
+        CountingResponse counting = new CountingResponse(response);
         long start = System.nanoTime();
         try {
-            chain.doFilter(cachingRequest, cachingResponse);
+            chain.doFilter(request, counting);
         } finally {
             // 寫在 finally：就算後面丟出例外，這個請求也要留下紀錄——出事的請求最需要被看到
             long elapsedNanos = System.nanoTime() - start;
             long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(elapsedNanos);
-            // 註冊、登入的請求裡有密碼（JSON 或表單），一律不記：log 會被 Alloy 收進 Loki，
-            // 寫進去就等於明碼存在另一個地方、看 log 的人都看得到。回應照記（裡面沒有密碼）
-            String requestBody = request.getRequestURI().startsWith(CREDENTIAL_PATHS)
-                    ? "（不記：可能有密碼）"
-                    : bodyOf(cachingRequest.getContentType(), cachingRequest.getContentAsByteArray());
-            // 先取內容再 copy：copyBodyToResponse() 送出之後會把攔下的 buffer 清掉
-            String responseBody = bodyOf(cachingResponse.getContentType(), cachingResponse.getContentAsByteArray());
-            int status = cachingResponse.getStatus();
-            cachingResponse.copyBodyToResponse();
+            // 請求的大小用 Content-Length（沒帶是 -1）：要自己數就得把 body 讀一遍，那正是不想做的事
+            long requestBytes = request.getContentLengthLong();
+            counting.flushWriter();
+            long responseBytes = counting.bytesWritten();
+            int status = counting.getStatus();
             // 用 key-value 而不是只把數字塞進訊息字串：ECS JSON 會把它們變成獨立欄位，
             // Loki 才能寫 `| json | http_response_status_code >= 500` 這種條件，不必用 regex 從句子裡挖。
-            // 欄位名照 ECS 的慣例取，event.duration 在 ECS 規定是奈秒。
+            // 欄位名照 ECS 的慣例取，event.duration 在 ECS 規定是奈秒，body.bytes 也是 ECS 的欄位
             log.atInfo()
                     .addKeyValue("http.request.method", request.getMethod())
                     .addKeyValue("url.path", request.getRequestURI())
-                    .addKeyValue("http.request.body.content", requestBody)
+                    .addKeyValue("http.request.body.bytes", requestBytes)
                     .addKeyValue("http.response.status_code", status)
-                    .addKeyValue("http.response.body.content", responseBody)
+                    .addKeyValue("http.response.body.bytes", responseBytes)
                     .addKeyValue("event.duration", elapsedNanos)
-                    // 訊息本身仍然寫成人看得懂的一句：本機開發不開 JSON，終端機上看的就是這句
-                    .log("{} {} {} -> {} {} ({} ms)",
-                            request.getMethod(), request.getRequestURI(), requestBody, status, responseBody, elapsedMillis);
+                    // 訊息本身仍然寫成人看得懂的一句：本機開發不開 JSON，終端機上看的就是這句。
+                    // 只有路徑，不帶 query string：目前的 query 只有日期，但之後加了搜尋（?q=牙醫）就會把內容帶進來
+                    .log("{} {} -> {} ({} ms, {} B in, {} B out)",
+                            request.getMethod(), request.getRequestURI(), status, elapsedMillis, requestBytes, responseBytes);
         }
     }
 
-    /**
-     * 只記 JSON 的 body。打開 Swagger UI 時會載入一包包 JS/CSS，那些記下來只是雜訊；
-     * 我們的 API 進出都是 JSON，真正想看的內容都在這裡面。
-     * JSON 規定是 UTF-8，所以不必看宣告的編碼。超過上限就截斷。
-     */
-    private static String bodyOf(String contentType, byte[] content) {
-        if (contentType == null || !contentType.contains("json")) {
-            return "";
+    /** 數 controller 寫了多少 byte，內容照常直接送出去、不留一份。 */
+    private static final class CountingResponse extends HttpServletResponseWrapper {
+
+        private long bytes;
+        private ServletOutputStream stream;
+        private PrintWriter writer;
+
+        CountingResponse(HttpServletResponse response) {
+            super(response);
         }
-        int length = Math.min(content.length, MAX_BODY_BYTES);
-        return new String(content, 0, length, StandardCharsets.UTF_8);
+
+        long bytesWritten() {
+            return bytes;
+        }
+
+        /**
+         * 用 getWriter() 寫的（Spring Security 擋下時的錯誤 JSON 就是）也要數到：把它接到下面會數的 stream 上。
+         * 這個 writer 是我們自己包的，容器不知道要沖它，所以記 log 前自己沖一次，不然最後幾個字留在緩衝裡沒送出去。
+         */
+        @Override
+        public PrintWriter getWriter() throws IOException {
+            if (writer == null) {
+                writer = new PrintWriter(new OutputStreamWriter(getOutputStream(), getCharacterEncoding()));
+            }
+            return writer;
+        }
+
+        @Override
+        public void flushBuffer() throws IOException {
+            flushWriter();
+            super.flushBuffer();
+        }
+
+        void flushWriter() {
+            if (writer != null) {
+                writer.flush();
+            }
+        }
+
+        @Override
+        public ServletOutputStream getOutputStream() throws IOException {
+            if (stream == null) {
+                ServletOutputStream target = super.getOutputStream();
+                stream = new ServletOutputStream() {
+                    @Override
+                    public void write(int b) throws IOException {
+                        target.write(b);
+                        bytes++;
+                    }
+
+                    @Override
+                    public void write(byte[] b, int off, int len) throws IOException {
+                        target.write(b, off, len);
+                        bytes += len;
+                    }
+
+                    @Override
+                    public boolean isReady() {
+                        return target.isReady();
+                    }
+
+                    @Override
+                    public void setWriteListener(WriteListener listener) {
+                        target.setWriteListener(listener);
+                    }
+
+                    @Override
+                    public void flush() throws IOException {
+                        target.flush();
+                    }
+                };
+            }
+            return stream;
+        }
     }
 
     /**

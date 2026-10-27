@@ -67,7 +67,7 @@ prometheus.remote_write "mimir" {
 
 // ═══ 日誌 ═══════════════════════════════════════════════════════════
 //
-//   discovery.docker  ──找出要收哪些容器──▶  loki.source.docker  ──讀它們的 stdout──▶  loki.write  ──▶  Loki
+//   discovery.docker  ──找出要收哪些容器──▶  loki.source.docker  ──讀它們的 stdout──▶  loki.process（遮個資）──▶  loki.write  ──▶  Loki
 //                                              ▲ 套用 discovery.relabel 的規則，決定每筆 log 帶什麼標籤
 //
 // log 用「推」：事件發生了就要送走，沒辦法等人來拉。
@@ -119,7 +119,46 @@ loki.source.docker "deploy" {
   host          = "unix:///var/run/docker.sock"
   targets       = discovery.docker.deploy.targets
   relabel_rules = discovery.relabel.deploy.rules
-  forward_to    = [loki.write.local.receiver]
+  forward_to    = [loki.process.redact.receiver]
+}
+
+// ── 3.5 遮個資：第二道防線（#52）─────────────────────────────────────
+// 第一道在 app：access log 不記 body、AI 助理的 log 不記對話、Spring AI 不記 prompt（application.properties）。
+// 這裡防的是「第一道哪天破了」：有人為了除錯打開 log-prompt、或新寫的 log 順手印了使用者的話。
+// 進了 Loki 就難收回（沒有逐筆刪除，只能等保留期限過），所以在送進去之前擋。
+//
+// 擋得到的只有「認得出形狀」的東西；一句自由的中文（「陪王小明看身心科」）規則認不出來，
+// 那只能靠第一道 —— 所以這裡是第二道、不是唯一一道。PrivacySystemTest 守第一道，這裡的效果在 docs/privacy.md 實測過。
+loki.process "redact" {
+  forward_to = [loki.write.local.receiver]
+
+  // (1) Spring AI 印 prompt、回覆內容的兩個 logger：整行丟掉。
+  //     app 的 log 是 ECS JSON，logger 在 log.logger；不是 JSON 的行（postgres、llama-server）這步拆不開，照常往下走
+  stage.json {
+    expressions = { logger = "log.logger" }
+  }
+  stage.drop {
+    source              = "logger"
+    expression          = `org\.springframework\.ai\.chat\.observation\.ChatModel(PromptContent|Completion)ObservationHandler`
+    drop_counter_reason = "llm_content"
+  }
+
+  // (2) 認得出形狀的個資，換成 <email> 這種記號，那一行其他內容照留（請求的路徑、耗時、trace id 還有用）。
+  //     規則用反引號（raw string）寫，反斜線不必再跳脫一次。\b 是字的邊界：trace id（十六進位）、奈秒耗時這種長數字中間剛好有一段像電話，不會被誤遮
+  stage.replace {
+    expression = `\b([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})\b`
+    replace    = "<email>"
+  }
+  // 台灣手機：09 開頭十碼，中間可以有減號
+  stage.replace {
+    expression = `\b(09\d{2}-?\d{3}-?\d{3})\b`
+    replace    = "<phone>"
+  }
+  // 身分證字號：一個大寫英文 + 1 或 2 + 八碼數字
+  stage.replace {
+    expression = `\b([A-Z][12]\d{8})\b`
+    replace    = "<national-id>"
+  }
 }
 
 // ── 4. 送進 Loki ───────────────────────────────────────────────────
