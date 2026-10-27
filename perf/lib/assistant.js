@@ -55,9 +55,9 @@ export function jsonParams(extra) {
 }
 
 // 說一句正常的話，並檢查契約「正常的那一半」：回 200、reply 要有東西、拿到這段對話的 id。
-// 這會真的叫模型，是整條路上最慢的部分。extra 跟 jsonParams 一樣，例如給這個請求加 tag。
-export function say(message, extra) {
-  const res = http.post(ASSISTANT_URL, JSON.stringify({ message }), jsonParams(extra));
+// 這會真的叫模型，是整條路上最慢的部分。
+export function say(message) {
+  const res = http.post(ASSISTANT_URL, JSON.stringify({ message }), jsonParams());
   check(res, {
     '正常訊息回 200': (r) => r.status === 200,
     'reply 非空白': (r) => field(r, 'reply').trim().length > 0,

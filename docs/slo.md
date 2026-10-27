@@ -143,7 +143,7 @@ burn rate 是比例。一個小時只有 10 個請求、其中 1 個 502，比�
 
 ## 怎麼改目標
 
-1. 改 `ops/mimir/rules/anonymous/slo.yaml` 的 `slo:objective:ratio`（目標）或延遲門檻的 `le`。
+1. 改 `ops/mimir/rules/anonymous/slo.yaml` 的 `slo:objective:ratio`（目標），或第一層 `slo:sli_bad_events:rate5m` 裡延遲門檻的 `le`（範圍和門檻只寫在第一層，各視窗都從那裡推算）。
 2. 改延遲門檻時，`application.properties` 的 `management.metrics.distribution.slo.http.server.requests` 也要有那個值，不然沒有那個 bucket。
 3. 重啟 mimir（`docker compose restart mimir`）；改了 app 的設定要重新部署 app。
 4. 這份文件的表和理由一起改。
