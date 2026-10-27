@@ -41,16 +41,12 @@ RUN apt-get update \
 
 COPY --from=build /app.jar /app/app.jar
 
-# 版本（#25）：由 compose 的 build.args 傳進來（cd/version.sh 算的）。只用在這最後幾層：
-# jar 本身跟版本無關，只改了 web/、docs/ 的 commit，上面編譯那層照樣吃快取，不必每次重編。
+# 版本（#25）：由 compose 的 build.args 傳進來（cd/version.sh 算的），貼成 OCI 標準名稱的 label。
+# 容器建立時會帶著映像檔的 label，`docker inspect talkcal-app` 看的就是正在跑的那個容器是哪個 commit。
+# 只放在這最後一層：jar 跟版本無關，只改了 web/、docs/ 的 commit，上面編譯那層照樣吃快取。
 # 預設值 local / unknown：直接 docker build 沒帶參數，就誠實地說不知道是哪一版
 ARG APP_VERSION=local
 ARG GIT_COMMIT=unknown
-# /actuator/info 讀這個檔案，蓋過 jar 裡 build.gradle 產生的那份（那份永遠是 local / unknown，給 bootRun、測試用）
-RUN printf 'build.artifact=talkcal\nbuild.name=talkcal\nbuild.version=%s\nbuild.commit=%s\n' \
-        "$APP_VERSION" "$GIT_COMMIT" > /app/build-info.properties
-ENV SPRING_INFO_BUILD_LOCATION=file:/app/build-info.properties
-# 同一組也貼在映像檔上（OCI 標準的 label 名稱）：不用啟動容器，`docker inspect` 就看得到這個映像檔是哪個 commit
 LABEL org.opencontainers.image.title="talkcal-app" \
       org.opencontainers.image.source="https://github.com/Anderson-chen/talkcal" \
       org.opencontainers.image.version="$APP_VERSION" \

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 印出目前 checkout 的版本號（#25）。映像檔的 tag、label 和 app 的 /actuator/info 都用它，規則只寫在這裡。
+# 印出目前 checkout 的版本號（#25）。映像檔的 tag 和 label 都用它，規則只寫在這裡。
 #
 #   cd/version.sh   → v0.2.0 / 3f9c2ab / 3f9c2ab-dirty
 #

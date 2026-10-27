@@ -26,7 +26,7 @@ source "$env_file"
 compose_args=()
 for f in $COMPOSE_FILES; do compose_args+=(-f "$f"); done
 
-# 版本號（#25）：compose 拿它當映像檔的 tag、傳進 build 寫進 /actuator/info 和 label。規則在 cd/version.sh
+# 版本號（#25）：compose 拿它當映像檔的 tag、傳進 build 貼成 label。規則在 cd/version.sh
 APP_VERSION="$(cd/version.sh)"
 GIT_COMMIT="$(git rev-parse HEAD)"
 export APP_VERSION GIT_COMMIT

@@ -186,7 +186,7 @@ services:
     # tag 是版本號（#25）：cd/apply.sh 用 cd/version.sh 算好 APP_VERSION、GIT_COMMIT 再叫 compose，
     # 每個版本一個 tag，機器上留著舊版本的映像檔（之後 #19 rollback 就是換回某個 tag）。
     # 沒經過 apply.sh 直接 docker compose up 時沒有這兩個變數，退回原本的 local / unknown，
-    # app 的 /actuator/info 也會照實回報 local —— 一看就知道這不是走部署流程上去的
+    # 容器的 label 也會照實寫 local —— 一看就知道這不是走部署流程上去的
     image: talkcal/app:${APP_VERSION:-local}
     build:
       context: ../backend
