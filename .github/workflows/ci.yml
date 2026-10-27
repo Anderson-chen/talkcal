@@ -57,7 +57,19 @@ jobs:
           name: test-reports
           path: |
             ci/build/reports/
+            !ci/build/reports/jacoco/
             ci/build/playwright-report/
+
+      # 覆蓋率報告（#23）：綠燈也要留，用途是找漏測，不是判斷成敗（總數在上面的摘要裡）。
+      # 失敗時也只在這裡、不在 test-reports 裡重複一份。怎麼看見 docs/test-coverage.md
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage
+          path: |
+            ci/build/reports/jacoco/
+            ci/build/web-coverage/
+          if-no-files-found: ignore
 
   # 祕密掃描。跟 checks 分開成兩個 job：並行跑，而且在 PR 上各自一個燈，一眼看出是哪一關紅
   secrets:
