@@ -30,7 +30,7 @@ Java 的 package 沒有依賴方向的概念：core 直接 import 並 new 一個
 
 ## 決定
 
-**`calendar` 一個模組，裡面是 `application/domain/{model,service}`、`application/port/{in,out}`、`adapter/{in,out}`；組裝根在 `app/`。
+**每門業務一個模組（現在是 `calendar`、`auth`），模組裡是 `application/domain/{model,service}`、`application/port/{in,out}`、`adapter/{in,out}`；組裝根在 `app/`。
 規則寫成 [ArchitectureTest](../../backend/src/test/java/io/github/andersonchen/talkcal/ArchitectureTest.java)，全部用 `noClasses()`「不准出現」的形式，每條帶 `because(...)`。**
 
 守的規則包括：依賴只能由外往內、domain model 連自家的 port 都不認識、inbound 和 outbound adapter 互不認識、
@@ -41,7 +41,7 @@ Java 的 package 沒有依賴方向的概念：core 直接 import 並 new 一個
 ## 代價
 
 - 檔案和介面比較多：一個 use case 有 port.in 介面、service 實作、port.out，加上 adapter。
-- 組裝根要手動接線（`@Configuration` 裡 `new`），不靠元件掃描。
+- core 和 outbound adapter 由組裝根手動接線（`@Configuration` 裡 `new`），不靠元件掃描；只有 controller 這類 inbound 入口和全站的 filter 還是掃描註冊的。
 - `@Transactional` 這類靠代理的註解在 `final` adapter 上用不了，改用 `TransactionTemplate`（見 [0004](0004-jdbc-client-not-jpa.md)）。
 
 ## 什麼時候重想

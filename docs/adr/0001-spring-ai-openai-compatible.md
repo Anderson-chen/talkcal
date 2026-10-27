@@ -33,7 +33,7 @@ llama-server 講的是 OpenAI 的 Chat Completions 協定，雲端的託管模�
 
 - 往外的 HTTP span 沒了，改看 Spring AI 自己的 `gen_ai.*` 觀測：多了 token 用量，少了 HTTP 狀態碼（[ops/README.md](../../ops/README.md) 的「追蹤」一節）。
 - Spring AI 現成的記憶（`JdbcChatMemoryRepository`、`MessageChatMemoryAdvisor`）不適合 agent，助理只用它的底層零件，迴圈自己寫（見 [0003](0003-own-agent-loop-and-memory.md)）。
-- `base-url` 一定要帶 `/v1`，少了會打到 llama.cpp 原生格式的端點（寫在 application.properties 的註解）。
+- `base-url` 一定要帶 `/v1`：llama.cpp 有不帶 `/v1` 的同名別名，少了在本機不會出錯，換成真的 OpenAI 才 404（寫在 application.properties 的註解）。
 
 ## 什麼時候重想
 

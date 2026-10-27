@@ -7,7 +7,7 @@
 ## 背景
 
 第一次要存東西（多輪對話的紀錄）時，domain 已經是純 Java 的 record 和類別，ArchUnit 守著 core 不准依賴框架（[0005](0005-hexagonal-with-archunit.md)）。
-資料表很少（現在行程、助理記憶、帳號幾張），schema 由 Flyway 管。
+資料表很少（現在是 `calendar_event`、`calendar_assistant_message`、`account`、`account_identity` 四張），schema 由 Flyway 管（[db/migration](../../backend/src/main/resources/db/migration)）。
 
 ## 選項
 
