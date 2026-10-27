@@ -12,6 +12,8 @@ body:
       value: |
         **Title:** the outcome once this is done, e.g. `多個副本時限流上限不會倍增`.
         No `feat:` prefix; the type is decided when the PR is opened, and the PR title is rewritten from this one.
+
+        **Labels:** exactly one `stage:` or `product:` (how to choose: README), exactly one of `p0`/`p1`, and any `area:` it touches.
   - type: textarea
     id: goal
     attributes:
