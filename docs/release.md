@@ -1,7 +1,7 @@
 # 版本與 release tag
 
 回答一個問題：**線上現在跑的是哪個 commit？** rollback（[#19](https://github.com/Anderson-chen/talkcal/issues/19)）
-和 hotfix（[docs/hotfix.md](hotfix.md)，[#26](https://github.com/Anderson-chen/talkcal/issues/26)）都從這裡起步：
+和 hotfix（[#26](https://github.com/Anderson-chen/talkcal/issues/26)）都從這裡起步：
 要退回去或從線上那一版開分支，得先說得出線上是哪一版。
 
 以前說不出來：沒有 git tag，映像檔固定叫 `talkcal/app:local`，每次部署都蓋掉同一個名字。
@@ -38,7 +38,7 @@ GitHub Deployments 記的是「watcher 想部署哪個 commit」，不是「容�
 正式 release 另外用 semver tag。這裡沒有 registry，兩件事收成一個名字：有 release tag 時就是 release tag。
 
 **為什麼是 semver 不是 CalVer**：talkcal 沒有外部的 API 使用者，「主版號代表不相容」的意義不大；
-但 semver 有清楚的「修補版」——hotfix（[docs/hotfix.md](hotfix.md) 情境 B）從 `v0.2.0` 修出來的就是 `v0.2.1`，
+但 semver 有清楚的「修補版」——從 `v0.2.0` 修出來的 hotfix 就是 `v0.2.1`，
 一看就知道它是哪一版的修補。CalVer 只說得出日期，說不出它跟哪一版是同一條線。
 
 **為什麼 `-dirty` 要誠實寫出來**：`./gradlew deploy` 是從開發用的 clone 部署，可能有還沒 commit 的改動。
@@ -187,6 +187,15 @@ label:   talkcal-app version=9dc4eb9 revision=9dc4eb90bbc46258d4859b28d423d08467
 
 **反例：沒帶版本直接 `docker build backend`**：label `version=local revision=unknown`，
 info 回 `{"version":"local","commit":"unknown"}` —— 不會冒充某個版本。
+
+**2026-10-27 改成「映像檔最後一層寫版本」之後重驗**（`docker build backend` 兩次，只換 `APP_VERSION`）：
+
+```
+第二次 build：COPY src/ CACHED、gradle bootJar CACHED、COPY app.jar CACHED，只重跑寫 build-info 那一層
+帶 vtest2 / 2222222222 → /actuator/info {"commit":"2222222222","version":"vtest2"}，label vtest2 2222222222
+不帶參數              → /actuator/info {"commit":"unknown","version":"local"}，label local unknown
+compose 沒設 APP_VERSION → build args 整段不傳（用 Dockerfile 的預設）；有設 → 照傳
+```
 
 **網站入口連不到**：`127.0.0.1:18080/actuator/info` → nginx 404；`/api/../actuator/info`、`/api/%2e%2e/actuator/info` 也是 404。
 
