@@ -17,9 +17,9 @@ GitHub Deployments 記的是「watcher 想部署哪個 commit」，不是「容�
 | HEAD 上有 release tag（`v<主>.<次>.<修>`） | 那個 tag | `v0.2.0` |
 | 沒有 tag | commit 前 7 碼 | `3f9c2ab` |
 | 有沒 commit 的改動或新檔案 | 上面兩種後面加 `-dirty` | `3f9c2ab-dirty` |
-| 沒經過部署流程（`bootRun`、IDE、直接 `docker build`） | `local`，commit 是 `unknown` | `local` |
+| 沒經過部署流程（直接 `docker build`、直接 `docker compose up`） | `local`，commit 是 `unknown` | `local` |
 
-不管哪一種，**完整的 40 碼 commit 永遠另外記一份**（`/actuator/info` 的 `build.commit`、映像檔 label 的 `revision`）。
+不管哪一種，**完整的 40 碼 commit 永遠另外記一份**（映像檔 label 的 `revision`）。
 版本號是給人看的名字，commit 才是身分。
 
 ### 為什麼這樣選
@@ -54,44 +54,39 @@ git（tag、HEAD）
        └─ cd/apply.sh（本機）／infra/envs/1-ec2/deploy.sh（EC2）export 給 compose
             └─ deploy/compose.yaml
                  ├─ image: talkcal/app:<版本>、talkcal/web:<版本>     ← docker images 看得到
-                 └─ build.args → Dockerfile
-                      ├─ LABEL org.opencontainers.image.version / revision   ← docker inspect 看得到
-                      └─ /app/build-info.properties（最後一層，蓋過 jar 裡那份 local / unknown）
-                           └─ /actuator/info                         ← curl 看得到
+                 └─ build.args → Dockerfile 最後一層
+                      └─ LABEL org.opencontainers.image.version / revision   ← docker inspect 看得到
 ```
 
-映像檔 build 的 context 是 `backend/`、`web/`，看不到 `.git`，所以不在 Dockerfile 或 Gradle 裡跑 git，
-一律從外面傳進去。同一個值走三條路是因為三種情況下各只看得到其中一種：
-容器沒在跑時只能看映像檔（tag、label），容器在跑但不確定是哪個映像檔時問 app 自己（info）。
-
-版本只用在 Dockerfile 的最後幾層、不傳進 Gradle：傳進去的話 jar 每個 commit 都不同，
-只改了前端或文件的 commit 也得整個重編一次。jar 裡 `build.gradle` 產生的那份永遠是 `local` / `unknown`（給 bootRun、測試），
-映像檔用 `SPRING_INFO_BUILD_LOCATION` 指向最後一層寫的那份。
+映像檔 build 的 context 是 `backend/`、`web/`，看不到 `.git`，所以不在 Dockerfile 裡跑 git，一律從外面傳進去。
+版本只用在 Dockerfile 的最後一層：jar 跟版本無關，只改了前端或文件的 commit，編譯那層照樣吃快取、不必重編。
 
 ### 怎麼查線上是哪一版
 
-```bash
-# 本機
-curl -s http://127.0.0.1:18090/actuator/info
-#   {"build":{"artifact":"talkcal","name":"talkcal","commit":"9dc4eb9…","version":"9dc4eb9"}}
-docker inspect talkcal-app --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
+查**容器**，不是查映像檔的 tag 名稱：容器建立時就帶著映像檔的 label，看到的是正在跑的那一個。
 
-# EC2：先用 SSM 連進去（infra/envs/1-ec2/README.md），在機器上跑同樣兩行
+```bash
+docker inspect talkcal-app --format '{{index .Config.Labels "org.opencontainers.image.version"}} {{index .Config.Labels "org.opencontainers.image.revision"}}'
+#   9dc4eb9 9dc4eb90bbc46258d4859b28d423d08467fc658e
+
+# EC2：先用 SSM 連進去（infra/envs/1-ec2/README.md），在機器上跑同一行（要 sudo）
 ```
 
-這比 GitHub Deployments 準：Deployments 記的是 watcher「想部署」的 commit，這裡是容器裡**實際在跑**的。
+這比 GitHub Deployments 準：Deployments 記的是 watcher「想部署」的 commit，這裡是容器**實際在跑**的。
 
-### 為什麼不對外公開
+### 為什麼不讓 app 自己回報版本（`/actuator/info`）
 
-`/actuator/info` 只在容器網路和本機 `127.0.0.1:18090` 看得到；網站入口的 nginx 只轉 `/api/`，
-`https://<網址>/actuator/info` 是 404。前端也只把版本貼在映像檔 label，不寫進頁面。
+一開始有做：`/actuator/info` 回報同一組版本號和 commit。後來拿掉了，因為它跟容器 label 重複：
 
-- 版本號是給維運的人查的，使用者用不到
-- repo 是公開的，精確的 commit 等於告訴別人「線上跑的就是這一份程式碼」，哪個依賴有洞一查就知道
-- 要給面試官看「哪個版本部署到哪」，GitHub 的 Deployments 和 Releases 頁面就有
+- 能 curl 它的人一定也能 `docker inspect`：它跟其他 actuator 端點一樣只在機器本身看得到，nginx 只轉 `/api/`
+- Grafana 也沒有讀它：Alloy 只抓 `/actuator/prometheus`。要在 Grafana 篩版本，從容器 label 拿更直接
+  （log 帶版本的標籤，見 [#216](https://github.com/Anderson-chen/talkcal/issues/216)），app 不必改
+- 留著要多露一個 actuator 端點、Dockerfile 多一層寫檔、`build.gradle` 一段、一個測試
 
-`info` 只放 `build` 這一段：Boot 的 `env`、`java`、`os`、`process` contributor 預設是關的，這裡沒打開
-（[ActuatorInfoTest](../backend/src/test/java/io/github/andersonchen/talkcal/app/observability/ActuatorInfoTest.java) 守著這件事，也守著 `/actuator/env` 依然拿不到）。
+等到有東西只能用 HTTP 問版本（例如部署後的自動檢查、搬到拿不到 `docker inspect` 的平台），再加回來。
+
+版本號也不對外公開：使用者用不到；repo 是公開的，精確的 commit 等於告訴別人線上跑的是哪一份程式碼。
+要給面試官看「哪個版本部署到哪」，GitHub 的 Deployments 和 Releases 頁面就有。
 
 ## 怎麼打 release tag
 
@@ -175,29 +170,17 @@ commit 訊息用的是這個 repo 自己的 `[feat]`、`[fix]`（見 CLAUDE.md�
 | 模擬 EC2：`git fetch --depth 1 --tags` 拉有 `v0.11.0` 的 commit | `v0.11.0`（淺 clone 也認得） |
 | 模擬 EC2：淺 clone 拉沒 tag 的 commit | `0f36f0e`，跟完整 clone 算出來的一樣 |
 
-**從 git 帶進映像檔和 app**（`docker compose build app web`，沒有換掉正在跑的容器）：
+**從 git 帶進映像檔和容器**（2026-10-27，拿掉 `/actuator/info` 之後重驗；只 build、起暫時的容器，沒有換掉正在跑的服務）：
 
 ```
-image:   talkcal/app:9dc4eb9、talkcal/web:9dc4eb9
-label:   talkcal-app version=9dc4eb9 revision=9dc4eb90bbc46258d4859b28d423d08467fc658e
-         talkcal-web version=9dc4eb9 revision=9dc4eb90bbc46258d4859b28d423d08467fc658e
-/actuator/info → {"build":{"artifact":"talkcal","name":"talkcal","commit":"9dc4eb90bbc4…","version":"9dc4eb9"}}
-/actuator/env → 404   /actuator/beans → 404
-```
-
-**反例：沒帶版本直接 `docker build backend`**：label `version=local revision=unknown`，
-info 回 `{"version":"local","commit":"unknown"}` —— 不會冒充某個版本。
-
-**2026-10-27 改成「映像檔最後一層寫版本」之後重驗**（`docker build backend` 兩次，只換 `APP_VERSION`）：
-
-```
-第二次 build：COPY src/ CACHED、gradle bootJar CACHED、COPY app.jar CACHED，只重跑寫 build-info 那一層
-帶 vtest2 / 2222222222 → /actuator/info {"commit":"2222222222","version":"vtest2"}，label vtest2 2222222222
-不帶參數              → /actuator/info {"commit":"unknown","version":"local"}，label local unknown
+docker build --build-arg APP_VERSION=a5f5372 --build-arg GIT_COMMIT=a5f5372…  backend
+  起成容器 → docker inspect 容器：talkcal/app:a5f5372 | version=a5f5372 revision=a5f537232b83e84976e885e940c5292951d9b065
+同一份程式碼只換 APP_VERSION 再 build：gradle bootJar、COPY app.jar 全部 CACHED，只有 label 變了
 compose 沒設 APP_VERSION → build args 整段不傳（用 Dockerfile 的預設）；有設 → 照傳
+容器內 /actuator/info → 404（端點已拿掉）
 ```
 
-**網站入口連不到**：`127.0.0.1:18080/actuator/info` → nginx 404；`/api/../actuator/info`、`/api/%2e%2e/actuator/info` 也是 404。
+**反例：沒帶版本直接 `docker build backend`**：容器的 label 是 `version=local revision=unknown`，不會冒充某個版本。
 
 **cd/release.sh**（2026-10-27 改成只認 master 後重跑；在本機建的 tag 立刻刪掉，沒有推任何 tag）：
 
@@ -218,5 +201,4 @@ compose 沒設 APP_VERSION → build args 整段不傳（用 Dockerfile 的預�
 - [How to Handle Docker Image Tagging（OneUptime，2026-02）](https://oneuptime.com/blog/post/2026-02-02-docker-image-tagging/view)：每個 build 帶 commit SHA 的不可變 tag，release 另外用 semver，部署不用 `latest`
 - [Image tag best practices（Microsoft Learn，Azure Container Registry）](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-image-tag-version)：穩定 tag 與唯一 tag 的差別；只有 commit 的 tag 是「半穩定」——同一個 commit 重 build 會換 base image
 - [Tag and manage Docker image versions in Artifact Registry（OneUptime，2026-02）](https://oneuptime.com/blog/post/2026-02-17-how-to-tag-and-manage-docker-image-versions-in-artifact-registry/markdown)：不可變 tag、用唯一 tag 或 digest 部署
-- [Spring Boot 4.1 Gradle plugin：Integrating with Actuator](https://docs.spring.io/spring-boot/4.2/gradle-plugin/integrating-with-actuator.html)、[actuator info 端點](https://docs.spring.io/spring-boot/4.0/api/rest/actuator/info.html)：`buildInfo()` 產生 `build-info.properties`，info 端點自動讀
 - [OCI image annotations](https://github.com/opencontainers/image-spec/blob/main/annotations.md)：`org.opencontainers.image.version`、`revision`、`source` 這幾個 label 名稱

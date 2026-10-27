@@ -123,7 +123,7 @@ EC2 目前是手動部署：機器平常關機，展示前開機、需要時用 
 | ruleset（protect-master） | 直推 master、force push、刪 master、checks、secrets、vulns 或 PR issue 沒綠就合併、分支落後 master | — |
 | `compose up --wait` | 起不來的容器（healthcheck 沒過） | 起得來但功能壞了：例如模型名稱送錯（[#76](https://github.com/Anderson-chen/talkcal/issues/76)），容器 healthy、第一個 AI 請求才 404 |
 | watcher 同一個 commit 只試一次 | 壞掉的版本每 5 分鐘重 build | watcher 自己掛掉（沒有「多久沒部署」告警，決定不做） |
-| 版本號（[docs/release.md](release.md)） | 說不出線上跑的是哪個 commit：映像檔 tag、label、`/actuator/info` 都帶版本號和 commit；`cd/release.sh` 擋下打錯的 release tag | tag 被刪掉或移動（GitHub 上沒設 tag 保護） |
+| 版本號（[docs/release.md](release.md)） | 說不出線上跑的是哪個 commit：映像檔 tag 帶版本號、label 帶版本號和 commit，`docker inspect` 查得到正在跑的容器是哪一版；`cd/release.sh` 擋下打錯的 release tag | tag 被刪掉或移動（GitHub 上沒設 tag 保護） |
 
 ### 檔案
 

@@ -16,7 +16,7 @@ cd/apply.sh local llm-chat               # 只換模型
 WAIT_TIMEOUT=600 cd/apply.sh local app   # 拉長等待
 ```
 
-映像檔的 tag 是 `cd/version.sh` 算的版本號（有 release tag 用 tag，沒有用 commit 前 7 碼），部署完 `curl -s 127.0.0.1:18090/actuator/info` 看得到是哪一版。
+映像檔的 tag 是 `cd/version.sh` 算的版本號（有 release tag 用 tag，沒有用 commit 前 7 碼），部署完 `docker inspect talkcal-app` 的 label 看得到是哪一版。
 規則、怎麼打 release tag（`cd/release.sh`）見 [docs/release.md](../docs/release.md)。
 
 平常用 Gradle 的快捷鍵就好（在 `backend/`）：`./gradlew deploy`、`deployApp`、`deployWeb`、`deployModels`，
