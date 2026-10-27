@@ -230,7 +230,7 @@ Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](..
 告警要接通知管道（contact point、policy），那些都在 Grafana，規則放一起才看得到「哪條規則送去哪」。
 Mimir 的 ruler 也能發告警，但那樣要再架一個 Alertmanager，通知設定就分散在兩個地方。
 
-改了 `slo.yaml` 要 `docker compose restart mimir`（ruler 只在啟動時讀）；Grafana 的告警規則檔同樣重啟 grafana 才會重讀。
+改了 `slo.yaml`，ruler 10 分鐘內會自己重讀（要馬上生效就 `docker compose restart mimir`），改之前先跑 `ci/rules.sh`；Grafana 的告警規則檔要重啟 grafana 才會重讀。
 
 ## 三種訊號之間怎麼跳
 
@@ -258,6 +258,7 @@ ops/
 ├── alloy/config.alloy                        # 三條管線：抓誰的指標、收哪些容器的 log、trace 轉給誰
 ├── mimir/mimir.yaml                          # 指標：單機最小設定（關掉多租戶、複製、物件儲存）
 ├── mimir/rules/anonymous/slo.yaml            # SLO 的錄製規則（SLI、burn rate、error budget）
+├── mimir/slo.test.yaml                       # 上面那份的單元測試（ci/rules.sh 跑）
 ├── loki/loki-config.yaml                     # 日誌：單機最小設定
 ├── tempo/tempo.yaml                          # 追蹤：單機最小設定
 └── grafana/provisioning/

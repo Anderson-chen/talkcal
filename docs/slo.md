@@ -116,7 +116,9 @@ burn rate 是比例。一個小時只有 10 個請求、其中 1 個 502，比�
 在獨立的一組容器裡做（自己的 app、postgres、mimir、alloy、grafana，compose 專案 `talkcal-34-verify`），
 `perf/slo.js` 一直送平常流量（每秒 5 個行程請求、每分鐘 6 句助理），再一次弄壞一種依賴：
 
-2026-10-19 實測（時間是 UTC）：
+2026-10-19 實測（時間是 UTC）。當時的規則是每個視窗直接從原始 histogram 算；之後改成兩層
+（先錄 5 分鐘的事件率、各視窗再加總，見 `slo.yaml` 開頭），算的是同一個比例。改完之後由單元測試
+[ops/mimir/slo.test.yaml](../ops/mimir/slo.test.yaml)（`ci/rules.sh`，CI 的 `rules` job）驗算式，沒有重跑這組故障演練：
 
 | 時段 | 做了什麼 | 結果 |
 |------|----------|------|
@@ -145,5 +147,5 @@ burn rate 是比例。一個小時只有 10 個請求、其中 1 個 502，比�
 
 1. 改 `ops/mimir/rules/anonymous/slo.yaml` 的 `slo:objective:ratio`（目標），或第一層 `slo:sli_bad_events:rate5m` 裡延遲門檻的 `le`（範圍和門檻只寫在第一層，各視窗都從那裡推算）。
 2. 改延遲門檻時，`application.properties` 的 `management.metrics.distribution.slo.http.server.requests` 也要有那個值，不然沒有那個 bucket。
-3. 重啟 mimir（`docker compose restart mimir`）；改了 app 的設定要重新部署 app。
+3. 跑 `ci/rules.sh`（單元測試的期望值也要跟著改）。mimir 10 分鐘內會自己重讀規則，要馬上生效就 `docker compose restart mimir`；改了 app 的設定要重新部署 app。
 4. 這份文件的表和理由一起改。
