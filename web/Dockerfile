@@ -32,4 +32,13 @@ COPY --from=build /src/dist /usr/share/nginx/html
 
 # 不必自己寫 ENTRYPOINT / USER：官方映像檔的 nginx 主程序以 root 起來只為了綁 80 埠，
 # 真正處理請求的 worker 是 nginx 這個一般使用者。
+# 版本（#25）：跟 app 映像檔同一組，由 compose 的 build.args 傳進來（cd/version.sh 算的）。
+# 前端只貼 label、不寫進頁面：版本給維運的人查，不給使用者看（理由見 docs/release.md）
+ARG APP_VERSION=local
+ARG GIT_COMMIT=unknown
+LABEL org.opencontainers.image.title="talkcal-web" \
+      org.opencontainers.image.source="https://github.com/Anderson-chen/talkcal" \
+      org.opencontainers.image.version="$APP_VERSION" \
+      org.opencontainers.image.revision="$GIT_COMMIT"
+
 EXPOSE 80
