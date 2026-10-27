@@ -121,6 +121,7 @@ EC2 目前是手動部署：機器平常關機，展示前開機、需要時用 
 | CI 的 `migrations`（[ci/migrations.sh](../ci/migrations.sh)） | 改了已經跑過的 migration；新 migration 裡新舊版本同時在線會壞、或會鎖住整張表的寫法（DROP／RENAME COLUMN、改型別、沒 CONCURRENTLY 的索引…，見 [ci/README.md](../ci/README.md#db-migration-檢查)） | 語意上的相容性：例如 contract 刪欄位的時機對不對（加了 `squawk-ignore` 就放行，靠審查）；還不是 ruleset 的必過檢查 |
 | PR issue | 沒連到 issue 的 PR：合併按鈕按不下去 | 連到的 issue 對不對（只檢查有沒有連） |
 | ruleset（protect-master） | 直推 master、force push、刪 master、checks、secrets、vulns 或 PR issue 沒綠就合併、分支落後 master | — |
+| rollback（[docs/rollback.md](rollback.md)） | 新版壞了要等修好才能恢復：換回機器上舊 tag 的映像檔、釘住 watcher；指定的版本不在、換上去起不來都不會留下掛掉的服務 | 退到不相容的 schema 或沒有安全修正的版本（容器照樣 healthy，要人看 runbook 判斷） |
 | `compose up --wait` | 起不來的容器（healthcheck 沒過） | 起得來但功能壞了：例如模型名稱送錯（[#76](https://github.com/Anderson-chen/talkcal/issues/76)），容器 healthy、第一個 AI 請求才 404 |
 | watcher 同一個 commit 只試一次 | 壞掉的版本每 5 分鐘重 build | watcher 自己掛掉（沒有「多久沒部署」告警，決定不做） |
 | 版本號（[docs/release.md](release.md)） | 說不出線上跑的是哪個 commit：映像檔 tag 帶版本號、label 帶版本號和 commit，`docker inspect` 查得到正在跑的容器是哪一版；`cd/release.sh` 擋下打錯的 release tag | tag 被刪掉或移動（GitHub 上沒設 tag 保護） |
@@ -136,6 +137,7 @@ EC2 目前是手動部署：機器平常關機，展示前開機、需要時用 
 | 部署步驟 | 怎麼把版本放上機器 | `cd/apply.sh`（本機）、`infra/envs/1-ec2/deploy.sh`（EC2，還沒收進 `cd/`） |
 | 環境差異 | 本機和雲端差在哪 | `cd/envs/local.env`、`infra/envs/1-ec2/compose.*.yaml` |
 | CD 入口 | 什麼時候部署 | `cd/triggers/watch.sh` + 工作排程（本機）；手動（EC2） |
+| 退版 | 怎麼回到上一版 | `cd/rollback.sh`（本機；EC2 手動，見 [docs/rollback.md](rollback.md#ec2)） |
 | 生機器 | 機器從哪來 | `infra/`（Terraform） |
 
 原則只有一條：**做什麼只寫一次，入口可以很多個**。CI 和 CD 都是這樣分。
