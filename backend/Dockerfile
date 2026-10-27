@@ -23,16 +23,11 @@ RUN --mount=type=cache,target=/gradle-cache \
     gradle dependencies --no-daemon -q > /dev/null
 
 COPY src/ src/
-# 版本（#25）：由 compose 的 build.args 傳進來（cd/version.sh 算的），寫進 jar 的 build-info.properties。
-# ARG 放在依賴那層之後：版本每個 commit 都不同，放前面會讓上面的依賴快取每次都失效。
-# 預設值跟 build.gradle 一樣是 local / unknown：直接 docker build 沒帶參數，就誠實地說不知道是哪一版
-ARG APP_VERSION=local
-ARG GIT_COMMIT=unknown
 # 只打包，不跑測試：測試是 CI（或你本機 ./gradlew build）的事。
 # 映像檔 build 要做的是「把已經驗證過的程式碼包起來」，把測試塞進來只會讓每次 build 變慢，
 # 而且整合測試需要真的模型伺服器，build 環境裡也沒有。
 RUN --mount=type=cache,target=/gradle-cache \
-    gradle bootJar --no-daemon -q -PappVersion="$APP_VERSION" -PgitCommit="$GIT_COMMIT" \
+    gradle bootJar --no-daemon -q \
     # Boot 外掛會產出兩個 jar：可執行的 talkcal.jar，和只有自己 class 的 talkcal-plain.jar。要的是前者
     && cp build/libs/talkcal.jar /app.jar
 
@@ -46,11 +41,20 @@ RUN apt-get update \
 
 COPY --from=build /app.jar /app/app.jar
 
-# 同一組版本也貼在映像檔上（OCI 標準的 label 名稱）：不用啟動容器，`docker inspect` 就看得到這個映像檔是哪個 commit。
-# 每個 stage 的 ARG 要各自宣告，build stage 那兩行在這裡看不到。放在最後面：label 變了只重做這一層
+# 版本（#25）：由 compose 的 build.args 傳進來（cd/version.sh 算的）。只用在這最後幾層：
+# jar 本身跟版本無關，只改了 web/、docs/ 的 commit，上面編譯那層照樣吃快取，不必每次重編。
+# 預設值 local / unknown：直接 docker build 沒帶參數，就誠實地說不知道是哪一版
 ARG APP_VERSION=local
 ARG GIT_COMMIT=unknown
-LABEL org.opencontainers.image.title="talkcal-app"       org.opencontainers.image.source="https://github.com/Anderson-chen/talkcal"       org.opencontainers.image.version="$APP_VERSION"       org.opencontainers.image.revision="$GIT_COMMIT"
+# /actuator/info 讀這個檔案，蓋過 jar 裡 build.gradle 產生的那份（那份永遠是 local / unknown，給 bootRun、測試用）
+RUN printf 'build.artifact=talkcal\nbuild.name=talkcal\nbuild.version=%s\nbuild.commit=%s\n' \
+        "$APP_VERSION" "$GIT_COMMIT" > /app/build-info.properties
+ENV SPRING_INFO_BUILD_LOCATION=file:/app/build-info.properties
+# 同一組也貼在映像檔上（OCI 標準的 label 名稱）：不用啟動容器，`docker inspect` 就看得到這個映像檔是哪個 commit
+LABEL org.opencontainers.image.title="talkcal-app" \
+      org.opencontainers.image.source="https://github.com/Anderson-chen/talkcal" \
+      org.opencontainers.image.version="$APP_VERSION" \
+      org.opencontainers.image.revision="$GIT_COMMIT"
 
 # 不跑 root：映像檔內建 uid 1000 的 ubuntu 使用者，直接用（跟 llama-server 那個一樣）
 USER ubuntu

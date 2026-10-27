@@ -35,7 +35,7 @@ git -C "$REPO" checkout --detach FETCH_HEAD
 git -C "$REPO" log -1 --oneline
 # 映像檔的 tag、label 和 app 的 /actuator/info 都用這組，跟本機的 cd/apply.sh 同一支 version.sh
 APP_VERSION="$(bash "$REPO/cd/version.sh")"
-GIT_COMMIT="$(bash "$REPO/cd/version.sh" --commit)"
+GIT_COMMIT="$(git -C "$REPO" rev-parse HEAD)"
 export APP_VERSION GIT_COMMIT
 echo "版本：$APP_VERSION"
 

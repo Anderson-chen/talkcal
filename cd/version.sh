@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # 印出目前 checkout 的版本號（#25）。映像檔的 tag、label 和 app 的 /actuator/info 都用它，規則只寫在這裡。
 #
-#   cd/version.sh            → v0.2.0 / 3f9c2ab / 3f9c2ab-dirty
-#   cd/version.sh --commit   → 完整的 40 碼 commit
+#   cd/version.sh   → v0.2.0 / 3f9c2ab / 3f9c2ab-dirty
+#
+# 只印版本號；完整的 commit 由呼叫的一方直接 git rev-parse HEAD。
 #
 # 規則（為什麼這樣選見 docs/release.md）：
 #   1. HEAD 上有 release tag（v<主>.<次>.<修>）→ 那個 tag
@@ -16,15 +17,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 commit="$(git rev-parse HEAD)"
-if [ "${1:-}" = --commit ]; then
-  echo "$commit"
-  exit 0
-fi
 
 # 只認 v數字.數字.數字：其他名字的 tag（例如實驗用的）不會被當成版本。
 # 同一個 commit 有好幾個 release tag 時取最新的（--sort 依版本號排）
-tag="$(git tag --points-at HEAD --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname \
-         | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+tag="$(git tag --points-at HEAD --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
 version="${tag:-${commit:0:7}}"
 
 # 沒加進 git 的新檔案也算：放在 backend/src 底下就會被 build 進映像檔。

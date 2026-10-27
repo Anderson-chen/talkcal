@@ -39,6 +39,12 @@ x-gpu: &gpu
           count: 1
           capabilities: [gpu]
 
+# app、web 的映像檔共用的版本參數（#25）：值是 cd/apply.sh export 的環境變數。
+# 只寫名字不寫值：環境變數沒設時 compose 不傳，改用 Dockerfile 裡 ARG 的預設（local / unknown），預設值只寫在那裡
+x-version-args: &version-args
+  - APP_VERSION
+  - GIT_COMMIT
+
 services:
   # ── 模型播種：把模型從 Windows 資料夾複製進 volume（只跑一次就結束）──────────
   # 為什麼不讓模型服務直接掛 C:/llm/models：實測 Windows → WSL2 的檔案通道只有約 20 MB/s，
@@ -184,9 +190,7 @@ services:
     image: talkcal/app:${APP_VERSION:-local}
     build:
       context: ../backend
-      args:
-        APP_VERSION: ${APP_VERSION:-local}
-        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+      args: *version-args
     container_name: talkcal-app
 
     environment:
@@ -236,9 +240,7 @@ services:
     image: talkcal/web:${APP_VERSION:-local}   # 版本號跟 app 同一組，理由同上
     build:
       context: ../web             # Dockerfile、nginx.conf 都在 web/ 裡，前端自己的東西放一起
-      args:
-        APP_VERSION: ${APP_VERSION:-local}
-        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+      args: *version-args
     container_name: talkcal-web
 
     ports:

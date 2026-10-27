@@ -36,6 +36,9 @@ COPY --from=build /src/dist /usr/share/nginx/html
 # 前端只貼 label、不寫進頁面：版本給維運的人查，不給使用者看（理由見 docs/release.md）
 ARG APP_VERSION=local
 ARG GIT_COMMIT=unknown
-LABEL org.opencontainers.image.title="talkcal-web"       org.opencontainers.image.source="https://github.com/Anderson-chen/talkcal"       org.opencontainers.image.version="$APP_VERSION"       org.opencontainers.image.revision="$GIT_COMMIT"
+LABEL org.opencontainers.image.title="talkcal-web" \
+      org.opencontainers.image.source="https://github.com/Anderson-chen/talkcal" \
+      org.opencontainers.image.version="$APP_VERSION" \
+      org.opencontainers.image.revision="$GIT_COMMIT"
 
 EXPOSE 80

@@ -18,9 +18,9 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * /actuator/info 回報這一版是哪個版本、哪個 commit（#25），而且只回報這些。
  *
- * 版本號本身是 build 時從外面傳進來的（cd/version.sh → compose → Dockerfile → -PappVersion），
- * 測試是 ./gradlew test 直接跑、沒有傳，所以這裡看到的是預設值 local / unknown ——
- * 正好驗「沒走部署流程時，誠實地說不知道」。有傳時帶不帶得進去，是 docker build 之後 curl 驗的（見 docs/release.md）。
+ * 真的版本號是部署的映像檔在 backend/Dockerfile 最後一層另外寫的（cd/version.sh → compose → Dockerfile），
+ * 測試讀的是 jar 裡 build.gradle 產生的那份，永遠是 local / unknown ——
+ * 正好驗「沒走部署流程時，誠實地說不知道」。映像檔裡帶不帶得進去，是 docker build 之後 curl 驗的（見 docs/release.md）。
  *
  * 設定跟 AccessLogTraceIdTest 一樣（RANDOM_PORT、關 Flyway），兩個測試共用同一個 Spring 容器，不多起一次。
  */
@@ -32,6 +32,8 @@ class ActuatorInfoTest {
     @LocalServerPort
     int port;
 
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
     private final HttpClient client = HttpClient.newHttpClient();
 
     @Test
@@ -40,7 +42,7 @@ class ActuatorInfoTest {
         HttpResponse<String> response = get("/actuator/info");
         assertEquals(200, response.statusCode());
 
-        JsonNode build = JsonMapper.builder().build().readTree(response.body()).path("build");
+        JsonNode build = JSON.readTree(response.body()).path("build");
         assertEquals("local", build.path("version").asString());
         assertEquals("unknown", build.path("commit").asString());
     }
@@ -48,7 +50,7 @@ class ActuatorInfoTest {
     @Test
     @DisplayName("info 只有 build 這一段：env、java、os、process 這些主機細節不露出來")
     void exposesOnlyBuildSection() throws Exception {
-        JsonNode info = JsonMapper.builder().build().readTree(get("/actuator/info").body());
+        JsonNode info = JSON.readTree(get("/actuator/info").body());
         assertEquals(List.of("build"), List.copyOf(info.propertyNames()));
     }
 
