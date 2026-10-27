@@ -1,12 +1,12 @@
-# 0009. 資料庫存取用 JdbcClient 手寫 SQL，不用 JPA
+# 0004. 資料庫存取用 JdbcClient 手寫 SQL，不用 JPA
 
 - 狀態：已採用
 - 日期：2026-10-02
-- 相關：[7b2824c 對話紀錄存 PostgreSQL](https://github.com/Anderson-chen/talkcal/commit/7b2824c)、[0010](0010-hexagonal-with-archunit.md)
+- 相關：[7b2824c 對話紀錄存 PostgreSQL](https://github.com/Anderson-chen/talkcal/commit/7b2824c)、[0005](0005-hexagonal-with-archunit.md)
 
 ## 背景
 
-第一次要存東西（多輪對話的紀錄）時，domain 已經是純 Java 的 record 和類別，ArchUnit 守著 core 不准依賴框架（[0010](0010-hexagonal-with-archunit.md)）。
+第一次要存東西（多輪對話的紀錄）時，domain 已經是純 Java 的 record 和類別，ArchUnit 守著 core 不准依賴框架（[0005](0005-hexagonal-with-archunit.md)）。
 資料表很少（現在行程、助理記憶、帳號幾張），schema 由 Flyway 管。
 
 ## 選項
@@ -25,7 +25,7 @@
 
 ## 代價
 
-- 欄位對應、型別轉換自己寫，例如 `TIMESTAMP` 要用 `getObject(..., LocalDateTime.class)` 讀，不能用會經過 JVM 時區的 `getTimestamp()`（見 [0011](0011-wall-clock-timestamp-without-time-zone.md)）。
+- 欄位對應、型別轉換自己寫，例如 `TIMESTAMP` 要用 `getObject(..., LocalDateTime.class)` 讀，不能用會經過 JVM 時區的 `getTimestamp()`（見 [0006](0006-wall-clock-timestamp-without-time-zone.md)）。
 - 樂觀鎖、批次要自己寫（例如當時對話用 `UPDATE ... WHERE version = ?`）。
 
 ## 什麼時候重想

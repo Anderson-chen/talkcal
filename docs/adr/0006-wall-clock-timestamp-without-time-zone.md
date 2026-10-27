@@ -1,4 +1,4 @@
-# 0011. 行程時間存牆上時間：LocalDateTime + PostgreSQL 不帶時區的 TIMESTAMP
+# 0006. 行程時間存牆上時間：LocalDateTime + PostgreSQL 不帶時區的 TIMESTAMP
 
 - 狀態：已採用
 - 日期：2026-10-05

@@ -1,8 +1,8 @@
-# 0007. 模型自己架：llama.cpp 跑 Qwen3-8B（Q4_K_M），映像檔自己 build
+# 0002. 模型自己架：llama.cpp 跑 Qwen3-8B（Q4_K_M），映像檔自己 build
 
-- 狀態：已採用（本機）；雲端預設改走 Bedrock，見 [0002](0002-model-bedrock-default-gpu-optional.md)
+- 狀態：已採用（本機）；雲端改走 Bedrock，見 [0010](0010-aws-stage-one-ec2-compose-bedrock.md)
 - 日期：2026-09-21（第一個 llama.cpp adapter）、2026-09-30（搬進容器）
-- 相關：[8f5ae30](https://github.com/Anderson-chen/talkcal/commit/8f5ae30)、[04ce407 模型伺服器搬進容器](https://github.com/Anderson-chen/talkcal/commit/04ce407)、[0006](0006-spring-ai-openai-compatible.md)
+- 相關：[8f5ae30](https://github.com/Anderson-chen/talkcal/commit/8f5ae30)、[04ce407 模型伺服器搬進容器](https://github.com/Anderson-chen/talkcal/commit/04ce407)、[0001](0001-spring-ai-openai-compatible.md)
 
 ## 背景
 
@@ -35,7 +35,7 @@
 
 - 8B、不 thinking 的模型心算星期幾不可靠（「下週三」給過星期一、星期二），所以 prompt 附日期對照表、時間解析和空檔計算交給程式（[DateTable](../../backend/src/main/java/io/github/andersonchen/talkcal/calendar/adapter/shared/DateTable.java)、[CalendarAssistant](../../backend/src/main/java/io/github/andersonchen/talkcal/calendar/adapter/in/assistant/CalendarAssistant.java) 的「分工」註解）。
 - 模型檔路徑寫死 `C:\llm\models`，只能在 Windows 上照原樣跑（README 的「已知限制」）。
-- 雲端開不出 GPU（配額被拒），雲端跟本機不是同一顆模型（[0002](0002-model-bedrock-default-gpu-optional.md)）。
+- 雲端開不出 GPU（配額被拒），雲端跟本機不是同一顆模型（[0010](0010-aws-stage-one-ec2-compose-bedrock.md)）。
 - 映像檔只編 `sm_89`；換到不同架構的 GPU（例如 T4 是 sm_75）要重編（[infra/envs/1-ec2/README.md](../../infra/envs/1-ec2/README.md)）。
 
 ## 什麼時候重想

@@ -1,8 +1,8 @@
-# 0006. 跟模型講話用 Spring AI 的 OpenAI 相容 client
+# 0001. 跟模型講話用 Spring AI 的 OpenAI 相容 client
 
 - 狀態：已採用
 - 日期：2026-10-06
-- 相關：[e5ae6dc 導入 Spring AI](https://github.com/Anderson-chen/talkcal/commit/e5ae6dc)、[0002](0002-model-bedrock-default-gpu-optional.md)、[0007](0007-self-hosted-llama-cpp-qwen3-8b.md)
+- 相關：[e5ae6dc 導入 Spring AI](https://github.com/Anderson-chen/talkcal/commit/e5ae6dc)、[0002](0002-self-hosted-llama-cpp-qwen3-8b.md)
 
 ## 背景
 
@@ -32,7 +32,7 @@ llama-server 講的是 OpenAI 的 Chat Completions 協定，雲端的託管模�
 ## 代價
 
 - 往外的 HTTP span 沒了，改看 Spring AI 自己的 `gen_ai.*` 觀測：多了 token 用量，少了 HTTP 狀態碼（[ops/README.md](../../ops/README.md) 的「追蹤」一節）。
-- Spring AI 現成的記憶（`JdbcChatMemoryRepository`、`MessageChatMemoryAdvisor`）不適合 agent，助理只用它的底層零件，迴圈自己寫（見 [0008](0008-own-agent-loop-and-memory.md)）。
+- Spring AI 現成的記憶（`JdbcChatMemoryRepository`、`MessageChatMemoryAdvisor`）不適合 agent，助理只用它的底層零件，迴圈自己寫（見 [0003](0003-own-agent-loop-and-memory.md)）。
 - `base-url` 一定要帶 `/v1`，少了會打到 llama.cpp 原生格式的端點（寫在 application.properties 的註解）。
 
 ## 什麼時候重想

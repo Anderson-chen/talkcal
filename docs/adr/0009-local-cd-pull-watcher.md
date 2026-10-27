@@ -1,8 +1,8 @@
-# 0014. 本機 CD 用 pull：watcher 自己去看 master 的 CI，綠燈才部署
+# 0009. 本機 CD 用 pull：watcher 自己去看 master 的 CI，綠燈才部署
 
 - 狀態：已採用
 - 日期：2026-10-13
-- 相關：[24416d6 本機 CD](https://github.com/Anderson-chen/talkcal/commit/24416d6)、[150d9b1 部署步驟收進 cd/apply.sh](https://github.com/Anderson-chen/talkcal/commit/150d9b1)、epic [#17](https://github.com/Anderson-chen/talkcal/issues/17)、EKS 的部署見 [0004](0004-push-deploy-from-github-actions.md)
+- 相關：[24416d6 本機 CD](https://github.com/Anderson-chen/talkcal/commit/24416d6)、[150d9b1 部署步驟收進 cd/apply.sh](https://github.com/Anderson-chen/talkcal/commit/150d9b1)、epic [#17](https://github.com/Anderson-chen/talkcal/issues/17)
 
 ## 背景
 
@@ -25,7 +25,7 @@ GitHub 不該有連進自己電腦的權限。
 
 **`cd/triggers/watch.sh` 每 5 分鐘找 master 最新的綠燈 commit，沒試過就 checkout 並跑那個 commit 的 `cd/apply.sh`，結果寫回 GitHub Deployments。同一個 commit 只試一次。**
 
-「做什麼」只寫一次：部署步驟在 `cd/apply.sh`，入口（watcher、Gradle 的 deploy、手動）可以很多個 —— 跟 CI 同一個原則（[0013](0013-ci-same-script-in-container.md)）。
+「做什麼」只寫一次：部署步驟在 `cd/apply.sh`，入口（watcher、Gradle 的 deploy、手動）可以很多個 —— 跟 CI 同一個原則（[0008](0008-ci-same-script-in-container.md)）。
 `apply.sh` 一次換一個服務、都帶 `--no-deps`，部署 app 不會順便重啟模型。
 
 ## 代價
@@ -36,7 +36,7 @@ GitHub 不該有連進自己電腦的權限。
 
 ## 什麼時候重想
 
-- 上 EKS：同一個 pull 模型就是 Argo CD；但階段二先用 GitHub Actions 推（[0004](0004-push-deploy-from-github-actions.md)）。
+- 上 EKS（[#58](https://github.com/Anderson-chen/talkcal/issues/58)）：同一個 pull 模型就是 Argo CD，要跟 GitHub Actions 推的做法比過再決定。
 - 要合併即部署、或有多台機器要協調 → push 或 GitOps 控制器。
 
 ## 證據

@@ -1,8 +1,8 @@
-# 0008. AI 助理的 agent loop 自己寫，對話記憶連工具呼叫一起存
+# 0003. AI 助理的 agent loop 自己寫，對話記憶連工具呼叫一起存
 
 - 狀態：已採用
 - 日期：2026-10-06
-- 相關：[3eee98a 行事曆加 AI 助理 agent](https://github.com/Anderson-chen/talkcal/commit/3eee98a)、[0006](0006-spring-ai-openai-compatible.md)
+- 相關：[3eee98a 行事曆加 AI 助理 agent](https://github.com/Anderson-chen/talkcal/commit/3eee98a)、[0001](0001-spring-ai-openai-compatible.md)
 
 ## 背景
 

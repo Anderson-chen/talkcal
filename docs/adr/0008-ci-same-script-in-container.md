@@ -1,8 +1,8 @@
-# 0013. CI 的檢查只寫在 `ci/checks.sh`，在容器裡跑；本機 pre-push 和 GitHub Actions 都呼叫它
+# 0008. CI 的檢查只寫在 `ci/checks.sh`，在容器裡跑；本機 pre-push 和 GitHub Actions 都呼叫它
 
 - 狀態：已採用
 - 日期：2026-10-08
-- 相關：[d89c076 CI 改成在乾淨的容器裡跑](https://github.com/Anderson-chen/talkcal/commit/d89c076)、epic [#17](https://github.com/Anderson-chen/talkcal/issues/17)、[0010](0010-hexagonal-with-archunit.md)
+- 相關：[d89c076 CI 改成在乾淨的容器裡跑](https://github.com/Anderson-chen/talkcal/commit/d89c076)、epic [#17](https://github.com/Anderson-chen/talkcal/issues/17)、[0005](0005-hexagonal-with-archunit.md)
 
 ## 背景
 
@@ -29,7 +29,7 @@ GitHub Actions 沒有 GPU，跑不到連真模型的測試；本機有 GPU，但
 
 **`checks.sh` 是「要檢查什麼」、`Dockerfile` 是「在什麼環境檢查」、`run.sh` 負責把 commit 放進容器；`.github/workflows/ci.yml` 和 `.githooks/pre-push` 都只呼叫 `ci/run.sh`。**
 
-跟後端的六角架構同一個道理：`checks.sh` 是核心，各平台的設定檔是 adapter（[0010](0010-hexagonal-with-archunit.md)）。
+跟後端的六角架構同一個道理：`checks.sh` 是核心，各平台的設定檔是 adapter（[0005](0005-hexagonal-with-archunit.md)）。
 兩邊各守一道：本機補上 GitHub 跑不到的模型測試，GitHub 補上本機可以繞過的那一道。
 
 容器的代價這樣處理：很少變的（JDK、Node、Gradle 本體）烤進映像檔；常變的（Java 函式庫、npm 套件）放具名 volume；

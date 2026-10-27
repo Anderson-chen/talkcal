@@ -1,8 +1,8 @@
-# 0012. 觀測：只有 Alloy 一個收集器，分送 Mimir、Loki、Tempo
+# 0007. 觀測：只有 Alloy 一個收集器，分送 Mimir、Loki、Tempo
 
 - 狀態：已採用
 - 日期：2026-10-02
-- 相關：[c429b59 觀測環境改成 Grafana 全家](https://github.com/Anderson-chen/talkcal/commit/c429b59)、epic [#30](https://github.com/Anderson-chen/talkcal/issues/30)、上 EKS 時怎麼放見 [0003](0003-self-hosted-observability-on-s3.md)
+- 相關：[c429b59 觀測環境改成 Grafana 全家](https://github.com/Anderson-chen/talkcal/commit/c429b59)、epic [#30](https://github.com/Anderson-chen/talkcal/issues/30)
 
 ## 背景
 
@@ -42,7 +42,7 @@ app 只認得 OTLP、只知道 Alloy 在哪；之後換儲存，app 不必重新
 
 ## 什麼時候重想
 
-- 上 EKS：繼續自架、區塊改存 S3（已決定，[0003](0003-self-hosted-observability-on-s3.md)）。
+- 上 EKS（[#58](https://github.com/Anderson-chen/talkcal/issues/58)）：要重新決定繼續自架還是換託管。
 - 量大到單一 Alloy 撐不住，或要 HA → 多台 Alloy + Mimir 的 HA tracker 去重。
 
 ## 證據

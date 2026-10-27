@@ -1,4 +1,4 @@
-# 0010. 後端用六角架構、功能優先的目錄，規則寫成 ArchUnit 測試
+# 0005. 後端用六角架構、功能優先的目錄，規則寫成 ArchUnit 測試
 
 - 狀態：已採用
 - 日期：2026-09-18（BuckPal 式目錄）、2026-09-21（功能優先、ArchUnit）
@@ -42,7 +42,7 @@ Java 的 package 沒有依賴方向的概念：core 直接 import 並 new 一個
 
 - 檔案和介面比較多：一個 use case 有 port.in 介面、service 實作、port.out，加上 adapter。
 - 組裝根要手動接線（`@Configuration` 裡 `new`），不靠元件掃描。
-- `@Transactional` 這類靠代理的註解在 `final` adapter 上用不了，改用 `TransactionTemplate`（見 [0009](0009-jdbc-client-not-jpa.md)）。
+- `@Transactional` 這類靠代理的註解在 `final` adapter 上用不了，改用 `TransactionTemplate`（見 [0004](0004-jdbc-client-not-jpa.md)）。
 
 ## 什麼時候重想
 

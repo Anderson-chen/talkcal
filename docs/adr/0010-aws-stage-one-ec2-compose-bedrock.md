@@ -1,8 +1,8 @@
-# 0015. 上 AWS 分兩階段；階段一是一台 EC2 跑同一份 compose，模型先走 Bedrock
+# 0010. 上 AWS 分兩階段；階段一是一台 EC2 跑同一份 compose，模型先走 Bedrock
 
 - 狀態：已採用（2026-10-14 部署上線）
 - 日期：2026-10-13
-- 相關：[5d693ea 規劃搬上 AWS 的兩個階段](https://github.com/Anderson-chen/talkcal/commit/5d693ea)、[83a9ef2 雲端先走一般機型 + Bedrock](https://github.com/Anderson-chen/talkcal/commit/83a9ef2)、[#57](https://github.com/Anderson-chen/talkcal/issues/57)、[#72](https://github.com/Anderson-chen/talkcal/issues/72)、階段二見 [0001](0001-eks-with-managed-node-groups.md)、[0002](0002-model-bedrock-default-gpu-optional.md)
+- 相關：[5d693ea 規劃搬上 AWS 的兩個階段](https://github.com/Anderson-chen/talkcal/commit/5d693ea)、[83a9ef2 雲端先走一般機型 + Bedrock](https://github.com/Anderson-chen/talkcal/commit/83a9ef2)、[#57](https://github.com/Anderson-chen/talkcal/issues/57)、[#72](https://github.com/Anderson-chen/talkcal/issues/72)、階段二見 [infra/envs/2-eks](../../infra/envs/2-eks/README.md)
 
 ## 背景
 
@@ -29,7 +29,7 @@
 
 **兩個階段、一個資料夾一個（`infra/envs/1-ec2`、`infra/envs/2-eks`）。階段一 Terraform 變數 `model_backend` 預設 `bedrock`：m7i-flex.large，app 打 Bedrock 的 Qwen3 32B；設成 `gpu` 就回到 g6.xlarge + llama-server。**
 
-app 一行不用改：因為跟模型講話走 OpenAI 相容協定（[0006](0006-spring-ai-openai-compatible.md)），`compose.bedrock.yaml` 只用環境變數換位址、key、模型名稱，並把 `llm-chat`、`model-seed` 放進不會啟用的 profile。
+app 一行不用改：因為跟模型講話走 OpenAI 相容協定（[0001](0001-spring-ai-openai-compatible.md)），`compose.bedrock.yaml` 只用環境變數換位址、key、模型名稱，並把 `llm-chat`、`model-seed` 放進不會啟用的 profile。
 key 綁在只能呼叫模型的專用 IAM user 上、90 天過期，跟 DB 密碼一起寫進 SSM 的 `.env`。
 
 ## 代價
