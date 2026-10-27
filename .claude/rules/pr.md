@@ -13,7 +13,7 @@
     |---|---|---|
     | 1 | 只有文件、規則、模板 | `/code-review medium` |
     | 2 | 程式碼（含腳本、workflow） | `/simplify` 再 `/code-review high` |
-    | 3 | `infra/`、`deploy/`、`ops/`、`web/nginx.conf`，或驗證／權限、對外 API 的程式碼 | 第 2 級，再加 `/security-review`；出錯難收拾的（資料遷移、刪資源）由人手動跑 `/code-review ultra` |
+    | 3 | `infra/`、`deploy/`、`ops/`、`web/nginx.conf`、`backend/src/main/resources/db/migration/`，或後端的 `auth/` 模組、各模組的 `adapter/in/web/`（對外 API） | 第 2 級，再加 `/security-review`；出錯難收拾的（資料遷移、刪資源）由人手動跑 `/code-review ultra` |
 
     - `/code-review` 找 bug，文件寫錯路徑、說錯行為也算；等級要寫明，不寫會沿用上次打的等級。
     - `/simplify` 找重複、可以簡化的地方，會直接改，所以排在 `/code-review` 前面，`/code-review` 才審得到最後進 PR 的那一版。
