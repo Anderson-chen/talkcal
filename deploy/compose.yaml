@@ -39,6 +39,12 @@ x-gpu: &gpu
           count: 1
           capabilities: [gpu]
 
+# app、web 的映像檔共用的版本參數（#25）：值是 cd/apply.sh export 的環境變數。
+# 只寫名字不寫值：環境變數沒設時 compose 不傳，改用 Dockerfile 裡 ARG 的預設（local / unknown），預設值只寫在那裡
+x-version-args: &version-args
+  - APP_VERSION
+  - GIT_COMMIT
+
 services:
   # ── 模型播種：把模型從 Windows 資料夾複製進 volume（只跑一次就結束）──────────
   # 為什麼不讓模型服務直接掛 C:/llm/models：實測 Windows → WSL2 的檔案通道只有約 20 MB/s，
@@ -177,9 +183,14 @@ services:
   # ── talkcal app ────────────────────────────────────────────────────
   app:
     # Dockerfile 在 backend/（要看得到 src/ 和 build.gradle），後端自己的東西放一起
-    image: talkcal/app:local
+    # tag 是版本號（#25）：cd/apply.sh 用 cd/version.sh 算好 APP_VERSION、GIT_COMMIT 再叫 compose，
+    # 每個版本一個 tag，機器上留著舊版本的映像檔（之後 #19 rollback 就是換回某個 tag）。
+    # 沒經過 apply.sh 直接 docker compose up 時沒有這兩個變數，退回原本的 local / unknown，
+    # 容器的 label 也會照實寫 local —— 一看就知道這不是走部署流程上去的
+    image: talkcal/app:${APP_VERSION:-local}
     build:
       context: ../backend
+      args: *version-args
     container_name: talkcal-app
 
     environment:
@@ -228,9 +239,10 @@ services:
   # ── 前端：nginx 送 Vue 靜態檔，並把 /api 轉給 app ──────────────────
   # 瀏覽器只連這一個入口，看到的是同一個來源，app 不必開 CORS。對照雲端：Ingress / CDN 那一層。
   web:
-    image: talkcal/web:local
+    image: talkcal/web:${APP_VERSION:-local}   # 版本號跟 app 同一組，理由同上
     build:
       context: ../web             # Dockerfile、nginx.conf 都在 web/ 裡，前端自己的東西放一起
+      args: *version-args
     container_name: talkcal-web
 
     ports:
