@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit;
  * 走 SLF4J 才會跟其他 log 一樣在 docker profile 下印成 ECS JSON，Loki 用 `| json` 就拆得開。
  *
  * 為什麼放在 app.observability、不放在某個模組的 adapter.in.web：它記的是整個應用的每一個請求，
- * 不屬於任何一門業務，跟 app.config 的 ObservationConfiguration 一樣是全站的觀測設定。core 照樣不知道有 HTTP 這回事。
+ * 不屬於任何一門業務，是全站的觀測設定。core 照樣不知道有 HTTP 這回事。
  *
  * 請求內容（body）也一起記在同一行：一次請求的「送了什麼」和「回幾號、花多久」放在一起，
  * 在 Loki 查一筆就看得完整，不必再拿時間去對另一行 log。
@@ -110,15 +110,5 @@ final class AccessLogFilter extends OncePerRequestFilter {
         }
         int length = Math.min(content.length, MAX_BODY_BYTES);
         return new String(content, 0, length, StandardCharsets.UTF_8);
-    }
-
-    /**
-     * actuator 不記：Alloy 每 15 秒來抓一次 /actuator/prometheus，
-     * 全記下來的話 access log 大半是它，真正的請求反而被淹掉。
-     * 健康檢查、指標本身就有 Alloy + Mimir 盯著，不缺這份紀錄。
-     */
-    @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        return request.getRequestURI().startsWith("/actuator");
     }
 }

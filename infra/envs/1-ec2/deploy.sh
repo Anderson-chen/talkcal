@@ -28,9 +28,16 @@ MODELS_DIR="$ROOT/models"
 echo "── 1. 原始碼：$GIT_REF"
 # 正在跑的這支腳本也會被換掉：git 是刪掉舊檔、寫新檔，bash 手上拿的還是舊檔，不會讀到一半變內容。
 # 新版的腳本從下次部署開始生效。
-git -C "$REPO" fetch --depth 1 origin "$GIT_REF"
+# --tags：連 release tag 一起拉，cd/version.sh 才認得出這個 commit 是不是某個 v<版本>（#25）。
+# 淺 clone 也沒關係：version.sh 只看「指著 HEAD 的 tag」，不需要歷史
+git -C "$REPO" fetch --depth 1 --tags origin "$GIT_REF"
 git -C "$REPO" checkout --detach FETCH_HEAD
 git -C "$REPO" log -1 --oneline
+# 映像檔的 tag 和 label 都用這組，跟本機的 cd/apply.sh 同一支 version.sh
+APP_VERSION="$(bash "$REPO/cd/version.sh")"
+GIT_COMMIT="$(git -C "$REPO" rev-parse HEAD)"
+export APP_VERSION GIT_COMMIT
+echo "版本：$APP_VERSION"
 
 if [ "$MODEL_BACKEND" = gpu ]; then
   echo "── 2. 模型檔：s3://$MODELS_BUCKET → $MODELS_DIR"
@@ -84,9 +91,10 @@ unset db_password
 
 docker compose "${compose_files[@]}" up -d --build --remove-orphans
 
-echo "── 5. 觀測（ops/，跟本機同一份）"
-# 要在 deploy/ 之後：Alloy 要加入的網路是 deploy/ 建的
-docker compose -f ops/compose.yaml up -d
+echo "── 5. 觀測（ops/ + compose.ops.yaml）"
+# 要在 deploy/ 之後：Alloy 要加入的網路是 deploy/ 建的。
+# 設定跟本機同一份，compose.ops.yaml 只蓋掉雲端不一樣的值（trace 取樣比例）
+docker compose -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml up -d
 
 docker compose "${compose_files[@]}" ps
 echo "完成。網址：https://$(grep '^SITE_ADDRESS=' deploy/.env | cut -d= -f2)"
