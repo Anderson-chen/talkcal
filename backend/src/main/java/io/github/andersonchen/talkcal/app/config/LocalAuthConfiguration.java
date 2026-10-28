@@ -19,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -43,8 +44,10 @@ import org.springframework.security.web.authentication.logout.HttpStatusReturnin
  * - /api 底下除了註冊、登入，一律要登入；沒登入回 401 JSON，不轉址到登入頁（前端自己決定畫登入畫面）
  * - 會改東西的請求（POST、DELETE）要帶 CSRF token：別的網站騙使用者的瀏覽器送請求時，cookie 會自動帶上，
  *   但它讀不到我們這個網域的 XSRF-TOKEN cookie，送不出對的 header
- * - actuator、API 文件不擋：它們不經過 nginx（nginx 只轉 /api），外面連不到。
- *   actuator 另外開在不發佈的 management 埠（#33），這條規則在那個埠上也生效，Alloy 才不必登入就抓得到指標
+ * - API 文件不擋：它不經過 nginx（nginx 只轉 /api），外面連不到
+ * - actuator 不擋：它只開在不發佈到主機的 management 埠（#33），由網路決定誰連得到；Alloy 抓指標不必登入。
+ *   用 EndpointRequest 而不是寫死 /actuator/**：它跟著 management 的設定走，只認 management 埠上的請求，
+ *   API 埠上打 /actuator 照樣要登入
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(name = "talkcal.auth.provider", havingValue = "local", matchIfMissing = true)
@@ -101,7 +104,8 @@ class LocalAuthConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/auth/providers").permitAll()
                         // Spring Boot 出錯時會轉到 /error 產生錯誤回應；擋住的話，所有錯誤都會變成 401
                         .requestMatchers("/error").permitAll()
-                        .requestMatchers("/actuator/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers(EndpointRequest.toAnyEndpoint()).permitAll()
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated())
                 // 登入：前端用表單格式送 username、password 到 /api/auth/login。
                 // 成功、失敗都只回狀態碼和 JSON，不轉址 —— 預設的轉址是給伺服器畫頁面用的，SPA 用不到
