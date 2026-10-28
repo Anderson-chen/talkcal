@@ -5,9 +5,7 @@
 import { computed, ref, watch } from 'vue'
 import { addDays, dayLabel, timeOf, weekdayName } from '../monthGrid'
 import Icon from './Icon.vue'
-import { problemOf, type Problem } from '../http'
-import TraceId from '../TraceId.vue'
-import { useCalendarState } from './useCalendar'
+import { message, useCalendarState } from './useCalendar'
 import { useThemeState } from './useTheme'
 
 const props = defineProps<{ variant: 'drawer' | 'page' }>()
@@ -16,7 +14,7 @@ const theme = useThemeState()
 
 const confirming = ref(false)
 const removing = ref(false)
-const error = ref<Problem | null>(null)
+const error = ref<string | null>(null)
 
 const event = computed(() => calendar.detail.value)
 
@@ -61,7 +59,7 @@ async function remove() {
   try {
     await calendar.remove(event.value.id)
   } catch (e) {
-    error.value = problemOf(e)
+    error.value = message(e)
   } finally {
     removing.value = false
     confirming.value = false
@@ -101,7 +99,7 @@ async function remove() {
           <span class="main note">{{ event.note }}</span>
         </div>
       </div>
-      <p v-if="error" role="alert" class="error">{{ error.text }}<TraceId v-if="error.traceId" :id="error.traceId" /></p>
+      <p v-if="error" role="alert" class="error">{{ error }}</p>
     </div>
 
     <div class="actions">

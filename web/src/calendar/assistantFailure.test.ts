@@ -4,7 +4,7 @@ import { ApiError } from '../http'
 import { describeAssistantFailure } from './assistantFailure'
 
 const failure = (status: number | null, code: string | null = null, retryAfterSeconds: number | null = null, message = '後端的話') =>
-  new ApiError(message, null, { status, code, retryAfterSeconds })
+  new ApiError(message, { status, code, retryAfterSeconds })
 
 describe('describeAssistantFailure', () => {
   it('模型連不上（503 MODEL_UNAVAILABLE）：照後端給的秒數倒數，並說行事曆還能用', () => {

@@ -9,7 +9,7 @@
 // 回到首頁時 session 已經是登入的，App 照常 loadMe() 就知道是誰。
 
 import { ref } from 'vue'
-import { onUnauthorized, problemOf, send, UnauthorizedError, type Problem } from './http'
+import { onUnauthorized, send, UnauthorizedError } from './http'
 
 /** 目前登入的人。id 是行程、對話的擁有者；name 是給人看的。 */
 export interface Me {
@@ -57,7 +57,7 @@ onUnauthorized(() => {
  * 只有 401 才代表「沒登入」；連不上、伺服器出錯時就說連不上，不畫登入頁 —— 登入著的人在伺服器重啟時重新整理，
  * 看到登入頁會以為被登出、去重打密碼，而那時候登入也一樣會失敗
  */
-export const meUnreachable = ref<Problem | null>(null)
+export const meUnreachable = ref<string | null>(null)
 
 /** 打開頁面時問一次：有登入就記下是誰，沒有就是 null；問不到（不是 401）就留在「還不知道」，記下原因。 */
 export async function loadMe(): Promise<void> {
@@ -70,7 +70,7 @@ export async function loadMe(): Promise<void> {
       me.value = null
       meUnreachable.value = null
     } else if (me.value === undefined) {
-      meUnreachable.value = problemOf(e)
+      meUnreachable.value = e instanceof Error ? e.message : String(e)
     } else {
       // 已經在登入頁（me 是 null），登入成功後卻問不到是誰：照舊丟出去，由登入頁顯示錯誤
       throw e

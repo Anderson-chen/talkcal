@@ -163,7 +163,7 @@ async function main() {
     await contexts[name].setOffline(false)
   }
 
-  // 6. app 停掉：nginx 自己回錯誤（不是 JSON、沒有追蹤碼）
+  // 6. app 停掉：nginx 自己回錯誤（不是 JSON、沒有 code）
   docker('stop talkcal43-app')
   for (const name of ['desktop', 'mobile']) {
     await ask(name, '明天有什麼行程？')

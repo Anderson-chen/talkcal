@@ -29,7 +29,7 @@ onMounted(loadMe)
     <LoginView v-else />
   </div>
   <div v-else-if="meUnreachable" class="view">
-    <ServerUnreachable :problem="meUnreachable" :retry="loadMe" />
+    <ServerUnreachable :reason="meUnreachable" :retry="loadMe" />
   </div>
   <div v-else-if="slow" class="view connecting" :style="vars" role="status">正在連線…</div>
 </template>

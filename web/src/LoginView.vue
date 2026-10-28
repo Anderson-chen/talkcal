@@ -10,8 +10,6 @@
 import { computed, onMounted, ref } from 'vue'
 import { loadProviders, logIn, providerLoginUrl, signUp, type Provider } from './auth'
 import { loadThemeKey, THEMES, toCssVars } from './calendar/theme'
-import { problemOf, type Problem } from './http'
-import TraceId from './TraceId.vue'
 
 // 行事曆還沒建好主題狀態，這裡直接用上次選的主題：登入前後顏色一致
 const vars = toCssVars(THEMES[loadThemeKey()])
@@ -19,7 +17,7 @@ const vars = toCssVars(THEMES[loadThemeKey()])
 const mode = ref<'login' | 'register'>('login')
 const username = ref('')
 const password = ref('')
-const error = ref<Problem | null>(null)
+const error = ref<string | null>(null)
 const busy = ref(false)
 
 const providers = ref<Provider[]>([])
@@ -33,8 +31,7 @@ onMounted(async () => {
   // 原因不放在網址上（後端只記 log），這裡只說「沒成功」；顯示完把參數拿掉，重新整理才不會一直看到
   const params = new URLSearchParams(window.location.search)
   if (params.has('login_error')) {
-    // 原因只在後端的 log，這一頁拿不到那次請求的追蹤碼
-    error.value = { text: '沒有登入成功，請再試一次或改用其他方式登入', traceId: null }
+    error.value = '沒有登入成功，請再試一次或改用其他方式登入'
     params.delete('login_error')
     const query = params.toString()
     window.history.replaceState(null, '', window.location.pathname + (query ? `?${query}` : ''))
@@ -55,7 +52,7 @@ async function submit() {
     await (mode.value === 'login' ? logIn : signUp)(username.value, password.value)
     // 成功之後 auth.ts 的 me 會變成登入的人，App 自己換成行事曆，這裡不必做什麼
   } catch (e) {
-    error.value = problemOf(e)
+    error.value = e instanceof Error ? e.message : String(e)
   } finally {
     busy.value = false
   }
@@ -77,7 +74,7 @@ async function submit() {
                :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" />
       </div>
       <p v-if="mode === 'register'" class="hint">帳號名稱 3～32 個字（英數、底線、點、減號）；密碼至少 8 個字</p>
-      <p v-if="error" role="alert" class="error">{{ error.text }}<TraceId v-if="error.traceId" :id="error.traceId" /></p>
+      <p v-if="error" role="alert" class="error">{{ error }}</p>
       <button type="submit" class="primary" :disabled="busy">{{ busy ? '請稍候…' : title }}</button>
       <template v-if="providers.length">
         <div class="divider"><span>或</span></div>

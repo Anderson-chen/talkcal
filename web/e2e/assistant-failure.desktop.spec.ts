@@ -8,7 +8,6 @@ import { expect, test, type Page, type Route } from '@playwright/test'
 import { fakeApi } from './fakeApi'
 
 const INPUT = '例如：下週二早上10點面試'
-const TRACE_ID = '4bf92f3577b34da6a3ce929d0e0e4736'
 
 test.beforeEach(async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-06T11:30:00+08:00') })
@@ -21,7 +20,7 @@ const failure = (status: number, code: string, retryAfterSeconds?: number): Repl
   route.fulfill({
     status,
     json: { error: '後端的話', code, ...(retryAfterSeconds ? { retryAfterSeconds } : {}) },
-    headers: { 'X-Trace-Id': TRACE_ID, ...(retryAfterSeconds ? { 'Retry-After': String(retryAfterSeconds) } : {}) },
+    headers: retryAfterSeconds ? { 'Retry-After': String(retryAfterSeconds) } : {},
   })
 
 /** 助理照順序回這幾種；用完了就一直回最後一種。回傳收到幾次請求。 */
@@ -53,7 +52,6 @@ test('模型連不上（503 MODEL_UNAVAILABLE）：那句標「沒送出」、�
   await expect(panel.locator('.bubble.me', { hasText: '明天下午三點和 Amy 開會' })).toContainText('沒送出')
   const notice = panel.locator('[data-failure="unavailable"]')
   await expect(notice).toContainText('行事曆的其他功能照常可用')
-  await expect(notice.getByText(TRACE_ID)).toBeVisible()
   await expect(notice.getByRole('button', { name: '30 秒後可以再試' })).toBeDisabled()
 
   // 倒數中：可以先打字，但送出鈕、建議說法都按不了；打的字不會被清掉
@@ -127,7 +125,7 @@ test('請求本身有問題（400）：沒有「再試一次」，那句放回�
   await expect(chat(page).getByLabel('輸入訊息')).toHaveValue('明天有什麼行程？')
 })
 
-test('網路斷了（請求沒送出去）：說連不上、可以再試，沒有追蹤碼，也不說行事曆照常可用', async ({ page }) => {
+test('網路斷了（請求沒送出去）：說連不上、可以再試，不說行事曆照常可用', async ({ page }) => {
   await fakeApi(page)
   await page.route('**/api/calendar/assistant', (route) => route.abort('internetdisconnected'))
   await page.goto('/')
@@ -136,7 +134,6 @@ test('網路斷了（請求沒送出去）：說連不上、可以再試，沒�
   const notice = chat(page).locator('[data-failure="offline"]')
   await expect(notice).toContainText('連不上伺服器')
   await expect(notice).not.toContainText('照常可用')
-  await expect(notice.getByText('追蹤碼')).toHaveCount(0)
   await expect(notice.getByRole('button', { name: '再試一次' })).toBeEnabled()
 })
 

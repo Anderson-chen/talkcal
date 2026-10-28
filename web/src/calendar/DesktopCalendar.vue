@@ -5,7 +5,6 @@ import { computed, ref } from 'vue'
 import { logOut, me } from '../auth'
 import { CATEGORIES } from '../calendar'
 import { monthDayLabel, weekdayName, weekOf } from '../monthGrid'
-import TraceId from '../TraceId.vue'
 import AssistantChat from './AssistantChat.vue'
 import ClearChatButton from './ClearChatButton.vue'
 import EventDetail from './EventDetail.vue'
@@ -86,8 +85,7 @@ const noEventsToday = computed(() => calendar.view.value === 'day' && calendar.e
         <ViewTabs />
       </div>
       <p v-if="calendar.loadError.value" role="alert" class="error">
-        讀不到行程：{{ calendar.loadError.value.text }}
-        <TraceId v-if="calendar.loadError.value.traceId" :id="calendar.loadError.value.traceId" />
+        讀不到行程：{{ calendar.loadError.value }}
         <button type="button" class="reload" @click="calendar.reload()">重新讀取</button>
       </p>
 

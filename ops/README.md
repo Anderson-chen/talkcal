@@ -383,13 +383,6 @@ Mimir 的 ruler 也能發告警，但那樣要再架一個 Alertmanager，通知
 | trace（Tempo） | log | span 旁的 **Logs for this span** | Tempo 資料源用 trace id 去 Loki 搜內容 |
 | trace（Tempo） | 指標 | span 名稱旁的連結圖示 → 選一條：延遲 p95、5xx 比例、連線池、同一種 span 的 p95 | Tempo 資料源的 `tracesToMetrics`，時間是 span 前後各 5 分鐘 |
 | log（Loki） | 單一請求儀表板 | 展開一行 → **用「單一請求」dashboard 看** | 同一個 derived field 的第二個連結 |
-| 使用者回報（畫面上的「追蹤碼」） | trace | Explore → 資料源 **Tempo** → **TraceQL** 分頁，貼上那串 32 字 | app 每個回應都帶 `X-Trace-Id` header（`TraceIdResponseFilter`），前端在助理的回覆和每個錯誤底下顯示（`web/src/TraceId.vue`）（#42） |
-
-使用者說「剛剛那次怪怪的」時，請他複製助理回覆或錯誤訊息底下的追蹤碼。助理答得怪的那一則也有，不只出錯的時候：
-這個 app 最常見的「怪」是模型答錯，那時候 HTTP 是 200。
-畫面上**沒有**追蹤碼的錯誤，表示請求根本沒到 app（nginx 自己擋下的 429、app 掛掉時的 502/504）：
-這時要看的是 nginx 的 log 和 app 的健康狀態，Tempo 裡本來就不會有那一次。
-（實測截圖：`docs/evidence/2026-10-19-trace-id-*.png`）
 
 ## 下一步（一次一件）
 

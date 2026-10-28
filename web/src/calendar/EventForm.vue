@@ -8,9 +8,7 @@ import { CATEGORIES } from '../calendar'
 import { timeOf } from '../monthGrid'
 import { isOvernight, toDraft, type FormFields } from './eventDraft'
 import Icon from './Icon.vue'
-import { problemOf, type Problem } from '../http'
-import TraceId from '../TraceId.vue'
-import { useCalendarState } from './useCalendar'
+import { message, useCalendarState } from './useCalendar'
 import { useThemeState } from './useTheme'
 
 const props = defineProps<{ variant: 'dialog' | 'page' }>()
@@ -28,7 +26,7 @@ const form = reactive<FormFields>({
   location: initial.location ?? '',
   note: initial.note ?? '',
 })
-const error = ref<Problem | null>(null)
+const error = ref<string | null>(null)
 const saving = ref(false)
 const titleInput = ref<HTMLInputElement | null>(null)
 
@@ -43,8 +41,7 @@ function close() {
 async function save() {
   if (saving.value) return
   const result = toDraft(form)
-  // 表單自己的檢查（結束早於開始……）沒有送出請求，也就沒有追蹤碼
-  if ('error' in result) return fail({ text: result.error, traceId: null })
+  if ('error' in result) return fail(result.error)
 
   saving.value = true
   error.value = null
@@ -58,14 +55,14 @@ async function save() {
     // 存好直接打開它的詳情（照設計稿），使用者看得到存進去的樣子
     calendar.detailId.value = saved.id
   } catch (e) {
-    fail(problemOf(e))
+    fail(message(e))
   } finally {
     saving.value = false
   }
 }
 
-function fail(problem: Problem) {
-  error.value = problem
+function fail(text: string) {
+  error.value = text
 }
 </script>
 
@@ -125,7 +122,7 @@ function fail(problem: Problem) {
         <label for="ev-note">備註</label>
         <textarea id="ev-note" v-model="form.note" rows="3" placeholder="選填" />
       </div>
-      <p v-if="error" role="alert" class="error">{{ error.text }}<TraceId v-if="error.traceId" :id="error.traceId" /></p>
+      <p v-if="error" role="alert" class="error">{{ error }}</p>
       <!-- 讓 Enter 也能送出；畫面上的按鈕在下面（對話框）或上面（整頁） -->
       <button type="submit" hidden />
     </form>

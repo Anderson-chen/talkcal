@@ -4,10 +4,8 @@
 // 「重新連線」再問一次「我是誰」；網路回來時（瀏覽器的 online 事件）自己問，不必等使用者按。
 import { onMounted, onUnmounted, ref } from 'vue'
 import { loadThemeKey, THEMES, toCssVars } from './calendar/theme'
-import type { Problem } from './http'
-import TraceId from './TraceId.vue'
 
-const props = defineProps<{ problem: Problem; retry: () => Promise<void> }>()
+const props = defineProps<{ reason: string; retry: () => Promise<void> }>()
 
 // 行事曆還沒建好主題狀態，跟登入頁一樣直接用上次選的主題
 const vars = toCssVars(THEMES[loadThemeKey()])
@@ -33,9 +31,8 @@ onUnmounted(() => window.removeEventListener('online', onOnline))
   <div class="unreachable" :style="vars">
     <div class="card" role="alert">
       <h1>暫時連不上伺服器</h1>
-      <p>{{ problem.text }}</p>
+      <p>{{ reason }}</p>
       <p class="hint">可能是網路斷了，或伺服器正在更新。你的行程和對話都存在伺服器上，連上之後就會回來。</p>
-      <TraceId v-if="problem.traceId" :id="problem.traceId" />
       <button type="button" class="primary" :disabled="busy" @click="reconnect">{{ busy ? '連線中…' : '重新連線' }}</button>
     </div>
   </div>

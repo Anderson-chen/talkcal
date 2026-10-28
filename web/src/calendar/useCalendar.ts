@@ -6,7 +6,6 @@
 
 import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
 import { addEvents, listEvents, NotFoundError, removeEvent, type Category, type EventFields, type SavedEvent } from '../calendar'
-import { problemOf, type Problem } from '../http'
 import { addDays, daysCovered, gridRange, monthGrid, toIsoDate } from '../monthGrid'
 
 export type View = 'month' | 'week' | 'day'
@@ -27,7 +26,7 @@ export function useCalendar() {
   // 現在載入的是哪個月的月曆頁。週、日視圖也靠它：任何一天所在的那一週，一定落在它那個月的 42 格裡
   const shown = ref(monthOf(today))
   const events = ref<SavedEvent[]>([])
-  const loadError = ref<Problem | null>(null)
+  const loadError = ref<string | null>(null)
   const hidden = ref<Partial<Record<Category, boolean>>>({})
   const detailId = ref<string | null>(null)
   const form = ref<FormRequest | null>(null)
@@ -50,7 +49,7 @@ export function useCalendar() {
       loadError.value = null
     } catch (e) {
       if (ticket !== latestLoad) return
-      loadError.value = problemOf(e)
+      loadError.value = message(e)
     }
   }, { immediate: true })
 
@@ -167,4 +166,8 @@ export function blankDraft(day: string): EventFields {
 
 export function monthOf(day: string) {
   return { year: Number(day.slice(0, 4)), month: Number(day.slice(5, 7)) }
+}
+
+export function message(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
 }

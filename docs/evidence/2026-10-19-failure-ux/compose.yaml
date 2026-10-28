@@ -8,7 +8,7 @@
 # 故障打在這幾處，真正的模型完全不動：
 #   docker stop  talkcal43-llm-proxy   模型斷線（502 ASSISTANT_FAILED，連 5 次後熔斷 503 MODEL_UNAVAILABLE）
 #   docker pause talkcal43-llm-proxy   模型卡住（bulkhead 縮成 1：第二個人 503 MODEL_BUSY）
-#   docker stop  talkcal43-app         app 停掉（nginx 自己回 502/504，沒有 JSON、沒有追蹤碼）
+#   docker stop  talkcal43-app         app 停掉（nginx 自己回 502/504，沒有 JSON、沒有 code）
 #
 # 起：docker compose -f docs/evidence/2026-10-19-failure-ux/compose.yaml up -d --build
 # 收：docker compose -f docs/evidence/2026-10-19-failure-ux/compose.yaml down -v
@@ -46,7 +46,7 @@ services:
       SPRING_AI_OPENAI_CHAT_BASEURL: http://llm-proxy:8080/v1
       # 縮成 1：一個人卡在模型上，第二個人就看得到「忙碌」
       TALKCAL_MODEL_BULKHEAD_MAXCONCURRENTCALLS: "1"
-      # 沒有 Alloy：trace 送不出去只會記 log，不影響回應的 X-Trace-Id
+      # 沒有 Alloy：trace 送不出去只會記 log，不影響回應
     ports:
       - "127.0.0.1:18843:8090"
     depends_on:

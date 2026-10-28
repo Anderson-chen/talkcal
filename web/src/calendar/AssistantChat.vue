@@ -9,7 +9,6 @@
 import { computed } from 'vue'
 import { addDays, dayLabel, timeOf } from '../monthGrid'
 import type { EventFields } from '../calendar'
-import TraceId from '../TraceId.vue'
 import Icon from './Icon.vue'
 import { SLOW_AFTER_SECONDS, SUGGESTIONS, useAssistantState, type ChatMessage } from './useAssistant'
 import { useThemeState } from './useTheme'
@@ -65,11 +64,10 @@ const thinking = computed(() =>
               <button type="button" class="secondary" :disabled="assistant.saving.value" @click="assistant.cancel(m)">取消</button>
             </div>
             <span v-else-if="m.proposals.length && m.proposals.every((p) => p.status === 'removed')" class="cancelled">已取消</span>
-            <span v-if="m.error" role="alert" class="error">{{ m.error.text }}<TraceId v-if="m.error.traceId" :id="m.error.traceId" /></span>
+            <span v-if="m.error" role="alert" class="error">{{ m.error }}</span>
             <button v-if="assistant.canRetry(m)" type="button" class="retry" :disabled="blocked" @click="assistant.retry(m)">
               {{ assistant.waitSeconds.value > 0 ? `${assistant.waitSeconds.value} 秒後可以再試` : '再試一次' }}
             </button>
-            <TraceId v-if="m.traceId" :id="m.traceId" />
           </div>
         </template>
         <div v-if="assistant.typing.value" class="bubble typing">{{ thinking }}</div>
@@ -116,7 +114,7 @@ const thinking = computed(() =>
 .primary { flex: 1; height: 40px; border: 0; border-radius: 9px; background: var(--accent); color: var(--onAccent); font-size: 13px; font-weight: 700; }
 .large .primary, .large .secondary { height: 44px; font-size: 14px; }
 .secondary { height: 40px; padding: 0 12px; border: 1px solid var(--field); border-radius: 9px; background: transparent; color: var(--ink); font-size: 13px; }
-.error { font-size: 13px; color: var(--danger); display: flex; flex-direction: column; gap: 2px; }
+.error { font-size: 13px; color: var(--danger); }
 .suggestions { display: flex; gap: 6px; padding: 8px 16px 4px; overflow-x: auto; }
 .suggestions button { flex: none; height: 32px; padding: 0 10px; border: 1px solid var(--field); border-radius: 16px; background: transparent; color: var(--ink); font-size: 12px; white-space: nowrap; }
 .input { display: flex; gap: 8px; align-items: center; padding: 8px 16px 20px; }
