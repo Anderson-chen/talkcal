@@ -183,7 +183,7 @@ groups:
           summary: 這條永遠在響是正常的；它停了，外部服務會寄信
           description: >-
             每分鐘打一次 HEARTBEAT_URL。外部服務超過寬限時間沒收到，就代表 Grafana 停了、
-            機器斷線，或 Grafana 的通知送不出去。機器排程關機前先到外部服務按 Pause，見 ops/README.md。
+            機器斷線，或 Grafana 的通知送不出去。雲端機器關機用 infra/envs/1-ec2/power.sh stop，它會先暫停外部服務的 check，見 ops/README.md。
         # 不走 policy 樹，直接送 heartbeat。
         # Grafana 的通知每 group_interval 檢查一次，離上次送出已滿 repeat_interval 就重送 —— 這就是 heartbeat 的節奏。
         # 不設成 1m／1m：實測每 2 分鐘才送一次。第 60 秒那次檢查時離上次送出差幾毫秒不滿 1 分鐘，要等下一輪。
