@@ -3,7 +3,6 @@ package io.github.andersonchen.talkcal.app.config;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.sun.net.httpserver.HttpServer;
 import io.micrometer.core.instrument.Counter;
@@ -122,7 +121,7 @@ class ModelTokenUsageMetricsTest {
         if (counter != null) {
             // 每個 token counter 都要能分出在哪裡跑、哪一顆，少一個標籤 dashboard 就算錯錢
             assertEquals("bedrock", counter.getId().getTag("model.backend"), "標籤：" + counter.getId().getTags());
-            assertTrue(counter.getId().getTag("gen_ai.request.model") != null, "標籤：" + counter.getId().getTags());
+            assertNotNull(counter.getId().getTag("gen_ai.request.model"), "標籤：" + counter.getId().getTags());
         }
         return counter;
     }
