@@ -61,7 +61,7 @@ flowchart LR
 ```mermaid
 flowchart LR
     seed["model-seed<br/>成功結束"] --> llm["llm-chat<br/>/health 200"]
-    llm --> app["app<br/>/actuator/health 200"]
+    llm --> app["app<br/>:8091/actuator/health/readiness 200"]
     pg["postgres<br/>pg_isready"] --> app
     app --> web["web"]
     deploy_net["deploy/ 的網路存在"] --> alloy["ops/ 的 alloy"]

@@ -34,7 +34,7 @@ RUN --mount=type=cache,target=/gradle-cache \
 # ════════════════════════════════════════════════════════════════════
 FROM eclipse-temurin:25-jre-noble AS runtime
 
-# curl：給 compose 的 healthcheck 打 /actuator/health。JRE 映像檔沒附 curl 也沒附 wget。
+# curl：給 compose 的 healthcheck 打 management 埠的 /actuator/health/readiness。JRE 映像檔沒附 curl 也沒附 wget。
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
