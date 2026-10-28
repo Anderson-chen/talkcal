@@ -157,8 +157,8 @@ sum by (service) (count_over_time({env="docker"} | json | log_level=~"WARN|ERROR
 
 ## 追蹤：一個請求的時間花在哪
 
-app 對每個請求開一個 trace（`management.tracing.sampling.probability=1.0`，學習環境全記），
-用 OTLP 推給 Alloy 的 4318，Alloy 再轉給 Tempo。
+app 對每個請求開一個 trace、全部送出（`management.tracing.sampling.probability=1.0`），
+用 OTLP 推給 Alloy 的 4318，Alloy 決定留哪些（見下面「Trace 取樣」）再轉給 Tempo。
 
 > **改用 Spring AI 之後，trace 的樹還沒重新量過。** 以前往外的 span 是 RestClient 產生的 HTTP span
 > （`http post /v1/chat/completions`）；現在跟模型講話的是 Spring AI，
@@ -192,6 +192,76 @@ llama.cpp 本身不產生 span，所以樹只到 app 呼叫出去的那一層。
 
 本機 bootRun 的 app 也會送 trace（走主機的 `127.0.0.1:4318`），只要 ops/ 有起來。
 ops/ 沒起時 trace 送不出去，app 只會在 log 印 warning，請求照常處理。
+
+### Trace 取樣：錯的、慢的全留，其餘抽樣（#37）
+
+| 環境 | 一般請求留幾 % | 等多久才決定 | 設在哪 |
+|------|---------------|--------------|--------|
+| 本機 | 100 | 5 秒 | `alloy/config.alloy` 的預設值（不設環境變數） |
+| 雲端（EC2） | 10 | 125 秒 | [`infra/envs/1-ec2/compose.ops.yaml`](../infra/envs/1-ec2/compose.ops.yaml)，`deploy.sh` 疊上去 |
+
+不論比例多少，下面三種**一律留**：span 狀態是 ERROR、回 5xx（`outcome=SERVER_ERROR`）、整個 trace 超過 5 秒。
+
+**為什麼是 tail（在 Alloy）而不是 head（在 app）**
+
+| | head：app 端 `management.tracing.sampling.probability=0.1` | tail：Alloy 的 `otelcol.processor.tail_sampling` |
+|---|---|---|
+| 什麼時候決定 | 請求一進來就擲骰子 | 一個 trace 的 span 到齊後看整棵樹 |
+| 錯誤、慢請求 | 跟一般請求一樣只留 10%——最想看的那幾筆九成找不到 | 依規則全留 |
+| 省到哪 | app 少產生 span、少送網路 | app 照樣全送（同一台機器的內部網路，便宜），省的是 Tempo 的儲存和查詢 |
+| 代價 | 幾乎沒有 | Alloy 記憶體要放「還沒決定」的 trace；一個 trace 的 span 必須進同一個 Alloy |
+
+這個專案的 trace 成本在 Tempo 那頭（EC2 的磁碟、查詢），app 送出去的那段是同機器的內部網路；
+而 #37 的目標「關鍵請求留得住」head 做不到，所以選 tail。代價那欄目前都不是問題：只有一個 Alloy，
+一般流量下等決定的 trace 只有幾千個。哪天 Alloy 要變成多個，前面得加一層照 trace id 分流的（`otelcol.exporter.loadbalancing`）。
+
+app 端因此**必須**維持 1.0：app 先丟掉的 trace，Alloy 根本看不到，錯誤再多也撈不回來。
+
+**規則怎麼定的**
+
+- **5xx 要另外一條規則**：實測 Spring 的 HTTP span 回 500 時狀態是空的（UNSET），只有 `outcome` 屬性記著 `SERVER_ERROR`。
+  只靠「狀態是 ERROR」會漏掉 500。4xx 不全留：未登入、找不到是使用者那邊的事，量大又不代表系統出問題。
+- **慢 = 超過 5 秒**：AI 助理正常一次約 2–3 秒，行程 API 幾十毫秒。等 #34 定了 SLO 改成跟延遲目標對齊。
+- **等 125 秒才決定（雲端）**：span 是「結束時」才送，根 span 最後到。等不夠久，慢請求的根 span 還沒到就被決定，
+  看起來不慢而被抽掉（下面反例 3）。叫模型的逾時是 2 分鐘，所以等 125 秒。代價是雲端的 trace 晚兩分鐘才查得到。
+  本機 100% 怎麼決定都是留，只等 5 秒。
+
+**證據**：另起一組 Alloy（就是這份 `config.alloy`）＋ Tempo，送合成 trace（形狀照 app 的真實 span：
+`outcome`、`uri` 屬性、根 span 加一個 jdbc 子 span），再用 TraceQL 數每組有根 span 的 trace 有幾個。
+
+| 組別 | 送幾個 | 雲端設定（10%）留下 | 本機設定（100%）留下 |
+|------|------:|------:|------:|
+| 一般（40ms、200） | 200 | **19** | 200 |
+| 4xx（`CLIENT_ERROR`） | 40 | **6** | 40 |
+| 接近門檻（4.5 秒） | 40 | **2** | 40 |
+| 慢（6 秒） | 20 | **20** | 20 |
+| span 狀態 ERROR | 20 | **20** | 20 |
+| 5xx、狀態空的（Spring 真實的樣子） | 20 | **20** | 20 |
+
+反例：
+
+1. **只有「狀態是 ERROR」這條規則會漏 5xx**：Alloy 的 `otelcol_processor_tail_sampling_count_traces_sampled_total`
+   上，`errors` 規則只判了 20 個留（狀態 ERROR 那組），5xx 那組 20 個全靠 `server-errors` 規則才留下。
+2. **不是什麼都留**：接近門檻的 4.5 秒、4xx 都只按比例留（2/40、6/40），規則沒有寬到把它們全收。
+   丟掉的 trace 連子 span 都沒進 Tempo（不帶根 span 的條件查也是 19），沒有留下半截。
+3. **等太短會漏慢請求**：模擬慢請求真實的到達順序——子 span 先到、根 span 8 秒後才到。
+   等 5 秒：20 個慢請求留下 **0** 個（決定時只看到 5ms 的子 span）；等 20 秒：**20** 個全留。
+
+**對從 trace 算出來的數字的影響**
+
+抽樣之後，Tempo 裡的 trace 不再是全部請求，而且是**有偏的**：錯的、慢的 100% 在，一般的只有 10%。
+
+- **`talkcal — Traces (Tempo)` 儀表板的 TraceQL metrics**（請求速率、各段 p95、失敗 span 數）：
+  雲端上速率會少算（約剩一成多），p95 和錯誤比例會**高估**（慢的、錯的都在，快的被抽掉）。
+  這幾張圖在雲端只拿來找「哪一段慢」、點進 trace，**數字以 talkcal-app 儀表板為準**——那是 app 的 Micrometer 指標，
+  每個請求都算到，跟取樣無關。
+- **Tempo metrics-generator（#31）**：它在 Tempo 收到 span 時才算 span metrics／service graph，
+  位置在 Alloy 的取樣**之後**，看到的是抽樣後的 trace——service graph 上的請求數會少算、錯誤率會高估，跟上面同一個偏差。
+  Tempo 的 `span_multiplier_key` 只適用「每個 span 帶著固定抽樣比例」的 head sampling，tail 的比例依規則而不同，套不上。
+  要準的話，把 span metrics／service graph 改在 Alloy 裡、取樣**之前**算（`otelcol.connector.spanmetrics`、
+  `otelcol.connector.servicegraph`），再寫進 Mimir。本機 100% 不受影響；雲端要不要搬，看 #31 的圖拿來做什麼。
+- **exemplar**：talkcal-app 圖上的 exemplar（指標點掛的 trace id）由 app 決定，可能指到被抽掉的 trace，點進去會找不到。
+  通常會去點的是延遲尖峰、錯誤那幾個點——那些剛好是全留的。
 
 ## 成本：token 用量和費用
 
