@@ -183,21 +183,30 @@ sum by (service) (count_over_time({env="docker"} | json | log_level=~"WARN|ERROR
 app 對每個請求開一個 trace、全部送出（`management.tracing.sampling.probability=1.0`），
 用 OTLP 推給 Alloy 的 4318，Alloy 決定留哪些（見下面「Trace 取樣」）再轉給 Tempo。
 
-> **改用 Spring AI 之後，trace 的樹還沒重新量過。** 以前往外的 span 是 RestClient 產生的 HTTP span
-> （`http post /v1/chat/completions`）；現在跟模型講話的是 Spring AI，
-> 底層是官方 openai-java SDK（OkHttp），**不會**產生 HTTP span，請求也不再帶 `traceparent` 標頭。
-> 換成 Spring AI 自己的觀測：AI 助理直接用 ChatModel，每叫一次模型一個 span，帶 `gen_ai.*` 屬性（模型名稱、token 用量）。
-> 部署後跟助理說一句話，到 Tempo 看實際的 span 名稱，再回來補一張 `http post /api/calendar/assistant` 的樹。
-> `talkcal — Traces (Tempo)` 儀表板裡用 `kind=client` 篩往外呼叫的那幾張圖，到時也要跟著改。
+一個助理請求實際的樹（2026-10-19 量的，截圖在 [docs/evidence/2026-10-19-request-trace.png](../docs/evidence/2026-10-19-request-trace.png)）：
+
+```
+talkcal-web  POST /api                          ← nginx（web/nginx.conf 的 otel_trace），trace 從這裡開始
+└ talkcal    http post /api/calendar/assistant
+  └ secured request
+    ├ connection                                ← 從連線池拿連線（排隊等連線就是這段變長）
+    ├ SELECT calendar_assistant_message         ← 每條 SQL 一個 span，參數值不放進來
+    ├ chat qwen3-8b ×N                          ← 叫一次模型一個，帶 gen_ai.* 屬性（token 用量）
+    │ └ POST                                    ← 真正打出去的 HTTP（target.host=llm-chat）
+    ├ connection
+    └ DELETE … / INSERT …                       ← 寫回對話記憶
+```
 
 | span | 誰量的 | 為什麼是它 |
 |------|--------|------------|
-| 根 span（進來的請求） | Spring Boot 自動註冊的 filter | 進來的 HTTP 由 Spring MVC 處理，它管得到，不必寫任何設定 |
-| 跟模型的往返 | Spring AI（ChatModel 內建的 Micrometer Observation） | 不必寫觀測程式碼；比 HTTP span 多了 token 用量，少了 HTTP 狀態碼 |
+| 最外層（nginx 收到） | nginx 官方的 OpenTelemetry 模組（`nginx:*-otel` 映像檔） | 被 nginx 自己擋掉的請求（429）、nginx 等 app 的時間也算得到；它把 `traceparent` 傳給 app |
+| app 收到的請求 | Spring Boot 自動註冊的 filter | 進來的 HTTP 由 Spring MVC 處理，它管得到，不必寫任何設定 |
+| 跟模型的往返 | Spring AI（ChatModel 內建的 Micrometer Observation） | 不必寫觀測程式碼；比 HTTP span 多了 token 用量 |
+| 每條 SQL、每次拿連線 | datasource-micrometer（把 DataSource 包一層） | JDBC 本身沒有 Observation；分得出慢在模型還是資料庫。不在請求裡的 SQL（健康檢查、Flyway）不記，見 `JdbcTracingConfiguration` |
 
 曾經用 AOP 在 outbound port 外面多包一層 span（名稱是 `retrievePassages`、`generateReply`），
 後來拿掉了。Spring AI 自己的 span 本來就是照「叫一次模型」這種動作切的，更用不著了（實際名稱同樣等部署後確認）。
-llama.cpp 本身不產生 span，所以樹只到 app 呼叫出去的那一層。
+llama.cpp、PostgreSQL 本身不產生 span，所以樹只到 app 呼叫出去的那一層。
 
 想在 trace 上看到送給模型的完整 prompt（下一步第 1 項），Spring AI 有現成的開關：
 `spring.ai.chat.client.observations.log-prompt=true`。prompt 裡可能有使用者的私人內容，所以預設關著，要開再想清楚。
@@ -207,11 +216,21 @@ llama.cpp 本身不產生 span，所以樹只到 app 呼叫出去的那一層。
 - **儀表板 `talkcal — Traces (Tempo)`**：全部用 TraceQL 查 Tempo。上排是從 trace 算出來的數字（助理請求速率、
   各段的 p95、沒成功的 span 數），下排是請求清單（最近的、超過 5 秒的、沒成功的），點 Trace ID 就打開瀑布圖。
   查詢只挑 `/api/calendar/assistant`，只看跟助理的對話。（actuator 的抓取與健康檢查走 management 埠 8091，那個埠上的請求本來就不產生 trace。）
+- **儀表板 `talkcal — 單一請求`**（#31）：變數 `traceId` 貼一個 trace id，一個畫面看完這個請求：
+  ① service map（經過哪些服務）→ ② 瀑布圖（每段多久）→ ③ 這個請求的 log → ④ 當時 app、連線池、llama 的狀態。
+  沒有 trace id 時，最下面的表格點一筆，時間範圍會自動對齊成那個請求前後各 5 分鐘。
 - **Explore** → 資料源選 **Tempo** → **Search** 分頁，Service Name 選 `talkcal`：自己下條件找。
 
 儀表板上排用的是 **TraceQL metrics**（`| rate()`、`| quantile_over_time()`）：Tempo 直接從存下來的 span 算出時間序列，
-不必另外開 metrics-generator 把數字寫進 Mimir。代價是分位數用 2 的次方分桶估（0.5s、1s、2s…），
-只適合看「慢在哪一段」的量級，精準的 p95 看 talkcal-app 儀表板（指標那條線）。
+代價是分位數用 2 的次方分桶估（0.5s、1s、2s…），只適合看「慢在哪一段」的量級，精準的 p95 看 talkcal-app 儀表板（指標那條線）。
+
+**service map 靠的是 Tempo 的 metrics-generator**（`tempo/tempo.yaml`）：它把收到的 span 加總成
+`traces_service_graph_*`（哪兩個服務之間有流量、多慢、錯多少）和 `traces_spanmetrics_*`，直接寫進 Mimir。
+這種「誰叫誰」的邊要兩頭的 span 放在一起才算得出來，只有收齊 span 的這一端做得到。
+為了讓圖對得上真的架構，Alloy 送進 Tempo 前改兩個屬性（`alloy/config.alloy` 的 `otelcol.processor.transform`）：
+nginx 只開一個 server span、沒有「轉給 app」的 client span，改標成 client 才配得出 talkcal-web → talkcal 這條邊；
+SQL span 的 `peer.service` 原本是資料庫名稱 talkcal（會畫成自己連自己），換成 postgresql。
+限制：metrics-generator 看到的是**取樣後**的 span，取樣率低於 100% 時圖上的請求數會少算。
 
 本機 bootRun 的 app 也會送 trace（走主機的 `127.0.0.1:4318`），只要 ops/ 有起來。
 ops/ 沒起時 trace 送不出去，app 只會在 log 印 warning，請求照常處理。
@@ -335,6 +354,8 @@ Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](..
 | 指標（talkcal-app 儀表板的 p95 圖） | trace | 圖上的小菱形（exemplar）→ 點 trace_id | app 吐指標時在 histogram 的點上附 trace id，Mimir 存下來（`max_global_exemplars_per_user`） |
 | log（Loki 的 access log） | trace | 展開一行 → **到 Tempo 看這個請求** | Loki 資料源的 derived field 從內容抓出 `traceId` |
 | trace（Tempo） | log | span 旁的 **Logs for this span** | Tempo 資料源用 trace id 去 Loki 搜內容 |
+| trace（Tempo） | 指標 | span 名稱旁的連結圖示 → 選一條：延遲 p95、5xx 比例、連線池、同一種 span 的 p95 | Tempo 資料源的 `tracesToMetrics`，時間是 span 前後各 5 分鐘 |
+| log（Loki） | 單一請求儀表板 | 展開一行 → **用「單一請求」dashboard 看** | 同一個 derived field 的第二個連結 |
 
 ## 下一步（一次一件）
 
@@ -357,5 +378,5 @@ ops/
 ├── tempo/tempo.yaml                          # 追蹤：單機最小設定
 └── grafana/provisioning/
     ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
-    └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces（trace）、talkcal-k6（壓測）、talkcal-product（產品指標）
+    └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces、talkcal-request（trace）、talkcal-k6（壓測）、talkcal-product（產品指標）
 ```
