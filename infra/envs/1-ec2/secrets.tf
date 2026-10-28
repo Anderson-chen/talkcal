@@ -43,7 +43,7 @@ resource "aws_ssm_parameter" "dotenv" {
     GOOGLE_CLIENT_SECRET=${var.google_client_secret}
     GITHUB_CLIENT_ID=${var.github_client_id}
     GITHUB_CLIENT_SECRET=${var.github_client_secret}
-    # Grafana 的 heartbeat（#40）：ops/ 的 compose 用 --env-file 讀同一份（#121 的 deploy.sh）
+    # Grafana 的 heartbeat（#40）：deploy.sh 起 ops/ 時用 --env-file 讀同一份
     HEARTBEAT_URL=${var.heartbeat_url}
   ENV
 }

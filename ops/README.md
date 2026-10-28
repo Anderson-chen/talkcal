@@ -398,7 +398,7 @@ Alloy 只重啟一下（幾秒）不會響：要連續 60 秒沒資料、再持�
 外部服務超過寬限時間沒收到，就自己寄信。它不靠我們這台機器上的任何東西，所以 Grafana 怎麼死都會被發現。
 
 Watchdog 用規則上的 `notification_settings` 直接送給 `heartbeat` 這個 contact point，不經過 notification policy：
-不會混進 email，也不必改寄信那棵 policy 樹。Mimir 掛掉時 Watchdog 照樣響（查詢失敗算 Alerting），
+不會混進 email，也不必改寄信那棵 policy 樹。Mimir 掛掉時 Watchdog 照樣響（它不查任何資料源，只算一個常數 1），
 因為那個情況上面那條已經寄信了，heartbeat 只負責「Grafana 和它的通知管線還活著」，不重複吵同一件事。
 
 ### 外部服務選 Healthchecks.io
@@ -425,7 +425,8 @@ Better Stack 也夠用，但它是整套觀測平台，只為一個 heartbeat �
 沒設時 compose 給 `.invalid` 的位址，Grafana 照常啟動，只是 heartbeat 打不出去（Grafana log 裡會一直有送不出去的 error）。
 
 **排程關機**（雲端平常關機）：用 `infra/envs/1-ec2/power.sh stop` 關機，它會先呼叫 Healthchecks 的 API 暫停 check，
-不然 6 分鐘後會收到「掛了」的信。開機後 Grafana 的第一個 heartbeat 會讓 check 自動恢復監控，不必再做什麼（本機實測過）。
+不然 6 分鐘後會收到「掛了」的信。開機後 Grafana 的第一個 heartbeat 會讓 check 自動恢復監控（本機實測過）；
+`power.sh start` 會等到恢復為止，Grafana 開機後沒起來時，暫停中的 check 不會寄信，要靠這一步發現。
 
 **本機和雲端用不同的 check**：共用一個的話，本機的 Grafana 一直在打，雲端的停了也看不出來。
 本機的電腦也常關，所以平常 `HEARTBEAT_URL` 留空，要試的時候才填一個本機專用的 check。
