@@ -305,6 +305,15 @@ app 端因此**必須**維持 1.0：app 先丟掉的 trace，Alloy 根本看不�
 - **exemplar**：talkcal-app 圖上的 exemplar（指標點掛的 trace id）由 app 決定，可能指到被抽掉的 trace，點進去會找不到。
   通常會去點的是延遲尖峰、錯誤那幾個點——那些剛好是全留的。
 
+## 成本：token 用量和費用
+
+app 每叫一次模型，Spring AI 把回應裡的 `usage` 記成 `gen_ai_client_token_usage_total`（`gen_ai_token_type` 分 input / output / total），
+標著模型名稱和 `model_backend`（`llama-cpp` 或 `bedrock`，從設定 `talkcal.ai.backend` 來）。
+
+儀表板 **`talkcal — 成本（token 與費用）`**：token/s、每個請求平均 token、每個請求叫幾次模型、照 Bedrock 單價換算的每個請求費用，
+以及請求速率離「自架 GPU 比較划算」的交叉點還有多遠。單價是 dashboard 上方的變數。
+算法、單價來源、交叉點怎麼來的見 [docs/cost.md](../docs/cost.md)。
+
 ## 壓測：k6 的指標也進 Mimir
 
 k6 跑完就結束，沒有 `/metrics` 可以等 Alloy 來抓，所以跟 trace 一樣由它用 OTLP 推給 Alloy 的 4318，
@@ -357,5 +366,5 @@ ops/
 ├── tempo/tempo.yaml                          # 追蹤：單機最小設定
 └── grafana/provisioning/
     ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
-    └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces、talkcal-request（trace）、talkcal-k6（壓測）
+    └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces、talkcal-request（trace）、talkcal-k6（壓測）、talkcal-cost（成本）
 ```
