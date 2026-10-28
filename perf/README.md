@@ -192,6 +192,43 @@ CRUD_RPS=50 ASSIST_PER_MIN=0 DURATION=60s k6 run perf/slo.js     # 只壓行程 
 開著它當背景流量，再弄壞一個依賴（停資料庫、模型位址指錯），SLO 儀表板的 burn rate 會往上衝、告警進 firing；
 依賴恢復、只剩這支的時候不該響。做法和結果見 docs/slo.md 的「驗證」。
 
+### db-pool：把資料庫連線池壓到不夠用
+
+其他腳本都壓 AI 助理，瓶頸在模型，連線池永遠用不滿。這支改壓只碰資料庫的 `GET /api/calendar/events`，
+看 Grafana 的 **talkcal — Spring app** 的「資料庫連線池」那一排（#32）：
+
+```bash
+perf/run-to-grafana.sh perf/db-pool.js
+```
+
+**實測（2026-10-17，池子 10 條、Tomcat 200 條執行緒、4 核）**：只壓讀取壓不滿池子。
+150 VU 起吞吐量就停在約 1,540 req/s，一條連線平均只占 3.6 毫秒，算下來平均同時只借出約 5.5 條
+（Little's Law：1,540 × 0.0036），pending 只偶爾跳到個位數。先撐不住的是 CPU 和 JSON 序列化，不是連線池 ——
+這個 app 照現在的查詢，池子 10 條是夠的。
+
+池子真正會不夠，是**查詢變慢**的時候：連線借出去還不回來。用鎖表模擬（例如 migration 改表、有人開著交易沒關）：
+50 VU 持續讀，同時在另一個終端機鎖住行程表 20 秒：
+
+```bash
+STAGES=50 HOLD_S=140 perf/run-to-grafana.sh perf/db-pool.js
+```
+
+```bash
+docker exec talkcal-postgres psql -U talkcal -d talkcal -c "BEGIN; LOCK TABLE calendar_event IN ACCESS EXCLUSIVE MODE; SELECT pg_sleep(20); COMMIT;"
+```
+
+| 鎖多久 | active | pending | 逾時 | 使用者看到的 |
+|--------|--------|---------|------|--------------|
+| 不鎖 | 平均約 5 | 0～個位數 | 0 | p95 不到 100 毫秒 |
+| 20 秒 | 貼著上限 10 | 衝到 40（50 VU − 10 條） | 0 | 卡 20 秒後全部成功 |
+| 40 秒 | 貼著上限 10 | 40 上下 | 約 40 次 | 等滿 30 秒（`connectionTimeout`）的請求回 502 |
+
+![連線池那一排：兩次鎖表時 active 貼著 10、pending 衝到 40，第二次鎖 40 秒出現逾時](../docs/evidence/2026-10-17-db-pool-lock.png)
+
+左邊 10:03 那一段是鎖 20 秒、10:04 那一段是鎖 40 秒（截圖時間是台北時間）。
+鎖表的那段時間，PostgreSQL 那張圖上 active 也是 10：10 條連線都在等鎖，不是在做事。
+看到「app 的 pending 高、資料庫的 active 等於池子大小」，就知道問題在資料庫那頭，加大池子沒用。
+
 ## 怎麼讀結果
 
 k6 收工時印一張表，看三個地方就夠：
@@ -247,6 +284,7 @@ launch.json 的原生 llama-server 沒帶 `-np`，是 llama.cpp 的預設值（4
 - **`load.js`** —— 三段平台找併發上限，暖身不算數。
 - **`concurrent.js`** —— 一波人在短時間內各說一句，看尖峰時最後來的人等多久。
 - **`knee.js`** —— 同時數逐階往上加，印出每階的延遲與吞吐量，找臨界值。
+- **`db-pool.js`** —— 只壓資料庫的讀取，看連線池（HikariCP）什麼時候不夠用。
 - **`lib/assistant.js`** —— 各腳本共用的位址、訊息池、請求參數、正常回覆的檢查。
 - **`lib/docker-target.js`** —— 把預設位址改成 docker 那台 app，有給 `BASE_URL` 就尊重它。
 
@@ -270,5 +308,6 @@ perf/
 ├── knee.js         # 同時數逐階往上加，找臨界值
 ├── deploy.js       # 邊壓邊部署：部署期間有幾個人受影響
 ├── slo.js          # 平常流量：量 SLO 的基準、驗 burn-rate 告警
+├── db-pool.js      # 只壓資料庫的讀取，看連線池什麼時候不夠用
 └── run-to-grafana.sh  # 跑任何一支腳本，指標同時送進 ops/ 的 Grafana
 ```

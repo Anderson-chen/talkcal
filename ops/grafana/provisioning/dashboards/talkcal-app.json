@@ -189,6 +189,283 @@
         "legend": { "displayMode": "list", "placement": "bottom" },
         "tooltip": { "mode": "multi", "sort": "none" }
       }
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "資料庫連線池（HikariCP）—— API 變慢時，是不是在排隊等連線",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "連線：借出去的 vs. 上下限",
+      "description": "active = 正被請求拿著的連線、idle = 開著但沒人用。max / min 是池的上下限（hikaricp_connections_max / _min，沒設時都是 10），畫成虛線。active 長期貼著 max 代表池太小，或有查詢借了不還（交易開太久）。active + idle = app 這邊實際開著的連線數，要跟下面 PostgreSQL 那張的連線數對得上。",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "mimir" },
+          "expr": "sum by (pool) (hikaricp_connections_active)",
+          "legendFormat": "active（借出去）{{pool}}"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "mimir" },
+          "expr": "sum by (pool) (hikaricp_connections_idle)",
+          "legendFormat": "idle（閒著）{{pool}}"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "mimir" },
+          "expr": "max by (pool) (hikaricp_connections_max)",
+          "legendFormat": "max（上限）{{pool}}"
+        },
+        {
+          "refId": "D",
+          "datasource": { "type": "prometheus", "uid": "mimir" },
+          "expr": "max by (pool) (hikaricp_connections_min)",
+          "legendFormat": "min（下限）{{pool}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": "^max.*" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+              { "id": "custom.fillOpacity", "value": 0 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": "^min.*" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "fill": "dot", "dash": [0, 10] } },
+              { "id": "custom.fillOpacity", "value": 0 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "text" } }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "排隊等連線的請求數（pending）",
+      "description": "hikaricp_connections_pending：有幾個執行緒在等池子還連線。平常應該一直是 0；大於 0 就是池不夠用了，等的時間會直接加在 API 延遲上。這是分辨「API 慢是不是卡在資料庫連線」的第一個看點。",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "mimir" },
+          "expr": "sum by (pool) (hikaricp_connections_pending)",
+          "legendFormat": "pending {{pool}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0,
+          "color": { "mode": "fixed", "fixedColor": "orange" },
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20, "showPoints": "never" },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "等連線花多久（acquire）",
+      "description": "hikaricp_connections_acquire_seconds 是 Timer：rate(_sum)/rate(_count) 是平均、_max 是最近一段時間最慢的那次。池夠用時是微秒等級；開始排隊就會跳到毫秒、秒。等超過 connectionTimeout（預設 30 秒）就變成右邊那張的逾時。",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 25 },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "mimir" },
+          "expr": "sum by (pool) (rate(hikaricp_connections_acquire_seconds_sum[1m])) / sum by (pool) (rate(hikaricp_connections_acquire_seconds_count[1m]))",
+          "legendFormat": "平均 {{pool}}"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "mimir" },
+          "expr": "max by (pool) (hikaricp_connections_acquire_seconds_max)",
+          "legendFormat": "最慢 {{pool}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "一條連線被占用多久（usage）",
+      "description": "hikaricp_connections_usage_seconds：從借出到還回的時間，平均和最慢。變長代表查詢變慢，或交易開太久（在交易裡做了慢的事，例如叫模型）。usage 變長、池子大小不變 → 每秒能服務的請求就變少，pending 會跟著上來。",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 25 },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "mimir" },
+          "expr": "sum by (pool) (rate(hikaricp_connections_usage_seconds_sum[1m])) / sum by (pool) (rate(hikaricp_connections_usage_seconds_count[1m]))",
+          "legendFormat": "平均 {{pool}}"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "mimir" },
+          "expr": "max by (pool) (hikaricp_connections_usage_seconds_max)",
+          "legendFormat": "最慢 {{pool}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "拿不到連線而失敗（timeout，每分鐘）",
+      "description": "increase(hikaricp_connections_timeout_total[1m])：等超過 connectionTimeout 還借不到連線、請求直接失敗的次數。只要不是 0 就是使用者看得到的錯誤，該告警。",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 25 },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "mimir" },
+          "expr": "sum by (pool) (increase(hikaricp_connections_timeout_total[1m]))",
+          "legendFormat": "逾時 {{pool}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "fixed", "fixedColor": "red" },
+          "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 60, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "PostgreSQL 那一端：各狀態的連線數 vs. max_connections",
+      "description": "postgres_exporter（deploy/ 的 postgres-exporter）抓的 pg_stat_activity，依 state 疊起來：active = 正在跑查詢、idle = 連著沒事做（HikariCP 的 idle 連線就在這）、idle in transaction = 開了交易沒在動，長時間不為 0 要查是誰沒關交易。紅色虛線是資料庫的上限 max_connections（預設 100）：所有 app 的池加起來，加上 exporter、你自己的 psql，都要在這條線底下，還要留幾條給管理員（superuser_reserved_connections）。",
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 33 },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "mimir" },
+          "expr": "sum by (state) (pg_stat_activity_count{datname=\"talkcal\", state=~\"active|idle|idle in transaction.*\"})",
+          "legendFormat": "{{state}}"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "mimir" },
+          "expr": "max(pg_settings_max_connections)",
+          "legendFormat": "max_connections"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 40, "showPoints": "never", "stacking": { "mode": "normal", "group": "A" } }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "max_connections" },
+            "properties": [
+              { "id": "custom.stacking", "value": { "mode": "none", "group": "A" } },
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+              { "id": "custom.fillOpacity", "value": 0 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "資料庫連線用掉幾成",
+      "description": "所有連到這個 PostgreSQL 的連線數 / max_connections。超過八成就該檢查：是不是某個 app 的池開太大、或連線漏了沒還。pg_up = 0（exporter 連不上資料庫）時這裡會顯示 No data。",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 33 },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "mimir" },
+          "expr": "sum(pg_stat_activity_count) / max(pg_settings_max_connections)",
+          "legendFormat": "用掉"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "decimals": 0,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 0.6 }, { "color": "red", "value": 0.8 } ] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
     }
   ]
 }
