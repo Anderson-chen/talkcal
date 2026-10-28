@@ -135,8 +135,7 @@ variable "github_client_secret" {
 }
 
 # ── Grafana 告警寄信（#121）──────────────────────────────────────────────
-# 跟上面的 OAuth 一樣：值不進 git，複製 alerting.auto.tfvars.example 成 alerting.auto.tfvars 再填，
-# 或用環境變數 TF_VAR_alert_smtp_password 這類名字給。apply 時寫進 SSM 的 .env，ops/ 的 Grafana 讀。
+# 跟上面的 OAuth 一樣：值填在 alerting.auto.tfvars（範本 alerting.auto.tfvars.example），apply 時寫進 SSM 的 .env。
 # alert_smtp_host 沒給 → 雲端不寄信，告警只在 Grafana 上看得到。
 variable "alert_smtp_host" {
   description = "寄告警信的 SMTP 伺服器 host:port，例如 smtp.gmail.com:587、email-smtp.ap-northeast-1.amazonaws.com:587"

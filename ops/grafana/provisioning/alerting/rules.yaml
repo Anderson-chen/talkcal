@@ -66,15 +66,12 @@ groups:
             model:
               refId: A
               instant: true
-              # 近 5 分鐘 5xx 占全部請求的比例。後面的 and 是最低流量門檻：
-              # 5 分鐘不到 20 個請求時結果是空的（不評估），免得半夜一個請求失敗就是 100%、寄一封信
+              # 近 5 分鐘 5xx 占全部請求的比例。分母的 >= 20 是最低流量門檻：
+              # 5 分鐘不到 20 個請求時分母是空的、除出來也是空的（不評估），免得半夜一個請求失敗就是 100%、寄一封信
               expr: >-
-                (
-                  sum(increase(http_server_requests_seconds_count{job="talkcal-app", status=~"5.."}[5m]))
-                  /
-                  sum(increase(http_server_requests_seconds_count{job="talkcal-app"}[5m]))
-                )
-                and on() sum(increase(http_server_requests_seconds_count{job="talkcal-app"}[5m])) >= 20
+                sum(increase(http_server_requests_seconds_count{job="talkcal-app", status=~"5.."}[5m]))
+                /
+                (sum(increase(http_server_requests_seconds_count{job="talkcal-app"}[5m])) >= 20)
           - refId: C
             datasourceUid: __expr__
             model:
