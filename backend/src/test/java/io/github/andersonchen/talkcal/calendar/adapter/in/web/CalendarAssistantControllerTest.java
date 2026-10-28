@@ -3,6 +3,7 @@ package io.github.andersonchen.talkcal.calendar.adapter.in.web;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -11,21 +12,32 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.CalendarAssistant;
 import io.github.andersonchen.talkcal.calendar.adapter.shared.ModelUnavailableException;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.EventOrigin;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.InMemoryProposals;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.TrackProposalsService;
+import io.github.andersonchen.talkcal.calendar.application.port.in.TrackProposalsUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsagePort;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.jayway.jsonpath.JsonPath;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -50,6 +62,7 @@ class CalendarAssistantControllerTest {
 
     private static final String URL = "/api/calendar/assistant";
     // 另一個登入的人（預設的請求是 ...0001）
+    private static final String ME = "3f1c8a2e-0000-4000-8000-000000000001";
     private static final String OTHER = "3f1c8a2e-0000-4000-8000-000000000002";
     private static final String UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
@@ -66,16 +79,20 @@ class CalendarAssistantControllerTest {
     void signedIn() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context)
                 .apply(springSecurity())
-                .defaultRequest(get("/").with(user("3f1c8a2e-0000-4000-8000-000000000001")).with(csrf()))
+                .defaultRequest(get("/").with(user(ME)).with(csrf()))
                 .build();
     }
 
     @Autowired
     AtomicReference<RuntimeException> failure;
 
+    @Autowired
+    RecordedUsage usage;
+
     @BeforeEach
     void reset() {
         failure.set(null);
+        usage.clear();
     }
 
     @Test
@@ -148,6 +165,89 @@ class CalendarAssistantControllerTest {
     }
 
     @Test
+    @DisplayName("#36 回覆裡有幾張卡片就記幾張「給人看了」，每張帶一個 proposalId；沒有卡片的回覆不記")
+    void countsShownProposals() throws Exception {
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"明天下午三點開會\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.proposals.length()").value(1))
+                .andExpect(jsonPath("$.proposals[0].proposalId").value(Matchers.matchesPattern(UUID_PATTERN)));
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"明天七點和 Amy 見面\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.proposals").isEmpty());
+
+        assertEquals(List.of("shown 1"), usage.events);
+    }
+
+    @Test
+    @DisplayName("#36 模型出事（502）時不記：使用者沒看到任何卡片")
+    void failedReplyCountsNothing() throws Exception {
+        failure.set(new IllegalStateException("模型掛了"));
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"明天下午三點開會\"}"))
+                .andExpect(status().isBadGateway());
+
+        assertEquals(List.of(), usage.events);
+    }
+
+    // 跟助理說一句會提議的話，拿回那張卡片的 proposalId
+    private String proposeCard(String signedIn) throws Exception {
+        String body = mockMvc.perform(post(URL).with(user(signedIn)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"明天下午三點開會\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return JsonPath.read(body, "$.proposals[0].proposalId");
+    }
+
+    @Test
+    @DisplayName("#223 POST /dismissals 帶自己卡片的 id：算一次拒絕，回 204；拒絕不會被記成採納（沒有 added）")
+    void recordsDismissals() throws Exception {
+        String card = proposeCard(ME);
+        usage.clear();
+
+        mockMvc.perform(post(URL + "/dismissals").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"proposalIds\":[\"" + card + "\"]}"))
+                .andExpect(status().isNoContent());
+
+        assertEquals(List.of("dismissed 1"), usage.events);
+    }
+
+    @Test
+    @DisplayName("#223 反例：同一張再拒絕一次、別人拿我的卡片 id、沒發過的 id：都回 204，但都不算")
+    void dismissalsAreVerifiedByServer() throws Exception {
+        String card = proposeCard(ME);
+        mockMvc.perform(post(URL + "/dismissals").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"proposalIds\":[\"" + card + "\"]}")).andExpect(status().isNoContent());
+        String othersCard = proposeCard(OTHER);
+        usage.clear();
+
+        for (String body : List.of(
+                "{\"proposalIds\":[\"" + card + "\"]}",
+                "{\"proposalIds\":[\"00000000-0000-4000-8000-000000000000\"]}")) {
+            mockMvc.perform(post(URL + "/dismissals").contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isNoContent());
+        }
+        // 別人的卡片：我按不掉，回應跟成功一模一樣（不透露那張卡片存在）
+        mockMvc.perform(post(URL + "/dismissals").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"proposalIds\":[\"" + othersCard + "\"]}"))
+                .andExpect(status().isNoContent());
+
+        assertEquals(List.of(), usage.events);
+    }
+
+    @Test
+    @DisplayName("#223 POST /dismissals 沒帶 proposalIds、id 不是 UUID、一次超過上限張數：400，什麼都不記")
+    void rejectsBadDismissals() throws Exception {
+        String tooMany = "{\"proposalIds\":[" + String.join(",",
+                java.util.Collections.nCopies(TrackProposalsUseCase.MAX_DISMISSED_PER_CALL + 1, "\"00000000-0000-4000-8000-000000000000\"")) + "]}";
+        for (String body : List.of("{}", "{\"proposalIds\":null}", "{\"proposalIds\":[\"abc\"]}", "{\"proposalIds\":[null]}", tooMany)) {
+            mockMvc.perform(post(URL + "/dismissals").contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+        }
+
+        assertEquals(List.of(), usage.events);
+    }
+
+    @Test
     @DisplayName("GET：讀回這段對話給人看的部分（user / assistant），沒有這段就是空陣列")
     void history() throws Exception {
         String id = "4bcfcbd5-9f27-4343-bd37-f2d0839c97a2";
@@ -201,7 +301,20 @@ class CalendarAssistantControllerTest {
             return new AtomicReference<>();
         }
 
-        // 假模型：每次都回「早上還是晚上？」；failure 設了就丟那個例外
+        @Bean
+        RecordedUsage usage() {
+            return new RecordedUsage();
+        }
+
+        // 記用量走真的 service（核對卡片的規則在那裡），只把「卡片存哪」「記到哪」換成記憶體
+        @Bean
+        TrackProposalsService trackProposals(RecordedUsage usage) {
+            InMemoryProposals proposals = new InMemoryProposals();
+            return new TrackProposalsService(proposals, usage);
+        }
+
+        // 假模型：使用者講「開會」就提議（呼叫 propose_events，拿到結果後回一句話），其他都回「早上還是晚上？」；
+        // failure 設了就丟那個例外
         @Bean
         CalendarAssistant calendarAssistant(AtomicReference<RuntimeException> failure) {
             ChatModel model = new ChatModel() {
@@ -210,14 +323,51 @@ class CalendarAssistantControllerTest {
                     if (failure.get() != null) {
                         throw failure.get();
                     }
+                    List<Message> messages = prompt.getInstructions();
+                    Message last = messages.getLast();
+                    if (last.getMessageType() == MessageType.TOOL) {
+                        return new ChatResponse(List.of(new Generation(new AssistantMessage("請確認卡片。"))));
+                    }
+                    if (last.getText().contains("開會")) {
+                        return new ChatResponse(List.of(new Generation(AssistantMessage.builder().content("")
+                                .toolCalls(List.of(new AssistantMessage.ToolCall("call-1", "function", "propose_events",
+                                        "{\"description\":\"明天下午三點開會\"}")))
+                                .build())));
+                    }
                     return new ChatResponse(List.of(new Generation(new AssistantMessage("早上還是晚上？"))));
                 }
             };
             // 每個擁有者一份記憶，跟真的實作一樣分開
             Map<OwnerId, InMemoryChatMemoryRepository> memories = new ConcurrentHashMap<>();
             return new CalendarAssistant(model, owner -> memories.computeIfAbsent(owner, o -> new InMemoryChatMemoryRepository()),
-                    description -> List.of(), (owner, start, end) -> List.of(), (owner, start, end, period, minimum) -> List.of(),
+                    description -> List.of(CalendarEvent.startingAt("開會", LocalDateTime.of(2026, 10, 7, 15, 0))),
+                    (owner, start, end) -> List.of(), (owner, start, end, period, minimum) -> List.of(),
                     Clock.systemDefaultZone());
+        }
+    }
+
+    /** 記下每一筆用量，寫成「shown 1」這種字串，比對時一眼看得懂。 */
+    static final class RecordedUsage implements RecordUsagePort {
+
+        final List<String> events = new ArrayList<>();
+
+        @Override
+        public void proposalsShown(int count) {
+            events.add("shown " + count);
+        }
+
+        @Override
+        public void proposalsDismissed(int count) {
+            events.add("dismissed " + count);
+        }
+
+        @Override
+        public void eventsAdded(EventOrigin origin, int count) {
+            events.add("added " + origin + " " + count);
+        }
+
+        void clear() {
+            events.clear();
         }
     }
 }

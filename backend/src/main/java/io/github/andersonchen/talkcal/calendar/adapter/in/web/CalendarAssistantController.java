@@ -4,6 +4,11 @@ import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.CalendarAssi
 import io.github.andersonchen.talkcal.calendar.adapter.in.web.CalendarController.EventFields;
 import io.github.andersonchen.talkcal.calendar.adapter.shared.ModelUnavailableException;
 
+import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalId;
+import io.github.andersonchen.talkcal.calendar.application.port.in.TrackProposalsUseCase;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,12 +27,14 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.security.Principal;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 /**
  * 行事曆 AI 助理的 HTTP 入口：一句話進來，助理的回覆和它提議的行程出去。
@@ -41,6 +48,10 @@ import java.util.UUID;
  * 紀錄只由排程按保留期限刪，不讓一個按鈕（或任何拿得到 id 的請求）把它抹掉。
  *
  * 對話屬於登入者（#104）：拿別人的 conversationId 來讀是空的、拿來說話是在自己名下開一段新的，碰不到別人的那段。
+ *
+ * 卡片的去向記成產品指標（#36）：回覆時每張卡片發一個 proposalId 並記下來（#223）；
+ * 按「加入行事曆」走 POST /events，每筆帶著它的 proposalId；按「取消」「移除」只改畫面，所以前端另外送 POST /dismissals 帶那幾張的 id。
+ * 伺服器只認自己發過、屬於登入者、還沒表態過的卡片，前端說了不算。
  *
  * 失敗一律回 AssistantFailure：error 給人看，code 給程式判斷（前端依它決定怎麼顯示、要不要讓使用者重試，#43）。
  * <pre>
@@ -59,9 +70,11 @@ public final class CalendarAssistantController {
     private static final Logger log = LoggerFactory.getLogger(CalendarAssistantController.class);
 
     private final CalendarAssistant assistant;
+    private final TrackProposalsUseCase proposals;
 
-    public CalendarAssistantController(CalendarAssistant assistant) {
+    public CalendarAssistantController(CalendarAssistant assistant, TrackProposalsUseCase proposals) {
         this.assistant = Objects.requireNonNull(assistant, "assistant 不可為 null");
+        this.proposals = Objects.requireNonNull(proposals, "proposals 不可為 null");
     }
 
     @PostMapping
@@ -78,8 +91,32 @@ public final class CalendarAssistantController {
             content = @Content(schema = @Schema(implementation = AssistantFailure.class)))
     public AssistantResponse talk(Principal signedIn, @RequestBody AssistantRequest request) {
         String conversationId = conversationId(request.conversationId());
-        CalendarAssistant.Reply reply = assistant.reply(SignedIn.owner(signedIn), conversationId, request.message());
-        return new AssistantResponse(conversationId, reply.text(), reply.proposals().stream().map(EventFields::of).toList());
+        OwnerId owner = SignedIn.owner(signedIn);
+        CalendarAssistant.Reply reply = assistant.reply(owner, conversationId, request.message());
+        // 在這裡發 id、不在助理呼叫工具時發：工具解析出來的草稿可能被擋下（沒講早上晚上），也可能這一輪最後失敗（502），
+        // 那些使用者都沒看到。回得出去的這一份，才是畫面上真的出現的卡片
+        List<CalendarEvent> drafts = reply.proposals();
+        List<ProposalId> ids = proposals.proposalsShown(owner, drafts.size());
+        List<EventFields> cards = IntStream.range(0, drafts.size())
+                .mapToObj(i -> EventFields.of(drafts.get(i), ids.get(i)))
+                .toList();
+        return new AssistantResponse(conversationId, reply.text(), cards);
+    }
+
+    @PostMapping("/dismissals")
+    // 204：記下了，沒有東西要回
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "回報使用者拒絕了哪幾張提議卡片",
+            description = "按「取消」「移除」只改畫面、不經過後端，前端用這個告訴後端，產品指標才算得出採納率。不影響任何行程。"
+                    + "只有自己的、還沒表態過的卡片才算，每張最多一次；別人的、沒發過的、已表態過的都靜靜略過。")
+    @ApiResponse(responseCode = "204", description = "收到了（不透露每一張有沒有算）")
+    @ApiResponse(responseCode = "400", description = "沒帶 proposalIds，或某個 id 不是 UUID（code = INVALID_REQUEST）",
+            content = @Content(schema = @Schema(implementation = AssistantFailure.class)))
+    public void dismissed(Principal signedIn, @RequestBody AssistantDismissals request) {
+        if (request.proposalIds() == null) {
+            throw new IllegalArgumentException("proposalIds 不可為 null");
+        }
+        proposals.proposalsDismissed(SignedIn.owner(signedIn), request.proposalIds().stream().map(ProposalId::of).toList());
     }
 
     @GetMapping("/{conversationId}")
@@ -155,6 +192,11 @@ public final class CalendarAssistantController {
             @Schema(description = "這段對話的 ID，下一句帶著它") String conversationId,
             @Schema(description = "助理說的話") String reply,
             @Schema(description = "這一輪提議的行程，使用者確認後送 POST /api/calendar/events 才會存") List<EventFields> proposals) {
+    }
+
+    public record AssistantDismissals(
+            @Schema(description = "這次按掉的卡片（回覆裡 proposals 的 proposalId）", requiredMode = Schema.RequiredMode.REQUIRED)
+            List<String> proposalIds) {
     }
 
     public record AssistantHistory(

@@ -1,22 +1,32 @@
 package io.github.andersonchen.talkcal.app.config;
 
 import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.CalendarAssistant;
+import io.github.andersonchen.talkcal.calendar.adapter.in.metrics.ActiveUsersMetrics;
+import io.github.andersonchen.talkcal.calendar.adapter.out.metrics.micrometer.MicrometerUsageAdapter;
 import io.github.andersonchen.talkcal.calendar.adapter.out.extraction.springai.SpringAiExtractEventsAdapter;
+import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcActiveOwnersAdapter;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository;
+import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantProposalAdapter;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcCalendarEventAdapter;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.AddEventsService;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.CountActiveUsersService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.FindFreeSlotsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ListEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ParseEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.RemoveEventService;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.TrackProposalsService;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.CountActiveUsersUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlotsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ParseEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.RemoveEventUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.TrackProposalsUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.out.CountActiveOwnersPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteEventPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.ExtractEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventsPort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsagePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPort;
 import io.github.andersonchen.talkcal.app.job.AssistantMemoryCleanup;
 
@@ -24,6 +34,7 @@ import io.github.andersonchen.talkcal.calendar.adapter.shared.GuardedChatModel;
 
 import io.github.resilience4j.bulkhead.Bulkhead;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -53,6 +64,7 @@ import java.time.ZoneId;
  * - 行程存 PostgreSQL（一個實作同時當 Save / Load / DeleteEventPort）
  * - 「現在」用哪個時區的時鐘
  * - AI 助理的舊對話留多久（AssistantMemoryCleanup 每天清一次，所以要開排程）
+ * - 產品用量記到哪（#36）：Micrometer 的 counter；活躍使用者從資料庫數，掛成 gauge
  */
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
@@ -116,8 +128,15 @@ class CalendarConfiguration {
 
     @Bean
     AssistantMemoryCleanup assistantMemoryCleanup(JdbcAssistantMemoryRepository assistantMemory,
+                                                  JdbcAssistantProposalAdapter assistantProposals,
                                                   @Value("${calendar.assistant.retention}") Duration retention) {
-        return new AssistantMemoryCleanup(assistantMemory, retention, Clock.systemUTC());
+        return new AssistantMemoryCleanup(assistantMemory, assistantProposals, retention, Clock.systemUTC());
+    }
+
+    // 助理發出的提議卡片（#223）：ProposalStorePort 的實作，清理排程也用它刪舊卡片
+    @Bean
+    JdbcAssistantProposalAdapter assistantProposals(JdbcClient jdbcClient) {
+        return new JdbcAssistantProposalAdapter(jdbcClient);
     }
 
     // 助理讀寫、清理工作刪除，用的是同一張表、同一個實作
@@ -127,8 +146,37 @@ class CalendarConfiguration {
     }
 
     @Bean
-    AddEventsUseCase addEvents(SaveEventsPort saveEventsPort) {
-        return new AddEventsService(saveEventsPort);
+    AddEventsUseCase addEvents(SaveEventsPort saveEventsPort, JdbcAssistantProposalAdapter assistantProposals, RecordUsagePort usage) {
+        return new AddEventsService(saveEventsPort, assistantProposals, usage);
+    }
+
+    // MeterRegistry 是 actuator 自動建好的那一個，/actuator/prometheus 吐的就是它裡面的東西
+    @Bean
+    RecordUsagePort recordUsage(MeterRegistry registry) {
+        return new MicrometerUsageAdapter(registry);
+    }
+
+    @Bean
+    TrackProposalsUseCase trackProposals(JdbcAssistantProposalAdapter assistantProposals, RecordUsagePort usage) {
+        return new TrackProposalsService(assistantProposals, usage);
+    }
+
+    // 活躍使用者算的是真實的時間點（created_at 帶時區），用 UTC 就好，跟行事曆的牆上時間無關
+    @Bean
+    CountActiveOwnersPort countActiveOwners(JdbcClient jdbcClient) {
+        return new JdbcActiveOwnersAdapter(jdbcClient);
+    }
+
+    @Bean
+    CountActiveUsersUseCase countActiveUsers(CountActiveOwnersPort countActiveOwners) {
+        return new CountActiveUsersService(countActiveOwners, Clock.systemUTC());
+    }
+
+    // MeterBinder 型別的 bean，actuator 會自動拿去 bindTo 自己的 registry，不必手動註冊。
+    // 一分鐘重數一次：活躍人數變得很慢，Alloy 15 秒抓一次只會讀到快取
+    @Bean
+    ActiveUsersMetrics activeUsersMetrics(CountActiveUsersUseCase countActiveUsers) {
+        return new ActiveUsersMetrics(countActiveUsers, Duration.ofMinutes(1), Clock.systemUTC());
     }
 
     @Bean

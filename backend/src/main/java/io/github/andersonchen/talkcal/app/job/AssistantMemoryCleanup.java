@@ -1,6 +1,7 @@
 package io.github.andersonchen.talkcal.app.job;
 
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository;
+import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantProposalAdapter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,6 +9,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 
 /**
@@ -16,6 +18,9 @@ import java.util.Objects;
  * 為什麼要清：每段對話都存著工具呼叫和工具結果（一輪好幾列），前端只記最新那一段的 id，
  * 按「清空」（前端只丟掉 id，後端不刪）或換瀏覽器之後，舊的那段就沒人接得回來了，只會一直留在表裡。
  * 這裡是唯一會刪對話紀錄的地方。
+ *
+ * 助理發出的提議卡片（#223，只用在產品指標）也在這裡清，保留期限跟對話一樣：
+ * 超過期限的卡片，對話本身都被刪了，使用者也不會再回頭按它。
  *
  * 為什麼放在 app.job、不放在 calendar 的 adapter.in：計時器也算是「從外面推進來」的入口，
  * 但它要直接用 JdbcAssistantMemoryRepository（不是 port，是這張表自己的維護工作），
@@ -30,11 +35,14 @@ public final class AssistantMemoryCleanup {
     private static final Logger log = LoggerFactory.getLogger(AssistantMemoryCleanup.class);
 
     private final JdbcAssistantMemoryRepository memory;
+    private final JdbcAssistantProposalAdapter proposals;
     private final Duration retention;
     private final Clock clock;
 
-    public AssistantMemoryCleanup(JdbcAssistantMemoryRepository memory, Duration retention, Clock clock) {
+    public AssistantMemoryCleanup(JdbcAssistantMemoryRepository memory, JdbcAssistantProposalAdapter proposals,
+                                  Duration retention, Clock clock) {
         this.memory = Objects.requireNonNull(memory, "memory 不可為 null");
+        this.proposals = Objects.requireNonNull(proposals, "proposals 不可為 null");
         this.retention = Objects.requireNonNull(retention, "retention 不可為 null");
         this.clock = Objects.requireNonNull(clock, "clock 不可為 null");
         if (retention.isNegative() || retention.isZero()) {
@@ -46,7 +54,9 @@ public final class AssistantMemoryCleanup {
     // 每天凌晨四點（台北時間）：沒人在用的時候。多台一起跑也沒關係，DELETE 重跑一次只是刪 0 段
     @Scheduled(cron = "0 0 4 * * *", zone = "${calendar.zone}")
     void run() {
-        int deleted = memory.deleteInactiveSince(clock.instant().minus(retention));
-        log.info("清掉 AI 助理的舊對話：{} 段（超過 {} 天沒說話）", deleted, retention.toDays());
+        Instant cutoff = clock.instant().minus(retention);
+        int deleted = memory.deleteInactiveSince(cutoff);
+        int deletedProposals = proposals.deleteCreatedBefore(cutoff);
+        log.info("清掉 AI 助理的舊對話：{} 段（超過 {} 天沒說話）、舊提議卡片 {} 張", deleted, retention.toDays(), deletedProposals);
     }
 }

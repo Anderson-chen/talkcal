@@ -7,7 +7,28 @@
 #     不開網路、不讀外部輸入；標準函式庫的漏洞要被利用，得先有程式拿它去處理攻擊者給的資料
 #   - postgres 的埠只綁在 127.0.0.1（deploy/compose.yaml），外面連不到
 # paths 限定在 gosu：同一個 CVE 出現在別的地方（例如 app 自己的程式）照樣會報
+#
+# brotli-libs（CVE-2026-111497）—— 2026-10-24 評估：
+#   - 還升不了：Alpine 已經有修補版 1.2.1-r0，但 postgres:18.6-alpine 最近一次 build 是 2026-10-22，裡面還是 1.2.0-r1
+#   - 碰不到：brotli 是 libcurl 帶進來的，PG18 用 libcurl 只為了 libpq 的 OAuth 登入流程；我們用密碼登入，埠只綁 127.0.0.1
+#   - 到期日只給兩週：官方映像檔重新 build 後這條就該拿掉，到期 CI 變紅會逼人回來看
+#
+# libcurl（CVE-2026-92392）—— 2026-10-27 評估，理由跟上面的 brotli 一樣：
+#   - 還升不了：Alpine 已經有修補版 8.23.0-r0，但 postgres:18.6-alpine 還是上面說的那次 build
+#     （2026-10-22 台灣時間，映像檔的 Created 是 2026-10-21 22:56 UTC；2026-10-27 重新 pull 確認過），裡面還是 8.22.0-r0
+#   - 碰不到：PG18 用 libcurl 只為了 libpq 的 OAuth 登入流程；我們用密碼登入，埠只綁 127.0.0.1
+#   - 到期日跟 brotli 那條一樣：兩條都等同一次官方重新 build，到時一起拿掉
+#   - 考慮過自己包一層 postgres 跑 apk upgrade（像 web/Dockerfile 對 nginx 那樣），沒選：見 #217
+#   - 限制：例外只能寫 CVE 編號，會套用到每個掃的映像檔。app 的 runtime 也裝了 curl（Ubuntu 的 libcurl），
+#     Ubuntu 若也對它發這個 CVE 會一起被忽略。Trivy 0.74 對 OS 套件限定不到 purl（2026-10-27 試過三種寫法都對不到），
+#     所以到期日給短：最多兩週後一定會重新報出來
 vulnerabilities:
+  - id: CVE-2026-111497
+    statement: libcurl 帶進來，只給 libpq 的 OAuth 用；我們用密碼登入。等 postgres 官方映像檔重新 build，見檔案開頭
+    expired_at: 2026-11-07
+  - id: CVE-2026-92392
+    statement: libcurl 只給 libpq 的 OAuth 用；我們用密碼登入。等 postgres 官方映像檔重新 build，見檔案開頭
+    expired_at: 2026-11-07
   - id: CVE-2025-61726
     paths: [usr/local/bin/gosu]
     statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
