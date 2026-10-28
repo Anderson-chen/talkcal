@@ -53,5 +53,5 @@
 | 舊的失敗不會被插回對話中間 | E2E：失敗後再問一句成功的 | 「再試一次」消失 |
 | 不靠 `error` 的字面判斷 | Vitest：同一個 code 換一句話行為不變；502 沒有 code 不當成模型失敗 | 成立 |
 
-跑過的測試：`assistant-failure.desktop.spec.ts`（15）、`assistant-failure.mobile.spec.ts`（1），以及用到同一批檔案的
-`assistant-proposals`、`add-event`（桌面、手機）、`login` 的 E2E（共 32）；`assistantFailure.test.ts`、`http.test.ts`（共 17）；`vue-tsc`、ESLint。完整測試照約定由主 session 合併前統一跑。
+跑過的測試：`assistant-failure.desktop.spec.ts`（19）、`assistant-failure.mobile.spec.ts`（1），以及用到同一批檔案的
+`assistant-proposals`、`add-event`（桌面、手機）、`login` 的 E2E（共 36）；`assistantFailure.test.ts`、`http.test.ts`（共 17）；`vue-tsc`、ESLint。完整測試照約定由主 session 合併前統一跑。
