@@ -15,15 +15,22 @@ import java.util.List;
 public interface TrackProposalsUseCase {
 
     /**
+     * 拒絕一次最多帶幾張。一則回覆的卡片不會到這麼多；設上限是為了請求大小 ——
+     * 核對是一句 SQL 帶著所有 id，不設的話一個請求就能塞上萬個參數。
+     * 數字灌不灌得了不靠這個：每張卡片本來就只算一次。
+     */
+    int MAX_DISMISSED_PER_CALL = 100;
+
+    /**
      * 助理要給 owner 看 count 張卡片：每張發一個 id、記下來，照順序回傳。0 張就是空的。
-     * 失敗時：count 小於 0 → IllegalArgumentException。記錄失敗不會讓這裡失敗（見 SaveProposalsPort）。
+     * 失敗時：count 小於 0 → IllegalArgumentException。記錄失敗不會讓這裡失敗（見 ProposalStorePort）。
      */
     List<ProposalId> proposalsShown(OwnerId owner, int count);
 
     /**
      * owner 按掉了這幾張卡片。只有 owner 自己的、還沒表態過的才算，每張最多算一次；
      * 別人的、沒發過的、已經表態過的都靜靜略過，不報錯（不洩漏別人的卡片存不存在）。
-     * 失敗時：owner、proposals 是 null 或含 null → IllegalArgumentException。
+     * 失敗時：owner、proposals 是 null 或含 null、超過 MAX_DISMISSED_PER_CALL 張 → IllegalArgumentException。
      */
     void proposalsDismissed(OwnerId owner, List<ProposalId> proposals);
 }

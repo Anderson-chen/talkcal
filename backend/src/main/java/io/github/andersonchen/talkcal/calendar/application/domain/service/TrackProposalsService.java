@@ -4,26 +4,24 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalOutcome;
 import io.github.andersonchen.talkcal.calendar.application.port.in.TrackProposalsUseCase;
-import io.github.andersonchen.talkcal.calendar.application.port.out.DecideProposalPort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.ProposalStorePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsagePort;
-import io.github.andersonchen.talkcal.calendar.application.port.out.SaveProposalsPort;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.IntStream;
 
 /**
- * 實作「記下提議卡片的去向」：發卡片時給 id、存起來；拒絕時逐張核對，核對過的才算進指標。
+ * 實作「記下提議卡片的去向」：發卡片時給 id、存起來；拒絕時整批交給 port 核對，核對過的才算進指標。
  */
 public final class TrackProposalsService implements TrackProposalsUseCase {
 
-    private final SaveProposalsPort saveProposals;
-    private final DecideProposalPort decideProposal;
+    private final ProposalStorePort store;
     private final RecordUsagePort usage;
 
-    public TrackProposalsService(SaveProposalsPort saveProposals, DecideProposalPort decideProposal, RecordUsagePort usage) {
-        this.saveProposals = Objects.requireNonNull(saveProposals, "saveProposals 不可為 null");
-        this.decideProposal = Objects.requireNonNull(decideProposal, "decideProposal 不可為 null");
+    public TrackProposalsService(ProposalStorePort store, RecordUsagePort usage) {
+        this.store = Objects.requireNonNull(store, "store 不可為 null");
         this.usage = Objects.requireNonNull(usage, "usage 不可為 null");
     }
 
@@ -39,7 +37,7 @@ public final class TrackProposalsService implements TrackProposalsUseCase {
             return List.of();
         }
         List<ProposalId> ids = IntStream.range(0, count).mapToObj(i -> ProposalId.newId()).toList();
-        saveProposals.saveProposals(owner, ids);
+        store.saveProposals(owner, ids);
         usage.proposalsShown(count);
         return ids;
     }
@@ -52,12 +50,13 @@ public final class TrackProposalsService implements TrackProposalsUseCase {
         if (proposals == null || proposals.stream().anyMatch(Objects::isNull)) {
             throw new IllegalArgumentException("卡片清單和裡面的每一張都不可為 null");
         }
-        // distinct：同一個請求裡重複的 id 也只問一次。真正擋重複的是 port（還沒表態過才算）
-        long dismissed = proposals.stream().distinct()
-                .filter(id -> decideProposal.decide(owner, id, ProposalOutcome.DISMISSED))
-                .count();
+        if (proposals.size() > MAX_DISMISSED_PER_CALL) {
+            throw new IllegalArgumentException("一次最多回報 " + MAX_DISMISSED_PER_CALL + " 張卡片：" + proposals.size());
+        }
+        // Set：同一個請求裡重複的 id 只算一張。跨請求的重複由 port 擋（還沒表態過才算）
+        int dismissed = store.decide(owner, Set.copyOf(proposals), ProposalOutcome.DISMISSED);
         if (dismissed > 0) {
-            usage.proposalsDismissed((int) dismissed);
+            usage.proposalsDismissed(dismissed);
         }
     }
 }

@@ -7,12 +7,13 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Proposal
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalOutcome;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
-import io.github.andersonchen.talkcal.calendar.application.port.out.DecideProposalPort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.ProposalStorePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsagePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPort;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * 實作「把確認過的行程排進行事曆」。
@@ -20,18 +21,18 @@ import java.util.Objects;
  *
  * 流程：每筆排進去（發 id）→ 一次存起來 → 核對帶來的提議卡片 → 記下用量（採納幾筆、手動幾筆）。
  * 用量在存好之後才記：存檔失敗的不算數，不然「採納」會把沒存進去的也算進來。
- * 採納不信呼叫端說的，一張一張問 DecideProposalPort：是 owner 的、還沒表態過的卡片才算（#223）。
+ * 採納不信呼叫端說的，交給 ProposalStorePort 核對：是 owner 的、還沒表態過的卡片才算（#223）。
  * 行程本身的規則已經在 CalendarEvent 建構時檢查過，這裡不再看第二次。
  */
 public final class AddEventsService implements AddEventsUseCase {
 
     private final SaveEventsPort saveEventsPort;
-    private final DecideProposalPort decideProposal;
+    private final ProposalStorePort proposals;
     private final RecordUsagePort usage;
 
-    public AddEventsService(SaveEventsPort saveEventsPort, DecideProposalPort decideProposal, RecordUsagePort usage) {
+    public AddEventsService(SaveEventsPort saveEventsPort, ProposalStorePort proposals, RecordUsagePort usage) {
         this.saveEventsPort = Objects.requireNonNull(saveEventsPort, "saveEventsPort 不可為 null");
-        this.decideProposal = Objects.requireNonNull(decideProposal, "decideProposal 不可為 null");
+        this.proposals = Objects.requireNonNull(proposals, "proposals 不可為 null");
         this.usage = Objects.requireNonNull(usage, "usage 不可為 null");
     }
 
@@ -59,10 +60,8 @@ public final class AddEventsService implements AddEventsUseCase {
         }
         List<ScheduledEvent> scheduled = events.stream().map(ScheduledEvent::schedule).toList();
         saveEventsPort.save(owner, scheduled);
-        // distinct：同一個請求裡帶兩次同一張卡片也只問一次。真正擋重複的是 port（還沒表態過才算）
-        int adopted = (int) adopting.stream().distinct()
-                .filter(id -> decideProposal.decide(owner, id, ProposalOutcome.ADOPTED))
-                .count();
+        // Set：同一個請求裡帶兩次同一張卡片只算一張。跨請求的重複由 port 擋（還沒表態過才算）
+        int adopted = adopting.isEmpty() ? 0 : proposals.decide(owner, Set.copyOf(adopting), ProposalOutcome.ADOPTED);
         if (adopted > 0) {
             usage.eventsAdded(EventOrigin.ASSISTANT, adopted);
         }

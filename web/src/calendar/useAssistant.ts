@@ -156,11 +156,9 @@ export function useAssistant(calendar: CalendarState) {
 
   /** 帶著這筆草稿打開新增表單；在表單裡存好了，這張卡片就算「已加入」。 */
   function edit(proposal: Proposal) {
-    calendar.openForm(proposal.draft, {
-      proposalId: proposal.draft.proposalId ?? null,
-      onSaved: () => {
-        proposal.status = 'added'
-      },
+    // 草稿裡帶著卡片的 proposalId，表單存檔時會一起送出去，改過再存也算採納
+    calendar.openForm(proposal.draft, () => {
+      proposal.status = 'added'
     })
   }
 

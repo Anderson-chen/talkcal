@@ -24,8 +24,8 @@ export interface EventFields {
   // 沒有就是 null（後端把空白一律當成沒有）
   location: string | null
   note: string | null
-  // 從哪張助理提議卡片來的：助理回覆的每張卡片都有，確認時原樣帶回去才算採納（#223）。手動填的沒有
-  proposalId?: string | null
+  // 從哪張助理提議卡片來的：助理回覆的每張卡片都有，確認時原樣帶回去才算採納（#223）。手動填的沒有這個欄位
+  proposalId?: string
 }
 
 /** 已經存起來的行程，多了 id。 */

@@ -44,7 +44,6 @@ export async function fakeApi(page: Page, options: Options = {}) {
     events: [...(options.events ?? [])],
     // 每次 POST /events 收到的 body.events（前端送了什麼）
     saved: [] as Omit<FakeEvent, 'id'>[][],
-
     failNextSave: null as string | null,
     // 註冊過的帳號：名稱 → 密碼
     accounts: new Map<string, string>([['amy', 'correct-horse']]),

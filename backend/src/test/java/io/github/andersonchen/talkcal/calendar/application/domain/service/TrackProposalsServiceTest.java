@@ -8,11 +8,14 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.EventOri
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalOutcome;
+import io.github.andersonchen.talkcal.calendar.application.port.in.TrackProposalsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsagePort;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,7 +29,7 @@ class TrackProposalsServiceTest {
     private final List<String> recorded = new ArrayList<>();
     private final InMemoryProposals proposals = new InMemoryProposals();
 
-    private final TrackProposalsService service = new TrackProposalsService(proposals, proposals, new RecordUsagePort() {
+    private final TrackProposalsService service = new TrackProposalsService(proposals, new RecordUsagePort() {
         @Override
         public void proposalsShown(int count) {
             recorded.add("shown " + count);
@@ -51,7 +54,7 @@ class TrackProposalsServiceTest {
         assertEquals(2, ids.size());
         assertNotEquals(ids.get(0), ids.get(1));
         assertEquals(List.of("shown 2"), recorded);
-        assertEquals(true, proposals.decide(OWNER, ids.get(0), ProposalOutcome.ADOPTED), "發出去的卡片要存在、是 owner 的");
+        assertEquals(1, proposals.decide(OWNER, Set.of(ids.get(0)), ProposalOutcome.ADOPTED), "發出去的卡片要存在、是 owner 的");
     }
 
     @Test
@@ -77,7 +80,7 @@ class TrackProposalsServiceTest {
     @DisplayName("反例：同一張拒絕兩次、同一個請求帶兩次、先採納再拒絕，都只算第一次")
     void eachCardCountsOnce() {
         List<ProposalId> ids = service.proposalsShown(OWNER, 2);
-        proposals.decide(OWNER, ids.get(1), ProposalOutcome.ADOPTED);
+        proposals.decide(OWNER, Set.of(ids.get(1)), ProposalOutcome.ADOPTED);
 
         service.proposalsDismissed(OWNER, List.of(ids.get(0), ids.get(0)));
         service.proposalsDismissed(OWNER, List.of(ids.get(0)));
@@ -97,6 +100,16 @@ class TrackProposalsServiceTest {
 
         assertEquals(List.of(), recorded);
         assertEquals(null, proposals.outcomeOf(others));
+    }
+
+    @Test
+    @DisplayName("一次超過上限張數：IllegalArgumentException，什麼都不記；剛好上限可以")
+    void rejectsTooManyAtOnce() {
+        List<ProposalId> tooMany = Collections.nCopies(TrackProposalsUseCase.MAX_DISMISSED_PER_CALL + 1, ProposalId.newId());
+
+        assertThrows(IllegalArgumentException.class, () -> service.proposalsDismissed(OWNER, tooMany));
+        service.proposalsDismissed(OWNER, tooMany.subList(0, TrackProposalsUseCase.MAX_DISMISSED_PER_CALL));
+        assertEquals(List.of(), recorded);
     }
 
     @Test

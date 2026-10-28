@@ -275,7 +275,7 @@ class CalendarAssistantControllerTest {
         @Bean
         TrackProposalsService trackProposals(RecordedUsage usage) {
             InMemoryProposals proposals = new InMemoryProposals();
-            return new TrackProposalsService(proposals, proposals, usage);
+            return new TrackProposalsService(proposals, usage);
         }
 
         // 假模型：使用者講「開會」就提議（呼叫 propose_events，拿到結果後回一句話），其他都回「早上還是晚上？」；

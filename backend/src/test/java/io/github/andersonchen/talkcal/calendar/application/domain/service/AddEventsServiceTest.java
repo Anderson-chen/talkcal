@@ -161,7 +161,8 @@ class AddEventsServiceTest {
 
         service.addEvents(OWNER, List.of(DINNER), List.of(card));
         service.addEvents(OWNER, List.of(DINNER), List.of(card));
-        service.addEvents(OWNER, List.of(DINNER, DENTIST), List.of(proposals.issue(OWNER)).stream().flatMap(id -> java.util.stream.Stream.of(id, id)).toList());
+        ProposalId twice = proposals.issue(OWNER);
+        service.addEvents(OWNER, List.of(DINNER, DENTIST), List.of(twice, twice));
 
         assertEquals(List.of("ASSISTANT 1", "MANUAL 1", "ASSISTANT 1", "MANUAL 1"), usage.events);
     }
@@ -171,7 +172,7 @@ class AddEventsServiceTest {
     void foreignOrUnknownOrDismissedCardsAreManual() {
         ProposalId others = proposals.issue(OTHER);
         ProposalId dismissed = proposals.issue(OWNER);
-        proposals.decide(OWNER, dismissed, ProposalOutcome.DISMISSED);
+        proposals.decide(OWNER, java.util.Set.of(dismissed), ProposalOutcome.DISMISSED);
         RecordingPort port = new RecordingPort();
 
         new AddEventsService(port, proposals, usage).addEvents(OWNER, List.of(DINNER, DENTIST, DINNER),

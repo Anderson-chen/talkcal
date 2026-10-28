@@ -15,8 +15,6 @@ export interface FormRequest {
   initial: EventFields
   // 存好之後要通知誰（AI 卡片要把那一筆標成「已加入」）
   onSaved?: (saved: SavedEvent) => void
-  // 從 AI 卡片「修改」過來的：那張卡片的 id，存檔時帶上，改過再存還是算採納（#223）。手動新增是 null
-  proposalId: string | null
 }
 
 export function useCalendar() {
@@ -132,14 +130,9 @@ export function useCalendar() {
     reload()
   }
 
-  // fromProposal：從 AI 卡片「修改」過來的，帶著卡片的 id，存好要通知那張卡片；沒有就是手動新增
-  function openForm(initial?: Partial<EventFields>, fromProposal?: { proposalId: string | null; onSaved: (saved: SavedEvent) => void }) {
+  function openForm(initial?: Partial<EventFields>, onSaved?: (saved: SavedEvent) => void) {
     detailId.value = null
-    form.value = {
-      initial: { ...blankDraft(sel.value), ...initial },
-      onSaved: fromProposal?.onSaved,
-      proposalId: fromProposal?.proposalId ?? null,
-    }
+    form.value = { initial: { ...blankDraft(sel.value), ...initial }, onSaved }
   }
 
   return {

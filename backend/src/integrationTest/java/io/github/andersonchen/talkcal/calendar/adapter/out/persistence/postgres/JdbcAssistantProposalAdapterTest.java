@@ -1,9 +1,7 @@
 package io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalId;
@@ -13,6 +11,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -80,7 +79,7 @@ class JdbcAssistantProposalAdapterTest {
     void firstDecisionCounts() {
         ProposalId card = issued(OWNER);
 
-        assertTrue(adapter.decide(OWNER, card, ProposalOutcome.ADOPTED));
+        assertEquals(1, adapter.decide(OWNER, Set.of(card), ProposalOutcome.ADOPTED));
         assertEquals("ADOPTED", outcomeOf(card));
     }
 
@@ -89,15 +88,35 @@ class JdbcAssistantProposalAdapterTest {
     void otherDecisionsDoNotCount() {
         ProposalId card = issued(OWNER);
         ProposalId others = issued(OTHER);
-        adapter.decide(OWNER, card, ProposalOutcome.DISMISSED);
+        adapter.decide(OWNER, Set.of(card), ProposalOutcome.DISMISSED);
 
-        assertFalse(adapter.decide(OWNER, card, ProposalOutcome.DISMISSED));
-        assertFalse(adapter.decide(OWNER, card, ProposalOutcome.ADOPTED));
-        assertFalse(adapter.decide(OWNER, others, ProposalOutcome.ADOPTED));
-        assertFalse(adapter.decide(OWNER, ProposalId.newId(), ProposalOutcome.ADOPTED));
+        assertEquals(0, adapter.decide(OWNER, Set.of(card), ProposalOutcome.DISMISSED));
+        assertEquals(0, adapter.decide(OWNER, Set.of(card), ProposalOutcome.ADOPTED));
+        assertEquals(0, adapter.decide(OWNER, Set.of(others), ProposalOutcome.ADOPTED));
+        assertEquals(0, adapter.decide(OWNER, Set.of(ProposalId.newId()), ProposalOutcome.ADOPTED));
 
         assertEquals("DISMISSED", outcomeOf(card));
         assertEquals(null, outcomeOf(others), "別人的卡片不會被我改到");
+    }
+
+    @Test
+    @DisplayName("一次核對好幾張：自己的、還沒表態過的算，別人的、沒發過的、已表態過的不算，回傳算數的張數")
+    void decidesBatch() {
+        ProposalId mine = issued(OWNER);
+        ProposalId alsoMine = issued(OWNER);
+        ProposalId decided = issued(OWNER);
+        ProposalId others = issued(OTHER);
+        adapter.decide(OWNER, Set.of(decided), ProposalOutcome.ADOPTED);
+
+        assertEquals(2, adapter.decide(OWNER, Set.of(mine, alsoMine, decided, others, ProposalId.newId()), ProposalOutcome.DISMISSED));
+        assertEquals("ADOPTED", outcomeOf(decided));
+        assertEquals(null, outcomeOf(others));
+    }
+
+    @Test
+    @DisplayName("空的一批：0，不碰資料庫")
+    void emptyBatchIsZero() {
+        assertEquals(0, adapter.decide(OWNER, Set.of(), ProposalOutcome.ADOPTED));
     }
 
     @Test
@@ -108,8 +127,8 @@ class JdbcAssistantProposalAdapterTest {
             ExecutorService pool = Executors.newFixedThreadPool(2);
             try {
                 List<Callable<Boolean>> both = List.of(
-                        () -> adapter.decide(OWNER, card, ProposalOutcome.ADOPTED),
-                        () -> adapter.decide(OWNER, card, ProposalOutcome.DISMISSED));
+                        () -> adapter.decide(OWNER, Set.of(card), ProposalOutcome.ADOPTED) == 1,
+                        () -> adapter.decide(OWNER, Set.of(card), ProposalOutcome.DISMISSED) == 1);
                 long counted = 0;
                 for (Future<Boolean> result : pool.invokeAll(both)) {
                     if (result.get()) {
@@ -133,8 +152,8 @@ class JdbcAssistantProposalAdapterTest {
                 .param("at", OffsetDateTime.ofInstant(cutoff.minusSeconds(60), ZoneOffset.UTC)).param("id", old.value()).update();
 
         assertEquals(1, adapter.deleteCreatedBefore(cutoff));
-        assertFalse(adapter.decide(OWNER, old, ProposalOutcome.ADOPTED), "刪掉的卡片不能再表態");
-        assertTrue(adapter.decide(OWNER, fresh, ProposalOutcome.ADOPTED));
+        assertEquals(0, adapter.decide(OWNER, Set.of(old), ProposalOutcome.ADOPTED), "刪掉的卡片不能再表態");
+        assertEquals(1, adapter.decide(OWNER, Set.of(fresh), ProposalOutcome.ADOPTED));
     }
 
     @Test
@@ -144,7 +163,7 @@ class JdbcAssistantProposalAdapterTest {
                 JdbcClient.create(new DriverManagerDataSource("jdbc:postgresql://localhost:1/none", "x", "x")));
 
         broken.saveProposals(OWNER, List.of(ProposalId.newId()));
-        assertFalse(broken.decide(OWNER, ProposalId.newId(), ProposalOutcome.ADOPTED));
+        assertEquals(0, broken.decide(OWNER, Set.of(ProposalId.newId()), ProposalOutcome.ADOPTED));
     }
 
     @Test

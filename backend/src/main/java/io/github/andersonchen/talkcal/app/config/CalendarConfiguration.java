@@ -118,7 +118,7 @@ class CalendarConfiguration {
         return new AssistantMemoryCleanup(assistantMemory, assistantProposals, retention, Clock.systemUTC());
     }
 
-    // 助理發出的提議卡片（#223）：一個實作同時當 Save / DecideProposalPort，清理排程也用它刪舊卡片
+    // 助理發出的提議卡片（#223）：ProposalStorePort 的實作，清理排程也用它刪舊卡片
     @Bean
     JdbcAssistantProposalAdapter assistantProposals(JdbcClient jdbcClient) {
         return new JdbcAssistantProposalAdapter(jdbcClient);
@@ -143,7 +143,7 @@ class CalendarConfiguration {
 
     @Bean
     TrackProposalsUseCase trackProposals(JdbcAssistantProposalAdapter assistantProposals, RecordUsagePort usage) {
-        return new TrackProposalsService(assistantProposals, assistantProposals, usage);
+        return new TrackProposalsService(assistantProposals, usage);
     }
 
     // 活躍使用者算的是真實的時間點（created_at 帶時區），用 UTC 就好，跟行事曆的牆上時間無關
