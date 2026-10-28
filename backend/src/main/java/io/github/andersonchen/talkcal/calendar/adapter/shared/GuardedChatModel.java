@@ -60,7 +60,7 @@ public final class GuardedChatModel implements ChatModel {
     @Override
     public ChatResponse call(Prompt prompt) {
         try {
-            return Bulkhead.decorateSupplier(bulkhead, CircuitBreaker.decorateSupplier(breaker, () -> delegate.call(prompt))).get();
+            return bulkhead.executeSupplier(() -> breaker.executeSupplier(() -> delegate.call(prompt)));
         } catch (CallNotPermittedException e) {
             throw new ModelUnavailableException(ModelUnavailableException.Reason.CIRCUIT_OPEN, retryAfterOpen, e);
         } catch (BulkheadFullException e) {

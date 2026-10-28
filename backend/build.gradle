@@ -68,12 +68,13 @@ dependencies {
     // 多一個依賴只加設定、不必再寫一套組裝；指標（breaker 狀態、bulkhead 剩幾個位子）也由它自動接上 Micrometer。
     // 只用它建好的 registry，不用 @CircuitBreaker 註解（見 ResilienceConfiguration）。
     // 不用 Spring Cloud Circuit Breaker：它是同一個 Resilience4j 外面再包一層抽象，還多一套 release train 要追（理由見 PR #161）；
-    // 設定格式一樣是 resilience4j.*，哪天要換，設定檔不用改。版號要自己寫：不在 Boot 的 BOM 裡，兩個要一致
-    implementation 'io.github.resilience4j:resilience4j-spring-boot4:2.4.0'
+    // 設定格式一樣是 resilience4j.*，哪天要換，設定檔不用改。
+    // 版號只寫一次（不在 Boot 的 BOM 裡）。不用 resilience4j-bom：2.4.0 的 BOM 只列了 spring-boot3，沒有 spring-boot4
+    def resilience4j = '2.4.0'
+    implementation "io.github.resilience4j:resilience4j-spring-boot4:${resilience4j}"
     // 程式直接用 CircuitBreaker、Bulkhead 這兩個型別，明寫出來，不靠 starter 間接帶進來
-    ['resilience4j-circuitbreaker', 'resilience4j-bulkhead'].each {
-        implementation "io.github.resilience4j:${it}:2.4.0"
-    }
+    implementation "io.github.resilience4j:resilience4j-circuitbreaker:${resilience4j}"
+    implementation "io.github.resilience4j:resilience4j-bulkhead:${resilience4j}"
 
     // 認證與授權（#11）：沒登入就用不了 /api。登入方式是可以換的 adapter（本機帳密、之後的 Google／GitHub、AWS 上的 Cognito），
     // 由 app.config 依 talkcal.auth.provider 組裝其中一套 SecurityFilterChain。auth 模組的規則（帳號名稱、密碼長度）不碰 Spring

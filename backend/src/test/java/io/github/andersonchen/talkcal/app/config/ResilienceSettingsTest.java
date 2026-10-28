@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.health.actuate.endpoint.HealthEndpoint;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 
 /**
  * application.properties 的 resilience4j.* 真的被讀進去了（#44）。
@@ -29,6 +30,8 @@ import org.springframework.boot.test.context.SpringBootTest;
  * 起整個容器、不連資料庫，理由同 OpenApiDocumentationTest。
  */
 @SpringBootTest(properties = "spring.flyway.enabled=false")
+// 用不到 MockMvc，加上它只為了跟 OpenApiDocumentationTest 的設定一模一樣：Spring 測試會重用同一個容器，不必再起一次
+@AutoConfigureMockMvc
 @DisplayName("斷路器、bulkhead 的設定")
 class ResilienceSettingsTest {
 
@@ -95,7 +98,7 @@ class ResilienceSettingsTest {
      * starter 可以把斷路器狀態接進 /actuator/health，打開時 health 變 DOWN。那樣模型一掛，Docker 的 healthcheck 就判 app 不健康、
      * 雲端的負載平衡器把它拿掉 —— 行程 CRUD 跟著不能用，正好是斷路器要防的事。
      * 所以 health 裡不能有斷路器（starter 預設也是關的，這裡守著它）。
-     * 不直接看整體的 UP／DOWN：這個測試沒有資料庫，health 裡的資料庫檢查本來就是 DOWN。
+     * 不看整體的 UP／DOWN：這個測試沒有資料庫，health 裡的資料庫檢查本來就是 DOWN（而且問一次要等連線逾時）。
      */
     @Test
     @DisplayName("反例：模型的斷路器打開時，health 裡也沒有斷路器這一項（模型掛了不等於 app 掛了）")
@@ -104,7 +107,6 @@ class ResilienceSettingsTest {
         breaker.transitionToForcedOpenState();
         try {
             assertThat(health.healthForPath("circuitBreakers")).isNull();
-            assertThat(health.health()).isNotNull();
         } finally {
             breaker.reset();
         }
