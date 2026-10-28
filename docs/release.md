@@ -135,13 +135,13 @@ commit 訊息用的是這個 repo 自己的 `[feat]`、`[fix]`（見 CLAUDE.md�
 
 ## 給 rollback（#19）的介面
 
-這次只做到「每個版本有自己的映像檔 tag，舊的留在機器上」，rollback 本身留給 #19：
+這次只做到「每個版本有自己的映像檔 tag，舊的留在機器上」，rollback 本身在 [docs/rollback.md](rollback.md)（#19）：
 
 - `deploy/compose.yaml` 的 `image: talkcal/app:${APP_VERSION}`：設好 `APP_VERSION` 再 `up --no-build`，
   就是換回機器上已經有的那個版本，不用重 build
 - `cd/apply.sh` **不**接受從外面指定 `APP_VERSION`：它一定 `--build` 目前 checkout 的程式碼，
   讓外面指定的話會把 A 版的程式碼 build 成 B 版的名字
-- 舊映像檔會一直累積（每個約幾百 MB），#19 要決定留幾個、怎麼清
+- 舊映像檔會一直累積（每個約幾百 MB）：#19 決定先不清（清掉就退不回去），保留規則列在 rollback.md 的「還沒做的」
 
 ## 已知限制
 

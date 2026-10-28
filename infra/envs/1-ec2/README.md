@@ -77,6 +77,7 @@ flowchart LR
 | `compose.bedrock.yaml` | 不起 `llm-chat`、`model-seed`；app 的模型位址、key、名稱換成 Bedrock 的 |
 | `compose.gpu.yaml` | 模型來源換成從 S3 拉下來的資料夾 |
 | `Caddyfile` | HTTPS 入口，全部轉給 web |
+| `compose.ops.yaml` | 疊在 `ops/compose.yaml` 上：Alloy 的 trace 取樣改成一般請求 10%、等 125 秒才決定 |
 
 ## 跟本機比，改了什麼
 
@@ -92,6 +93,7 @@ flowchart LR
 | Google、GitHub 登入 | client id／secret 填在 `deploy/.env`，回呼網址 `http://localhost:5173/...` | `oauth.auto.tfvars` → SSM → `deploy/.env`；回呼網址 `https://<網站>/...`，nginx 照轉 Caddy 的 `X-Forwarded-Proto`、app 信任它才組得出 https（[#127](https://github.com/Anderson-chen/talkcal/issues/127)） | `variables.tf`、`secrets.tf`、`web/nginx.conf` |
 | 告警寄信 | SMTP、收件人填在 `deploy/.env`，起 `ops/` 時帶 `--env-file ../deploy/.env`；試寄用 Mailpit（`--profile mailtest`） | `alerting.auto.tfvars` → SSM → `deploy/.env`，`deploy.sh` 起 `ops/` 時帶 `--env-file deploy/.env`（[#121](https://github.com/Anderson-chen/talkcal/issues/121)） | `variables.tf`、`secrets.tf`、`deploy.sh`、`ops/compose.yaml` |
 | app 記憶體 | 沒上限 | `mem_limit: 2g`：沒設的話 JVM 的 75% 是算整台（8GB 或 16GB） | `compose.ec2.yaml` |
+| Trace 取樣 | 全留 | 錯的、5xx、超過 5 秒的全留，其餘留 10%（[#37](https://github.com/Anderson-chen/talkcal/issues/37)，理由見 [ops/README.md](../../../ops/README.md)） | `compose.ops.yaml` |
 | 映像檔 | 本機 build | 在 EC2 上 build；做[版本 tag](https://github.com/Anderson-chen/talkcal/issues/25) 時再改成 CI 推到 ECR | `deploy.sh` |
 
 ## 首次部署
