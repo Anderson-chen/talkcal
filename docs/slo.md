@@ -17,7 +17,7 @@ dashboard 看得到數字，但數字要跟一條線比才知道該不該處理�
 
 | SLO | 範圍 | 好的請求 | 目標 | error budget（28 天） |
 |-----|------|----------|------|------------------------|
-| `calendar-availability` | 一般 API：`/api/calendar/events…`、`GET /api/calendar/assistant/{id}` | 不是 5xx | **99.5%** | 0.5% 的請求可以失敗 |
+| `calendar-availability` | 一般 API：`/api/calendar/events…`、`GET /api/calendar/assistant/{id}`、`POST /api/calendar/assistant/dismissals` | 不是 5xx | **99.5%** | 0.5% 的請求可以失敗 |
 | `calendar-latency` | 同上 | 300ms 內回應 | **99%** | 1% 的請求可以超過 300ms |
 | `assistant-availability` | 跟助理說話：`POST /api/calendar/assistant` | 不是 5xx | **99%** | 1% |
 | `assistant-latency` | 同上 | 8 秒內回應 | **95%** | 5% 的請求可以超過 8 秒 |

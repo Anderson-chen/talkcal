@@ -22,7 +22,7 @@
 #   延遲：  壞 = 比門檻慢。用「全部 - 落在門檻那個 bucket 以內的」算，所以 app 一定要有剛好在門檻上的 bucket
 #          （application.properties 的 management.metrics.distribution.slo.http.server.requests=300ms,8s，兩邊要一起改）。
 # 範圍：
-#   calendar-*  = 一般 API：行程的增刪查（/api/calendar/events…）＋讀對話紀錄（GET /api/calendar/assistant/{id}）
+#   calendar-*  = 一般 API：行程的增刪查（/api/calendar/events…）＋讀對話紀錄（GET /api/calendar/assistant/{id}）＋拒絕卡片（POST /api/calendar/assistant/dismissals）
 #   assistant-* = 跟助理說話（POST /api/calendar/assistant）。後面要叫模型好幾次，慢是預期的，所以門檻分開定
 # 「沒有錯也要有 0」：沒有任何 5xx 時壞事件那一項是空的，空 / 數字 = 空，SLI 會變成沒資料。
 #   補 or vector(0) 讓它是 0。完全沒有請求時全部事件也是空的，結果就是沒資料——沒人用，不算好也不算壞。
