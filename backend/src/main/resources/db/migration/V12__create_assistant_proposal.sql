@@ -7,6 +7,12 @@
 -- 只存身分和結果，不存行程內容：內容在回覆裡已經給前端了，使用者還可能改過才存；指標只需要知道「這張卡片後來怎麼了」。
 -- 跟其他表一樣不加 owner 的外鍵（見 V11）。舊卡片由每天的清理排程按對話的保留期限刪掉（AssistantMemoryCleanup）。
 
+-- 等鎖、跑太久就放棄，不讓 migration 卡住線上的請求（ci/migrations.sh 的 squawk 規則）。
+-- 這張表是這支 migration 才建的、裡面沒有資料，實際上不會等；寫上是讓每支 migration 都守同一條規矩。
+-- SET LOCAL：只在這支 migration 的交易裡有效（Flyway 每支包一個交易），不會留在連線上影響之後的查詢
+SET LOCAL lock_timeout = '1s';
+SET LOCAL statement_timeout = '5s';
+
 CREATE TABLE assistant_proposal (
     id         UUID        PRIMARY KEY,         -- 伺服器發的，前端原樣帶回來
     owner_id   UUID        NOT NULL,
