@@ -96,6 +96,7 @@ Alloy 加入了 deploy/ 的網路（`talkcal-deploy_default`）：用服務名�
 |-----|------|------|
 | `talkcal-app` | `app:8091/actuator/prometheus` | deploy/ 的 app 容器（management 埠，不發佈到主機） |
 | `llama-cpp` | `llm-chat:8080/metrics` | Qwen3-8B（deploy/ 的 llm-chat） |
+| `postgres` | `postgres-exporter:9187/metrics` | deploy/ 的 postgres_exporter，替 PostgreSQL 翻成 Prometheus 格式 |
 
 每 15 秒抓一次，用 `remote_write` 推進 Mimir。本機 bootRun 的 app 不在 deploy/ 的網路裡，不會被抓。
 
@@ -105,6 +106,28 @@ Alloy 加入了 deploy/ 的網路（`talkcal-deploy_default`）：用服務名�
 ```bash
 curl 'localhost:9009/prometheus/api/v1/query?query=up'
 ```
+
+### 資料庫連線：app 那頭和資料庫那頭各看一次（#32）
+
+「API 變慢」常見的原因之一是在排隊等資料庫連線，只看 API 延遲分不出來。
+talkcal-app dashboard 的「資料庫連線池」那一排把兩頭放在一起：
+
+| 哪一頭 | 指標 | 回答 |
+|--------|------|------|
+| app 的連線池（HikariCP，Micrometer 自動產生） | `hikaricp_connections_active` / `_idle` / `_max` / `_min` | 借出去幾條、離上限多遠 |
+| | `hikaricp_connections_pending` | 有幾個請求在排隊等連線（> 0 就是池不夠用） |
+| | `hikaricp_connections_acquire_seconds`、`_usage_seconds` | 等連線等多久、一條連線被占用多久 |
+| | `hikaricp_connections_timeout_total` | 等超過 30 秒、直接失敗的次數 |
+| 資料庫（postgres_exporter） | `pg_settings_max_connections` | 資料庫最多收幾條（預設 100） |
+| | `pg_stat_activity_count{state=...}` | 實際開著的連線各在做什麼（active / idle / idle in transaction） |
+
+兩頭要分開看的理由：app 的池開多大，都不能超過資料庫的上限扣掉保留的；而資料庫那頭看到的是**所有** app 的池加起來
+（例如本機 bootRun 和容器版 app 同時開著，就是 10 + 10 條）。
+
+exporter 關掉了逐表統計（`--no-collector.stat_user_tables`）：實測有人鎖住一張表時，那個查詢會跟著卡住，
+整次抓取逾時、連 `pg_stat_activity` 都抓不到 —— 偏偏是資料庫出事的時候。原因和實測寫在 `deploy/compose.yaml`。
+
+怎麼壓出「池子不夠用」的畫面，見 [perf/README.md](../perf/README.md) 的 db-pool 那一段。
 
 app 打給模型的呼叫，原本有一組 `http_client_requests_seconds`（RestClient 自動產生）。
 改用 Spring AI 之後沒有了：Spring AI 的 OpenAI 模組底層是官方 openai-java SDK（OkHttp），不走 RestClient。
