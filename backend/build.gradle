@@ -2,6 +2,8 @@ import org.springframework.boot.gradle.plugin.SpringBootPlugin
 
 plugins {
     id 'java'
+    // 測試覆蓋率（#23），設定在下面 jacocoTestReport 那段
+    id 'jacoco'
     // 讓 ./gradlew run 能直接啟動組裝根
     id 'application'
     // Spring Boot 只負責「組裝」這件事：把散落的 bean 兜起來、打包成可執行 jar、提供 bootRun。
@@ -105,6 +107,16 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-micrometer-tracing-opentelemetry'
     runtimeOnly 'io.micrometer:micrometer-tracing-bridge-otel'
     runtimeOnly 'io.opentelemetry:opentelemetry-exporter-otlp'
+    // 每條 SQL 變成 trace 上的一個 span（#31）：HTTP 請求、Spring AI 叫模型都有 Spring 自己開的 Observation，
+    // 只有 JDBC 沒有，trace 上看不出時間是花在模型還是資料庫。它把 DataSource 包一層 datasource-proxy，
+    // 每次拿連線、每次執行 SQL 開一個 Observation，接到同一個 tracer 上；指標（jdbc.query 等）也會一起有。
+    // 版號要自己寫：不在 Boot 的 BOM 裡。2.x 對 Boot 4（2.3.0 的 pom 用的正是 Boot 4.1.1）
+    runtimeOnly 'net.ttddyy.observation:datasource-micrometer-spring-boot:2.3.0'
+    // 上面那個預設用自己的屬性名稱（jdbc.query[0]、peer.service = 資料庫名稱）。加這個改用 OpenTelemetry 的資料庫命名：
+    // db.system.name=postgresql、server.address、db.query.text（字面值換成 ?）。
+    // Tempo 畫 service map 時靠 db.system.name 造出「postgresql」這個節點（見 ops/tempo/tempo.yaml）；
+    // 只有 peer.service 的話，值是資料庫名稱 talkcal，圖上會變成 talkcal 自己連自己
+    runtimeOnly 'net.ttddyy.observation:datasource-micrometer-opentelemetry:2.3.0'
 
     // Swagger UI + OpenAPI 文件：啟動時掃 @RestController，自動產出 /v3/api-docs（機器讀的 JSON）
     // 與 /swagger-ui.html（人點的頁面）。文件是「從程式長出來」的，路由改了文件跟著改，不會過期。
@@ -245,6 +257,8 @@ testing {
             targets.configureEach {
                 testTask.configure {
                     shouldRunAfter tasks.named('integrationTest')
+                    // 不量覆蓋率：eval 量的是模型答得好不好，不是程式有沒有被走到（見 docs/test-coverage.md）
+                    jacoco { enabled = false }
                     // 模型在外面，程式沒變結果也可能變（換了模型檔、換了雲端模型），所以每次都真的跑，不沿用上次的結果
                     outputs.upToDateWhen { false }
                     // 跑哪個模型：沒給就是本機 llama-server 的 qwen3-8b。要評雲端的就給這三個（名字跟 Spring 認得的一樣）
@@ -272,6 +286,25 @@ configurations {
     integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
     evalImplementation.extendsFrom testImplementation
     evalRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+// ── 測試覆蓋率（#23）：單元測試＋整合測試合併成一份報告 ──
+// 用法：./gradlew test integrationTest jacocoTestReport（ci/checks.sh 就是這樣跑）
+// 報告在哪、為什麼合併、為什麼不設門檻（不加 jacocoTestCoverageVerification）：見 docs/test-coverage.md
+jacoco {
+    // 0.8.14 起正式支援 Java 25 的 class 檔。不寫的話用 Gradle 內建的版本，Gradle 升級時會悄悄跟著換
+    toolVersion = '0.8.15'
+}
+
+tasks.named('jacocoTestReport', JacocoReport) {
+    // 預設只讀 test 的結果，這裡把 integrationTest 的也加進來。傳 task 而不是寫死 exec 檔的路徑：
+    // Gradle 從 task 自己的 jacoco 設定找檔案，順便加上 mustRunAfter（不是 dependsOn）——
+    // 只跑 ./gradlew test jacocoTestReport 時不會被迫起 PostgreSQL 容器，沒跑整合測試時報告就只有單元測試的部分
+    executionData tasks.named('integrationTest').get()
+    reports {
+        // HTML 預設就開著（給人看）；另外開 CSV 給 ci/checks.sh 加總貼摘要：一個類別一列、欄位有名字，比拆 XML 好讀
+        csv.required = true
+    }
 }
 
 tasks.named('check') {

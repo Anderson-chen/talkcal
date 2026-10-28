@@ -17,7 +17,7 @@
 
 import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
 import { me } from '../auth'
-import { assistantHistory, talkToAssistant, type EventFields } from '../calendar'
+import { assistantHistory, dismissProposals, talkToAssistant, type EventFields } from '../calendar'
 import { problemOf, UnauthorizedError, type Problem } from '../http'
 import { describeAssistantFailure, type FailureKind } from './assistantFailure'
 import { type CalendarState } from './useCalendar'
@@ -215,6 +215,7 @@ export function useAssistant(calendar: CalendarState) {
     saving.value = true
     msg.error = null
     try {
+      // 草稿裡帶著卡片的 proposalId，後端核對過才算採納
       await calendar.add(pending.map((p) => p.draft))
       for (const p of pending) p.status = 'added'
     } catch (e) {
@@ -225,15 +226,26 @@ export function useAssistant(calendar: CalendarState) {
   }
 
   function cancel(msg: ChatMessage) {
-    for (const p of msg.proposals) if (p.status === 'pending') p.status = 'removed'
+    const pending = msg.proposals.filter((p) => p.status === 'pending')
+    for (const p of pending) p.status = 'removed'
+    reportDismissed(pending)
   }
 
   function drop(proposal: Proposal) {
+    if (proposal.status !== 'pending') return
     proposal.status = 'removed'
+    reportDismissed([proposal])
+  }
+
+  // 拒絕了哪幾張告訴後端（產品指標的採納率）。不等它、失敗也不說：使用者按的是「取消」，不該因為指標送不出去看到錯誤
+  function reportDismissed(proposals: Proposal[]) {
+    const ids = proposals.map((p) => p.draft.proposalId).filter((id): id is string => !!id)
+    if (ids.length > 0) dismissProposals(ids).catch(() => {})
   }
 
   /** 帶著這筆草稿打開新增表單；在表單裡存好了，這張卡片就算「已加入」。 */
   function edit(proposal: Proposal) {
+    // 草稿裡帶著卡片的 proposalId，表單存檔時會一起送出去，改過再存也算採納
     calendar.openForm(proposal.draft, () => {
       proposal.status = 'added'
     })
