@@ -24,7 +24,7 @@
 import './lib/docker-target.js';
 import http from 'k6/http';
 import { Counter, Trend } from 'k6/metrics';
-import { ASSISTANT_URL, BASE_URL, MESSAGES, jsonParams, signIn, useSession } from './lib/assistant.js';
+import { ASSISTANT_URL, MESSAGES, field, jsonParams, listMonth, signIn, useSession } from './lib/assistant.js';
 
 const RATE_PER_MIN = Number(__ENV.RATE_PER_MIN || 20); // 要低於容量，理由同 deploy.js
 const DURATION_S = Number(__ENV.DURATION_S || 300);
@@ -37,11 +37,9 @@ const OUTCOMES = {
   MODEL_BUSY: '503 MODEL_BUSY（滿載，沒叫模型）',
   other: '其他（含沒拿到回應）',
 };
-// Trend 只有分佈（中位數、最久…），沒有次數，次數另外數
+// 次數也從 Trend 拿（options 的 summaryTrendStats 有 count），不另外數
 const assistantMs = Object.fromEntries(Object.keys(OUTCOMES).map((k) => [k, new Trend(`outage_assistant_${k}`, true)]));
-const assistantCount = Object.fromEntries(Object.keys(OUTCOMES).map((k) => [k, new Counter(`outage_assistant_${k}_count`)]));
 const calendarMs = new Trend('outage_calendar', true);
-const calendarCount = new Counter('outage_calendar_count');
 const calendarFailed = new Counter('outage_calendar_failed');
 
 export const options = {
@@ -67,6 +65,8 @@ export const options = {
       maxVUs: 50,
     },
   },
+  // 收工的表要次數、中位數、最久；p(95) 給行程 API 的門檻
+  summaryTrendStats: ['count', 'med', 'p(95)', 'max'],
   // 行程 API 是這次要守住的：模型怎麼壞都要 100% 成功、而且不被拖慢
   thresholds: {
     outage_calendar_failed: ['count==0'],
@@ -88,19 +88,18 @@ export function assistant(session) {
   if (res.status === 200) {
     outcome = 'ok';
   } else if (res.status === 502 || res.status === 503) {
-    outcome = code(res) in OUTCOMES ? code(res) : 'other';
+    const code = field(res, 'code');
+    outcome = code in OUTCOMES ? code : 'other';
   }
   assistantMs[outcome].add(res.timings.duration);
-  assistantCount[outcome].add(1);
   console.log(`${now()} assistant status=${res.status} code=${outcome} ${Math.round(res.timings.duration)}ms`
       + (res.headers['Retry-After'] ? ` retry-after=${res.headers['Retry-After']}` : ''));
 }
 
 export function calendar(session) {
   useSession(session);
-  const res = http.get(`${BASE_URL}/api/calendar/events?from=2026-10-01&to=2026-11-01`);
+  const res = listMonth();
   calendarMs.add(res.timings.duration);
-  calendarCount.add(1);
   if (res.status !== 200) {
     calendarFailed.add(1);
     console.log(`${now()} calendar status=${res.status} ${Math.round(res.timings.duration)}ms`);
@@ -112,31 +111,22 @@ function now() {
   return new Date().toTimeString().slice(0, 8);
 }
 
-function code(res) {
-  try {
-    return res.json('code') || '';
-  } catch (e) {
-    return '';
-  }
-}
-
 export function handleSummary(data) {
   const m = (name) => data.metrics[name] && data.metrics[name].values;
   const ms = (v) => `${Math.round(v)}ms`.padStart(9);
   const rows = Object.entries(OUTCOMES).map(([key, label]) => {
-    const n = (m(`outage_assistant_${key}_count`) || { count: 0 }).count;
     const v = m(`outage_assistant_${key}`);
+    const n = v ? v.count : 0;
     if (!n) return `  ${'0'.padStart(5)}  ${''.padStart(9)}  ${''.padStart(9)}  ${label}`;
     return `  ${String(n).padStart(5)}  ${ms(v.med)}  ${ms(v.max)}  ${label}`;
   });
-  const cal = m('outage_calendar') || { 'p(95)': 0, max: 0 };
-  const calCount = (m('outage_calendar_count') || { count: 0 }).count;
+  const cal = m('outage_calendar') || { count: 0, 'p(95)': 0, max: 0 };
   const calFailed = (m('outage_calendar_failed') || { count: 0 }).count;
   const dropped = (m('dropped_iterations') || { count: 0 }).count;
   return {
     stdout: `\n助理（每分鐘 ${RATE_PER_MIN} 人，共 ${DURATION_S} 秒）\n`
         + `  ${'次數'.padStart(4)}  ${'中位數'.padStart(7)}  ${'最久'.padStart(8)}  結果\n${rows.join('\n')}\n`
-        + `\n行程 API（每秒 1 人）：${calCount} 次，失敗 ${calFailed} 次，p95 ${Math.round(cal['p(95)'])}ms，最久 ${Math.round(cal.max)}ms\n`
+        + `\n行程 API（每秒 1 人）：${cal.count} 次，失敗 ${calFailed} 次，p95 ${Math.round(cal['p(95)'])}ms，最久 ${Math.round(cal.max)}ms\n`
         + `k6 沒送出去（dropped_iterations）：${dropped}\n`,
   };
 }

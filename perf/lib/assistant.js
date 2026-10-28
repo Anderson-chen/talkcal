@@ -67,13 +67,19 @@ export function say(message) {
 }
 
 // 把欄位安全地挖出來：body 不是預期的 JSON（例如 502 回了錯誤物件）時不要讓腳本自己炸，
-// 回空字串讓 check 判它是「沒拿到」就好。
-function field(res, name) {
+// 回空字串讓 check 判它是「沒拿到」就好。outage.js 也用它讀錯誤回應的 code
+export function field(res, name) {
   try {
     return res.json(name) || '';
   } catch (e) {
     return '';
   }
+}
+
+// 月曆一頁：前端打開月曆就是這個請求，最常見。只碰資料庫、不經過模型 ——
+// slo.js 拿它當平常流量，outage.js 拿它確認「模型掛了，行程 API 照常」。兩支讀的是同一個月，結果才比得起來
+export function listMonth() {
+  return http.get(`${BASE_URL}/api/calendar/events?from=2026-10-01&to=2026-11-01`);
 }
 
 // ── 登入（#103）────────────────────────────────────────────────────────
