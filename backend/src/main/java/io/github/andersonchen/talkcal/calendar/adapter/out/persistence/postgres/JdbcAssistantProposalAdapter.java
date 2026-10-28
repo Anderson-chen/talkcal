@@ -16,6 +16,8 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * 助理發出去的提議卡片存在 PostgreSQL（表的定義在 V12__create_assistant_proposal.sql，#223）。
@@ -40,13 +42,20 @@ public final class JdbcAssistantProposalAdapter implements ProposalStorePort {
         Objects.requireNonNull(owner, "owner 不可為 null");
         Objects.requireNonNull(proposals, "proposals 不可為 null");
         try {
-            // 一張一句：一則回覆的卡片只有幾張，不值得為了批次多一層寫法
-            for (ProposalId proposal : proposals) {
-                jdbc.sql("INSERT INTO assistant_proposal (id, owner_id) VALUES (:id, :owner)")
-                        .param("id", proposal.value())
-                        .param("owner", owner.value())
-                        .update();
+            if (proposals.isEmpty()) {
+                return;
             }
+            // 一句多列 INSERT：整批全有或全無，不會寫到一半留下部分卡片；也只來回資料庫一次。
+            // 列數跟著卡片數走，但每個值都是參數（:id0、:id1…）
+            String rows = IntStream.range(0, proposals.size())
+                    .mapToObj(i -> "(:id" + i + ", :owner)")
+                    .collect(Collectors.joining(", "));
+            JdbcClient.StatementSpec insert = jdbc.sql("INSERT INTO assistant_proposal (id, owner_id) VALUES " + rows)
+                    .param("owner", owner.value());
+            for (int i = 0; i < proposals.size(); i++) {
+                insert = insert.param("id" + i, proposals.get(i).value());
+            }
+            insert.update();
         } catch (DataAccessException e) {
             log.warn("記不下助理發出的提議卡片，這幾張之後的採納、拒絕都不會算進指標：owner={} count={}", owner, proposals.size(), e);
         }

@@ -15,6 +15,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.EventOri
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.InMemoryProposals;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.TrackProposalsService;
+import io.github.andersonchen.talkcal.calendar.application.port.in.TrackProposalsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsagePort;
 
 import java.time.Clock;
@@ -202,9 +203,11 @@ class CalendarAssistantControllerTest {
     }
 
     @Test
-    @DisplayName("#223 POST /dismissals 沒帶 proposalIds、id 不是 UUID：400，什麼都不記")
+    @DisplayName("#223 POST /dismissals 沒帶 proposalIds、id 不是 UUID、一次超過上限張數：400，什麼都不記")
     void rejectsBadDismissals() throws Exception {
-        for (String body : List.of("{}", "{\"proposalIds\":null}", "{\"proposalIds\":[\"abc\"]}", "{\"proposalIds\":[null]}")) {
+        String tooMany = "{\"proposalIds\":[" + String.join(",",
+                java.util.Collections.nCopies(TrackProposalsUseCase.MAX_DISMISSED_PER_CALL + 1, "\"00000000-0000-4000-8000-000000000000\"")) + "]}";
+        for (String body : List.of("{}", "{\"proposalIds\":null}", "{\"proposalIds\":[\"abc\"]}", "{\"proposalIds\":[null]}", tooMany)) {
             mockMvc.perform(post(URL + "/dismissals").contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isBadRequest());
         }

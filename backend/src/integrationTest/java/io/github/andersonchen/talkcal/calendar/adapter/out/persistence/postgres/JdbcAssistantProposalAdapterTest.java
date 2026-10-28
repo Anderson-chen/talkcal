@@ -114,6 +114,16 @@ class JdbcAssistantProposalAdapterTest {
     }
 
     @Test
+    @DisplayName("一次發好幾張：一句寫進去，每張都記在 owner 名下")
+    void savesSeveralAtOnce() {
+        List<ProposalId> cards = List.of(ProposalId.newId(), ProposalId.newId(), ProposalId.newId());
+
+        adapter.saveProposals(OWNER, cards);
+
+        assertEquals(3, adapter.decide(OWNER, Set.copyOf(cards), ProposalOutcome.ADOPTED));
+    }
+
+    @Test
     @DisplayName("空的一批：0，不碰資料庫")
     void emptyBatchIsZero() {
         assertEquals(0, adapter.decide(OWNER, Set.of(), ProposalOutcome.ADOPTED));
