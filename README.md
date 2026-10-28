@@ -96,7 +96,7 @@ cd backend && ./gradlew deploy                                  # 跑測試、bu
 
 瀏覽器開 <http://localhost:18080>。API 文件（Swagger UI）在 <http://localhost:18090/swagger-ui.html>。
 
-要看觀測：再起 `ops/`（`docker compose -f ops/compose.yaml up -d`），Grafana 在 <http://localhost:3000>。
+要看觀測：再起 `ops/`（`docker compose --env-file deploy/.env -f ops/compose.yaml up -d`；`--env-file` 帶告警寄信的 SMTP，沒帶 Grafana 會重建成不寄信），Grafana 在 <http://localhost:3000>。
 
 本機開發（不進容器）：
 
