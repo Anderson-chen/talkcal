@@ -7,8 +7,9 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -51,15 +52,20 @@ public final class JdbcActiveOwnersAdapter implements CountActiveOwnersPort {
                     SELECT owner_id, created_at FROM calendar_assistant_message WHERE created_at >= :earliest
                 ) activity
                 """.formatted(counts))
-                .param("earliest", Timestamp.from(sinces.stream().min(Instant::compareTo).orElseThrow()));
+                .param("earliest", utc(sinces.stream().min(Instant::compareTo).orElseThrow()));
         for (int i = 0; i < sinces.size(); i++) {
-            statement = statement.param("s" + i, Timestamp.from(Objects.requireNonNull(sinces.get(i), "since 不可為 null")));
+            statement = statement.param("s" + i, utc(Objects.requireNonNull(sinces.get(i), "since 不可為 null")));
         }
         try {
             return statement.query((ResultSet rs, int row) -> columns(rs, sinces.size())).single();
         } catch (DataAccessException e) {
             throw new IllegalStateException("數活躍使用者失敗：sinces=" + sinces, e);
         }
+    }
+
+    // 帶著時區送：欄位是 TIMESTAMPTZ，用 java.sql.Timestamp 的話換算要看 JVM 的時區，容器（UTC）和本機（台北）會差 8 小時
+    private static OffsetDateTime utc(Instant instant) {
+        return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
     }
 
     private static List<Integer> columns(ResultSet rs, int count) throws SQLException {

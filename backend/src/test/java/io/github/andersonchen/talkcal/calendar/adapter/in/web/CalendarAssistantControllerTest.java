@@ -162,9 +162,9 @@ class CalendarAssistantControllerTest {
     }
 
     @Test
-    @DisplayName("#36 POST /dismissals 的張數是負的、或超過上限：400，什麼都不記（前端不能灌爆採納率）")
+    @DisplayName("#36 POST /dismissals 的張數是負的、超過上限、或沒帶：400，什麼都不記（前端不能灌爆採納率，送錯格式也看得出來）")
     void rejectsBadDismissalCounts() throws Exception {
-        for (String body : List.of("{\"count\":-1}", "{\"count\":21}")) {
+        for (String body : List.of("{\"count\":-1}", "{\"count\":21}", "{}", "{\"count\":null}")) {
             mockMvc.perform(post(URL + "/dismissals").contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isBadRequest());
         }

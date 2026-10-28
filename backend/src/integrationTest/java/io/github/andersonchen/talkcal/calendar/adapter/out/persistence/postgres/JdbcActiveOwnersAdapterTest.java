@@ -108,6 +108,15 @@ class JdbcActiveOwnersAdapterTest {
     }
 
     @Test
+    @DisplayName("邊界只差一小時也分得出來：時區換算錯了（例如差 8 小時）這裡會紅")
+    void boundaryIsExactInstant() {
+        talked(AMY, ONE_DAY_AGO.plusSeconds(3600));
+        talked(BOB, ONE_DAY_AGO.minusSeconds(3600));
+
+        assertEquals(List.of(1), adapter.countActiveOwners(List.of(ONE_DAY_AGO)));
+    }
+
+    @Test
     @DisplayName("沒有任何紀錄：0")
     void emptyIsZero() {
         assertEquals(List.of(0), adapter.countActiveOwners(List.of(ONE_DAY_AGO)));

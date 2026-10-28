@@ -83,9 +83,13 @@ public final class CalendarAssistantController {
     @Operation(summary = "回報使用者拒絕了幾張提議卡片",
             description = "按「取消」「移除」只改畫面、不經過後端，前端用這個告訴後端，產品指標才算得出採納率。不影響任何資料。")
     @ApiResponse(responseCode = "204", description = "記下了")
-    @ApiResponse(responseCode = "400", description = "count 小於 0 或超過 " + TrackProposalsUseCase.MAX_DISMISSED_PER_CALL,
+    @ApiResponse(responseCode = "400", description = "沒帶 count，或 count 小於 0、超過 " + TrackProposalsUseCase.MAX_DISMISSED_PER_CALL,
             content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
     public void dismissed(@RequestBody AssistantDismissals request) {
+        // Integer、不是 int：沒帶 count 時 int 會被 Jackson 補成 0，回 204 卻什麼都沒記，前端送錯格式永遠不會被發現
+        if (request.count() == null) {
+            throw new IllegalArgumentException("count 不可為 null");
+        }
         proposals.proposalsDismissed(request.count());
     }
 
@@ -149,7 +153,7 @@ public final class CalendarAssistantController {
             @Schema(description = "這一輪提議的行程，使用者確認後送 POST /api/calendar/events 才會存") List<EventFields> proposals) {
     }
 
-    public record AssistantDismissals(@Schema(description = "這次按掉了幾張卡片", example = "1") int count) {
+    public record AssistantDismissals(@Schema(description = "這次按掉了幾張卡片", example = "1", requiredMode = Schema.RequiredMode.REQUIRED) Integer count) {
     }
 
     public record AssistantHistory(
