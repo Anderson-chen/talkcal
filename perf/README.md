@@ -192,7 +192,7 @@ docker start talkcal-llm-chat     # 或 docker unpause
 ```
 
 收工的表：助理的 200、502、503（MODEL_UNAVAILABLE／MODEL_BUSY）各幾個、中位數和最久花多久；行程 API 有門檻（0 失敗、p95 < 1 秒）。
-熔斷的門檻和理由在 `backend/src/main/resources/application.properties` 的 `talkcal.model.*`。
+斷路器的門檻和理由在 `backend/src/main/resources/application.properties` 的 `resilience4j.*`（`chat-model`）。
 ### slo：平常流量，量 SLO 的基準、驗 burn-rate 告警
 
 行程 CRUD 為主（每秒 `CRUD_RPS` 個，預設 10）、每分鐘跟助理說 `ASSIST_PER_MIN` 句（預設 6），跑 `DURATION`（預設 2m）。

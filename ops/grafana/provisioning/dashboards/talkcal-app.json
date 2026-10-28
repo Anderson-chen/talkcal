@@ -484,7 +484,7 @@
       "id": 14,
       "type": "state-timeline",
       "title": "模型的熔斷狀態（#44）",
-      "description": "GuardedChatModel 的 circuit breaker。綠 = 關著（正常叫模型）；紅 = 打開（模型最近大多失敗或太慢，助理直接回 503 MODEL_UNAVAILABLE，不叫模型）；黃 = 半開（打開 30 秒後放 2 個請求去試，成功就關回來）。門檻和理由在 application.properties 的 talkcal.model.*。",
+      "description": "GuardedChatModel 的 circuit breaker。綠 = 關著（正常叫模型）；紅 = 打開（模型最近大多失敗或太慢，助理直接回 503 MODEL_UNAVAILABLE，不叫模型）；黃 = 半開（打開 30 秒後放 2 個請求去試，成功就關回來）。門檻和理由在 application.properties 的 resilience4j.*（chat-model）。",
       "gridPos": {
         "h": 5,
         "w": 24,
@@ -594,7 +594,7 @@
             "type": "prometheus",
             "uid": "mimir"
           },
-          "expr": "sum(rate(talkcal_model_bulkhead_rejected_total{name=\"chat-model\"}[1m]))",
+          "expr": "sum(rate(talkcal_bulkhead_rejected_total{name=\"chat-model\"}[1m]))",
           "legendFormat": "滿載擋下"
         }
       ],

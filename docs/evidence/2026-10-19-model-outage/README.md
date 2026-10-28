@@ -1,7 +1,7 @@
 # 模型掛掉演練（#44）：2026-10-19
 
 驗證 circuit breaker + bulkhead（`GuardedChatModel`）在模型**斷線**和**卡住**時的行為，同時確認行程 API 不受影響。
-腳本是 [`perf/outage.js`](../../../perf/outage.js)，門檻和理由在 `backend/src/main/resources/application.properties` 的 `talkcal.model.*`。
+腳本是 [`perf/outage.js`](../../../perf/outage.js)，門檻和理由在 `backend/src/main/resources/application.properties`（演練當時是 `talkcal.model.*`；之後改用 Resilience4j 的 starter，搬到 `resilience4j.*` 的 `chat-model`，值沒變）。
 
 ## 環境
 

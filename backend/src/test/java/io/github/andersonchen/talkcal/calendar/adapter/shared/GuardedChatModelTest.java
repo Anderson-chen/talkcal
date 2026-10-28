@@ -37,7 +37,6 @@ import org.springframework.ai.chat.prompt.Prompt;
 class GuardedChatModelTest {
 
     private static final Duration OPEN_FOR = Duration.ofMillis(200);
-    private static final Duration RETRY_AFTER_OPEN = Duration.ofSeconds(30);
     private static final Duration RETRY_AFTER_BUSY = Duration.ofSeconds(5);
     private static final Prompt PROMPT = new Prompt("明天有什麼行程？");
 
@@ -72,13 +71,13 @@ class GuardedChatModelTest {
             .slowCallRateThreshold(50)
             .waitDurationInOpenState(OPEN_FOR)
             .permittedNumberOfCallsInHalfOpenState(2)
-            .recordException(GuardedChatModel::countsAgainstModel)
+            .recordException(new ModelFailurePredicate())
             .build());
 
     private GuardedChatModel guarded(int maxConcurrentCalls) {
         Bulkhead bulkhead = Bulkhead.of("chat-model", BulkheadConfig.custom()
                 .maxConcurrentCalls(maxConcurrentCalls).maxWaitDuration(Duration.ZERO).build());
-        return new GuardedChatModel(model, breaker, bulkhead, RETRY_AFTER_OPEN, RETRY_AFTER_BUSY);
+        return new GuardedChatModel(model, breaker, bulkhead, RETRY_AFTER_BUSY);
     }
 
     private final GuardedChatModel guarded = guarded(50);
@@ -136,7 +135,8 @@ class GuardedChatModelTest {
             assertThatThrownBy(() -> guarded.call(PROMPT))
                     .isInstanceOfSatisfying(ModelUnavailableException.class, e -> {
                         assertThat(e.reason()).isEqualTo(ModelUnavailableException.Reason.CIRCUIT_OPEN);
-                        assertThat(e.retryAfter()).isEqualTo(RETRY_AFTER_OPEN);
+                        // 建議多久再試 = 斷路器保持打開的時間，直接從它的設定讀
+                        assertThat(e.retryAfter()).isEqualTo(OPEN_FOR);
                     })
                     // 舊的契約照樣成立：沒認得它的呼叫端當成一般的失敗
                     .isInstanceOf(IllegalStateException.class);
@@ -166,8 +166,8 @@ class GuardedChatModelTest {
 
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
         // 包了一層也認得出來
-        assertThat(GuardedChatModel.countsAgainstModel(new RuntimeException("包一層", tooLong))).isFalse();
-        assertThat(GuardedChatModel.countsAgainstModel(new RuntimeException("包一層", connectionRefused()))).isTrue();
+        assertThat(new ModelFailurePredicate().test(new RuntimeException("包一層", tooLong))).isFalse();
+        assertThat(new ModelFailurePredicate().test(new RuntimeException("包一層", connectionRefused()))).isTrue();
     }
 
     @Test

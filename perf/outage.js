@@ -11,7 +11,7 @@
 //   恢復：docker start／docker unpause
 //
 // 收工印一張表：助理的每種結果（200、502、503 的兩種 code）各幾個、各花多久；行程 API 成功幾個、p95 多久。
-// 預期（門檻、理由在 application.properties 的 talkcal.model.*）：
+// 預期（門檻、理由在 application.properties 的 resilience4j.*（chat-model））：
 //   - 模型掛掉後，前 5 次失敗讓熔斷打開；之後助理一律回 503 MODEL_UNAVAILABLE，幾毫秒
 //   - 卡住的時候還在等的請求最多 50 個（bulkhead），再多就回 503 MODEL_BUSY
 //   - 行程 API 從頭到尾都是 200

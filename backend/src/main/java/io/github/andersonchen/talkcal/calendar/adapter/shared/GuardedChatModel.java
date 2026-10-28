@@ -1,7 +1,5 @@
 package io.github.andersonchen.talkcal.calendar.adapter.shared;
 
-import com.openai.errors.BadRequestException;
-import com.openai.errors.UnprocessableEntityException;
 import io.github.resilience4j.bulkhead.Bulkhead;
 import io.github.resilience4j.bulkhead.BulkheadFullException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
@@ -33,8 +31,10 @@ import java.util.Objects;
  *
  * bulkhead 在外層：bulkhead 滿了不是模型的錯，不該記進 breaker 讓它打開。
  *
- * 兩個物件由 app.config 建好、設好門檻再交進來（門檻是部署決定，理由寫在 application.properties）；
+ * breaker、bulkhead 由 Resilience4j 的 starter 照 application.properties 的 resilience4j.*.instances.chat-model 建好，
+ * app.config 依名字取出來交進來（門檻是部署決定，理由寫在 application.properties）；
  * 助理和抽行程各包一個 GuardedChatModel，但共用同一組 breaker、bulkhead —— 背後是同一顆模型，壞就一起壞。
+ * 什麼失敗算模型出事，見 ModelFailurePredicate。
  */
 public final class GuardedChatModel implements ChatModel {
 
@@ -45,15 +45,15 @@ public final class GuardedChatModel implements ChatModel {
     private final Duration retryAfterBusy;
 
     /**
-     * @param retryAfterOpen 熔斷打開時建議多久後再試：跟 breaker 保持打開的時間一樣，早於這個時間重試一定還是被擋
-     * @param retryAfterBusy 滿載時建議多久後再試
+     * @param retryAfterBusy 滿載時建議多久後再試。
+     *                       熔斷打開時的建議時間不必給：就是 breaker 保持打開的時間，早於這個時間重試一定還是被擋，
+     *                       直接從 breaker 的設定讀，免得兩個地方各寫一次、改了一邊忘了另一邊
      */
-    public GuardedChatModel(ChatModel delegate, CircuitBreaker breaker, Bulkhead bulkhead,
-                            Duration retryAfterOpen, Duration retryAfterBusy) {
+    public GuardedChatModel(ChatModel delegate, CircuitBreaker breaker, Bulkhead bulkhead, Duration retryAfterBusy) {
         this.delegate = Objects.requireNonNull(delegate, "delegate 不可為 null");
         this.breaker = Objects.requireNonNull(breaker, "breaker 不可為 null");
         this.bulkhead = Objects.requireNonNull(bulkhead, "bulkhead 不可為 null");
-        this.retryAfterOpen = Objects.requireNonNull(retryAfterOpen, "retryAfterOpen 不可為 null");
+        this.retryAfterOpen = Duration.ofMillis(breaker.getCircuitBreakerConfig().getWaitIntervalFunctionInOpenState().apply(1));
         this.retryAfterBusy = Objects.requireNonNull(retryAfterBusy, "retryAfterBusy 不可為 null");
     }
 
@@ -72,24 +72,5 @@ public final class GuardedChatModel implements ChatModel {
     @Override
     public ChatOptions getOptions() {
         return delegate.getOptions();
-    }
-
-    /**
-     * 這個失敗算不算「模型出事」，要不要記進 breaker。
-     *
-     * 不算的只有「這一個請求本身有問題」：400（例如對話太長超過 context）、422。換一個請求就會好，
-     * 算進去的話，一個使用者一直送超長的對話就能把所有人的助理關掉。
-     * 其他都算：連不上、逾時、5xx、429（模型塞爆）、401／403（雲端的金鑰失效）、404（模型名稱設錯）——
-     * 這些換一個請求也一樣失敗，正是 breaker 要擋的。
-     *
-     * 沿著 cause 往下找：Spring AI 可能把 SDK 的例外再包一層。
-     */
-    public static boolean countsAgainstModel(Throwable failure) {
-        for (Throwable t = failure; t != null; t = t.getCause()) {
-            if (t instanceof BadRequestException || t instanceof UnprocessableEntityException) {
-                return false;
-            }
-        }
-        return true;
     }
 }
