@@ -282,3 +282,41 @@ test('反例：回成功之後重新整理，輸入框是空的（送成功的�
   await page.reload()
   await expect(chat(page).getByLabel('輸入訊息')).toHaveValue('')
 })
+
+test('送到一半重新整理、後端卻已經做完：讀回的對話裡有那句，輸入框就不再放著它（免得又送一次）', async ({ page }) => {
+  await fakeApi(page)
+  let calls = 0
+  await page.route('**/api/calendar/assistant', (route) =>
+    // 第一句正常回（拿到 conversationId），第二句卡住：使用者等不及重新整理
+    calls++ === 0 ? ok(route) : new Promise<void>(() => {}))
+  await page.route('**/api/calendar/assistant/c1', (route) => route.fulfill({
+    status: 200,
+    json: { conversationId: 'c1', messages: [
+      { role: 'user', text: '明天有什麼行程？' }, { role: 'assistant', text: '明天沒有行程。' },
+      { role: 'user', text: '後天呢？' }, { role: 'assistant', text: '後天也沒有。' },
+    ] },
+  }))
+  await page.goto('/')
+
+  await ask(page, '明天有什麼行程？')
+  await expect(chat(page).getByText('明天沒有行程。')).toBeVisible()
+  await ask(page, '後天呢？')
+  await expect(chat(page).locator('.bubble.typing')).toBeVisible()
+  await page.reload()
+  await expect(chat(page).getByText('後天也沒有。')).toBeVisible()
+  await expect(chat(page).getByLabel('輸入訊息')).toHaveValue('')
+})
+
+test('沒送成功之後按「清空」：重新整理不會又冒出那句', async ({ page }) => {
+  await fakeApi(page)
+  await assistantReplies(page, failure(502, 'ASSISTANT_FAILED'))
+  await page.goto('/')
+
+  await ask(page, '明天有什麼行程？')
+  await expect(chat(page).locator('[data-failure="failed"]')).toBeVisible()
+  // 清空要按兩下（「清空」→「確定清空？」）
+  await chat(page).getByRole('button', { name: '清空對話' }).click()
+  await chat(page).getByRole('button', { name: '確定清空對話' }).click()
+  await page.reload()
+  await expect(chat(page).getByLabel('輸入訊息')).toHaveValue('')
+})

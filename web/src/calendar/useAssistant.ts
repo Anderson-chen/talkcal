@@ -139,6 +139,9 @@ export function useAssistant(calendar: CalendarState) {
         return
       }
       messages.value = [say('ai', GREETING), ...history.messages.map((m) => say(m.role === 'user' ? 'me' : 'ai', m.text))]
+      // 送到一半重新整理時，瀏覽器斷了請求，後端卻照樣做完、記進對話：讀回來已經有那句，草稿就不必再放著，免得又送一次
+      const lastAsked = history.messages.filter((m) => m.role === 'user').at(-1)?.text
+      if (lastAsked && lastAsked === input.value.trim()) input.value = ''
     } catch (e) {
       messages.value.push(say('ai', `讀不回上次的對話：${message(e)}。可以直接開始新的對話。`))
     } finally {
@@ -154,7 +157,10 @@ export function useAssistant(calendar: CalendarState) {
     conversationId = undefined
     saveConversationId(undefined)
     messages.value = [say('ai', GREETING)]
+    // 沒送成功的那句也一起丟掉：清空就是不要了，重新整理後不該又出現
+    unsent = ''
     input.value = ''
+    keepDraft()
   }
 
   async function send(text = input.value) {
