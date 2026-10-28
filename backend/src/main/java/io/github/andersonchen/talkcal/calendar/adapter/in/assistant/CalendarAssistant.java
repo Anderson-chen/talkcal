@@ -1,6 +1,7 @@
 package io.github.andersonchen.talkcal.calendar.adapter.in.assistant;
 
 import io.github.andersonchen.talkcal.calendar.adapter.shared.DateTable;
+import io.github.andersonchen.talkcal.calendar.adapter.shared.ModelUnavailableException;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlotsUseCase;
@@ -173,6 +174,8 @@ public final class CalendarAssistant {
      *
      * 失敗時（模型、資料庫出事、繞圈超過 MAX_STEPS）一律丟 IllegalStateException：
      * 背後的例外型別五花八門，裡面還可能混著 IllegalArgumentException，不包起來會被誤認成「呼叫端送錯」。
+     * 例外是「模型這次沒被叫」（ModelUnavailableException，#44）：不管被包了幾層（例如抽行程的工具裡叫模型被擋下，
+     * 經過工具框架、port 再傳回來），都把它原樣丟出去，呼叫端才回得出 503 而不是 502。
      */
     public Reply reply(OwnerId owner, String conversationId, String message) {
         Objects.requireNonNull(owner, "owner 不可為 null");
@@ -258,11 +261,26 @@ public final class CalendarAssistant {
                 correction = List.of();
             }
             throw new IllegalStateException("AI 助理呼叫工具超過 " + MAX_STEPS + " 次還沒回話");
-        } catch (IllegalStateException e) {
-            throw e;
         } catch (RuntimeException e) {
+            ModelUnavailableException unavailable = modelUnavailable(e);
+            if (unavailable != null) {
+                throw unavailable;
+            }
+            if (e instanceof IllegalStateException failure) {
+                throw failure;
+            }
             throw new IllegalStateException("AI 助理失敗：" + e.getMessage(), e);
         }
+    }
+
+    // 沿著 cause 找：中間每一層（工具框架、port、Spring AI）都可能再包一次
+    private static ModelUnavailableException modelUnavailable(Throwable failure) {
+        for (Throwable t = failure; t != null; t = t.getCause()) {
+            if (t instanceof ModelUnavailableException unavailable) {
+                return unavailable;
+            }
+        }
+        return null;
     }
 
     /** 回覆裡有沒有網址不在使用者說過的話裡（大小寫不分）。使用者自己貼的網址，助理照著講是正常的。 */

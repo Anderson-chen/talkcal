@@ -2,13 +2,16 @@ package io.github.andersonchen.talkcal.calendar.adapter.in.assistant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.andersonchen.talkcal.calendar.adapter.shared.ModelUnavailableException;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -217,6 +220,21 @@ class CalendarAssistantTest {
         };
 
         assertThrows(IllegalStateException.class, () -> assistant(broken).reply(OWNER, ID, "嗨"));
+    }
+
+    @Test
+    @DisplayName("#44 模型這次沒被叫（斷路器打開）：就算中間被包了一層（例如抽行程的工具裡被擋下），也原樣丟出去，不變成一般的失敗")
+    void modelUnavailablePassesThroughWrapping() {
+        ModelUnavailableException unavailable =
+                new ModelUnavailableException(ModelUnavailableException.Reason.CIRCUIT_OPEN, Duration.ofSeconds(30), null);
+        ChatModel wrapped = new ChatModel() {
+            @Override
+            public ChatResponse call(Prompt prompt) {
+                throw new IllegalStateException("呼叫模型抽行程失敗", new RuntimeException("工具執行失敗", unavailable));
+            }
+        };
+
+        assertSame(unavailable, assertThrows(ModelUnavailableException.class, () -> assistant(wrapped).reply(OWNER, ID, "嗨")));
     }
 
     @Test
