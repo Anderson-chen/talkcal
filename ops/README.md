@@ -94,7 +94,7 @@ Alloy 加入了 deploy/ 的網路（`talkcal-deploy_default`）：用服務名�
 
 | job | 位址 | 是誰 |
 |-----|------|------|
-| `talkcal-app` | `app:8090/actuator/prometheus` | deploy/ 的 app 容器 |
+| `talkcal-app` | `app:8091/actuator/prometheus` | deploy/ 的 app 容器（management 埠，不發佈到主機） |
 | `llama-cpp` | `llm-chat:8080/metrics` | Qwen3-8B（deploy/ 的 llm-chat） |
 | `postgres` | `postgres-exporter:9187/metrics` | deploy/ 的 postgres_exporter，替 PostgreSQL 翻成 Prometheus 格式 |
 
@@ -206,7 +206,7 @@ llama.cpp 本身不產生 span，所以樹只到 app 呼叫出去的那一層。
 
 - **儀表板 `talkcal — Traces (Tempo)`**：全部用 TraceQL 查 Tempo。上排是從 trace 算出來的數字（助理請求速率、
   各段的 p95、沒成功的 span 數），下排是請求清單（最近的、超過 5 秒的、沒成功的），點 Trace ID 就打開瀑布圖。
-  查詢只挑 `/api/calendar/assistant`，只看跟助理的對話。（actuator 的抓取與健康檢查在 app 端就不產生 trace 了，見 `ObservationConfiguration`。）
+  查詢只挑 `/api/calendar/assistant`，只看跟助理的對話。（actuator 的抓取與健康檢查走 management 埠 8091，那個埠上的請求本來就不產生 trace。）
 - **Explore** → 資料源選 **Tempo** → **Search** 分頁，Service Name 選 `talkcal`：自己下條件找。
 
 儀表板上排用的是 **TraceQL metrics**（`| rate()`、`| quantile_over_time()`）：Tempo 直接從存下來的 span 算出時間序列，
