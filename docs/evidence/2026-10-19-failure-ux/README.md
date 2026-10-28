@@ -1,6 +1,9 @@
-# 失敗時的使用者體驗（#43）：2026-10-19
+# 失敗時的使用者體驗（#43）：2026-10-19，2026-10-28 重拍
 
 每一種失敗都真的造出來，改之前（`before-*`）和改之後（`after-*`）用同一支腳本、同樣的步驟各截一次，桌面（1280×800）和手機（Pixel 7）都有。
+改之前是 master 的前端，改之後是這個分支的前端；後端兩次都是這個分支的（帶著 #44 的熔斷和錯誤格式）。
+
+2026-10-28 重拍：第一次拍的時候分支裡還帶著追蹤碼（#42），之後決定不做、從分支拿掉，截圖跟著重拍，改之前也改成用 master 的前端。
 每一種怎麼說、為什麼這樣設計，寫在 [`web/README.md` 的「壞掉的時候畫面怎麼說」](../../../web/README.md)。
 
 ## 環境
@@ -8,7 +11,7 @@
 [`compose.yaml`](compose.yaml) 另起一組 `talkcal43-*`（web 18443、app 18843），沒碰共用的 `talkcal-*`：
 
 ```
-瀏覽器 → web（這個分支的 nginx.conf＋前端）→ app（#44 的熔斷＋bulkhead，bulkhead 縮成 1）→ llm-proxy（假模型）
+瀏覽器 → web（nginx.conf＋前端）→ app（#44 的熔斷＋bulkhead，bulkhead 縮成 1）→ llm-proxy（假模型）
 ```
 
 - **故障都打在容器上**：`docker stop llm-proxy` = 模型斷線、`docker pause llm-proxy` = 模型卡住、`docker stop app` = app 停掉；網路斷是 Playwright 的 `setOffline`；問太快是對 nginx 灌 20 個請求
@@ -50,5 +53,5 @@
 | 舊的失敗不會被插回對話中間 | E2E：失敗後再問一句成功的 | 「再試一次」消失 |
 | 不靠 `error` 的字面判斷 | Vitest：同一個 code 換一句話行為不變；502 沒有 code 不當成模型失敗 | 成立 |
 
-跑過的測試：`assistant-failure.desktop.spec.ts`（15）、`assistant-failure.mobile.spec.ts`（1）、`trace-id.desktop.spec.ts`（5，文案跟著改）、
-`assistantFailure.test.ts`、`http.test.ts`（共 17）、`vue-tsc`。完整測試照約定由主 session 合併前統一跑。
+跑過的測試：`assistant-failure.desktop.spec.ts`（15）、`assistant-failure.mobile.spec.ts`（1），以及用到同一批檔案的
+`assistant-proposals`、`add-event`（桌面、手機）、`login` 的 E2E（共 32）；`assistantFailure.test.ts`、`http.test.ts`（共 17）；`vue-tsc`、ESLint。完整測試照約定由主 session 合併前統一跑。
