@@ -17,6 +17,7 @@ apiVersion: 1
 # 以前在這裡、改由 SLO 接手的三條（5xx 比例、行程 API p95、AI 助理 p95）。
 # provisioning 只會新增、更新，檔案裡拿掉的規則不會從 Grafana 消失（存在 grafana-data volume 裡），
 # 不明寫刪除的話，已經起過的 Grafana 會一直留著舊規則、跟 SLO 告警重複寄信。
+# 全新的 Grafana 裡本來就沒有這三條，刪不存在的 uid 不會報錯（實測過）。所有環境都重啟過一次之後就可以拿掉這段。
 deleteRules:
   - orgId: 1
     uid: talkcal-5xx-ratio
