@@ -101,7 +101,10 @@ export function useAssistant(calendar: CalendarState) {
   const messages = ref<ChatMessage[]>([say('ai', GREETING)])
   const draft = draftKey(me.value?.id)
   const input = ref(loadDraft(draft))
-  watch(input, (text) => saveDraft(draft, text))
+  // 送出去、還沒回成功的那一句：輸入框清掉了，但草稿裡留著它，送到一半重新整理、登入過期、關掉分頁，回來都還在
+  let unsent = ''
+  const keepDraft = () => saveDraft(draft, input.value || unsent)
+  watch(input, keepDraft)
   const typing = ref(false)
   const saving = ref(false)
 
@@ -160,6 +163,7 @@ export function useAssistant(calendar: CalendarState) {
     // 從陣列拿回來的才是 reactive 的那一個：之後標「沒送出」要改它，畫面才會跟著變
     const mine = messages.value[messages.value.push(say('me', said)) - 1]
     // 從輸入框送的才清掉輸入框；按建議、按「再試一次」送的，不動使用者正在打的字
+    unsent = said
     if (text === input.value) input.value = ''
     typing.value = true
     typingSince = now.value = Date.now()
@@ -168,12 +172,11 @@ export function useAssistant(calendar: CalendarState) {
       conversationId = answer.conversationId
       saveConversationId(conversationId)
       messages.value.push(say('ai', answer.reply, answer.proposals.map((draft) => ({ draft, status: 'pending' }))))
+      unsent = ''
+      keepDraft()
     } catch (e) {
-      // 登入過期：App 馬上換成登入頁、這段對話跟著被拆掉。把這句放回草稿，登入回來時還在輸入框裡
-      if (e instanceof UnauthorizedError) {
-        if (!input.value) saveDraft(draft, said)
-        return
-      }
+      // 登入過期：App 馬上換成登入頁、這段對話跟著被拆掉；那句還在草稿裡，登入回來時在輸入框裡
+      if (e instanceof UnauthorizedError) return
       const failure = describeAssistantFailure(e)
       mine.failed = true
       const notice = say('ai', failure.text)

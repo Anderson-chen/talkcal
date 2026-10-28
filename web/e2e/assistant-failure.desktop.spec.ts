@@ -259,3 +259,26 @@ test('打開頁面時伺服器遲遲不回：1 秒後說「正在連線」，不
   await expect(chat(page)).toBeVisible()
   await expect(page.getByText('正在連線…')).toHaveCount(0)
 })
+
+test('送出去、還沒回就重新整理：那句還在輸入框裡，不必重打', async ({ page }) => {
+  await fakeApi(page)
+  // 模型一直沒回：請求卡著，使用者等不及按了重新整理
+  await page.route('**/api/calendar/assistant', () => new Promise<void>(() => {}))
+  await page.goto('/')
+
+  await ask(page, '下週三早上九點看牙醫')
+  await expect(chat(page).locator('.bubble.typing')).toBeVisible()
+  await page.reload()
+  await expect(chat(page).getByLabel('輸入訊息')).toHaveValue('下週三早上九點看牙醫')
+})
+
+test('反例：回成功之後重新整理，輸入框是空的（送成功的那句不會一直留在草稿裡）', async ({ page }) => {
+  await fakeApi(page)
+  await assistantReplies(page, ok)
+  await page.goto('/')
+
+  await ask(page, '明天有什麼行程？')
+  await expect(chat(page).getByText('明天沒有行程。')).toBeVisible()
+  await page.reload()
+  await expect(chat(page).getByLabel('輸入訊息')).toHaveValue('')
+})
