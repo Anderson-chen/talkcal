@@ -374,7 +374,7 @@ cost:{n:"每月花多少",intro:"平常關機、展示才開：關機時只剩�
  {k:"ec2",t:"機器",d:{bedrock:"m7i-flex.large 約 0.1 USD/小時，24 小時開著一個月約 73 USD，所以平常關機。",gpu:"g6.xlarge 約 0.8–1 USD/小時，24 小時開著一個月要 600 USD 以上，所以平常關機。"}},
  {k:"ec2",t:"磁碟",d:{bedrock:"30GB gp3，關機也照收，約 3 USD/月。",gpu:"150GB gp3，關機也照收，約 14 USD/月。"},src:["ebs"]},
  {k:"eip",t:"公有 IP",d:"公有 IPv4 每小時 0.005 USD，開不開機都算，約 3.6 USD/月。換來的是網址固定。",src:["ipv4"]},
- {k:{bedrock:"bsvc",gpu:"s3m"},t:{bedrock:"模型",gpu:"模型檔"},d:{bedrock:"Bedrock 按 token 計費，不叫就不收：一個助理請求約 0.00078 USD（2026-10-17 量的，docs/cost.md）。機器開著的每小時少於約 1,341 個請求，都比開 GPU 機器便宜。nginx 的全站限流（每分鐘 30 次）同時是帳單的上限。",gpu:"S3 放幾 GB 的 GGUF，一個月幾毛錢；同區傳到 EC2 不收傳輸費。"}},
+ {k:{bedrock:"bsvc",gpu:"s3m"},t:{bedrock:"模型",gpu:"模型檔"},d:{bedrock:"Bedrock 按 token 計費，不叫就不收：一個助理請求多少錢、請求量到多少以上自己開 GPU 機器比較便宜，見 docs/cost.md。nginx 的全站限流（每分鐘 30 次）同時是帳單的上限。",gpu:"S3 放幾 GB 的 GGUF，一個月幾毛錢；同區傳到 EC2 不收傳輸費。"}},
  {k:"rt",t:"刻意沒建",d:"NAT Gateway 東京約 45 USD/月起，比機器本身還貴。機器直接用公有 IP 出網，安全邊界交給 security group。",src:["nat"]},
  {k:"budget",t:"保險絲",d:"每月 50 USD 告警：實際花到 80%、預測會超過 100% 各寄一封信。只寄信，不會幫你關機。"}]},
 free:{n:"自由探索",intro:"點任一方塊看細節，或從「檔案」選單反查它畫在哪裡。點兩下 EC2 展開內部。",steps:[]}

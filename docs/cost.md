@@ -15,9 +15,10 @@ AI 助理一個請求（`POST /api/calendar/assistant`）是一段 agent loop：
 | 每個請求的 input token | **3,905** | 117,159 ÷ 30 |
 | 每個請求的 output token | **103** | 3,096 ÷ 30 |
 
-- 量法：[`perf/tokens.js`](../perf/tokens.js)，1 個使用者把訊息池（查詢、提議行程各半）每句說 3 輪，前後各讀一次 app 的 `/actuator/prometheus`（management 埠 8091），相減。
+- 量法：[`perf/tokens.js`](../perf/tokens.js)，1 個使用者把訊息池（10 句：查詢 6 句、提議行程 4 句）每句說 3 輪，前後各讀一次 app 的 `/actuator/prometheus`（management 埠 8091），相減。
 - 數字來源是 app 自己的 `gen_ai_client_token_usage_total`：Spring AI 每叫一次模型就把回應裡的 `usage` 記進去（`ObservationConfiguration` 多貼一個 `model_backend` 標籤，見下面第 4 節）。跟 Grafana 成本 dashboard 用的是同一個指標。
 - 2026-10-17 本機 llama-server（Qwen3-8B Q4_K_M）。對 bootRun（8090）跑 3 輪、對 docker 的 app（18090）跑 1 輪，每個請求的平均都是 3,905 / 103。
+  docker 那輪是 actuator 分到 management 埠之前跑的；現在 docker 的 8091 不發佈到主機，`tokens.js` 只能打 bootRun。
 - **假設**：雲端的 Qwen3 32B 跟本機的 8B 同一家族、同一套 tokenizer，同一句話送出去的 input token 數相同；output 會不一樣（模型不同，回答長度不同）。output 只佔費用的一成，影響小，見第 3 節的敏感度。
 
 ## 2. 單價（2026 年 10 月，官方來源）
@@ -95,9 +96,10 @@ input 佔九成費用：system prompt 或工具定義變長、對話記憶留得
 | 每個請求叫幾次模型 | prompt 改壞、模型繞圈時會變大，token 跟著倍增 |
 | 每次叫模型的平均 token | 掉到 0 = 模型沒回 `usage`，費用會悄悄少算（見下） |
 | 每個請求的費用 | 「實際」只算 Bedrock；「如果全走 Bedrock」把本機的用量也換算成錢 |
-| 請求/小時 | 超過 1,341 變橘色：到了該考慮自己跑的量 |
+| 請求/小時 | 只算 app 開著的時間；超過 1,341 變橘色：到了該考慮自己跑的量 |
 
-單價是 dashboard 上方的兩個變數，換模型或換區域時直接改。
+單價是 dashboard 上方的兩個變數。在畫面上改只對自己這次瀏覽有效：dashboard 是 provisioning 載入的（`allowUiUpdates: false`），
+存不回去，重新整理就變回預設值。換模型或換區域要長期生效，改 JSON 裡 `price_in`、`price_out` 的預設值，`perf/tokens.js` 的預設單價也一起改。
 
 **為什麼要多一個 `model_backend` 標籤**：本機 llama-server 和雲端 Bedrock 都是用 OpenAI 的 client 打的，Spring AI 內建的 provider 標籤（`gen_ai_system`）兩邊都是 `openai`，分不出哪些 token 要收錢。模型名稱分得出「哪一顆」，但收不收錢取決於「在哪裡跑」，所以另外從設定 `talkcal.ai.backend` 貼（預設 `llama-cpp`，`compose.bedrock.yaml` 蓋成 `bedrock`）。
 
@@ -122,4 +124,8 @@ input 佔九成費用：system prompt 或工具定義變長、對話記憶留得
    python -c "import json,gzip;d=json.loads(gzip.open('ec2.json.gz').read());[print(v['Instance Type'],v['price']) for r in d['regions'].values() for v in r.values() if v['Instance Type'] in ('g6.xlarge','m7i-flex.large')]"
    ```
 4. **交叉點** = (GPU 時薪 − 一般機器時薪) ÷ 每個請求的費用，單位是「每小時的請求數」。
-   改了的話，dashboard「請求/小時」的橘色門檻（1341）和面板說明也要跟著改。
+5. **換掉寫死的數字**：這份文件是正式來源，其他地方只放工具非有不可的預設值，或連回這裡。重算後要改的就是這幾處：
+   - 這份文件：開頭結論、第 1～3 節的數字和表格。
+   - [`talkcal-cost.json`](../ops/grafana/provisioning/dashboards/talkcal-cost.json)：變數 `price_in`、`price_out` 的預設值（`query` 和 `current` 兩處），「請求/小時」的橘色門檻（`thresholds` 裡的 1341）。
+   - [`perf/tokens.js`](../perf/tokens.js)：`PRICE_IN`、`PRICE_OUT` 的預設值（開頭註解的範例也一起）。
+   - 面板標題、說明和 [架構圖](architecture/index.html) 都不寫數字，只連到這裡，不用改。
