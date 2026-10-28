@@ -133,7 +133,8 @@ loki.write "local" {
 
 // ═══ 追蹤 ═══════════════════════════════════════════════════════════
 //
-//   app ──OTLP/HTTP──▶ otelcol.receiver.otlp ──▶ otelcol.processor.batch ──▶ otelcol.exporter.otlp ──▶ Tempo
+//   app ──OTLP/HTTP──▶ otelcol.receiver.otlp ──▶ otelcol.processor.tail_sampling ──▶ otelcol.processor.batch ──▶ otelcol.exporter.otlp ──▶ Tempo
+//                                                  （錯的、慢的全留，其餘抽樣）
 //
 // trace 也是「推」：span 在請求結束時才完整，只能由 app 主動送出來。
 // OTLP 是 OpenTelemetry 的標準協定，app 那頭只認得它，不知道後面接的是 Tempo。
@@ -146,8 +147,87 @@ otelcol.receiver.otlp "default" {
     endpoint = "0.0.0.0:4318"
   }
   output {
-    traces  = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.tail_sampling.default.input]
     metrics = [otelcol.processor.batch.default.input]   // k6 壓測的指標，見下面「壓測」那一段
+  }
+}
+
+// 取樣：決定哪些 trace 留進 Tempo（#37，為什麼這樣選見 README 的「Trace 取樣」）。
+//
+// 為什麼在這裡（tail）而不是 app 端（head，management.tracing.sampling.probability）：
+// head 在請求「剛開始」就擲骰子，那時還不知道它會不會出錯、會不會慢，丟掉的 90% 裡錯誤和慢請求一樣被丟。
+// tail 等一個 trace 的 span 到齊、看完整棵樹才決定，所以能「錯的、慢的全留，其餘抽樣」。
+// 代價：每個 trace 要在 Alloy 記憶體裡等 decision_wait；所有 span 必須進同一個 Alloy（現在只有一個）。
+// 所以 app 端一律 100% 全送（application.properties），只在這裡丟。
+//
+// 本機和雲端用同一份，差在環境變數：本機不設，用下面 coalesce 的預設值；雲端由 infra/envs/1-ec2/compose.ops.yaml 給：
+//   TRACE_SAMPLING_PERCENT       一般請求留幾 %。本機 100（每筆都找得到）、雲端 10
+//   TRACE_SAMPLING_DECISION_WAIT 等多久才決定。本機 5s（打完請求很快就查得到）、雲端 125s（見下面）
+otelcol.processor.tail_sampling "default" {
+  // 從 trace 的第一個 span 到達開始算。span 是「結束時」才送出，根 span（整個 HTTP 請求）最後到；
+  // 等不夠久就決定的話，慢請求的根 span 還沒到，看起來不慢 → 被當一般請求抽掉。
+  // 所以雲端要比最慢的請求還久：叫模型的逾時是 2 分鐘（spring.ai.openai.chat.timeout），取 125s。
+  // 本機 100% 怎麼決定都是留，等短一點只是讓 trace 早點進 Tempo。
+  decision_wait = coalesce(sys.env("TRACE_SAMPLING_DECISION_WAIT"), "5s")
+
+  // 同時在記憶體裡等決定的 trace 上限，滿了最舊的先被迫決定。
+  // 雲端估算：每秒 50 個請求 × 等 125 秒 ≈ 6,250 個，留三倍餘裕。現在的流量遠低於此。
+  num_traces = 20000
+
+  // 決定之後還晚到的 span（例如等太久才結束的請求）：記住「這個 trace id 留過／丟過」，照同一個決定處理。
+  // 不記的話晚到的 span 會被當成新 trace 重新擲骰，Tempo 裡出現只有半截的 trace。
+  // 只存 trace id，很省，所以給得比 num_traces 大得多（官方文件的建議）。
+  decision_cache = {
+    sampled_cache_size     = 200000,
+    non_sampled_cache_size = 200000,
+  }
+
+  // 多條規則：任一條說「留」就留。
+  // (1) span 狀態是 ERROR：丟例外的請求、叫模型失敗之類
+  policy {
+    name = "errors"
+    type = "status_code"
+    status_code {
+      status_codes = ["ERROR"]
+    }
+  }
+
+  // (2) 回 5xx 的請求。不能只靠 (1)：Spring 的 HTTP span 回 500 時狀態是空的（UNSET），
+  //     只有 outcome 這個屬性記著 SERVER_ERROR（實測：連線池等不到連線的 500，status 是 {}）。
+  //     4xx（CLIENT_ERROR）不在這裡：未登入的 401、打錯的 404 是使用者的事，量大又不代表系統出問題。
+  policy {
+    name = "server-errors"
+    type = "string_attribute"
+    string_attribute {
+      key    = "outcome"
+      values = ["SERVER_ERROR"]
+    }
+  }
+
+  // (3) 慢的：整個 trace 超過 5 秒。
+  //     AI 助理一次正常約 2–3 秒（後面是 LLM），行程的增刪查是幾十毫秒；5 秒是助理正常值的兩倍，
+  //     行程 API 慢到這樣一定是出事。代價：行程 API 在 1–5 秒之間的「有點慢」只按比例留。
+  //     等 #34 定了 SLO，門檻改成跟 SLO 的延遲目標對齊。
+  policy {
+    name = "slow"
+    type = "latency"
+    latency {
+      threshold_ms = 5000
+    }
+  }
+
+  // (4) 其餘的按比例留。依 trace id 雜湊決定，同一個 trace 的 span 一定同進同出。
+  policy {
+    name = "baseline"
+    type = "probabilistic"
+    probabilistic {
+      // 環境變數是字串，sampling_percentage 要數字，用 JSON 解析轉成數字
+      sampling_percentage = encoding.from_json(coalesce(sys.env("TRACE_SAMPLING_PERCENT"), "100"))
+    }
+  }
+
+  output {
+    traces = [otelcol.processor.batch.default.input]
   }
 }
 
