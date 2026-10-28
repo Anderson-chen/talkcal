@@ -3,6 +3,7 @@ package io.github.andersonchen.talkcal.calendar.adapter.in.web;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.EventNotFoundException;
@@ -86,7 +87,10 @@ public final class CalendarController {
         // 「確認時重驗規則」就發生在這一行：每一筆都得先成為 CalendarEvent，
         // 使用者在確認卡片上改壞的（結束早於開始、清空標題）在這裡就丟 IllegalArgumentException → 400
         List<CalendarEvent> events = request.events().stream().map(CalendarController::toDomain).toList();
-        return SavedEvents.of(addEvents.addEvents(SignedIn.owner(signedIn), events));
+        // 從助理卡片來的那幾筆帶著卡片的 id（#223）；是不是真的採納由 use case 核對，這裡只負責轉型別
+        List<ProposalId> adopting = request.events().stream()
+                .map(EventFields::proposalId).filter(Objects::nonNull).map(ProposalId::of).toList();
+        return SavedEvents.of(addEvents.addEvents(SignedIn.owner(signedIn), events, adopting));
     }
 
     @GetMapping("/events")
@@ -170,11 +174,14 @@ public final class CalendarController {
             @Schema(description = "分類；不帶就是 PERSONAL", allowableValues = {"WORK", "PERSONAL", "HEALTH", "SOCIAL"},
                     example = "SOCIAL", nullable = true) String category,
             @Schema(description = "地點，選填", example = "公司附近的拉麵店", nullable = true) String location,
-            @Schema(description = "備註，選填", nullable = true) String note) {
+            @Schema(description = "備註，選填", nullable = true) String note,
+            @Schema(description = "從哪張助理提議卡片來的（#223）：助理的回覆裡每張卡片都有；確認時原樣帶回來才算採納。手動填的不帶",
+                    nullable = true) String proposalId) {
 
-        static EventFields of(CalendarEvent event) {
+        // 助理的提議：帶著伺服器剛發的卡片 id
+        static EventFields of(CalendarEvent event, ProposalId proposal) {
             return new EventFields(event.title(), event.start(), event.end(), fromCategory(event.category()),
-                    event.location().orElse(null), event.note().orElse(null));
+                    event.location().orElse(null), event.note().orElse(null), proposal.toString());
         }
 
         CalendarEvent toDomain() {

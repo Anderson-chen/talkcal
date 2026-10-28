@@ -16,6 +16,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Category
 import io.github.andersonchen.talkcal.calendar.application.domain.model.DateRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.EventNotFoundException;
@@ -146,6 +147,39 @@ class CalendarControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"events\":[{\"title\":\"吃飯\",\"start\":\"明天三點\",\"end\":\"明天四點\"}]}"))
                     .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Nested
+    @DisplayName("POST /api/calendar/events：從助理卡片來的行程（產品指標 #223）")
+    class AddFromProposal {
+
+        private static final String CARD = "9b0f3c2e-1111-4a5b-8c7d-000000000001";
+
+        @Test
+        @DisplayName("帶著 proposalId 的那幾筆，把卡片 id 轉給 use case 核對；沒帶的不轉")
+        void passesProposalIdsThrough() throws Exception {
+            mockMvc.perform(post("/api/calendar/events").contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"events":[
+                                      {"title":"吃飯","start":"2026-10-06T15:00","end":"2026-10-06T16:00","proposalId":"%s"},
+                                      {"title":"看牙醫","start":"2026-10-07T09:00","end":"2026-10-07T10:00"}
+                                    ]}
+                                    """.formatted(CARD)))
+                    .andExpect(status().isCreated());
+
+            assertEquals(List.of(List.of(ProposalId.of(CARD))), calendar.adopting);
+        }
+
+        @Test
+        @DisplayName("proposalId 不是 UUID：400，一筆都不存")
+        void badProposalIdIsRejected() throws Exception {
+            mockMvc.perform(post("/api/calendar/events").contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"events":[{"title":"吃飯","start":"2026-10-06T15:00","end":"2026-10-06T16:00","proposalId":"abc"}]}
+                                    """))
+                    .andExpect(status().isBadRequest());
+            assertTrue(calendar.added.isEmpty());
         }
     }
 
@@ -320,13 +354,15 @@ class CalendarControllerTest {
         Function<DateRange, List<ScheduledEvent>> list = DEFAULT_LIST;
         final List<OwnerId> owners = new ArrayList<>();
         final List<CalendarEvent> added = new ArrayList<>();
+        final List<List<ProposalId>> adopting = new ArrayList<>();
         final List<DateRange> ranges = new ArrayList<>();
         final List<EventId> removed = new ArrayList<>();
 
         @Override
-        public List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events) {
+        public List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events, List<ProposalId> adopting) {
             owners.add(owner);
             added.addAll(events);
+            this.adopting.add(adopting);
             return events.stream().map(event -> new ScheduledEvent(DINNER_ID, event)).toList();
         }
 
@@ -352,6 +388,7 @@ class CalendarControllerTest {
             list = DEFAULT_LIST;
             owners.clear();
             added.clear();
+            adopting.clear();
             ranges.clear();
             removed.clear();
         }
