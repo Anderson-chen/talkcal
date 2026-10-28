@@ -335,6 +335,27 @@ Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](..
 
 驗過準不準：同一次 knee 壓測，Grafana 算出的 p95（792ms → 1572ms → 3360ms）跟 k6 收工印的表一致。
 
+## 產品指標：功能有沒有人用、有沒有用處
+
+上面那些指標回答「系統健不健康」；這一段回答「功能有沒有人用」（#36）。儀表板 **`talkcal — 產品指標`**（`talkcal-product.json`）。
+
+| 問題 | 指標 | 從哪來、為什麼這樣定 |
+|------|------|------|
+| 有多少人在用 | `talkcal_active_users{window="1d"\|"7d"\|"30d"}`（gauge） | 從資料庫數最近一段時間跟助理說過話、或存過行程的**不同的人**；三個期間一句 SQL 一起數，結果留一分鐘（Alloy 15 秒抓一次只讀快取）。不在記憶體裡記「今天見過誰」：重啟歸零、多台各數各的。只看月曆不算（讀取沒有留紀錄）。30 天剛好是對話的保留期限 |
+| 助理被用了幾次 | `http_server_requests_seconds_count{uri="/api/calendar/assistant",method="POST",status="200"}` | Spring 本來就有，不另外埋一個一樣的 counter |
+| 助理提議了幾張卡片 | `talkcal_assistant_proposals_shown_total` | 在回覆送出去前數（CalendarAssistantController），只算畫面上真的出現的：工具解析出來但因為沒講早上晚上被擋下的、這一輪最後 502 的都不算 |
+| 被採納幾張 | `talkcal_calendar_events_added_total{origin="assistant"}` | 存檔成功之後才記（AddEventsService）。助理回覆時每張卡片發一個 `proposalId` 並存進 `assistant_proposal`；存檔時帶著它、而且伺服器核對是自己的、還沒表態過的卡片才算（#223）。從卡片按「修改」改完再存也算採納：起點是助理的提議 |
+| 被拒絕幾張 | `talkcal_assistant_proposals_dismissed_total` | 按「取消」「移除」只改前端畫面，所以前端另外送 `POST /api/calendar/assistant/dismissals` 帶那幾張的 `proposalId`。同樣由伺服器核對，每張卡片最多算一次（採納或拒絕擇一），前端灌不了數字 |
+| 採納率 | 採納 ÷（採納 + 拒絕） | 分母只算有表態的；沒表態的（直接清空對話）兩邊都不算。儀表板另外有「採納 ÷ 全部提議」，兩個差很多代表很多卡片沒人理 |
+| 手動 vs 助理建的行程 | `talkcal_calendar_events_added_total{origin="assistant"\|"manual"}` | 存檔時核對過卡片的那幾筆算 assistant，其餘（沒帶 `proposalId`、別人的或已表態過的卡片）都算 manual |
+
+| 選擇 | 為什麼 |
+|------|--------|
+| 標籤只有 `origin`、`window`，各兩三個固定值 | 每個標籤值的組合就是一條時間序列。放使用者 ID 的話序列數跟著人數長（基數爆炸），Mimir 變慢變貴；「誰」的問題留給 log 和資料庫 |
+| counter 在 app 啟動時就建好、值是 0 | 從沒發生過的事在 Prometheus 上是「沒有這條序列」而不是 0，採納率的分子分母缺一邊整格就空白；而且 `increase()` 要有前一個點才算得出第一次的 +1 |
+| 業務事件由 core 經 `RecordUsagePort` 送出，Micrometer 只出現在 adapter | 跟 SaveEventsPort 不知道背後是 PostgreSQL 一樣：core 不碰框架（ArchitectureTest），換成別的分析系統只換 adapter |
+| 不埋在模型呼叫那段 | 業務事件（提議、採納、拒絕）跟呼叫模型的成本（token，#35）是兩件事，分開埋才不會互相牽動 |
+
 ## 三種訊號之間怎麼跳
 
 | 從 | 到 | 怎麼點 | 靠什麼接起來 |
@@ -366,5 +387,5 @@ ops/
 ├── tempo/tempo.yaml                          # 追蹤：單機最小設定
 └── grafana/provisioning/
     ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
-    └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces、talkcal-request（trace）、talkcal-k6（壓測）、talkcal-cost（成本）
+    └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces、talkcal-request（trace）、talkcal-k6（壓測）、talkcal-cost（成本）、talkcal-product（產品指標）
 ```
