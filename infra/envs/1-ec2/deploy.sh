@@ -91,9 +91,10 @@ unset db_password
 
 docker compose "${compose_files[@]}" up -d --build --remove-orphans
 
-echo "── 5. 觀測（ops/，跟本機同一份）"
-# 要在 deploy/ 之後：Alloy 要加入的網路是 deploy/ 建的
-docker compose -f ops/compose.yaml up -d
+echo "── 5. 觀測（ops/ + compose.ops.yaml）"
+# 要在 deploy/ 之後：Alloy 要加入的網路是 deploy/ 建的。
+# 設定跟本機同一份，compose.ops.yaml 只蓋掉雲端不一樣的值（trace 取樣比例）
+docker compose -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml up -d
 
 docker compose "${compose_files[@]}" ps
 echo "完成。網址：https://$(grep '^SITE_ADDRESS=' deploy/.env | cut -d= -f2)"
