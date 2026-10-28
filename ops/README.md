@@ -335,6 +335,24 @@ Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](..
 
 驗過準不準：同一次 knee 壓測，Grafana 算出的 p95（792ms → 1572ms → 3360ms）跟 k6 收工印的表一致。
 
+## SLO：怎樣才算「夠好」
+
+四個 SLO（一般 API 與跟助理說話，各一個可用性、一個延遲），滾動 28 天。目標、數字怎麼從壓測推出來、
+告警門檻怎麼算，都寫在 [docs/slo.md](../docs/slo.md)。這裡只記它在觀測堆疊裡怎麼接：
+
+| 誰 | 做什麼 | 檔案 |
+|----|--------|------|
+| app | 延遲直方圖多兩個剛好在門檻上的 bucket（300ms、8s） | `backend/.../application.properties` |
+| Mimir 的 ruler | 每分鐘把 SLI、burn rate、error budget 算好，寫回成新的序列（`slo:*`） | `mimir/rules/anonymous/slo.yaml` |
+| Grafana 告警 | 讀 `slo:burn_rate:*`，長短兩個視窗都超過門檻就進 firing（multi-window, multi-burn-rate） | `grafana/provisioning/alerting/slo-burn-rate.yaml` |
+| Grafana 儀表板 | **talkcal — SLO**：budget 還剩多少、燒多快、告警狀態 | `grafana/provisioning/dashboards/talkcal-slo.json` |
+
+為什麼錄製規則放 Mimir、告警規則放 Grafana：錄製是「算數字」，放在存資料的地方算最省（不必每次把原始資料拉出來）；
+告警要接通知管道（contact point、policy），那些都在 Grafana，規則放一起才看得到「哪條規則送去哪」。
+Mimir 的 ruler 也能發告警，但那樣要再架一個 Alertmanager，通知設定就分散在兩個地方。
+
+改了 `slo.yaml`，ruler 10 分鐘內會自己重讀（要馬上生效就 `docker compose restart mimir`），改之前先跑 `ci/rules.sh`；Grafana 的告警規則檔要重啟 grafana 才會重讀。
+
 ## 產品指標：功能有沒有人用、有沒有用處
 
 上面那些指標回答「系統健不健康」；這一段回答「功能有沒有人用」（#36）。儀表板 **`talkcal — 產品指標`**（`talkcal-product.json`）。
@@ -383,9 +401,12 @@ ops/
 ├── compose.yaml                              # 五個服務的定義
 ├── alloy/config.alloy                        # 三條管線：抓誰的指標、收哪些容器的 log、trace 轉給誰
 ├── mimir/mimir.yaml                          # 指標：單機最小設定（關掉多租戶、複製、物件儲存）
+├── mimir/rules/anonymous/slo.yaml            # SLO 的錄製規則（SLI、burn rate、error budget）
+├── mimir/slo.test.yaml                       # 上面那份的單元測試（ci/rules.sh 跑）
 ├── loki/loki-config.yaml                     # 日誌：單機最小設定
 ├── tempo/tempo.yaml                          # 追蹤：單機最小設定
 └── grafana/provisioning/
     ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
-    └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces、talkcal-request（trace）、talkcal-k6（壓測）、talkcal-cost（成本）、talkcal-product（產品指標）
+    ├── alerting/slo-burn-rate.yaml           # SLO 的 burn-rate 告警（只有規則，通知管道在另一個檔）
+    └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces、talkcal-request（trace）、talkcal-k6（壓測）、talkcal-cost（成本）、talkcal-product（產品指標）、talkcal-slo
 ```

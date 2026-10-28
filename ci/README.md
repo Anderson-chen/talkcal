@@ -222,6 +222,22 @@ ci/migrations.sh <commit>      # 跟指定的 commit 比
 
 還沒做：加進 ruleset 的必過檢查（GitHub 的設定，要手動加 `migrations`）。
 
+## SLO 錄製規則檢查
+
+`ci/rules.sh` 用 promtool 檢查 [ops/mimir/rules/](../ops/mimir/rules/) 的錄製規則，再跑單元測試 [ops/mimir/slo.test.yaml](../ops/mimir/slo.test.yaml)：
+餵假的請求序列，比對錄出來的 SLI、burn rate。GitHub 上是自己一個 job（`rules`）。
+
+```bash
+ci/rules.sh
+```
+
+| 造出來的錯 | 結果 |
+|------------|------|
+| 比例的分母拿掉 `> 0` | 紅：沒流量的那段錄成 NaN，測試期望「沒資料」 |
+| 規則不變 | 通過 |
+
+還沒做：加進 ruleset 的必過檢查（要手動加 `rules`）；pre-push 也還沒接這支。
+
 ## 刻意不做的
 
 - **GitHub 上跑 AI eval（`./gradlew eval`）**：沒有模型。本機的 pre-push 改到 prompt 或模型相關的檔案時才跑（`RUN_EVAL=1`），GitHub 上只確定它編得過。見 [#8 的「AI 品質回歸（eval）」段落](https://github.com/Anderson-chen/talkcal/issues/8)。

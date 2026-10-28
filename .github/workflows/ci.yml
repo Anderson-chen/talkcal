@@ -106,6 +106,15 @@ jobs:
         env:
           BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
 
+  # Mimir 錄製規則（SLO）的語法和單元測試：promtool 在自己的映像檔裡，不在 checks.sh 的容器（見 ci/rules.sh）
+  rules:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: ci/rules.sh
+
   # 漏洞掃描：build 出會上線的映像檔再掃，有 HIGH、CRITICAL 就紅燈（必過檢查）。
   # --pull：每次都拉最新的基底映像檔，掃到的才是重新部署時真的會拿到的版本
   vulns:
