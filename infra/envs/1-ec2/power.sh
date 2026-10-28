@@ -4,14 +4,7 @@
 #   ./power.sh stop    # 先把 Healthchecks 的 check 暫停，再關機
 #   ./power.sh start   # 開機
 #
-# 為什麼不直接 aws ec2 stop-instances：機器平常關機，關了之後 Grafana 的 heartbeat 也停了（#40），
-# 不先暫停的話 Healthchecks 6 分鐘後會寄一封「掛了」的信，關一次響一次，久了就沒人理它的信。
-# 開機不用另外恢復：暫停中的 check 收到下一個 heartbeat 就自己回到監控（本機實測過）。
-#
-# 暫停要 Healthchecks 的 API key（Project Settings → API Access，選可以寫的那種，不是 read-only）。
-# 只有這支腳本用得到，機器上不需要，所以不進 SSM、不進 git：用環境變數給
-#   export HEALTHCHECKS_API_KEY=...
-# 沒給（或沒設 heartbeat_url）就跳過暫停，照樣關機，並提醒會收到一封信。
+# 暫停要 export HEALTHCHECKS_API_KEY=...（可寫的 key）。為什麼要暫停、key 從哪來：見 README.md 的「省錢」。
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -28,7 +21,7 @@ pause_heartbeat() {
     echo "沒設 heartbeat_url 或 HEALTHCHECKS_API_KEY：不暫停，有設 heartbeat 的話約 6 分鐘後會收到一封 DOWN 的信" >&2
     return 0
   fi
-  # Ping URL 的最後一段就是 check 的 UUID（https://hc-ping.com/<uuid>）。用 slug 形式的網址時這裡會不對，所以要用 UUID 那種
+  # Ping URL 的最後一段就是 check 的 UUID（https://hc-ping.com/<uuid>）。slug 形式的網址取不到，要用 UUID 那種
   uuid="${ping_url##*/}"
   # 暫停失敗也照樣關機：關機是為了省錢，不該被監控卡住；只是會收到一封信
   if curl -fsS -X POST -H "X-Api-Key: $HEALTHCHECKS_API_KEY" \

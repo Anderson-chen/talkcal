@@ -28,9 +28,7 @@ contactPoints:
       - uid: talkcal-heartbeat
         type: webhook
         settings:
-          # 外部服務給的 ping 網址，例如 https://hc-ping.com/<uuid>。這串網址本身就是祕密（拿到就能假裝我們還活著），
-          # 所以放不進 git 的 deploy/.env，由 ops/compose.yaml 交給 grafana 容器。沒設時 compose 給一個 .invalid 位址：
-          # 打不出去（Grafana log 裡會有送不出去的 error），但 Grafana 照常啟動、其他告警不受影響
+          # 外部服務的 ping 網址（https://hc-ping.com/<uuid>），是祕密：值在 deploy/.env，沒設時的行為見 ops/compose.yaml
           url: $HEARTBEAT_URL
           httpMethod: POST
         # 只送「還在響」，Watchdog 本來就不會恢復；就算恢復了也不該被當成一次 ping
@@ -156,13 +154,14 @@ groups:
         title: Watchdog（永遠在響，送 heartbeat 給外部服務）
         condition: C
         data:
+          # 不查任何資料源，只算一個常數：Mimir 掛掉時照樣響（那個情況第 2 條會寄信），
+          # heartbeat 只負責「Grafana 和通知管線還活著」，不跟 Mimir 一起停、同一件事吵兩次
           - refId: A
-            relativeTimeRange: { from: 600, to: 0 }
-            datasourceUid: mimir
+            datasourceUid: __expr__
             model:
               refId: A
-              instant: true
-              expr: vector(1)
+              type: math
+              expression: '1'
           - refId: C
             datasourceUid: __expr__
             model:
@@ -172,8 +171,6 @@ groups:
               conditions:
                 - evaluator: { type: gt, params: [0] }
         for: 0s
-        # Mimir 掛掉時照樣響：那個情況第 2 條會寄信，heartbeat 只負責「Grafana 和通知管線還活著」。
-        # 讓它跟著 Mimir 一起停的話，Mimir 一掛就同時收到 email 跟外部服務的通知，是同一件事吵兩次
         noDataState: Alerting
         execErrState: Alerting
         labels:

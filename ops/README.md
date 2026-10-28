@@ -98,7 +98,7 @@ Alloy 加入了 deploy/ 的網路（`talkcal-deploy_default`）：用服務名�
 | `llama-cpp` | `llm-chat:8080/metrics` | Qwen3-8B（deploy/ 的 llm-chat） |
 | `postgres` | `postgres-exporter:9187/metrics` | deploy/ 的 postgres_exporter，替 PostgreSQL 翻成 Prometheus 格式 |
 | `alloy` | Alloy 自己（`prometheus.exporter.self`） | 收集器本身，給「監控本身掛掉」用 |
-| `mimir`、`loki`、`tempo`、`grafana` | `<服務名>:<HTTP 埠>/metrics` | ops/ 這組自己，同上 |
+| `mimir`、`loki`、`tempo`、`grafana` | `<服務名>:<HTTP 埠>/metrics`，只留 `up` | ops/ 這組自己，同上。它們自己的指標合起來好幾千條，告警只用得到 `up` |
 
 每 15 秒抓一次，用 `remote_write` 推進 Mimir。本機 bootRun 的 app 不在 deploy/ 的網路裡，不會被抓。
 

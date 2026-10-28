@@ -300,7 +300,7 @@ const F={
 "infra/envs/1-ec2/s3.tf":[["7–10","aws_s3_bucket.models","s3m"],["12–21","加密","s3m"],["23–31","公開封鎖","s3m"]],
 "infra/envs/1-ec2/user-data.sh.tftpl":[["全檔","第一次開機腳本","ec2"]],
 "infra/envs/1-ec2/deploy.sh":[["31–40","連 release tag 一起拉、算版本號（cd/version.sh）","app"],["60","從 SSM 拉 .env","dotenv"],["72","疊三份 compose","ec2"],["83–89","起 postgres、ALTER ROLE","postgres"],["92","up -d --build","app"],["97","起觀測（疊 compose.ops.yaml）","obs"]],
-"infra/envs/1-ec2/power.sh":[["24–40","pause_heartbeat：用 API 暫停 check，失敗也照樣關機","obs"],["51","先拿 instance id，拿不到就停","ec2"],["52–55","stop：先暫停再關機","ec2"],["56–58","start","ec2"]],
+"infra/envs/1-ec2/power.sh":[["17–33","pause_heartbeat：用 API 暫停 check，失敗也照樣關機","obs"],["43","先拿 instance id，拿不到就停","ec2"],["45–48","stop：先暫停再關機","ec2"],["49–51","start","ec2"]],
 "infra/envs/1-ec2/compose.ec2.yaml":[["18–20","postgres 密碼","postgres"],["22–30","app 密碼、session cookie Secure、mem_limit","app"],["36–53","caddy","caddy"],["55–57","caddy volumes","caddy"]],
 "infra/envs/1-ec2/compose.bedrock.yaml":[["11–12","model-seed 不起","seed"],["13–14","llm-chat 不起","llm"],["16–27","app 改打 Bedrock，token 指標標成 bedrock","app"]],
 "infra/envs/1-ec2/compose.gpu.yaml":[["8–10","model-seed 改掛 S3 拉下來的資料夾","seed"]],
@@ -311,7 +311,7 @@ const F={
 "ops/compose.yaml":[["22","mimir","obs"],["36","mimir 掛 SLO 錄製規則","obs"],["42","loki","obs"],["56","tempo","obs"],["69–76","grafana","obs"],["81","HEARTBEAT_URL（#40）","obs"],["104","alloy","obs"]],
 "web/Dockerfile":[["25","nginx:1.30-alpine-otel","web"],["33","load_module ngx_otel_module","web"]],
 "ops/tempo/tempo.yaml":[["46–71","metrics_generator（service-graphs、peer_attributes）","obs"],["74–80","overrides：對預設租戶開 processor","obs"]],
-"ops/alloy/config.alloy":[["66–102","監控自己：Alloy、Mimir、Loki、Tempo、Grafana 的 /metrics（#40）","obs"],["196–207","OTLP 入口：HTTP 4318、gRPC 4317","obs"],["221–233","transform：nginx span 改 client、SQL 的 peer.service（在取樣之前）","obs"]]
+"ops/alloy/config.alloy":[["66–111","監控自己：Alloy 全收，Mimir、Loki、Tempo、Grafana 只留 up（#40）","obs"],["205–216","OTLP 入口：HTTP 4318、gRPC 4317","obs"],["230–242","transform：nginx span 改 client、SQL 的 peer.service（在取樣之前）","obs"]]
 };
 const E="infra/envs/1-ec2/",B="infra/bootstrap/",D="deploy/compose.yaml",O="ops/compose.yaml";
 const L={
@@ -342,7 +342,7 @@ app:{"image":D+":219","mem_limit":E+"compose.ec2.yaml:30","SESSION_COOKIE_SECURE
 postgres:{"image":D+":161","POSTGRES_PASSWORD":E+"compose.ec2.yaml:20","密碼同步":E+"deploy.sh:88","postgres-exporter":D+":191","--no-collector.stat_user_tables":D+":199"},
 llm:{"-ngl":D+":107","-c / -np":D+":109","--kv-unified":D+":116"},
 seed:{"sha256sum -c":D+":80"},
-obs:{"Alloy":O+":105","Mimir":O+":23","Loki":O+":43","Tempo":O+":57","Grafana":O+":70","Grafana 埠":O+":76","Trace 取樣":E+"compose.ops.yaml:11","Alloy 抓指標":"ops/alloy/config.alloy:59","metrics-generator":"ops/tempo/tempo.yaml:46","OTLP 入口":"ops/alloy/config.alloy:196","SLO":"ops/mimir/rules/anonymous/slo.yaml:38","HEARTBEAT_URL":O+":81"}
+obs:{"Alloy":O+":105","Mimir":O+":23","Loki":O+":43","Tempo":O+":57","Grafana":O+":70","Grafana 埠":O+":76","Trace 取樣":E+"compose.ops.yaml:11","Alloy 抓指標":"ops/alloy/config.alloy:59","metrics-generator":"ops/tempo/tempo.yaml:46","OTLP 入口":"ops/alloy/config.alloy:205","SLO":"ops/mimir/rules/anonymous/slo.yaml:38","HEARTBEAT_URL":O+":81"}
 };
 // t：步驟標題（短）；d：說明。依 model_backend 不同的寫成 {bedrock, gpu}
 const ROUTES={

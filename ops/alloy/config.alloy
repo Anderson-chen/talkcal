@@ -95,10 +95,19 @@ prometheus.scrape "observability" {
     {"__address__" = "tempo:3200",   "job" = "tempo"},
     {"__address__" = "grafana:3000", "job" = "grafana"},
   ]
-  // 這幾個的指標量大（Mimir、Grafana 各上千條），只留 up 以外的少數幾條也行；
-  // 單機學習先全收，Mimir 的預設序列上限（15 萬）還很遠
   scrape_interval = "15s"
-  forward_to      = [prometheus.remote_write.mimir.receiver]
+  forward_to      = [prometheus.relabel.observability_up_only.receiver]
+}
+
+// 只留 up：告警只看它。四個元件自己吐的指標合起來有好幾千條，全收的話小機器上的 Mimir 白白多存一份；
+// 要查某個元件的內部狀況時，把這段拿掉就全收了
+prometheus.relabel "observability_up_only" {
+  rule {
+    source_labels = ["__name__"]
+    regex         = "up"
+    action        = "keep"
+  }
+  forward_to = [prometheus.remote_write.mimir.receiver]
 }
 
 // 抓到的指標推進 Mimir。remote_write 是 Prometheus 生態「把指標送去別處存」的標準協定，
