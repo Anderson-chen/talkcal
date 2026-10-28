@@ -94,7 +94,7 @@ Alloy 加入了 deploy/ 的網路（`talkcal-deploy_default`）：用服務名�
 
 | job | 位址 | 是誰 |
 |-----|------|------|
-| `talkcal-app` | `app:8090/actuator/prometheus` | deploy/ 的 app 容器 |
+| `talkcal-app` | `app:8091/actuator/prometheus` | deploy/ 的 app 容器（management 埠，不發佈到主機） |
 | `llama-cpp` | `llm-chat:8080/metrics` | Qwen3-8B（deploy/ 的 llm-chat） |
 
 每 15 秒抓一次，用 `remote_write` 推進 Mimir。本機 bootRun 的 app 不在 deploy/ 的網路裡，不會被抓。
@@ -192,7 +192,7 @@ llama.cpp、PostgreSQL 本身不產生 span，所以樹只到 app 呼叫出去�
 
 - **儀表板 `talkcal — Traces (Tempo)`**：全部用 TraceQL 查 Tempo。上排是從 trace 算出來的數字（助理請求速率、
   各段的 p95、沒成功的 span 數），下排是請求清單（最近的、超過 5 秒的、沒成功的），點 Trace ID 就打開瀑布圖。
-  查詢只挑 `/api/calendar/assistant`，只看跟助理的對話。（actuator 的抓取與健康檢查在 app 端就不產生 trace 了，見 `ObservationConfiguration`。）
+  查詢只挑 `/api/calendar/assistant`，只看跟助理的對話。（actuator 的抓取與健康檢查走 management 埠 8091，那個埠上的請求本來就不產生 trace。）
 - **儀表板 `talkcal — 單一請求`**（#31）：變數 `traceId` 貼一個 trace id，一個畫面看完這個請求：
   ① service map（經過哪些服務）→ ② 瀑布圖（每段多久）→ ③ 這個請求的 log → ④ 當時 app、連線池、llama 的狀態。
   沒有 trace id 時，最下面的表格點一筆，時間範圍會自動對齊成那個請求前後各 5 分鐘。
