@@ -9,7 +9,7 @@ apiVersion: 1
 policies:
   - orgId: 1
     receiver: email               # contact-points.yaml 的 name
-    # 同一條規則的告警合成一封：app 掛掉時 5xx、延遲可能一起響，各自一封，同一條規則的多個序列併成一封
+    # 同一條規則的告警合成一封：例如 SLO 快燒同時有好幾個 SLO 在燒（每個 SLO 一個告警實例），併成一封
     group_by: ['grafana_folder', 'alertname']
     # 第一次觸發後等 30 秒再寄：同一批一起響的湊進同一封，不會一秒來三封
     group_wait: 30s

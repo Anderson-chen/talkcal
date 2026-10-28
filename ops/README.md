@@ -388,15 +388,15 @@ Mimir 的 ruler 也能發告警，但那樣要再架一個 Alertmanager，通知
 
 規則、收件人、寄信節奏都用 provisioning 管（`grafana/provisioning/alerting/`），Grafana 一啟動就建好，UI 上唯讀。
 
-| 規則 | 查詢（都用 `job="talkcal-app"`，不依賴埠號） | 門檻 | 持續 | 沒資料時 |
-|------|------|------|------|------|
-| app 掛了或抓不到指標 | `max(up)` | < 1 | 1 分鐘 | **算出事**（Alloy 掛了也看不到 app） |
-| 5xx 比例 | 5xx ÷ 全部，5 分鐘至少 20 個請求才評估 | > 5% | 5 分鐘 | 正常（沒流量） |
-| 行程 API p95（不含 AI 助理） | `histogram_quantile(0.95, …)` | > 1 秒 | 10 分鐘 | 正常 |
-| AI 助理 p95 | 同上，只看 `/api/calendar/assistant` | > 30 秒 | 10 分鐘 | 正常 |
+| 規則 | 檔案 | 什麼時候響 | 嚴重度 |
+|------|------|------|------|
+| app 掛了或抓不到指標 | `rules.yaml` | `max(up{job="talkcal-app"}) < 1` 持續 1 分鐘；**沒資料也算**（Alloy 掛了一樣看不到 app） | critical |
+| SLO 快燒 | `slo-burn-rate.yaml` | 照這速度幾天內就燒光 error budget（[docs/slo.md](../docs/slo.md)） | critical |
+| SLO 慢燒 | `slo-burn-rate.yaml` | 照這速度這個月會不達標 | warning |
 
-每條門檻的理由寫在 `rules.yaml` 的註解。這些是依實測值留餘裕的暫時值；
-SLO 定下來（[#34](https://github.com/Anderson-chen/talkcal/issues/34)）之後改成照錯誤預算燒得多快來告警。
+錯誤、延遲只看 SLO 的 burn rate，不另外設「5xx > 5%」「p95 > 1 秒」這種固定門檻：兩邊都設的話同一件事會寄兩封、門檻還不一樣。
+SLO 管不到的是「根本沒資料」：app 掛掉時沒有請求，SLO 是沒資料（當正常），所以 `up` 這條另外留著。
+全部告警都寄到同一個信箱（`policies.yaml`）；要分流時比對 `severity` 標籤。
 
 寄信走 Grafana 內建的 SMTP，設定在不進 git 的 `deploy/.env`（`ALERT_SMTP_*`、`ALERT_EMAIL_TO`，範本 `deploy/.env.example`），
 所以起這組要帶 `--env-file ../deploy/.env`。雲端由 Terraform 寫進 SSM 的同一份 `.env`（`infra/envs/1-ec2/alerting.auto.tfvars.example`）。

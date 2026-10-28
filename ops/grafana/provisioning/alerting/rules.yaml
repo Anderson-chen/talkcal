@@ -1,18 +1,29 @@
-# 告警規則：什麼情況算「出事、要寄信」。寄給誰、多久寄一次在 policies.yaml。
+# 基本告警：app 活著嗎。寄給誰、多久寄一次在 policies.yaml。
 #
-# 先接三類最基本的訊號（Google SRE 的四個黃金訊號裡的 錯誤、延遲，加上最根本的「活著嗎」）。
-# 門檻是依現況實測值留餘裕定的暫時值，每條都寫了理由；SLO 定下來（#34）後改成照錯誤預算燒得多快來告警。
+# 錯誤和延遲交給 SLO 的 burn-rate 告警（slo-burn-rate.yaml，目標見 docs/slo.md）：
+# 那邊看的是「error budget 燒多快」，比固定門檻（5xx > 5%、p95 > 1 秒）更準，也不會跟這裡重複寄信。
+# 但 SLO 只算「有請求進來時好不好」，app 整個掛掉、或指標根本收不到時，那邊是沒資料（當成正常）——
+# 這個缺口由這裡補上。
 #
-# 每條規則的結構都一樣：
+# 規則的結構：
 #   A：PromQL 查 Mimir，算出一個數字（instant query，只要「現在」的值）
 #   C：threshold 運算，A 超過門檻就算成立；condition 指向 C
 #   for：要連續成立這麼久才真的觸發（Pending → Firing），擋掉一兩次評估的抖動
 #
-# 註解（annotations）裡的 $values 照寫一個 $：告警規則檔 Grafana 不做環境變數展開，
-# 跟 datasources.yaml、contact-points.yaml 不同 —— 寫成 $$ 反而會原樣留著、樣板解析失敗（實測過）。
-# 查詢都用 job="talkcal-app"（Alloy 設的 job_name），不寫埠號：actuator 搬到哪個埠（#33）都不受影響。
+# 查詢用 job="talkcal-app"（Alloy 設的 job_name），不寫埠號：actuator 搬到哪個埠（#33）都不受影響。
 
 apiVersion: 1
+
+# 以前在這裡、改由 SLO 接手的三條（5xx 比例、行程 API p95、AI 助理 p95）。
+# provisioning 只會新增、更新，檔案裡拿掉的規則不會從 Grafana 消失（存在 grafana-data volume 裡），
+# 不明寫刪除的話，已經起過的 Grafana 會一直留著舊規則、跟 SLO 告警重複寄信。
+deleteRules:
+  - orgId: 1
+    uid: talkcal-5xx-ratio
+  - orgId: 1
+    uid: talkcal-api-p95
+  - orgId: 1
+    uid: talkcal-assistant-p95
 
 groups:
   - orgId: 1
@@ -21,7 +32,7 @@ groups:
     # 每分鐘評估一次。指標每 15 秒抓一次，再密也只是重複看同一批點
     interval: 1m
     rules:
-      # ── 1. app 掛了（或抓不到它）─────────────────────────────────
+      # ── app 掛了（或抓不到它）─────────────────────────────────
       - uid: talkcal-app-down
         title: talkcal app 掛了或抓不到指標
         condition: C
@@ -54,117 +65,3 @@ groups:
           description: >-
             Alloy 抓 job="talkcal-app" 的 /actuator/prometheus 失敗（up 為 0 或整條沒資料）。
             先看 `docker compose ps` 裡 app 是不是 healthy，再看 Alloy 的除錯頁（127.0.0.1:12345）。
-
-      # ── 2. 5xx 比例太高 ─────────────────────────────────────────
-      - uid: talkcal-5xx-ratio
-        title: talkcal 5xx 比例超過 5%
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange: { from: 600, to: 0 }
-            datasourceUid: mimir
-            model:
-              refId: A
-              instant: true
-              # 近 5 分鐘 5xx 占全部請求的比例。分母的 >= 20 是最低流量門檻：
-              # 5 分鐘不到 20 個請求時分母是空的、除出來也是空的（不評估），免得半夜一個請求失敗就是 100%、寄一封信
-              expr: >-
-                sum(increase(http_server_requests_seconds_count{job="talkcal-app", status=~"5.."}[5m]))
-                /
-                (sum(increase(http_server_requests_seconds_count{job="talkcal-app"}[5m])) >= 20)
-          - refId: C
-            datasourceUid: __expr__
-            model:
-              refId: C
-              type: threshold
-              expression: A
-              conditions:
-                # 5%：行程的增刪改查正常時不該回 5xx（我們回 502 只在模型或資料庫出事），
-                # 20 個裡錯 1 個就到門檻，代表後面有東西壞了，不是偶發
-                - evaluator: { type: gt, params: [0.05] }
-        # 連續 5 分鐘才寄：一次模型逾時的尖峰不寄，持續在錯才寄
-        for: 5m
-        # 沒資料 = 沒流量（或還沒出現過 5xx 這個序列），不是出事；app 掛掉由第 1 條負責
-        noDataState: OK
-        execErrState: Error
-        labels:
-          severity: warning
-        annotations:
-          summary: 'talkcal 近 5 分鐘 5xx 比例 {{ humanizePercentage $values.A.Value }}'
-          description: >-
-            門檻 5%（5 分鐘至少 20 個請求才評估）。在 talkcal-app dashboard 看哪個 uri 在回 5xx，
-            再到 Loki 找 level=ERROR 的 log（AI 助理、帳號相關的 502 都會印 error log）。
-
-      # ── 3. 行程 API 變慢 ────────────────────────────────────────
-      - uid: talkcal-api-p95
-        title: talkcal 行程 API p95 延遲超過 1 秒
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange: { from: 600, to: 0 }
-            datasourceUid: mimir
-            model:
-              refId: A
-              instant: true
-              # 不含 AI 助理：它要等模型，秒級是正常的，混在一起會把 p95 拉高、蓋掉 CRUD 真的變慢的訊號。
-              # 直方圖桶是 application.properties 開的（percentiles-histogram.http.server.requests）
-              expr: >-
-                histogram_quantile(0.95,
-                  sum by (le) (rate(http_server_requests_seconds_bucket{job="talkcal-app", uri!="/api/calendar/assistant"}[5m])))
-          - refId: C
-            datasourceUid: __expr__
-            model:
-              refId: C
-              type: threshold
-              expression: A
-              conditions:
-                # 1 秒：本機 k6 壓測後查近 1 小時的 p95 約 0.18 秒，留 5 倍餘裕；
-                # 超過 1 秒使用者點下去會明顯覺得卡（Nielsen 的 1 秒注意力門檻）
-                - evaluator: { type: gt, params: [1] }
-        # 連續 10 分鐘：延遲本來就會抖，壓測、冷啟動的幾分鐘慢不叫醒人
-        for: 10m
-        # 沒流量時 histogram_quantile 算不出值，不是出事
-        noDataState: OK
-        execErrState: Error
-        labels:
-          severity: warning
-        annotations:
-          summary: 'talkcal 行程 API p95 {{ humanizeDuration $values.A.Value }}'
-          description: >-
-            門檻 1 秒（不含 /api/calendar/assistant）。先看 talkcal-app dashboard 的延遲和 JVM，
-            再看資料庫連線池（等連線的時間會直接算進請求延遲）。
-
-      # ── 4. AI 助理變慢 ──────────────────────────────────────────
-      - uid: talkcal-assistant-p95
-        title: talkcal AI 助理 p95 延遲超過 30 秒
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange: { from: 600, to: 0 }
-            datasourceUid: mimir
-            model:
-              refId: A
-              instant: true
-              expr: >-
-                histogram_quantile(0.95,
-                  sum by (le) (rate(http_server_requests_seconds_bucket{job="talkcal-app", uri="/api/calendar/assistant"}[5m])))
-          - refId: C
-            datasourceUid: __expr__
-            model:
-              refId: C
-              type: threshold
-              expression: A
-              conditions:
-                # 30 秒：本機實測 p95 約 3 秒，留 10 倍餘裕給 Bedrock 和長對話；
-                # 呼叫模型的逾時是 2 分鐘（spring.ai.openai.chat.timeout），等半分鐘的使用者多半已經放棄了
-                - evaluator: { type: gt, params: [30] }
-        for: 10m
-        noDataState: OK
-        execErrState: Error
-        labels:
-          severity: warning
-        annotations:
-          summary: 'talkcal AI 助理 p95 {{ humanizeDuration $values.A.Value }}'
-          description: >-
-            門檻 30 秒。先看模型那邊：本機看 llama-cpp dashboard 的排隊數（requests_deferred），
-            雲端看 Bedrock 有沒有被限流；再到 Tempo 看慢的那幾個請求卡在哪一段。
