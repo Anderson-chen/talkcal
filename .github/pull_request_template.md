@@ -1,7 +1,5 @@
 ## Summary
 
-> TLDR: <!-- one sentence: the outcome once this is merged -->
-
 <!-- One paragraph on why it matters and what problem it solves; leave details in the issue -->
 
 ## Dependencies
