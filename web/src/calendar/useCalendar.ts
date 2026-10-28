@@ -15,7 +15,7 @@ export interface FormRequest {
   initial: EventFields
   // 存好之後要通知誰（AI 卡片要把那一筆標成「已加入」）
   onSaved?: (saved: SavedEvent) => void
-  // 從 AI 卡片「修改」過來的是 ASSISTANT：改過再存還是採納了提議
+  // 從 AI 卡片「修改」過來的是 ASSISTANT：改過再存還是採納了提議（有 onSaved 的就是從卡片來的，見 openForm）
   origin: EventOrigin
 }
 
@@ -111,7 +111,8 @@ export function useCalendar() {
 
   // ── 新增、刪除 ─────────────────────────────────────────
   /** 存起來、跳到第一筆那天、重讀這一頁。存進去的分類如果被篩掉了，打開它 —— 不然使用者會以為沒存到。 */
-  async function add(drafts: EventFields[], origin: EventOrigin = 'MANUAL'): Promise<SavedEvent[]> {
+  // origin 必填、不給預設值：之後新增的入口忘了帶會編譯失敗，不會默默被算成手動
+  async function add(drafts: EventFields[], origin: EventOrigin): Promise<SavedEvent[]> {
     const saved = await addEvents(drafts, origin)
     const shownAgain = { ...hidden.value }
     for (const e of saved) delete shownAgain[e.category]
@@ -132,9 +133,14 @@ export function useCalendar() {
     reload()
   }
 
-  function openForm(initial?: Partial<EventFields>, onSaved?: (saved: SavedEvent) => void, origin: EventOrigin = 'MANUAL') {
+  // fromProposal：從 AI 卡片「修改」過來的，存好要通知那張卡片；有它就是採納助理的提議（ASSISTANT），沒有就是手動
+  function openForm(initial?: Partial<EventFields>, fromProposal?: { onSaved: (saved: SavedEvent) => void }) {
     detailId.value = null
-    form.value = { initial: { ...blankDraft(sel.value), ...initial }, onSaved, origin }
+    form.value = {
+      initial: { ...blankDraft(sel.value), ...initial },
+      onSaved: fromProposal?.onSaved,
+      origin: fromProposal ? 'ASSISTANT' : 'MANUAL',
+    }
   }
 
   return {

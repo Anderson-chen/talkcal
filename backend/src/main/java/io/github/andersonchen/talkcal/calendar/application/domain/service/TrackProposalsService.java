@@ -18,22 +18,24 @@ public final class TrackProposalsService implements TrackProposalsUseCase {
 
     @Override
     public void proposalsShown(int count) {
-        if (checked(count, Integer.MAX_VALUE) > 0) {
+        requireBetween(count, Integer.MAX_VALUE);
+        if (count > 0) {
             usage.proposalsShown(count);
         }
     }
 
     @Override
     public void proposalsDismissed(int count) {
-        if (checked(count, MAX_DISMISSED_PER_CALL) > 0) {
+        requireBetween(count, MAX_DISMISSED_PER_CALL);
+        if (count > 0) {
             usage.proposalsDismissed(count);
         }
     }
 
-    private static int checked(int count, int max) {
+    // 給人看的張數由伺服器自己數，不設上限（max 傳 Integer.MAX_VALUE），只擋負的
+    private static void requireBetween(int count, int max) {
         if (count < 0 || count > max) {
             throw new IllegalArgumentException("卡片數要在 0～" + max + " 之間：" + count);
         }
-        return count;
     }
 }

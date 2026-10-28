@@ -5,10 +5,12 @@ import io.github.andersonchen.talkcal.calendar.application.port.out.CountActiveO
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 
 /**
- * 實作「最近一段時間內有幾個人在用」：把「最近 window」換成一個時間點，交給 port 去數。
+ * 實作「最近幾段時間內各有幾個人在用」：把每個「最近 window」換成一個時間點，一次交給 port 去數。
  * 時鐘從外面給（同 ParseEventsService），測試才能固定「現在」。
  */
 public final class CountActiveUsersService implements CountActiveUsersUseCase {
@@ -22,10 +24,16 @@ public final class CountActiveUsersService implements CountActiveUsersUseCase {
     }
 
     @Override
-    public int countActiveUsers(Duration window) {
-        if (window == null || window.isZero() || window.isNegative()) {
-            throw new IllegalArgumentException("期間要是正的：" + window);
+    public List<Integer> countActiveUsers(List<Duration> windows) {
+        if (windows == null || windows.isEmpty()) {
+            throw new IllegalArgumentException("至少要一個期間");
         }
-        return activeOwners.countActiveOwners(clock.instant().minus(window));
+        for (Duration window : windows) {
+            if (window == null || window.isZero() || window.isNegative()) {
+                throw new IllegalArgumentException("期間要是正的：" + window);
+            }
+        }
+        Instant now = clock.instant();
+        return activeOwners.countActiveOwners(windows.stream().map(now::minus).toList());
     }
 }

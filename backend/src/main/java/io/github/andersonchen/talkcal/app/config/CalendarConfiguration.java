@@ -21,6 +21,7 @@ import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUse
 import io.github.andersonchen.talkcal.calendar.application.port.in.ParseEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.RemoveEventUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.TrackProposalsUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.out.CountActiveOwnersPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteEventPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.ExtractEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventsPort;
@@ -139,14 +140,20 @@ class CalendarConfiguration {
 
     // 活躍使用者算的是真實的時間點（created_at 帶時區），用 UTC 就好，跟行事曆的牆上時間無關
     @Bean
-    CountActiveUsersUseCase countActiveUsers(JdbcClient jdbcClient) {
-        return new CountActiveUsersService(new JdbcActiveOwnersAdapter(jdbcClient), Clock.systemUTC());
+    CountActiveOwnersPort countActiveOwners(JdbcClient jdbcClient) {
+        return new JdbcActiveOwnersAdapter(jdbcClient);
     }
 
-    // MeterBinder 型別的 bean，actuator 會自動拿去 bindTo 自己的 registry，不必手動註冊
+    @Bean
+    CountActiveUsersUseCase countActiveUsers(CountActiveOwnersPort countActiveOwners) {
+        return new CountActiveUsersService(countActiveOwners, Clock.systemUTC());
+    }
+
+    // MeterBinder 型別的 bean，actuator 會自動拿去 bindTo 自己的 registry，不必手動註冊。
+    // 一分鐘重數一次：活躍人數變得很慢，Alloy 15 秒抓一次只會讀到快取
     @Bean
     ActiveUsersMetrics activeUsersMetrics(CountActiveUsersUseCase countActiveUsers) {
-        return new ActiveUsersMetrics(countActiveUsers);
+        return new ActiveUsersMetrics(countActiveUsers, Duration.ofMinutes(1), Clock.systemUTC());
     }
 
     @Bean

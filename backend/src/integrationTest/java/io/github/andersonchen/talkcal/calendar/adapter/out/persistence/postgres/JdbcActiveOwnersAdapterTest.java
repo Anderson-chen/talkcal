@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.flywaydb.core.Flyway;
@@ -83,7 +84,18 @@ class JdbcActiveOwnersAdapterTest {
         talked(AMY, NOW.minusSeconds(30));
         talked(BOB, NOW.minusSeconds(3600));
 
-        assertEquals(2, adapter.countActiveOwners(ONE_DAY_AGO));
+        assertEquals(List.of(2), adapter.countActiveOwners(List.of(ONE_DAY_AGO)));
+    }
+
+    @Test
+    @DisplayName("幾個期間一句 SQL 一起數，各自只算自己期間內的人，照傳進來的順序回")
+    void countsSeveralWindowsAtOnce() {
+        talked(AMY, NOW.minusSeconds(60));
+        savedEvent(BOB, NOW.minusSeconds(3 * 24 * 3600));
+        talked(CAT, NOW.minusSeconds(20 * 24 * 3600));
+
+        assertEquals(List.of(3, 1, 2), adapter.countActiveOwners(List.of(
+                NOW.minusSeconds(30L * 24 * 3600), ONE_DAY_AGO, NOW.minusSeconds(7 * 24 * 3600))));
     }
 
     @Test
@@ -92,14 +104,13 @@ class JdbcActiveOwnersAdapterTest {
         savedEvent(CAT, NOW.minusSeconds(8 * 24 * 3600));
         talked(CAT, NOW.minusSeconds(8 * 24 * 3600));
 
-        assertEquals(0, adapter.countActiveOwners(ONE_DAY_AGO));
-        assertEquals(1, adapter.countActiveOwners(NOW.minusSeconds(30L * 24 * 3600)));
+        assertEquals(List.of(0, 1), adapter.countActiveOwners(List.of(ONE_DAY_AGO, NOW.minusSeconds(30L * 24 * 3600))));
     }
 
     @Test
     @DisplayName("沒有任何紀錄：0")
     void emptyIsZero() {
-        assertEquals(0, adapter.countActiveOwners(ONE_DAY_AGO));
+        assertEquals(List.of(0), adapter.countActiveOwners(List.of(ONE_DAY_AGO)));
     }
 
     @Test
@@ -108,6 +119,6 @@ class JdbcActiveOwnersAdapterTest {
         JdbcActiveOwnersAdapter broken = new JdbcActiveOwnersAdapter(
                 JdbcClient.create(new DriverManagerDataSource("jdbc:postgresql://localhost:1/none", "x", "x")));
 
-        assertThrows(IllegalStateException.class, () -> broken.countActiveOwners(ONE_DAY_AGO));
+        assertThrows(IllegalStateException.class, () -> broken.countActiveOwners(List.of(ONE_DAY_AGO)));
     }
 }

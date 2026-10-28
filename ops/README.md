@@ -313,7 +313,7 @@ Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](..
 
 | 問題 | 指標 | 從哪來、為什麼這樣定 |
 |------|------|------|
-| 有多少人在用 | `talkcal_active_users{window="1d"\|"7d"\|"30d"}`（gauge） | 被抓的當下從資料庫數：最近一段時間跟助理說過話、或存過行程的**不同的人**。不在記憶體裡記「今天見過誰」：重啟歸零、多台各數各的。只看月曆不算（讀取沒有留紀錄）。30 天剛好是對話的保留期限 |
+| 有多少人在用 | `talkcal_active_users{window="1d"\|"7d"\|"30d"}`（gauge） | 從資料庫數最近一段時間跟助理說過話、或存過行程的**不同的人**；三個期間一句 SQL 一起數，結果留一分鐘（Alloy 15 秒抓一次只讀快取）。不在記憶體裡記「今天見過誰」：重啟歸零、多台各數各的。只看月曆不算（讀取沒有留紀錄）。30 天剛好是對話的保留期限 |
 | 助理被用了幾次 | `http_server_requests_seconds_count{uri="/api/calendar/assistant",method="POST",status="200"}` | Spring 本來就有，不另外埋一個一樣的 counter |
 | 助理提議了幾張卡片 | `talkcal_assistant_proposals_shown_total` | 在回覆送出去前數（CalendarAssistantController），只算畫面上真的出現的：工具解析出來但因為沒講早上晚上被擋下的、這一輪最後 502 的都不算 |
 | 被採納幾張 | `talkcal_calendar_events_added_total{origin="assistant"}` | 存檔成功之後才記（AddEventsService）。從卡片按「修改」改完再存也算採納：起點是助理的提議 |

@@ -154,9 +154,11 @@ export function useAssistant(calendar: CalendarState) {
 
   /** 帶著這筆草稿打開新增表單；在表單裡存好了，這張卡片就算「已加入」。 */
   function edit(proposal: Proposal) {
-    calendar.openForm(proposal.draft, () => {
-      proposal.status = 'added'
-    }, 'ASSISTANT')
+    calendar.openForm(proposal.draft, {
+      onSaved: () => {
+        proposal.status = 'added'
+      },
+    })
   }
 
   return { messages, input, typing, saving, send, confirm, cancel, drop, edit, clear }
