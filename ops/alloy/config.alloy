@@ -144,8 +144,9 @@ loki.write "local" {
 
 // ═══ 追蹤 ═══════════════════════════════════════════════════════════
 //
-//   app ──OTLP/HTTP──▶ otelcol.receiver.otlp ──▶ otelcol.processor.tail_sampling ──▶ otelcol.processor.batch ──▶ otelcol.exporter.otlp ──▶ Tempo
-//                                                  （錯的、慢的全留，其餘抽樣）
+//   app ──OTLP/HTTP──┐
+//   web ──OTLP/gRPC──┴▶ otelcol.receiver.otlp ──▶ otelcol.processor.transform（為 service map 改屬性）
+//                       ──▶ otelcol.processor.tail_sampling（錯的、慢的全留，其餘抽樣）──▶ otelcol.processor.batch ──▶ otelcol.exporter.otlp ──▶ Tempo
 //
 // trace 也是「推」：span 在請求結束時才完整，只能由 app 主動送出來。
 // OTLP 是 OpenTelemetry 的標準協定，app 那頭只認得它，不知道後面接的是 Tempo。
@@ -153,13 +154,43 @@ loki.write "local" {
 
 // 收：開 OTLP 的 HTTP 入口（4318 是 OTLP/HTTP 的慣用埠）。
 // app 在容器裡用 http://alloy:4318 找到這裡；本機 bootRun 走 compose 發佈到主機的 127.0.0.1:4318。
+// gRPC 入口（4317）給前端的 nginx（#31）：它的 OpenTelemetry 模組只會講 gRPC。只在 deploy/ 的網路裡用，不發佈到主機
 otelcol.receiver.otlp "default" {
   http {
     endpoint = "0.0.0.0:4318"
   }
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
   output {
-    traces  = [otelcol.processor.tail_sampling.default.input]
+    traces  = [otelcol.processor.transform.service_graph.input]
     metrics = [otelcol.processor.batch.default.input]   // k6 壓測的指標，見下面「壓測」那一段
+  }
+}
+
+// 送進 Tempo 之前改兩個屬性，讓 Tempo 畫的 service map 對得上真的架構（#31，Tempo 怎麼畫見 tempo/tempo.yaml）。
+// Tempo 認邊的規則：一個 client span + 接在它底下的 server span 是一條邊；client span 底下沒有 server span 的
+// （資料庫、模型不送 span），就照 peer.service 這類屬性造一個虛擬節點。
+//
+// (1) nginx 的 span 改標成 client：nginx 的 OpenTelemetry 模組一個請求只開一個 server span（收到瀏覽器的請求），
+//     沒有另外開「轉給 app」的 client span，app 的 server span 直接接在另一個 server span 下面，Tempo 配不成對，
+//     圖上 talkcal-web 和 talkcal 之間就沒有邊。nginx 這個 span 本來就同時是「收」和「轉送」
+//     （從收到到 app 回完，時間幾乎一樣長），標成 client 就配得起來。
+//     代價：圖上少了 nginx 前面的「user」節點（Tempo 只替最上層的 server span 造它）——瀏覽器那段要等前端自己送 span（Faro）才真的有。
+// (2) SQL span 的 peer.service 換成資料庫種類：datasource-micrometer 把它設成資料庫名稱，我們的資料庫剛好也叫 talkcal，
+//     圖上會變成 talkcal 自己連自己（Tempo 給資料庫節點取名時 peer.service 優先，tempo.yaml 改不掉）。
+//     換成 db.system.name 的值（postgresql）。只動有 db.system.name 的 span，也就是只動 SQL
+otelcol.processor.transform "service_graph" {
+  error_mode = "ignore"
+  trace_statements {
+    context    = "span"
+    statements = [
+      `set(span.kind, SPAN_KIND_CLIENT) where resource.attributes["service.name"] == "talkcal-web" and span.kind == SPAN_KIND_SERVER`,
+      `set(span.attributes["peer.service"], span.attributes["db.system.name"]) where span.attributes["db.system.name"] != nil`,
+    ]
+  }
+  output {
+    traces = [otelcol.processor.tail_sampling.default.input]
   }
 }
 
