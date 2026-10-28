@@ -78,6 +78,7 @@ Gradle 只多做一件事 —— `deployApp` 先跑測試。
 |---|---|---|
 | 怎麼跑 | `./gradlew bootRun` | `docker compose up -d` |
 | app 埠 | 8090 | 主機 18090 → 容器內 8090 |
+| actuator 埠（健康檢查、指標） | 8091 | 容器內 8091，不發佈到主機 |
 | 模型位址 | `127.0.0.1:8080` | `llm-chat:8080` |
 | 資料庫位址 | `127.0.0.1:5432`（用 deploy/ 這個 postgres） | `postgres:5432` |
 | log 格式 | 給人看的彩色文字 | 一行一個 JSON（ECS），方便 Loki 拆欄位 |
@@ -153,6 +154,7 @@ docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新
 | `image: talkcal/llama-server:b10964-cuda13.0.1` 釘版本 | Deployment 的 image tag，同樣要釘；image 推到同區的 registry |
 | `deploy.resources...driver: nvidia` | `resources.limits: nvidia.com/gpu: 1` |
 | `healthcheck` 打 `/health` | readinessProbe（載模型期間不導流量進來） |
+| app 的 `healthcheck` 打 `:8091/actuator/health/readiness` | readinessProbe 打同一個路徑；livenessProbe 打 `/actuator/health/liveness`（不看資料庫，見 `application.properties`） |
 | `start_period: 120s` | startupProbe / `initialDelaySeconds` |
 | log 寫 stdout、不寫檔 | 平台的 log 收集器負責收 |
 | `model-seed` 跑完才啟動模型服務 | initContainer（從 S3/GCS 拉模型） |

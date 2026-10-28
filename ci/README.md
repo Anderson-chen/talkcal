@@ -15,7 +15,7 @@ git push --no-verify                    # 確定要跳過檢查時
 
 要先開著 Docker Desktop。llama-server 有開的話，模型相關的測試會真的跑；沒開就跳過，摘要會列出來。
 第一次跑要 build 映像檔（含 Gradle 本體）、下載依賴，比較慢；之後映像檔有快取、依賴放在 volume `talkcal-ci-gradle`、`talkcal-ci-npm` 裡，就快了。
-結果：摘要在 `ci/build/summary.md`，失敗時的 HTML 報告在 `ci/build/reports/`。
+結果：摘要在 `ci/build/summary.md`，失敗時的 HTML 報告在 `ci/build/reports/`；覆蓋率報告在 `ci/build/reports/jacoco/`、`ci/build/web-coverage/`（GitHub 上是 `coverage` artifact，怎麼看見 [docs/test-coverage.md](../docs/test-coverage.md)）。
 
 ## 架構：檢查內容只寫一次，平台只是入口
 
@@ -221,6 +221,22 @@ ci/migrations.sh <commit>      # 跟指定的 commit 比
 | `DROP COLUMN IF EXISTS note`，上面有 `squawk-ignore ban-drop-column` 和理由 | 通過 |
 
 還沒做：加進 ruleset 的必過檢查（GitHub 的設定，要手動加 `migrations`）。
+
+## SLO 錄製規則檢查
+
+`ci/rules.sh` 用 promtool 檢查 [ops/mimir/rules/](../ops/mimir/rules/) 的錄製規則，再跑單元測試 [ops/mimir/slo.test.yaml](../ops/mimir/slo.test.yaml)：
+餵假的請求序列，比對錄出來的 SLI、burn rate。GitHub 上是自己一個 job（`rules`）。
+
+```bash
+ci/rules.sh
+```
+
+| 造出來的錯 | 結果 |
+|------------|------|
+| 比例的分母拿掉 `> 0` | 紅：沒流量的那段錄成 NaN，測試期望「沒資料」 |
+| 規則不變 | 通過 |
+
+還沒做：加進 ruleset 的必過檢查（要手動加 `rules`）；pre-push 也還沒接這支。
 
 ## 刻意不做的
 
