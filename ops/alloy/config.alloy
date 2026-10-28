@@ -52,6 +52,17 @@ prometheus.scrape "llama_cpp" {
   forward_to      = [prometheus.remote_write.mimir.receiver]
 }
 
+// (3) PostgreSQL —— deploy/ 的 postgres-exporter 替資料庫翻成 Prometheus 格式（#32）。
+//     看得到的指標：pg_settings_max_connections（上限）、pg_stat_activity_count{state=...}（各狀態幾條連線）、
+//     pg_up（exporter 連不連得上資料庫；它自己的 up 是 1 不代表資料庫活著）。
+//     跟 app 的 hikaricp_connections_* 疊在一起看：app 借了幾條 vs. 資料庫那頭實際開著幾條。
+prometheus.scrape "postgres" {
+  job_name        = "postgres"
+  targets         = [{"__address__" = "postgres-exporter:9187"}]
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+}
+
 // 抓到的指標推進 Mimir。remote_write 是 Prometheus 生態「把指標送去別處存」的標準協定，
 // 送 Mimir、送雲端服務都是同一個元件，只差 url。
 // 附帶的 exemplar（某個指標點上掛的 trace id）也會一起送，Grafana 圖上才點得進那次請求的 trace。
