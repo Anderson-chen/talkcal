@@ -107,8 +107,10 @@ class ActuatorPortTest {
             // 對照組：API 埠的請求要被記到，證明上面沒記到不是因為根本沒在收
             get(apiPort, "/api/calendar/events");
 
-            // AccessLogFilter 先把回應送出、再記 log，客戶端收到回應時那筆可能還沒記
-            await().atMost(Duration.ofSeconds(5)).until(() -> !captured.list.isEmpty());
+            // AccessLogFilter 先把回應送出、再記 log，客戶端收到回應時那筆可能還沒記。
+            // 不是看到第一筆就停：要連續半秒都剛好一筆，晚到的 actuator 紀錄才不會在斷言之後才冒出來
+            await().atMost(Duration.ofSeconds(5)).during(Duration.ofMillis(500))
+                    .until(() -> captured.list.size() == 1);
             List<String> logged = List.copyOf(captured.list).stream().map(ILoggingEvent::getFormattedMessage).toList();
             assertEquals(1, logged.size(), logged.toString());
             assertTrue(logged.getFirst().contains("/api/calendar/events"), logged.toString());
