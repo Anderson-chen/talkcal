@@ -202,7 +202,8 @@ export function useAssistant(calendar: CalendarState) {
     if (at !== messages.value.length - 1) return
     const unsent = messages.value[at - 1]?.failed === true
     messages.value.splice(unsent ? at - 1 : at, unsent ? 2 : 1)
-    send(said)
+    // send 自己接住所有錯誤（變成對話裡的說明），這裡不必等它
+    void send(said)
   }
 
   /** 這則說明的「再試一次」要不要出現：要可以重送，而且是最後一則 */

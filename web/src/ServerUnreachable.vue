@@ -23,8 +23,10 @@ async function reconnect() {
   }
 }
 
-onMounted(() => window.addEventListener('online', reconnect))
-onUnmounted(() => window.removeEventListener('online', reconnect))
+// 事件監聽不接 Promise：包一層，加上和拿掉的要是同一個函式
+const onOnline = () => void reconnect()
+onMounted(() => window.addEventListener('online', onOnline))
+onUnmounted(() => window.removeEventListener('online', onOnline))
 </script>
 
 <template>

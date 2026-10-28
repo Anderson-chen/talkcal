@@ -12,7 +12,7 @@ import { loadMe, me, meUnreachable } from './auth'
 import CalendarView from './calendar/CalendarView.vue'
 import LoginView from './LoginView.vue'
 import { loadThemeKey, THEMES, toCssVars } from './calendar/theme'
-import Unreachable from './Unreachable.vue'
+import ServerUnreachable from './ServerUnreachable.vue'
 
 const slow = ref(false)
 const timer = setTimeout(() => (slow.value = true), 1000)
@@ -29,7 +29,7 @@ onMounted(loadMe)
     <LoginView v-else />
   </div>
   <div v-else-if="meUnreachable" class="view">
-    <Unreachable :problem="meUnreachable" :retry="loadMe" />
+    <ServerUnreachable :problem="meUnreachable" :retry="loadMe" />
   </div>
   <div v-else-if="slow" class="view connecting" :style="vars" role="status">正在連線…</div>
 </template>
