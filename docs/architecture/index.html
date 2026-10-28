@@ -199,7 +199,7 @@ footer{margin-top:28px;font-size:12px;color:var(--text-muted)}
 <span><i class="sw" style="background:var(--surface-1);border:0.5px solid var(--border-strong);opacity:.3"></i>目前 model_backend 不建</span>
 </div>
 <div id="panel"></div>
-<footer><p id="checked">最後核對：2026-10-27（行號以 master 為準；業界說法於同日查證，來源附在每個元件下）</p></footer>
+<footer><p id="checked">最後核對：2026-10-28（行號以 master 為準；業界說法於同日查證，來源附在每個元件下）</p></footer>
 <dialog id="code" aria-labelledby="code-title">
 <div class="dlg">
 <div class="dlg-h">
@@ -284,7 +284,7 @@ const F={
 "infra/envs/1-ec2/backend.tf":[["2","required_version","backend"],["9–12","backend \"s3\"","backend"],["14–24","required_providers","backend"]],
 "infra/envs/1-ec2/backend.hcl.example":[["3","bucket（帳號 ID 不進 repo）","backend"],["4–5","region、profile","backend"]],
 "infra/envs/1-ec2/providers.tf":[["1–12","provider \"aws\"","provider"],["14","data aws_caller_identity（拼 bucket 名）","s3m"]],
-"infra/envs/1-ec2/variables.tf":[["1–8","region","provider"],["10–14","aws_profile","provider"],["16–20","project","provider"],["22–37","model_backend（上方切換）",null],["39–49","instance_type","ec2"],["51–60","root_volume_size","ec2"],["62–69","bedrock_model","bsvc"],["71–79","bedrock_key_days","bkey"],["81–85","repo_url","ec2"],["87–91","git_ref","ec2"],["93–100","allow_ssh","sg"],["102–106","ssh_cidr","sg"],["108–135","google_／github_client_id、_secret（sensitive，#127）","dotenv"],["137–167","alert_smtp_*、alert_email_to（告警寄信，sensitive，#121）","dotenv"]],
+"infra/envs/1-ec2/variables.tf":[["1–8","region","provider"],["10–14","aws_profile","provider"],["16–20","project","provider"],["22–37","model_backend（上方切換）",null],["39–49","instance_type","ec2"],["51–60","root_volume_size","ec2"],["62–69","bedrock_model","bsvc"],["71–79","bedrock_key_days","bkey"],["81–85","repo_url","ec2"],["87–91","git_ref","ec2"],["93–100","allow_ssh","sg"],["102–106","ssh_cidr","sg"],["108–135","google_／github_client_id、_secret（sensitive，#127）","dotenv"],["137–173","alert_smtp_*、alert_email_to（告警寄信，sensitive，#121）","dotenv"]],
 "infra/envs/1-ec2/outputs.tf":[["1–4","instance_id","ec2"],["6–8","public_ip","eip"],["10–13","app_url","caddy"],["15–17","model_backend",null],["19–22","models_bucket","s3m"],["24–27","availability_zone","az"],["29–32","grafana_tunnel","obs"],["34–40","oauth_callback_urls（要在 Google、GitHub 登記的回呼網址）","caddy"]],
 "infra/envs/1-ec2/vpc.tf":[["5–13","aws_vpc.main","vpc"],["15–21","aws_internet_gateway.main","igw"],["25–32","data instance_type_offerings","az"],["34–36","locals.availability_zone","az"],["38–47","aws_subnet.public","subnet"],["49–60","aws_route_table.public","rt"],["62–65","route_table_association","rt"]],
 "infra/envs/1-ec2/security-groups.tf":[["3–11","aws_security_group.app","sg"],["14–21","ingress 80/tcp","sg"],["23–30","ingress 443/tcp","sg"],["33–40","ingress 443/udp","sg"],["43–59","ingress 22（count）","sg"],["62–67","egress all","sg"]],

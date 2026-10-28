@@ -149,9 +149,15 @@ variable "alert_smtp_user" {
 }
 
 variable "alert_smtp_password" {
-  type      = string
-  default   = ""
-  sensitive = true
+  description = "寫進 .env 時包在單引號裡（compose 才不會把 $ 當變數展開），所以密碼本身不能有單引號"
+  type        = string
+  default     = ""
+  sensitive   = true
+
+  validation {
+    condition     = !strcontains(var.alert_smtp_password, "'")
+    error_message = "alert_smtp_password 不能有單引號：寫進 .env 時用單引號包住。"
+  }
 }
 
 variable "alert_smtp_from" {
