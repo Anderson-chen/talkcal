@@ -15,7 +15,7 @@ AI 助理一個請求（`POST /api/calendar/assistant`）是一段 agent loop：
 | 每個請求的 input token | **3,905** | 117,159 ÷ 30 |
 | 每個請求的 output token | **103** | 3,096 ÷ 30 |
 
-- 量法：[`perf/tokens.js`](../perf/tokens.js)，1 個使用者把訊息池（查詢、提議行程各半）每句說 3 輪，前後各讀一次 app 的 `/actuator/prometheus`，相減。
+- 量法：[`perf/tokens.js`](../perf/tokens.js)，1 個使用者把訊息池（查詢、提議行程各半）每句說 3 輪，前後各讀一次 app 的 `/actuator/prometheus`（management 埠 8091），相減。
 - 數字來源是 app 自己的 `gen_ai_client_token_usage_total`：Spring AI 每叫一次模型就把回應裡的 `usage` 記進去（`ObservationConfiguration` 多貼一個 `model_backend` 標籤，見下面第 4 節）。跟 Grafana 成本 dashboard 用的是同一個指標。
 - 2026-10-17 本機 llama-server（Qwen3-8B Q4_K_M）。對 bootRun（8090）跑 3 輪、對 docker 的 app（18090）跑 1 輪，每個請求的平均都是 3,905 / 103。
 - **假設**：雲端的 Qwen3 32B 跟本機的 8B 同一家族、同一套 tokenizer，同一句話送出去的 input token 數相同；output 會不一樣（模型不同，回答長度不同）。output 只佔費用的一成，影響小，見第 3 節的敏感度。

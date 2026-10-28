@@ -12,13 +12,14 @@
 //   PowerShell:  $env:ROUNDS="3"; k6 run perf/tokens.js
 // 換算費用用的單價（USD / 每 1M token）可以覆蓋，預設是 Bedrock 東京 Qwen3 32B 的 Standard（來源見 docs/cost.md）：
 //   $env:PRICE_IN="0.18"; $env:PRICE_OUT="0.73"; k6 run perf/tokens.js
-// 指標不在 BASE_URL 上（例如 actuator 改到另一個埠）時，覆蓋 METRICS_URL。
+// 指標在 app 的 management 埠（8091），不在 API 的 8090 上：預設把 BASE_URL 結尾的 :8090 換成 :8091。
+// docker 那台 app 的 8091 故意不發佈到主機（deploy/compose.yaml），所以這支要打本機 bootRun；別的位置就覆蓋 METRICS_URL。
 
 import http from 'k6/http';
 import { BASE_URL, MESSAGES, say, signIn, useSession } from './lib/assistant.js';
 
 const ROUNDS = Number(__ENV.ROUNDS || 1);
-const METRICS_URL = __ENV.METRICS_URL || `${BASE_URL}/actuator/prometheus`;
+const METRICS_URL = __ENV.METRICS_URL || `${BASE_URL.replace(/:8090$/, ':8091')}/actuator/prometheus`;
 const PRICE_IN = Number(__ENV.PRICE_IN || 0.18);
 const PRICE_OUT = Number(__ENV.PRICE_OUT || 0.73);
 
@@ -38,7 +39,8 @@ export const options = {
 function snapshot() {
   const res = http.get(METRICS_URL);
   if (res.status !== 200) {
-    throw new Error(`讀不到指標 ${METRICS_URL}：${res.status}`);
+    // status 0 = 連不上：多半是打了 docker 的 app（management 埠沒發佈）或 bootRun 沒起來
+    throw new Error(`讀不到指標 ${METRICS_URL}：${res.status || res.error}。指標在 management 埠，見這支開頭的說明`);
   }
   const totals = {};
   for (const line of res.body.split('\n')) {
@@ -59,7 +61,9 @@ function snapshot() {
 }
 
 export function setup() {
-  return { session: signIn(), before: snapshot() };
+  // 先讀指標再登入：指標讀不到時馬上停，不必先註冊、登入一輪。登入不會叫模型，不影響相減的結果
+  const before = snapshot();
+  return { session: signIn(), before };
 }
 
 export default function (data) {
