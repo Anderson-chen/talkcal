@@ -105,10 +105,10 @@ class CalendarConfiguration {
         return new AssistantMemoryCleanup(assistantMemory, retention, Clock.systemUTC());
     }
 
-    // 助理讀寫、清理工作刪除，用的是同一張表、同一個實作
+    // 助理讀寫、清理工作刪除，用的是同一張表、同一個實作。存的時候只留最近幾輪，跟助理送給模型的輪數一樣
     @Bean
     JdbcAssistantMemoryRepository assistantMemory(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
-        return new JdbcAssistantMemoryRepository(jdbcClient, new TransactionTemplate(transactionManager));
+        return new JdbcAssistantMemoryRepository(jdbcClient, new TransactionTemplate(transactionManager), CalendarAssistant.MAX_TURNS);
     }
 
     @Bean
