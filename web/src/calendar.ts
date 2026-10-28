@@ -24,6 +24,8 @@ export interface EventFields {
   // 沒有就是 null（後端把空白一律當成沒有）
   location: string | null
   note: string | null
+  // 從哪張助理提議卡片來的：助理回覆的每張卡片都有，確認時原樣帶回去才算採納（#223）。手動填的沒有
+  proposalId?: string | null
 }
 
 /** 已經存起來的行程，多了 id。 */
@@ -61,23 +63,20 @@ export async function assistantHistory(conversationId: string): Promise<Assistan
 }
 
 /**
- * 行程怎麼來的：採納 AI 助理的提議（含從卡片「修改」後再存）是 ASSISTANT，手動填的是 MANUAL。
- * 只用在後端的產品指標（採納率、手動 vs 助理），不影響存檔。
+ * 把確認過的草稿（或手動表單）存起來。全部存或全部不存；有一筆不合規就整批 400。
+ * 從助理卡片來的那幾筆帶著 proposalId，後端核對過才算採納（只用在產品指標，不影響存檔）。
  */
-export type EventOrigin = 'ASSISTANT' | 'MANUAL'
-
-/** 把確認過的草稿（或手動表單）存起來。全部存或全部不存；有一筆不合規就整批 400。 */
-export async function addEvents(events: EventFields[], origin: EventOrigin): Promise<SavedEvent[]> {
-  const res = await send('/api/calendar/events', { method: 'POST', body: JSON.stringify({ events, origin }) })
+export async function addEvents(events: EventFields[]): Promise<SavedEvent[]> {
+  const res = await send('/api/calendar/events', { method: 'POST', body: JSON.stringify({ events }) })
   return ((await res.json()) as { events: SavedEvent[] }).events.map(normalize)
 }
 
 /**
- * 告訴後端使用者按掉了幾張提議卡片。「取消」只改畫面、不經過後端，不回報的話後端算不出採納率。
+ * 告訴後端使用者按掉了哪幾張提議卡片。「取消」只改畫面、不經過後端，不回報的話後端算不出採納率。
  * 只是指標：失敗了也不該打擾使用者，呼叫端自己決定要不要理會錯誤。
  */
-export async function dismissProposals(count: number): Promise<void> {
-  await send('/api/calendar/assistant/dismissals', { method: 'POST', body: JSON.stringify({ count }) })
+export async function dismissProposals(proposalIds: string[]): Promise<void> {
+  await send('/api/calendar/assistant/dismissals', { method: 'POST', body: JSON.stringify({ proposalIds }) })
 }
 
 /** 期間裡的行程。from 含、to 不含，格式 yyyy-MM-dd；跨夜跨月的行程前後兩頁都會出現。 */

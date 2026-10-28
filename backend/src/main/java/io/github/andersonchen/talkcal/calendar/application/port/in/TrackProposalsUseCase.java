@@ -1,24 +1,29 @@
 package io.github.andersonchen.talkcal.calendar.application.port.in;
 
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalId;
+
+import java.util.List;
+
 /**
- * 助理提議的卡片後來怎麼了（inbound port，#36）：給人看了幾張、被拒絕了幾張。
+ * 助理提議的卡片（inbound port，#36、#223）：發出去時記下來、被拒絕時核對後才算。
  *
- * 被採納的不在這裡：採納就是存進行事曆，由 AddEventsUseCase 帶著 EventOrigin.ASSISTANT 記。
+ * 被採納的不在這裡：採納就是存進行事曆，由 AddEventsUseCase 帶著卡片的 id 一起核對。
  * 拒絕要另外講，是因為按「取消」只改前端的畫面、不經過任何存檔，後端不被告知就永遠不知道。
  * 沒按加入也沒按取消（例如直接清空對話）的卡片兩邊都不算 —— 那是「沒表態」，不是拒絕。
- *
- * 失敗時：count 小於 0、或拒絕數超過 MAX_DISMISSED_PER_CALL → IllegalArgumentException。0 不算錯，什麼都不記。
  */
 public interface TrackProposalsUseCase {
 
     /**
-     * 拒絕一次最多回報幾張。一則回覆的卡片不會到這麼多；設上限是因為拒絕數由前端回報，
-     * 不擋的話一個請求就能灌進任意大的數字，採納率就被搞壞了。
-     * 給人看的張數沒有上限：那是伺服器自己數的，不經過前端。
+     * 助理要給 owner 看 count 張卡片：每張發一個 id、記下來，照順序回傳。0 張就是空的。
+     * 失敗時：count 小於 0 → IllegalArgumentException。記錄失敗不會讓這裡失敗（見 SaveProposalsPort）。
      */
-    int MAX_DISMISSED_PER_CALL = 20;
+    List<ProposalId> proposalsShown(OwnerId owner, int count);
 
-    void proposalsShown(int count);
-
-    void proposalsDismissed(int count);
+    /**
+     * owner 按掉了這幾張卡片。只有 owner 自己的、還沒表態過的才算，每張最多算一次；
+     * 別人的、沒發過的、已經表態過的都靜靜略過，不報錯（不洩漏別人的卡片存不存在）。
+     * 失敗時：owner、proposals 是 null 或含 null → IllegalArgumentException。
+     */
+    void proposalsDismissed(OwnerId owner, List<ProposalId> proposals);
 }

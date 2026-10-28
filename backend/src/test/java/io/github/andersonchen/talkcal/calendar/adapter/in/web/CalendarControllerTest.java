@@ -15,8 +15,8 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Calendar
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.DateRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
-import io.github.andersonchen.talkcal.calendar.application.domain.model.EventOrigin;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.EventNotFoundException;
@@ -151,42 +151,34 @@ class CalendarControllerTest {
     }
 
     @Nested
-    @DisplayName("POST /api/calendar/events：行程的來源（產品指標 #36）")
-    class AddWithOrigin {
+    @DisplayName("POST /api/calendar/events：從助理卡片來的行程（產品指標 #223）")
+    class AddFromProposal {
 
-        private static final String EVENT = "{\"title\":\"吃飯\",\"start\":\"2026-10-06T15:00\",\"end\":\"2026-10-06T16:00\"}";
-
-        @Test
-        @DisplayName("origin 照實轉給 use case：ASSISTANT 是採納、MANUAL 是手動")
-        void passesOriginThrough() throws Exception {
-            for (String origin : List.of("ASSISTANT", "MANUAL")) {
-                mockMvc.perform(post("/api/calendar/events").contentType(MediaType.APPLICATION_JSON)
-                                .content("{\"events\":[" + EVENT + "],\"origin\":\"" + origin + "\"}"))
-                        .andExpect(status().isCreated());
-            }
-
-            assertEquals(List.of(EventOrigin.ASSISTANT, EventOrigin.MANUAL), calendar.origins);
-        }
+        private static final String CARD = "9b0f3c2e-1111-4a5b-8c7d-000000000001";
 
         @Test
-        @DisplayName("沒帶 origin 算手動，不算採納：直接打 API 的腳本不該灌高採納率")
-        void missingOriginIsManual() throws Exception {
+        @DisplayName("帶著 proposalId 的那幾筆，把卡片 id 轉給 use case 核對；沒帶的不轉")
+        void passesProposalIdsThrough() throws Exception {
             mockMvc.perform(post("/api/calendar/events").contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"events\":[" + EVENT + "]}"))
+                            .content("""
+                                    {"events":[
+                                      {"title":"吃飯","start":"2026-10-06T15:00","end":"2026-10-06T16:00","proposalId":"%s"},
+                                      {"title":"看牙醫","start":"2026-10-07T09:00","end":"2026-10-07T10:00"}
+                                    ]}
+                                    """.formatted(CARD)))
                     .andExpect(status().isCreated());
 
-            assertEquals(List.of(EventOrigin.MANUAL), calendar.origins);
+            assertEquals(List.of(List.of(ProposalId.of(CARD))), calendar.adopting);
         }
 
         @Test
-        @DisplayName("不認得的 origin（小寫也不行）：400，一筆都不存")
-        void unknownOriginIsRejected() throws Exception {
-            for (String origin : List.of("assistant", "AI")) {
-                mockMvc.perform(post("/api/calendar/events").contentType(MediaType.APPLICATION_JSON)
-                                .content("{\"events\":[" + EVENT + "],\"origin\":\"" + origin + "\"}"))
-                        .andExpect(status().isBadRequest())
-                        .andExpect(jsonPath("$.error").value("不認得的來源：" + origin + "（只接受 ASSISTANT、MANUAL）"));
-            }
+        @DisplayName("proposalId 不是 UUID：400，一筆都不存")
+        void badProposalIdIsRejected() throws Exception {
+            mockMvc.perform(post("/api/calendar/events").contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"events":[{"title":"吃飯","start":"2026-10-06T15:00","end":"2026-10-06T16:00","proposalId":"abc"}]}
+                                    """))
+                    .andExpect(status().isBadRequest());
             assertTrue(calendar.added.isEmpty());
         }
     }
@@ -362,15 +354,15 @@ class CalendarControllerTest {
         Function<DateRange, List<ScheduledEvent>> list = DEFAULT_LIST;
         final List<OwnerId> owners = new ArrayList<>();
         final List<CalendarEvent> added = new ArrayList<>();
-        final List<EventOrigin> origins = new ArrayList<>();
+        final List<List<ProposalId>> adopting = new ArrayList<>();
         final List<DateRange> ranges = new ArrayList<>();
         final List<EventId> removed = new ArrayList<>();
 
         @Override
-        public List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events, EventOrigin origin) {
+        public List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events, List<ProposalId> adopting) {
             owners.add(owner);
             added.addAll(events);
-            origins.add(origin);
+            this.adopting.add(adopting);
             return events.stream().map(event -> new ScheduledEvent(DINNER_ID, event)).toList();
         }
 
@@ -396,7 +388,7 @@ class CalendarControllerTest {
             list = DEFAULT_LIST;
             owners.clear();
             added.clear();
-            origins.clear();
+            adopting.clear();
             ranges.clear();
             removed.clear();
         }

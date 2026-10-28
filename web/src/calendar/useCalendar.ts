@@ -5,7 +5,7 @@
 // 螢幕寬度跨過分界、版面整個換掉時，狀態也還在（選的日期、看的月份不會跳回今天）。
 
 import { computed, inject, ref, watch, type InjectionKey } from 'vue'
-import { addEvents, listEvents, NotFoundError, removeEvent, type Category, type EventFields, type EventOrigin, type SavedEvent } from '../calendar'
+import { addEvents, listEvents, NotFoundError, removeEvent, type Category, type EventFields, type SavedEvent } from '../calendar'
 import { addDays, daysCovered, gridRange, monthGrid, toIsoDate } from '../monthGrid'
 
 export type View = 'month' | 'week' | 'day'
@@ -15,8 +15,8 @@ export interface FormRequest {
   initial: EventFields
   // 存好之後要通知誰（AI 卡片要把那一筆標成「已加入」）
   onSaved?: (saved: SavedEvent) => void
-  // 從 AI 卡片「修改」過來的是 ASSISTANT：改過再存還是採納了提議（有 onSaved 的就是從卡片來的，見 openForm）
-  origin: EventOrigin
+  // 從 AI 卡片「修改」過來的：那張卡片的 id，存檔時帶上，改過再存還是算採納（#223）。手動新增是 null
+  proposalId: string | null
 }
 
 export function useCalendar() {
@@ -111,9 +111,8 @@ export function useCalendar() {
 
   // ── 新增、刪除 ─────────────────────────────────────────
   /** 存起來、跳到第一筆那天、重讀這一頁。存進去的分類如果被篩掉了，打開它 —— 不然使用者會以為沒存到。 */
-  // origin 必填、不給預設值：之後新增的入口忘了帶會編譯失敗，不會默默被算成手動
-  async function add(drafts: EventFields[], origin: EventOrigin): Promise<SavedEvent[]> {
-    const saved = await addEvents(drafts, origin)
+  async function add(drafts: EventFields[]): Promise<SavedEvent[]> {
+    const saved = await addEvents(drafts)
     const shownAgain = { ...hidden.value }
     for (const e of saved) delete shownAgain[e.category]
     hidden.value = shownAgain
@@ -133,13 +132,13 @@ export function useCalendar() {
     reload()
   }
 
-  // fromProposal：從 AI 卡片「修改」過來的，存好要通知那張卡片；有它就是採納助理的提議（ASSISTANT），沒有就是手動
-  function openForm(initial?: Partial<EventFields>, fromProposal?: { onSaved: (saved: SavedEvent) => void }) {
+  // fromProposal：從 AI 卡片「修改」過來的，帶著卡片的 id，存好要通知那張卡片；沒有就是手動新增
+  function openForm(initial?: Partial<EventFields>, fromProposal?: { proposalId: string | null; onSaved: (saved: SavedEvent) => void }) {
     detailId.value = null
     form.value = {
       initial: { ...blankDraft(sel.value), ...initial },
       onSaved: fromProposal?.onSaved,
-      origin: fromProposal ? 'ASSISTANT' : 'MANUAL',
+      proposalId: fromProposal?.proposalId ?? null,
     }
   }
 

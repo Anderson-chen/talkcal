@@ -46,7 +46,9 @@ async function save() {
   saving.value = true
   error.value = null
   try {
-    const [saved] = await calendar.add([result.draft], request.origin)
+    // 表單只產生行程內容；從 AI 卡片來的，再把卡片的 id 接回去（#223）。手動新增不帶這個欄位
+    const draft = request.proposalId ? { ...result.draft, proposalId: request.proposalId } : result.draft
+    const [saved] = await calendar.add([draft])
     request.onSaved?.(saved)
     close()
     // 存好直接打開它的詳情（照設計稿），使用者看得到存進去的樣子

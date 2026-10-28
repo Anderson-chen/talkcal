@@ -13,6 +13,7 @@ import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.CalendarAssi
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventOrigin;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.InMemoryProposals;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.TrackProposalsService;
 import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsagePort;
 
@@ -24,6 +25,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.jayway.jsonpath.JsonPath;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -56,6 +58,7 @@ class CalendarAssistantControllerTest {
 
     private static final String URL = "/api/calendar/assistant";
     // 另一個登入的人（預設的請求是 ...0001）
+    private static final String ME = "3f1c8a2e-0000-4000-8000-000000000001";
     private static final String OTHER = "3f1c8a2e-0000-4000-8000-000000000002";
     private static final String UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
@@ -72,7 +75,7 @@ class CalendarAssistantControllerTest {
     void signedIn() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context)
                 .apply(springSecurity())
-                .defaultRequest(get("/").with(user("3f1c8a2e-0000-4000-8000-000000000001")).with(csrf()))
+                .defaultRequest(get("/").with(user(ME)).with(csrf()))
                 .build();
     }
 
@@ -129,11 +132,12 @@ class CalendarAssistantControllerTest {
     }
 
     @Test
-    @DisplayName("#36 回覆裡有幾張卡片就記幾張「給人看了」；沒有卡片的回覆不記")
+    @DisplayName("#36 回覆裡有幾張卡片就記幾張「給人看了」，每張帶一個 proposalId；沒有卡片的回覆不記")
     void countsShownProposals() throws Exception {
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"明天下午三點開會\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.proposals.length()").value(1));
+                .andExpect(jsonPath("$.proposals.length()").value(1))
+                .andExpect(jsonPath("$.proposals[0].proposalId").value(Matchers.matchesPattern(UUID_PATTERN)));
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"明天七點和 Amy 見面\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.proposals").isEmpty());
@@ -152,26 +156,60 @@ class CalendarAssistantControllerTest {
         assertEquals(List.of(), usage.events);
     }
 
-    @Test
-    @DisplayName("#36 POST /dismissals：記下被拒絕的張數，回 204；拒絕不會被記成採納（沒有 added）")
-    void recordsDismissals() throws Exception {
-        mockMvc.perform(post(URL + "/dismissals").contentType(MediaType.APPLICATION_JSON).content("{\"count\":2}"))
-                .andExpect(status().isNoContent());
-
-        assertEquals(List.of("dismissed 2"), usage.events);
+    // 跟助理說一句會提議的話，拿回那張卡片的 proposalId
+    private String proposeCard(String signedIn) throws Exception {
+        String body = mockMvc.perform(post(URL).with(user(signedIn)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"明天下午三點開會\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return JsonPath.read(body, "$.proposals[0].proposalId");
     }
 
     @Test
-    @DisplayName("#36 POST /dismissals 的張數是負的、超過上限、或沒帶：400，什麼都不記（前端不能灌爆採納率，送錯格式也看得出來）")
-    void rejectsBadDismissalCounts() throws Exception {
-        for (String body : List.of("{\"count\":-1}", "{\"count\":21}", "{}", "{\"count\":null}")) {
+    @DisplayName("#223 POST /dismissals 帶自己卡片的 id：算一次拒絕，回 204；拒絕不會被記成採納（沒有 added）")
+    void recordsDismissals() throws Exception {
+        String card = proposeCard(ME);
+        usage.clear();
+
+        mockMvc.perform(post(URL + "/dismissals").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"proposalIds\":[\"" + card + "\"]}"))
+                .andExpect(status().isNoContent());
+
+        assertEquals(List.of("dismissed 1"), usage.events);
+    }
+
+    @Test
+    @DisplayName("#223 反例：同一張再拒絕一次、別人拿我的卡片 id、沒發過的 id：都回 204，但都不算")
+    void dismissalsAreVerifiedByServer() throws Exception {
+        String card = proposeCard(ME);
+        mockMvc.perform(post(URL + "/dismissals").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"proposalIds\":[\"" + card + "\"]}")).andExpect(status().isNoContent());
+        String othersCard = proposeCard(OTHER);
+        usage.clear();
+
+        for (String body : List.of(
+                "{\"proposalIds\":[\"" + card + "\"]}",
+                "{\"proposalIds\":[\"00000000-0000-4000-8000-000000000000\"]}")) {
+            mockMvc.perform(post(URL + "/dismissals").contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isNoContent());
+        }
+        // 別人的卡片：我按不掉，回應跟成功一模一樣（不透露那張卡片存在）
+        mockMvc.perform(post(URL + "/dismissals").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"proposalIds\":[\"" + othersCard + "\"]}"))
+                .andExpect(status().isNoContent());
+
+        assertEquals(List.of(), usage.events);
+    }
+
+    @Test
+    @DisplayName("#223 POST /dismissals 沒帶 proposalIds、id 不是 UUID：400，什麼都不記")
+    void rejectsBadDismissals() throws Exception {
+        for (String body : List.of("{}", "{\"proposalIds\":null}", "{\"proposalIds\":[\"abc\"]}", "{\"proposalIds\":[null]}")) {
             mockMvc.perform(post(URL + "/dismissals").contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isBadRequest());
         }
-        mockMvc.perform(post(URL + "/dismissals").contentType(MediaType.APPLICATION_JSON).content("{\"count\":20}"))
-                .andExpect(status().isNoContent());
 
-        assertEquals(List.of("dismissed 20"), usage.events);
+        assertEquals(List.of(), usage.events);
     }
 
     @Test
@@ -233,10 +271,11 @@ class CalendarAssistantControllerTest {
             return new RecordedUsage();
         }
 
-        // 記用量走真的 service（上限的規則在那裡），只把「記到哪」換成記在清單裡
+        // 記用量走真的 service（核對卡片的規則在那裡），只把「卡片存哪」「記到哪」換成記憶體
         @Bean
         TrackProposalsService trackProposals(RecordedUsage usage) {
-            return new TrackProposalsService(usage);
+            InMemoryProposals proposals = new InMemoryProposals();
+            return new TrackProposalsService(proposals, proposals, usage);
         }
 
         // 假模型：使用者講「開會」就提議（呼叫 propose_events，拿到結果後回一句話），其他都回「早上還是晚上？」；

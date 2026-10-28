@@ -126,7 +126,8 @@ export function useAssistant(calendar: CalendarState) {
     saving.value = true
     msg.error = null
     try {
-      await calendar.add(pending.map((p) => p.draft), 'ASSISTANT')
+      // 草稿裡帶著卡片的 proposalId，後端核對過才算採納
+      await calendar.add(pending.map((p) => p.draft))
       for (const p of pending) p.status = 'added'
     } catch (e) {
       msg.error = message(e)
@@ -138,23 +139,25 @@ export function useAssistant(calendar: CalendarState) {
   function cancel(msg: ChatMessage) {
     const pending = msg.proposals.filter((p) => p.status === 'pending')
     for (const p of pending) p.status = 'removed'
-    reportDismissed(pending.length)
+    reportDismissed(pending)
   }
 
   function drop(proposal: Proposal) {
     if (proposal.status !== 'pending') return
     proposal.status = 'removed'
-    reportDismissed(1)
+    reportDismissed([proposal])
   }
 
-  // 拒絕了幾張告訴後端（產品指標的採納率）。不等它、失敗也不說：使用者按的是「取消」，不該因為指標送不出去看到錯誤
-  function reportDismissed(count: number) {
-    if (count > 0) dismissProposals(count).catch(() => {})
+  // 拒絕了哪幾張告訴後端（產品指標的採納率）。不等它、失敗也不說：使用者按的是「取消」，不該因為指標送不出去看到錯誤
+  function reportDismissed(proposals: Proposal[]) {
+    const ids = proposals.map((p) => p.draft.proposalId).filter((id): id is string => !!id)
+    if (ids.length > 0) dismissProposals(ids).catch(() => {})
   }
 
   /** 帶著這筆草稿打開新增表單；在表單裡存好了，這張卡片就算「已加入」。 */
   function edit(proposal: Proposal) {
     calendar.openForm(proposal.draft, {
+      proposalId: proposal.draft.proposalId ?? null,
       onSaved: () => {
         proposal.status = 'added'
       },

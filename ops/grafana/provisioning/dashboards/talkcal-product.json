@@ -223,7 +223,7 @@
       "id": 4,
       "type": "stat",
       "title": "採納／拒絕",
-      "description": "採納 = talkcal_calendar_events_added_total{origin=\"assistant\"}：從卡片按「加入行事曆」或「修改」後存的。拒絕 = talkcal_assistant_proposals_dismissed_total：按「取消」「移除」的。沒表態的（直接清空對話）兩邊都不算。數的是右上角選的時間範圍（用 increase()，會依抓取間隔外插，數字小時可能差一兩個）。",
+      "description": "採納 = talkcal_calendar_events_added_total{origin=\"assistant\"}：從卡片按「加入行事曆」或「修改」後存的。拒絕 = talkcal_assistant_proposals_dismissed_total：按「取消」「移除」的。兩邊都由伺服器核對卡片的 id，每張卡片最多算一次。沒表態的（直接清空對話）兩邊都不算。數的是右上角選的時間範圍（用 increase()，會依抓取間隔外插，數字小時可能差一兩個）。",
       "gridPos": {
         "h": 5,
         "w": 5,
@@ -435,7 +435,7 @@
       "id": 7,
       "type": "piechart",
       "title": "新增的行程從哪來",
-      "description": "talkcal_calendar_events_added_total 依 origin：assistant 是採納助理的提議，manual 是自己用表單填的（直接打 API、沒帶 origin 的也算 manual）。助理那塊越大，代表大家越習慣用講的建行程。數的是右上角選的時間範圍（用 increase()，會依抓取間隔外插，數字小時可能差一兩個）。",
+      "description": "talkcal_calendar_events_added_total 依 origin：assistant 是採納助理的提議，manual 是自己用表單填的（沒帶提議卡片 id、或卡片核對不過的都算 manual）。助理那塊越大，代表大家越習慣用講的建行程。數的是右上角選的時間範圍（用 increase()，會依抓取間隔外插，數字小時可能差一兩個）。",
       "gridPos": {
         "h": 8,
         "w": 6,

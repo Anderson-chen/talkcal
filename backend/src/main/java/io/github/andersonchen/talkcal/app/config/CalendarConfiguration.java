@@ -6,6 +6,7 @@ import io.github.andersonchen.talkcal.calendar.adapter.out.metrics.micrometer.Mi
 import io.github.andersonchen.talkcal.calendar.adapter.out.extraction.springai.SpringAiExtractEventsAdapter;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcActiveOwnersAdapter;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository;
+import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantProposalAdapter;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcCalendarEventAdapter;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.AddEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.CountActiveUsersService;
@@ -112,8 +113,15 @@ class CalendarConfiguration {
 
     @Bean
     AssistantMemoryCleanup assistantMemoryCleanup(JdbcAssistantMemoryRepository assistantMemory,
+                                                  JdbcAssistantProposalAdapter assistantProposals,
                                                   @Value("${calendar.assistant.retention}") Duration retention) {
-        return new AssistantMemoryCleanup(assistantMemory, retention, Clock.systemUTC());
+        return new AssistantMemoryCleanup(assistantMemory, assistantProposals, retention, Clock.systemUTC());
+    }
+
+    // 助理發出的提議卡片（#223）：一個實作同時當 Save / DecideProposalPort，清理排程也用它刪舊卡片
+    @Bean
+    JdbcAssistantProposalAdapter assistantProposals(JdbcClient jdbcClient) {
+        return new JdbcAssistantProposalAdapter(jdbcClient);
     }
 
     // 助理讀寫、清理工作刪除，用的是同一張表、同一個實作
@@ -123,8 +131,8 @@ class CalendarConfiguration {
     }
 
     @Bean
-    AddEventsUseCase addEvents(SaveEventsPort saveEventsPort, RecordUsagePort usage) {
-        return new AddEventsService(saveEventsPort, usage);
+    AddEventsUseCase addEvents(SaveEventsPort saveEventsPort, JdbcAssistantProposalAdapter assistantProposals, RecordUsagePort usage) {
+        return new AddEventsService(saveEventsPort, assistantProposals, usage);
     }
 
     // MeterRegistry 是 actuator 自動建好的那一個，/actuator/prometheus 吐的就是它裡面的東西
@@ -134,8 +142,8 @@ class CalendarConfiguration {
     }
 
     @Bean
-    TrackProposalsUseCase trackProposals(RecordUsagePort usage) {
-        return new TrackProposalsService(usage);
+    TrackProposalsUseCase trackProposals(JdbcAssistantProposalAdapter assistantProposals, RecordUsagePort usage) {
+        return new TrackProposalsService(assistantProposals, assistantProposals, usage);
     }
 
     // 活躍使用者算的是真實的時間點（created_at 帶時區），用 UTC 就好，跟行事曆的牆上時間無關
