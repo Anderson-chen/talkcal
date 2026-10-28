@@ -100,6 +100,16 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-micrometer-tracing-opentelemetry'
     runtimeOnly 'io.micrometer:micrometer-tracing-bridge-otel'
     runtimeOnly 'io.opentelemetry:opentelemetry-exporter-otlp'
+    // 每條 SQL 變成 trace 上的一個 span（#31）：HTTP 請求、Spring AI 叫模型都有 Spring 自己開的 Observation，
+    // 只有 JDBC 沒有，trace 上看不出時間是花在模型還是資料庫。它把 DataSource 包一層 datasource-proxy，
+    // 每次拿連線、每次執行 SQL 開一個 Observation，接到同一個 tracer 上；指標（jdbc.query 等）也會一起有。
+    // 版號要自己寫：不在 Boot 的 BOM 裡。2.x 對 Boot 4（2.3.0 的 pom 用的正是 Boot 4.1.1）
+    runtimeOnly 'net.ttddyy.observation:datasource-micrometer-spring-boot:2.3.0'
+    // 上面那個預設用自己的屬性名稱（jdbc.query[0]、peer.service = 資料庫名稱）。加這個改用 OpenTelemetry 的資料庫命名：
+    // db.system.name=postgresql、server.address、db.query.text（字面值換成 ?）。
+    // Tempo 畫 service map 時靠 db.system.name 造出「postgresql」這個節點（見 ops/tempo/tempo.yaml）；
+    // 只有 peer.service 的話，值是資料庫名稱 talkcal，圖上會變成 talkcal 自己連自己
+    runtimeOnly 'net.ttddyy.observation:datasource-micrometer-opentelemetry:2.3.0'
 
     // Swagger UI + OpenAPI 文件：啟動時掃 @RestController，自動產出 /v3/api-docs（機器讀的 JSON）
     // 與 /swagger-ui.html（人點的頁面）。文件是「從程式長出來」的，路由改了文件跟著改，不會過期。

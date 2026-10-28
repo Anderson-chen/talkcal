@@ -1,0 +1,520 @@
+{
+  "uid": "talkcal-request",
+  "title": "talkcal — 單一請求",
+  "description": "拿到一個 trace id（告警、log、前端錯誤訊息裡的），貼進上面的 traceId，一個畫面看完這個請求：①經過哪些服務 → ②每一段花多久 → ③印了什麼 log → ④當時整個系統的狀態。由上往下讀：先找出事的那一段，再看它花多久、說了什麼，最後判斷是它自己的問題還是當時大家都在塞。設計見 GitHub issue #30「一個請求從頭串到尾」。",
+  "tags": [
+    "talkcal",
+    "traces",
+    "request"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "traceId",
+        "label": "traceId",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "description": "要看的請求的 trace id（32 個十六進位字元）。從 log 的 traceId 欄位、Tempo、或下面的「最近的請求」拿。"
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "所有 trace",
+      "type": "link",
+      "url": "/d/talkcal-traces"
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "nodeGraph",
+      "title": "① service map：請求走過哪幾個服務",
+      "description": "Tempo 的 metrics-generator 從所有 span 算出的服務關係（traces_service_graph_*，存在 Mimir），範圍是上面選的時間。每個節點是一個服務，箭頭是誰叫誰；點節點看每秒請求數、平均延遲、錯誤率。talkcal-web 是前端的 nginx，postgresql、llm-chat（雲端是 Bedrock 的主機）不送 span，是 Tempo 從 talkcal 那頭的 client span 推出來的節點。先看這張：哪一條邊紅了、哪一個節點特別慢，就是哪一段出事。瀏覽器那段要等前端接 Faro 才有。",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 11
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "serviceMap"
+        }
+      ],
+      "options": {}
+    },
+    {
+      "id": 2,
+      "type": "traces",
+      "title": "② 這個請求的 trace（瀑布圖）",
+      "description": "變數 traceId 的那一個請求。由上往下：talkcal-web（nginx 收到）→ http post …（app 收到）→ chat qwen3-8b（叫一次模型，底下的 POST 是真正打出去的 HTTP）→ SELECT / INSERT …（每條 SQL，前面的 connection 是從連線池拿連線花的時間）。nginx 那一條跟 app 那一條的長度差，就是 nginx 自己和網路花的時間。點 span 右邊的連結：Logs 跳到這個請求的 log，Metrics 跳到那段時間的延遲、錯誤率、連線池（datasources.yaml 的 tracesToMetrics）。",
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 14,
+        "h": 15
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "$traceId",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ],
+      "options": {}
+    },
+    {
+      "id": 3,
+      "type": "logs",
+      "title": "③ 這個請求的 log",
+      "description": "Loki 裡內容含這個 traceId 的 app log（ECS JSON 的 traceId 欄位，見 AccessLogTraceIdTest），依時間排序。| json 把 log.level 拆成 level 標籤，Grafana 照它上色：ERROR 是紅的、WARN 是黃的。nginx 的 access log 不帶 trace id，所以這裡只有 app 的。",
+      "gridPos": {
+        "x": 14,
+        "y": 11,
+        "w": 10,
+        "h": 15
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{service=\"app\"} |= \"$traceId\" | json level=\"[\\\"log.level\\\"]\", message=\"message\" | line_format \"{{.message}}\"",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Ascending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      }
+    },
+    {
+      "id": 4,
+      "type": "row",
+      "title": "④ 那段時間的狀態：是它自己的問題，還是當時整個系統都在塞",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "app：每秒請求數、5xx",
+      "description": "talkcal 自己吐的 http_server_requests（Alloy 每 15 秒抓一次）。這個請求慢的時候其他請求也多、也在出錯，就是整體的問題，不是這一個請求的。",
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(rate(http_server_requests_seconds_count{job=\"talkcal-app\", uri!~\"/actuator.*\"}[1m]))",
+          "legendFormat": "全部"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(rate(http_server_requests_seconds_count{job=\"talkcal-app\", uri!~\"/actuator.*\", status=~\"5..\"}[1m]))",
+          "legendFormat": "5xx"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "app：延遲 p95",
+      "description": "同一批請求 100 個裡第 95 慢的那個花多久。這個請求比 p95 還慢很多，看 ② 是哪一段；跟 p95 差不多，就是當時大家都這麼慢。",
+      "gridPos": {
+        "x": 6,
+        "y": 27,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{job=\"talkcal-app\", uri!~\"/actuator.*\"}[1m])))",
+          "legendFormat": "p95 全部"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{job=\"talkcal-app\", uri=\"/api/calendar/assistant\"}[1m])))",
+          "legendFormat": "p95 助理"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "連線池：使用中 / 閒置 / 排隊",
+      "description": "HikariCP 的連線數（Micrometer 自動吐的 hikaricp_connections_*）。使用中貼著上限、排隊（pending）大於 0，就是在等資料庫連線——② 裡的 connection span 會跟著變長。",
+      "gridPos": {
+        "x": 12,
+        "y": 27,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(hikaricp_connections_active{job=\"talkcal-app\"})",
+          "legendFormat": "使用中"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(hikaricp_connections_idle{job=\"talkcal-app\"})",
+          "legendFormat": "閒置"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(hikaricp_connections_pending{job=\"talkcal-app\"})",
+          "legendFormat": "排隊"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "sum(hikaricp_connections_max{job=\"talkcal-app\"})",
+          "legendFormat": "上限"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "上限"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "llama：處理中 / 排隊中、生成速度",
+      "description": "本機 llama-server 的 /metrics（雲端走 Bedrock 時這張是空的）。排隊中大於 0 代表模型忙不過來，② 裡 chat 那幾段會變長；生成速度（右軸）掉下來也是一樣的意思。",
+      "gridPos": {
+        "x": 18,
+        "y": 27,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "llamacpp:requests_processing{job=\"llama-cpp\"}",
+          "legendFormat": "處理中"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "llamacpp:requests_deferred{job=\"llama-cpp\"}",
+          "legendFormat": "排隊中"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "llamacpp:predicted_tokens_seconds{job=\"llama-cpp\"}",
+          "legendFormat": "tokens/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "tokens/s"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "沒有 traceId？從最近的請求挑一筆",
+      "description": "最近 20 個經過 nginx 的 /api 請求（Tempo 搜尋）。點 Trace ID 會用那一筆重新打開這個 dashboard，時間範圍自動對齊成那個請求前後各 5 分鐘（網址的 time、time.window 參數）。",
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "{resource.service.name=\"talkcal-web\"}",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Trace ID"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "用這個請求打開",
+                    "url": "/d/talkcal-request/?var-traceId=${__value.raw}&time=${__data.fields.startTime}&time.window=600000"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true
+      }
+    }
+  ]
+}
