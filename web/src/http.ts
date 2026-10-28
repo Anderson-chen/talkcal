@@ -34,8 +34,13 @@ export class NotFoundError extends ApiError {}
 /** 401：沒登入、登入過期，或登入時帳密錯誤。 */
 export class UnauthorizedError extends ApiError {}
 
+/** 接到的例外變成給人看的一句話。 */
+export function message(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
+
 /** 連不上的時候（fetch 本身丟例外）給人看的話。瀏覽器原本的訊息是英文的「Failed to fetch」，看不出該怎麼辦 */
-export const UNREACHABLE_MESSAGE = '連不上伺服器，請確認網路連線後再試一次'
+const UNREACHABLE_MESSAGE = '連不上伺服器，請確認網路連線後再試一次'
 
 /** Retry-After header 的秒數。也可能是 HTTP 日期格式（我們的後端和 nginx 都不用），讀不懂就當成沒有 */
 export function retryAfterOf(header: string | null): number | null {

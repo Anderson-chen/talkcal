@@ -6,6 +6,7 @@
 
 import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
 import { addEvents, listEvents, NotFoundError, removeEvent, type Category, type EventFields, type SavedEvent } from '../calendar'
+import { message } from '../http'
 import { addDays, daysCovered, gridRange, monthGrid, toIsoDate } from '../monthGrid'
 
 export type View = 'month' | 'week' | 'day'
@@ -168,6 +169,5 @@ export function monthOf(day: string) {
   return { year: Number(day.slice(0, 4)), month: Number(day.slice(5, 7)) }
 }
 
-export function message(e: unknown): string {
-  return e instanceof Error ? e.message : String(e)
-}
+// 錯誤變成一句話的共用函式在 http.ts（auth.ts 也用），這裡轉出去，元件照舊從這裡 import
+export { message }

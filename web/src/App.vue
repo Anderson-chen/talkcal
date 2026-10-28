@@ -8,7 +8,7 @@
 // 行事曆整個在 v-if 裡：登出時它被拆掉，裡面的狀態（行程、AI 對話）跟著丟掉，換人登入不會看到上一個人的東西。
 // 問不到「我是誰」又不是 401（伺服器連不上、正在重啟）：畫「連不上」，不畫登入頁（#43，理由在 auth.ts 的 meUnreachable）。
 import { onMounted, onUnmounted, ref } from 'vue'
-import { loadMe, me, meUnreachable } from './auth'
+import { connect, me, meUnreachable } from './auth'
 import CalendarView from './calendar/CalendarView.vue'
 import LoginView from './LoginView.vue'
 import { loadThemeKey, THEMES, toCssVars } from './calendar/theme'
@@ -19,7 +19,7 @@ const timer = setTimeout(() => (slow.value = true), 1000)
 onUnmounted(() => clearTimeout(timer))
 const vars = toCssVars(THEMES[loadThemeKey()])
 
-onMounted(loadMe)
+onMounted(connect)
 </script>
 
 <template>
@@ -29,7 +29,7 @@ onMounted(loadMe)
     <LoginView v-else />
   </div>
   <div v-else-if="meUnreachable" class="view">
-    <ServerUnreachable :reason="meUnreachable" :retry="loadMe" />
+    <ServerUnreachable :reason="meUnreachable" :retry="connect" />
   </div>
   <div v-else-if="slow" class="view connecting" :style="vars" role="status">正在連線…</div>
 </template>

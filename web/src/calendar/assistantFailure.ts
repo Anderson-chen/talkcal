@@ -10,7 +10,7 @@
 // - 後端說了要等多久（retryAfterSeconds），就照著倒數；倒數完之前送不出去 —— 那段時間送了也一定失敗，
 //   而且一群人同時狂按「再試」正是讓模型更起不來的原因
 // - 不自動重送：模型一次要好幾秒、可能還要錢（Bedrock），使用者也可能已經不想問了；由使用者按「再試一次」
-import { ApiError } from '../http'
+import { ApiError, message } from '../http'
 
 export type FailureKind =
   | 'unavailable' // 503 MODEL_UNAVAILABLE：模型連不上，熔斷打開，這次沒叫模型
@@ -37,7 +37,7 @@ const DEFAULT_WAIT = { unavailable: 30, busy: 5, 'rate-limited': 60 } as const
 
 export function describeAssistantFailure(e: unknown): AssistantFailureView {
   if (!(e instanceof ApiError)) {
-    return { kind: 'other', text: `助理暫時沒辦法回應：${e instanceof Error ? e.message : String(e)}`, waitSeconds: 0, canRetry: true }
+    return { kind: 'other', text: `助理暫時沒辦法回應：${message(e)}`, waitSeconds: 0, canRetry: true }
   }
   const { status, code, retryAfterSeconds } = e.detail
   const wait = (fallback: number) => retryAfterSeconds ?? fallback
@@ -75,7 +75,7 @@ export function describeAssistantFailure(e: unknown): AssistantFailureView {
     return { kind: 'invalid', text: `這句話送不出去：${e.message}`, waitSeconds: 0, canRetry: false }
   }
   if (status === null) {
-    return { kind: 'offline', text: '連不上伺服器，請確認網路連線後再試一次。', waitSeconds: 0, canRetry: true }
+    return { kind: 'offline', text: `${e.message}。`, waitSeconds: 0, canRetry: true }
   }
   if (status >= 500 && code === null) {
     return {

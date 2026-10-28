@@ -38,8 +38,8 @@ export interface ChatMessage {
   error: string | null
   // 使用者這句沒送成功（#43）：泡泡標成「沒送出」
   failed?: boolean
-  // 助理回不了的說明（#43）：retry 是可以原封不動再送的那句，null 就是不能（要先改）
-  failure?: { kind: FailureKind; retry: string | null }
+  // 助理回不了的說明（#43）：canRetry 是原封不動再送有沒有意義（400 沒有，要先改）
+  failure?: { kind: FailureKind; canRetry: boolean }
 }
 
 /** 「思考中」等超過這麼多秒，就改說已經等了多久。助理平常 p95 約 3 秒，等到 10 秒已經明顯不正常 */
@@ -177,7 +177,7 @@ export function useAssistant(calendar: CalendarState) {
       const failure = describeAssistantFailure(e)
       mine.failed = true
       const notice = say('ai', failure.text)
-      notice.failure = { kind: failure.kind, retry: failure.canRetry ? said : null }
+      notice.failure = { kind: failure.kind, canRetry: failure.canRetry }
       messages.value.push(notice)
       if (failure.waitSeconds > 0) {
         now.value = Date.now()
@@ -192,18 +192,17 @@ export function useAssistant(calendar: CalendarState) {
 
   /** 「再試一次」：拿掉沒送出的那句和說明，原封不動再送。只有最後一則說明有這顆鈕，不會把舊的問題插到新對話中間 */
   function retry(notice: ChatMessage) {
-    const said = notice.failure?.retry
-    if (!said || typing.value || waitSeconds.value > 0) return
-    const at = messages.value.indexOf(notice)
-    if (at !== messages.value.length - 1) return
-    const unsent = messages.value[at - 1]?.failed === true
-    messages.value.splice(unsent ? at - 1 : at, unsent ? 2 : 1)
+    if (!canRetry(notice) || typing.value || waitSeconds.value > 0) return
+    // 說明一定緊跟在沒送出的那句後面（等回覆時送不出別的）
+    const at = messages.value.length - 1
+    const said = messages.value[at - 1].text
+    messages.value.splice(at - 1, 2)
     // send 自己接住所有錯誤（變成對話裡的說明），這裡不必等它
     void send(said)
   }
 
   /** 這則說明的「再試一次」要不要出現：要可以重送，而且是最後一則 */
-  const canRetry = (msg: ChatMessage) => !!msg.failure?.retry && messages.value[messages.value.length - 1] === msg
+  const canRetry = (msg: ChatMessage) => !!msg.failure?.canRetry && messages.value[messages.value.length - 1] === msg
 
   /** 把這則訊息裡還沒處理的草稿一次存起來（後端是全部存或全部不存）。 */
   async function confirm(msg: ChatMessage) {
