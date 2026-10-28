@@ -112,7 +112,7 @@
     {
       "type": "timeseries",
       "title": "每個請求平均 token（input / output）",
-      "description": "token/s ÷ 會叫模型的請求/s（POST /api/calendar/assistant，不含 4xx：那些在叫模型前就被擋掉）。一個請求是一段 agent loop，會叫模型好幾次，所以這裡是好幾次加起來的量。2026-10-17 本機 qwen3-8b 用 perf/tokens.js 量：input 3905、output 103（docs/cost.md）。這條線明顯偏離，成本分析就要重算。",
+      "description": "token/s ÷ 會叫模型的請求/s（POST /api/calendar/assistant，不含 4xx：那些在叫模型前就被擋掉）。一個請求是一段 agent loop，會叫模型好幾次，所以這裡是好幾次加起來的量。跟 docs/cost.md 第 1 節用 perf/tokens.js 量到的數字比：這條線明顯偏離，成本分析就要重算。",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -130,17 +130,8 @@
             "type": "prometheus",
             "uid": "mimir"
           },
-          "expr": "sum(rate(gen_ai_client_token_usage_total{job=\"talkcal-app\", gen_ai_token_type=\"input\"}[$__rate_interval])) / sum(rate(http_server_requests_seconds_count{job=\"talkcal-app\", method=\"POST\", uri=\"/api/calendar/assistant\", status!~\"4..\"}[$__rate_interval]))",
-          "legendFormat": "input"
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "mimir"
-          },
-          "expr": "sum(rate(gen_ai_client_token_usage_total{job=\"talkcal-app\", gen_ai_token_type=\"output\"}[$__rate_interval])) / sum(rate(http_server_requests_seconds_count{job=\"talkcal-app\", method=\"POST\", uri=\"/api/calendar/assistant\", status!~\"4..\"}[$__rate_interval]))",
-          "legendFormat": "output"
+          "expr": "sum by (gen_ai_token_type) (rate(gen_ai_client_token_usage_total{job=\"talkcal-app\", gen_ai_token_type=~\"input|output\"}[$__rate_interval])) / on() group_left() sum(rate(http_server_requests_seconds_count{job=\"talkcal-app\", method=\"POST\", uri=\"/api/calendar/assistant\", status!~\"4..\"}[$__rate_interval]))",
+          "legendFormat": "{{gen_ai_token_type}}"
         }
       ],
       "fieldConfig": {
@@ -464,8 +455,8 @@
     },
     {
       "type": "stat",
-      "title": "請求/小時（交叉點 ≈ 1341）",
-      "description": "時間範圍內平均每小時的請求數。docs/cost.md 算出的交叉點：機器開著的每小時超過約 1341 個請求（0.37 req/s），自己開 g6.xlarge 跑模型才比 Bedrock 便宜。低於它，Bedrock 的 token 錢比 GPU 機器多出來的時薪少。閾值寫死在顏色上，單價或每個請求的 token 數變了要跟著改。",
+      "title": "請求/小時（橘色 = 過了交叉點）",
+      "description": "app 開著的時間裡，平均每小時的請求數：分母是 up{job=\"talkcal-app\"} 每分鐘取一次、加總成分鐘數，關機那幾小時不算（雲端平常關機，除以整個時間範圍會少算）。變橘色的門檻就是 docs/cost.md 算出的交叉點：機器開著的每小時超過它，自己開 g6.xlarge 跑模型才比 Bedrock 便宜；低於它，Bedrock 的 token 錢比 GPU 機器多出來的時薪少。數字只寫在門檻上，重算後照 docs/cost.md「重算」改。",
       "gridPos": {
         "h": 4,
         "w": 12,
@@ -483,7 +474,7 @@
             "type": "prometheus",
             "uid": "mimir"
           },
-          "expr": "sum(increase(http_server_requests_seconds_count{job=\"talkcal-app\", method=\"POST\", uri=\"/api/calendar/assistant\", status!~\"4..\"}[$__range])) / ($__range_s / 3600)",
+          "expr": "sum(increase(http_server_requests_seconds_count{job=\"talkcal-app\", method=\"POST\", uri=\"/api/calendar/assistant\", status!~\"4..\"}[$__range])) / (sum(sum_over_time(up{job=\"talkcal-app\"}[$__range:1m])) / 60)",
           "instant": true
         }
       ],
