@@ -151,3 +151,4 @@ burn rate 是比例。一個小時只有 10 個請求、其中 1 個 502，比�
 2. 改延遲門檻時，`application.properties` 的 `management.metrics.distribution.slo.http.server.requests` 也要有那個值，不然沒有那個 bucket。
 3. 跑 `ci/rules.sh`（單元測試的期望值也要跟著改）。mimir 10 分鐘內會自己重讀規則，要馬上生效就 `docker compose restart mimir`；改了 app 的設定要重新部署 app。
 4. 這份文件的表和理由一起改。
+
