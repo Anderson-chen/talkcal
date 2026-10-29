@@ -134,12 +134,15 @@ docker exec talkcal-postgres psql -U talkcal -d postgres -c "DROP DATABASE talkc
 
 ## 改壞了要退回：還原之後發現選錯備份
 
-兩次改名的反向就好（`talkcal` 現在是還原出來的那份）：
+兩次改名的反向就好（`talkcal` 現在是還原出來的那份）。跟 `pg-restore.sh` 一樣，改名前要先擋住新連線、踢掉剩下的：
+停了 app 還有 `talkcal-postgres-exporter` 一直連著 `talkcal`，不踢掉的話改名會失敗（`database is being accessed by other users`）。
 
 ```bash
 docker stop talkcal-app
-docker exec -i talkcal-postgres psql -U talkcal -d postgres <<'SQL'
+docker exec -i talkcal-postgres psql -U talkcal -d postgres -v ON_ERROR_STOP=1 <<'SQL'
 ALTER DATABASE talkcal_before_<時間> ALLOW_CONNECTIONS true;
+ALTER DATABASE talkcal ALLOW_CONNECTIONS false;
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'talkcal' AND pid <> pg_backend_pid();
 BEGIN;
 ALTER DATABASE talkcal RENAME TO talkcal_wrong_restore;
 ALTER DATABASE talkcal_before_<時間> RENAME TO talkcal;
