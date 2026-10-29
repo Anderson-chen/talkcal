@@ -180,19 +180,37 @@ Grafana 的「talkcal — 壓測（k6）」上，紅線是舊 app 收到 SIGTERM
 
 ### outage：模型掛掉演練（#44）
 
-模型斷線或卡住的時候，助理是不是快速失敗、行程 API 是不是照常可用。同時跑兩群人：每分鐘 `RATE_PER_MIN` 個人（預設 20）跟助理說一句，
-每秒 1 個人讀行程。故障由你在另一個終端機製造，每一句的結果都印一行（帶時間），對著看：
+模型斷線、卡住、變慢的時候，助理是不是快速失敗、行程 API 是不是照常可用。同時跑兩群人：每分鐘 `RATE_PER_MIN` 個人（預設 20）跟助理說一句，
+每秒 1 個人讀行程。故障由腳本自己透過 Toxiproxy 按時製造（第 60 秒弄壞、第 180 秒恢復），每一句的結果都印一行（帶時間），對著看。
+
+deploy/ 要疊 `compose.chaos.yaml` 起，app 和模型、資料庫中間才有 Toxiproxy（見 [deploy/README.md](../deploy/README.md#故障演練toxiproxy)）：
 
 ```bash
-k6 run perf/outage.js
-# 跑起來大約一分鐘後，另一個終端機：
-docker stop talkcal-llm-chat      # 斷線；卡住用 docker pause（要等 2 分鐘逾時，DURATION_S 拉長）
-# 再過兩分鐘：
-docker start talkcal-llm-chat     # 或 docker unpause
+docker compose -f deploy/compose.yaml -f deploy/compose.chaos.yaml up -d
 ```
 
-收工的表：助理的 200、502、503（MODEL_UNAVAILABLE／MODEL_BUSY）各幾個、中位數和最久花多久；行程 API 有門檻（0 失敗、p95 < 1 秒）。
+```bash
+FAULT=down k6 run perf/outage.js                                      # 斷線：幾毫秒就失敗
+```
+
+```bash
+FAULT=slow k6 run perf/outage.js                                      # 每個回應慢 40 秒（SLOW_MS），超過 30 秒的慢呼叫門檻
+```
+
+```bash
+FAULT=hang DURATION_S=360 RECOVER_AT_S=220 k6 run perf/outage.js      # 卡住：連得上、永遠不回，要等到逾時
+```
+
+```bash
+PROXY=postgres FAULT=down DURATION_S=180 RECOVER_AT_S=120 k6 run perf/outage.js   # 反例：弄壞資料庫那段，斷路器不該動
+```
+
+不給 `FAULT` 就不碰 Toxiproxy，由你在另一個終端機自己弄壞（`toxiproxy-cli` 的指令在 `deploy/compose.chaos.yaml` 開頭）。
+
+收工的表：助理的 200、502、503（MODEL_UNAVAILABLE／MODEL_BUSY）各幾個、中位數和最久花多久；行程 API 有門檻（0 失敗、p95 < 1 秒），
+所以弄壞資料庫那次 k6 會以非 0 結束 —— 那次本來就該失敗。
 斷路器的門檻和理由在 `backend/src/main/resources/application.properties` 的 `resilience4j.*`（`chat-model`）。
+
 ### slo：平常流量，量 SLO 的基準、驗 burn-rate 告警
 
 行程 CRUD 為主（每秒 `CRUD_RPS` 個，預設 10）、每分鐘跟助理說 `ASSIST_PER_MIN` 句（預設 6），跑 `DURATION`（預設 2m）。
