@@ -165,14 +165,16 @@ export function useAssistant(calendar: CalendarState) {
     keepDraft()
   }
 
-  async function send(text = input.value) {
-    const said = text.trim()
+  /** 沒給 text 就是從輸入框送的（送出鈕、Enter）；按建議、按「再試一次」會給 text */
+  async function send(text?: string) {
+    const fromInput = text === undefined
+    const said = (text ?? input.value).trim()
     if (!said || blocked.value) return
     // 從陣列拿回來的才是 reactive 的那一個：之後標「沒送出」要改它，畫面才會跟著變
     const mine = messages.value[messages.value.push(say('me', said)) - 1]
     // 從輸入框送的才清掉輸入框；按建議、按「再試一次」送的，不動使用者正在打的字
     unsent = said
-    if (text === input.value) input.value = ''
+    if (fromInput) input.value = ''
     typing.value = true
     typingSince = now.value = Date.now()
     try {
