@@ -10,7 +10,7 @@
 //   FAULT=down  斷線：停用那段 proxy                → 連不上，幾毫秒就失敗
 //   FAULT=hang  卡住：連得上、永遠不回（timeout 毒）  → 要等到叫模型的逾時才失敗
 //   FAULT=slow  很慢：每個回應慢 SLOW_MS 毫秒（latency 毒，預設 40 秒）→ 會回，但超過 30 秒的慢呼叫門檻
-// 不給 FAULT 就不碰 Toxiproxy，由人在另一個終端機弄壞（docker stop、toxiproxy-cli，見 deploy/compose.chaos.yaml）。
+// 不給 FAULT 就不碰 Toxiproxy，由人在另一個終端機弄壞（toxiproxy-cli，見 deploy/README.md 的「故障演練」）。
 // 每一句的結果都印一行（帶時間），弄壞、恢復的那一刻也各印一行，對著看。
 //
 // 收工印一張表：助理的每種結果（200、502、503 的兩種 code）各幾個、各花多久；行程 API 成功幾個、p95 多久。
@@ -46,29 +46,38 @@ const TOXIC = 'outage'; // 這支腳本加的毒都叫這個名字，恢復時�
 // 每種故障：怎麼弄壞、怎麼恢復。都只動 PROXY 那一段，另一段照常
 const FAULTS = {
   down: {
-    inject: () => http.post(`${TOXIPROXY_URL}/proxies/${PROXY}`, JSON.stringify({ enabled: false })),
-    recover: () => http.post(`${TOXIPROXY_URL}/proxies/${PROXY}`, JSON.stringify({ enabled: true })),
+    inject: () => setEnabled(false),
+    recover: () => setEnabled(true),
   },
   hang: {
     // timeout 0：資料一律不轉、連線也不關，就是「連得上、永遠不回」。
     // 要加在 upstream（app → 模型），請求根本到不了模型：加在 downstream 的話，請求照樣送到、模型算完回應就關連線，
     // Toxiproxy 跟著把 app 這端也關掉，app 幾秒就收到「連線中斷」—— 那是斷線，不是卡住（2026-10-29 實際踩到）
     inject: () => addToxic('timeout', { timeout: 0 }, 'upstream'),
-    recover: () => http.del(`${TOXIPROXY_URL}/proxies/${PROXY}/toxics/${TOXIC}`),
+    recover: removeToxic,
   },
   slow: {
     // 加在 downstream：請求照常送到、模型照常回，只是回應晚 SLOW_MS 才到 app
     inject: () => addToxic('latency', { latency: SLOW_MS }, 'downstream'),
-    recover: () => http.del(`${TOXIPROXY_URL}/proxies/${PROXY}/toxics/${TOXIC}`),
+    recover: removeToxic,
   },
 };
 if (FAULT && !FAULTS[FAULT]) {
   throw new Error(`FAULT 只能是 ${Object.keys(FAULTS).join('、')}，收到 ${FAULT}`);
 }
 
+// Toxiproxy 的 API：https://github.com/Shopify/toxiproxy#http-api
+function setEnabled(enabled) {
+  return http.post(`${TOXIPROXY_URL}/proxies/${PROXY}`, JSON.stringify({ enabled }));
+}
+
 function addToxic(type, attributes, stream) {
   return http.post(`${TOXIPROXY_URL}/proxies/${PROXY}/toxics`,
       JSON.stringify({ name: TOXIC, type, stream, attributes }));
+}
+
+function removeToxic() {
+  return http.del(`${TOXIPROXY_URL}/proxies/${PROXY}/toxics/${TOXIC}`);
 }
 
 // 助理的結果依 code 分開記：200、502（這次失敗）、503 的兩種（沒叫模型）、其他（含連線失敗）
