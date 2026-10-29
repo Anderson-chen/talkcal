@@ -185,7 +185,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: 'talkcal 已經 {{ humanizeDuration $values.A.Value }} 沒有成功備份資料庫'
+          # 沒資料（本機、剛開機）時 Grafana 也會展開這段，Value 是 nil，直接丟給 humanizeDuration 會每次評估都記一筆錯誤
+          summary: 'talkcal 已經 {{ if $values.A.Value }}{{ humanizeDuration $values.A.Value }}{{ else }}一段時間{{ end }} 沒有成功備份資料庫'
           description: >-
             每小時的備份連續兩次沒有成功傳上 S3。資料還在，但現在出事的話最多會掉這麼久的資料。
             先看 `journalctl -u talkcal-backup.service -n 50`。
