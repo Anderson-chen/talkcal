@@ -1,7 +1,7 @@
 // http.ts 的純函式：讀 cookie、哪些請求要帶 CSRF token。
 // send() 本身（真的帶上 header、401 回登入頁）在 Playwright 裡測：e2e/fakeApi.ts 會檢查 header，沒帶就回 403。
 import { describe, expect, it } from 'vitest'
-import { needsCsrf, readCookie } from './http'
+import { needsCsrf, readCookie, retryAfterOf } from './http'
 
 describe('readCookie', () => {
   it('從 document.cookie 那種字串裡找出指定的那一個', () => {
@@ -27,5 +27,18 @@ describe('needsCsrf', () => {
 
   it('反例：只讀的不用帶；沒寫 method 就是 GET', () => {
     for (const method of ['GET', 'head', 'OPTIONS', undefined]) expect(needsCsrf(method)).toBe(false)
+  })
+})
+
+describe('retryAfterOf', () => {
+  it('Retry-After 的秒數', () => {
+    expect(retryAfterOf('30')).toBe(30)
+    expect(retryAfterOf(' 5 ')).toBe(5)
+  })
+
+  it('反例：沒有、或是 HTTP 日期格式（我們不用）就當成沒有，不倒數成奇怪的數字', () => {
+    expect(retryAfterOf(null)).toBeNull()
+    expect(retryAfterOf('Wed, 21 Oct 2026 07:28:00 GMT')).toBeNull()
+    expect(retryAfterOf('-1')).toBeNull()
   })
 })
