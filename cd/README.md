@@ -118,7 +118,7 @@ cd C:/talkcal-deploy
 
 ## 還沒做的
 
-- `verify.sh`：部署後打一次 health 和 `/api/calendar`，不只看容器的 healthcheck
+- `verify.sh`：部署後打一次 health 和 `/api`，不只看容器的 healthcheck。EC2 上已經有 [infra/envs/1-ec2/smoke.sh](../infra/envs/1-ec2/smoke.sh)（[#225](https://github.com/Anderson-chen/talkcal/issues/225)），收進 `apply.sh` 時直接搬它
 - `envs/ec2.env`：把 [infra/envs/1-ec2/deploy.sh](../infra/envs/1-ec2/deploy.sh) 收進來，EC2 也跑 `apply.sh` 和同一支 watcher
 - 現在部署的是 checkout 的程式碼、在機器上 `--build`，還不是 build once：映像檔已經帶版本號（[docs/release.md](../docs/release.md)），
   但沒有推到 registry，本機和 EC2 各自 build。換回機器上舊 tag 的做法見 [docs/rollback.md](../docs/rollback.md)

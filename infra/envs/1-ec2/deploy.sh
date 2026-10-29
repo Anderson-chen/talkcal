@@ -62,7 +62,7 @@ aws ssm get-parameter --name "$DOTENV_PARAM" --with-decryption \
 umask 022
 # 冒煙測試的前半（#225）：.env 是空的（snap 版的 aws，#74）、帶 \r（從 Windows apply）、缺必要的 key，
 # 都在啟動任何容器之前就擋下、說出是哪一項。不擋的話要等 app 起不來、--wait 判 unhealthy 才失敗，看不出原因
-MODEL_BACKEND="$MODEL_BACKEND" bash "$REPO/infra/envs/1-ec2/smoke.sh" env "$REPO/deploy/.env"
+bash "$REPO/infra/envs/1-ec2/smoke.sh" env "$REPO/deploy/.env"
 
 cd "$REPO"
 
@@ -72,6 +72,9 @@ compose_files=(
   -f infra/envs/1-ec2/compose.ec2.yaml              # 雲端共用：DB 密碼、記憶體上限、Caddy
   -f "infra/envs/1-ec2/compose.$MODEL_BACKEND.yaml" # 模型從哪來
 )
+# 必要的 key 交給 compose 自己查：compose 檔裡每個 ${X:?缺 X} 都會檢查到，不另外維護一份清單。
+# config 只解析、不啟動任何容器
+docker compose "${compose_files[@]}" config -q
 
 echo "── 4. 服務（deploy/ + compose.ec2.yaml + compose.$MODEL_BACKEND.yaml）"
 # 先只起 postgres，把資料庫裡的密碼同步成 .env 這一份，app 才起來（#14）。

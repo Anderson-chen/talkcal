@@ -3,16 +3,18 @@
 # （SSM 拉下來的 .env、網路、憑證、真的 SMTP），這些只有部署當下在機器上才驗得到。
 # deploy.sh 呼叫兩次，任何一項沒過就結束碼 1，deploy.sh 跟著失敗：
 #
-#   MODEL_BACKEND=bedrock bash smoke.sh env deploy/.env   # 啟動 app 之前：.env 的換行、必要的 key
-#   bash smoke.sh services deploy/.env                    # 全部起來之後：網站、觀測、告警寄信
+#   bash smoke.sh env deploy/.env        # 啟動容器之前：.env 的換行、告警收件人
+#   bash smoke.sh services deploy/.env   # 全部起來之後：網站、觀測、告警寄信
 #
+# compose 檔裡 ${X:?} 的必要 key 不在這裡列：deploy.sh 用 `docker compose config -q` 讓 compose 自己查，清單只有一份。
 # 只印 key 的名字和檢查結果，不印任何值。
 # 每次部署都寄一封測試信（主旨是 DeploySmokeTest）：部署是手動、偶爾才做，多一封信的代價小，
 # 換來每次都證明 SMTP 帳密還能用。同一天要連續部署好幾次時，用 SMOKE_SEND_EMAIL=0 關掉。
 set -euo pipefail
 
-mode="${1:?用法：smoke.sh env|services <.env 路徑>}"
-dotenv="${2:?用法：smoke.sh env|services <.env 路徑>}"
+usage="用法：smoke.sh env|services <.env 路徑>"
+mode="${1:?$usage}"
+dotenv="${2:?$usage}"
 # 機器上 Grafana、Mimir 只綁 127.0.0.1（ops/compose.yaml）；本機驗這支腳本時可以指到別的地方
 GRAFANA_URL="${GRAFANA_URL:-http://127.0.0.1:3000}"
 MIMIR_URL="${MIMIR_URL:-http://127.0.0.1:9009}"
@@ -39,10 +41,10 @@ env_get() {
 }
 
 # 剛 up 完的服務要一點時間：Grafana 啟動、Alloy 抓第一輪（15 秒一次）再推進 Mimir。
-# 每 5 秒試一次，到時間還不行才算失敗
+# 所有檢查共用一個期限，每 5 秒試一次；期限過了，後面的檢查只試一次。
+# 不各給一段時間：東西壞掉時每項都等滿，部署要多卡好幾分鐘才說出哪裡壞
+deadline=$((SECONDS + ${SMOKE_WAIT_SECONDS:-120}))
 retry() {
-  local seconds="$1"; shift
-  local deadline=$((SECONDS + seconds))
   until "$@"; do
     [ "$SECONDS" -lt "$deadline" ] || return 1
     sleep 5
@@ -50,11 +52,10 @@ retry() {
 }
 
 check_env() {
-  : "${MODEL_BACKEND:?缺 MODEL_BACKEND}"
   # 寫出空檔案卻回 0 的事真的發生過（snap 版的 aws，#74）
   if [ ! -s "$dotenv" ]; then
     fail ".env 是空的：檢查 aws --version（不要用 snap 版）、SSM 參數"
-    finish
+    return
   fi
 
   # 2026-10-29：從 Windows apply，CRLF 的 secrets.tf 讓 SSM 的 .env 每行多一個 \r，
@@ -67,31 +68,19 @@ check_env() {
     pass ".env 的換行是 LF"
   fi
 
-  local required=(SITE_ADDRESS DB_PASSWORD)
-  case "$MODEL_BACKEND" in
-    bedrock) required+=(BEDROCK_BASE_URL BEDROCK_MODEL BEDROCK_API_KEY) ;;
-    gpu)     required+=(MODELS_DIR) ;;
-  esac
-  # 有設 SMTP 才要收件人：沒收件人的話 Grafana 會寄到 compose 給的 .invalid 位址，等於沒寄
-  [ -z "$(env_get ALERT_SMTP_HOST)" ] || required+=(ALERT_EMAIL_TO)
-
-  local key missing=()
-  for key in "${required[@]}"; do
-    [ -n "$(env_get "$key")" ] || missing+=("$key")
-  done
-  if [ "${#missing[@]}" -gt 0 ]; then
-    fail ".env 缺值：${missing[*]}"
-  else
-    pass ".env 必要的 key 都有值（${required[*]}）"
+  # 有設 SMTP 才要收件人。compose 查不到這條：ops/compose.yaml 沒收件人時給 .invalid 位址讓 Grafana 照樣啟動，等於沒寄
+  if [ -n "$(env_get ALERT_SMTP_HOST)" ] && [ -z "$(env_get ALERT_EMAIL_TO)" ]; then
+    fail ".env 缺值：有設 ALERT_SMTP_HOST 卻沒有 ALERT_EMAIL_TO"
   fi
-  finish
 }
 
 # 走 Caddy 的 https，跟使用者同一條路：DNS、憑證、Caddy → nginx → app 都要通
-http_code() { curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$1" 2>/dev/null || true; }
-https_ok() { [ "$(http_code "$1")" = 200 ]; }
+https_ok() {
+  last_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1" || true)"
+  [ "$last_code" = 200 ]
+}
 check_https() {
-  if retry 60 https_ok "$2"; then pass "$1 200（$2）"; else fail "$1：$2 回 $(http_code "$2")，要 200"; fi
+  if retry https_ok "$2"; then pass "$1 200（$2）"; else fail "$1：$2 回 $last_code，要 200"; fi
 }
 
 # Grafana 用資料源設定去連一次，連得上才算：位址、網路、對方 ready 都包含在內。
@@ -104,11 +93,11 @@ datasource_path() {
   esac
 }
 datasource_ok() {
-  curl -fsS --max-time 10 "$GRAFANA_URL$(datasource_path "$1")" >/dev/null 2>&1
+  curl -fs -o /dev/null --max-time 10 "$GRAFANA_URL$(datasource_path "$1")"
 }
 
 app_scraped() {
-  curl -fsS --max-time 10 "$MIMIR_URL/prometheus/api/v1/query" --data-urlencode 'query=up{job="talkcal-app"}' 2>/dev/null \
+  curl -fs --max-time 10 "$MIMIR_URL/prometheus/api/v1/query" --data-urlencode 'query=up{job="talkcal-app"}' \
     | python3 -c 'import json,sys; r=json.load(sys.stdin)["data"]["result"]; sys.exit(0 if r and all(x["value"][1]=="1" for x in r) else 1)' 2>/dev/null
 }
 
@@ -124,7 +113,7 @@ check_email() {
     return
   fi
   local body result
-  body="$(curl -fsS --max-time 10 "$GRAFANA_URL/api/alertmanager/grafana/config/api/v1/alerts" | python3 -c '
+  if ! body="$(curl -fsS --max-time 10 "$GRAFANA_URL/api/alertmanager/grafana/config/api/v1/alerts" | python3 -c '
 import json, sys
 receivers = [r for r in json.load(sys.stdin)["alertmanager_config"]["receivers"] if r["name"] == "email"]
 print(json.dumps({
@@ -133,8 +122,11 @@ print(json.dumps({
         "labels": {"alertname": "DeploySmokeTest"},
         "annotations": {"summary": "部署的冒煙測試寄的，確認告警信寄得出去，不用處理（" + sys.argv[1] + "）"},
     },
-}))' "${APP_VERSION:-unknown}")" || { fail "告警寄信：讀不到 Grafana 的 email contact point"; return; }
-  result="$(curl -sS --max-time 60 -X POST -H 'Content-Type: application/json' -d "$body" \
+}))' "${APP_VERSION:-unknown}")"; then
+    fail "告警寄信：讀不到 Grafana 的 email contact point"
+    return
+  fi
+  if result="$(curl -sS --max-time 60 -X POST -H 'Content-Type: application/json' -d "$body" \
     "$GRAFANA_URL/api/alertmanager/grafana/config/api/v1/receivers/test" | python3 -c '
 import json, sys
 resp = json.load(sys.stdin)
@@ -144,35 +136,36 @@ if not configs:
     sys.exit(1)
 bad = [c for c in configs if c.get("status") != "ok"]
 print("; ".join("%s %s：%s" % (c.get("name"), c.get("status"), c.get("error", "")) for c in bad))
-sys.exit(1 if bad else 0)')" \
-    && pass "告警寄信：Grafana 寄出測試信，status ok" \
-    || fail "告警寄信：${result:-Grafana 沒回應}"
+sys.exit(1 if bad else 0)')"; then
+    pass "告警寄信：Grafana 寄出測試信，status ok"
+  else
+    fail "告警寄信：${result:-Grafana 沒回應}"
+  fi
 }
 
 check_services() {
-  local site
+  local site uid
   site="$(env_get SITE_ADDRESS)"
   check_https "網站首頁" "https://$site/"
   # 沒登入也能打的 API：證明 nginx 轉得到 app（只看首頁的話，app 掛了首頁照樣 200）
   check_https "/api 健康檢查" "https://$site/api/auth/providers"
 
-  local uid
   for uid in mimir loki tempo; do
-    if retry 90 datasource_ok "$uid"; then pass "Grafana 資料源 $uid 連得上"; else fail "Grafana 資料源 $uid 連不上（$GRAFANA_URL$(datasource_path "$uid")）"; fi
+    if retry datasource_ok "$uid"; then pass "Grafana 資料源 $uid 連得上"; else fail "Grafana 資料源 $uid 連不上（$GRAFANA_URL$(datasource_path "$uid")）"; fi
   done
 
-  if retry 90 app_scraped; then
+  if retry app_scraped; then
     pass 'Alloy 抓得到 app：Mimir 裡 up{job="talkcal-app"} == 1'
   else
     fail 'Alloy 抓不到 app：Mimir 裡沒有 up{job="talkcal-app"} == 1（看 Alloy 的除錯頁 127.0.0.1:12345）'
   fi
 
   check_email
-  finish
 }
 
 case "$mode" in
   env)      check_env ;;
   services) check_services ;;
-  *)        echo "用法：smoke.sh env|services <.env 路徑>" >&2; exit 2 ;;
+  *)        echo "$usage" >&2; exit 2 ;;
 esac
+finish
