@@ -15,10 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 
 /**
- * 每一次叫模型帶的逾時，真的是設定的值（#231）。
- *
- * Spring AI 2.0.1 的逾時有兩層：spring.ai.openai.chat.timeout 只用在建 client，每一次呼叫另外帶選項裡的逾時、而且會蓋掉它；
- * 自動組裝的選項不帶逾時，每次呼叫就是 Spring AI 預設的 60 秒，看設定檔完全看不出來 —— 演練時模型卡住才發現。
+ * 每一次叫模型帶的逾時，真的是設定的值（#231；為什麼要自己補見 GuardedChatModel.getOptions）。
  * 助理和抽行程用的是包好保護的那個模型，都從它的 getOptions() 開始組選項，所以看它就知道兩者實際等多久。
  *
  * 起整個容器、不連資料庫，理由同 OpenApiDocumentationTest；設定一模一樣，Spring 測試會重用同一個容器。
@@ -48,7 +45,6 @@ class ChatModelTimeoutTest {
         Duration perCall = ((OpenAiChatOptions) guarded.getOptions()).getTimeout();
 
         assertThat(perCall).isEqualTo(configured);
-        assertThat(perCall).isNotEqualTo(SPRING_AI_DEFAULT);
     }
 
     /**

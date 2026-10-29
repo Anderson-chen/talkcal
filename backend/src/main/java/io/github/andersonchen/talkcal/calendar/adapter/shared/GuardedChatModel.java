@@ -38,7 +38,7 @@ import java.util.Objects;
  * 助理和抽行程各包一個 GuardedChatModel，但共用同一組 breaker、bulkhead —— 背後是同一顆模型，壞就一起壞。
  * 什麼失敗算模型出事，見 ModelFailurePredicate。
  *
- * 另外補上每一次呼叫最多等多久（#231，見 getOptions）：這也是保護的一部分，而且 Spring AI 自己沒做到。
+ * 另外補上每一次呼叫最多等多久，見 getOptions（#231）。
  */
 public final class GuardedChatModel implements ChatModel {
 

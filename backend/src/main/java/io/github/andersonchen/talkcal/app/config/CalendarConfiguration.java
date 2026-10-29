@@ -85,6 +85,9 @@ class CalendarConfiguration {
      * 模型外面包一層 GuardedChatModel（#44），助理和抽行程都用這一個：背後是同一顆模型，壞就一起壞。
      * 規則在 application.properties 的 resilience4j.*.instances.chat-model。
      *
+     * 每一次呼叫的逾時也是在這裡補上的（GuardedChatModel.getOptions）：Spring AI 自動建的那個沒包保護，每次呼叫只等 60 秒，
+     * 之後有新的地方要叫模型，一樣用 @Qualifier(GUARDED_CHAT_MODEL) 拿這一個。
+     *
      * defaultCandidate = false：它也是 ChatModel，一般按型別要 ChatModel 的地方（例如 Spring AI 自己的 ChatClient.Builder）
      * 看不到它、照樣拿 Spring AI 自動建的那個；只有指名 @Qualifier(GUARDED_CHAT_MODEL) 的才拿得到。
      */
