@@ -67,6 +67,10 @@ const FAULTS = {
 if (FAULT && !FAULTS[FAULT]) {
   throw new Error(`FAULT 只能是 ${Object.keys(FAULTS).join('、')}，收到 ${FAULT}`);
 }
+// 時間點要依序：不然不是根本沒弄壞（跑完一張全 200 的表，看起來像斷路器有效），就是弄壞了來不及恢復
+if (FAULT && !(0 <= FAULT_AT_S && FAULT_AT_S < RECOVER_AT_S && RECOVER_AT_S < DURATION_S)) {
+  throw new Error(`要 0 ≤ FAULT_AT_S < RECOVER_AT_S < DURATION_S，收到 ${FAULT_AT_S}、${RECOVER_AT_S}、${DURATION_S}`);
+}
 
 // Toxiproxy 的 API：https://github.com/Shopify/toxiproxy#http-api
 function setEnabled(enabled) {
@@ -146,6 +150,13 @@ export function setup() {
     }
   }
   return signIn();
+}
+
+// 不管怎麼結束（跑完、Ctrl+C、中途出錯）都清掉毒：留著的話，本機的 app 之後每個請求都會失敗，直到有人想起來
+export function teardown() {
+  if (FAULT) {
+    http.post(`${TOXIPROXY_URL}/reset`);
+  }
 }
 
 export function fault() {
