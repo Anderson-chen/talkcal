@@ -412,6 +412,11 @@ docker compose --env-file ../deploy/.env --profile mailtest up -d   # 多起一�
 Grafana 的 **Alerting → Alert rules** 看每條規則現在是 Normal / Pending / Firing；
 **Contact points** 那一頁的 **Test** 可以不等規則觸發，直接寄一封測試信。
 
+寄到 Gmail 會進垃圾郵件（2026-10-29 在 AWS 上用 Gmail SMTP 實測：三封都寄出、SMTP 沒報錯，但都在 Spam，
+Gmail 的理由是「跟以前的垃圾信相似」——Grafana 預設模板人人在用）。收件人要自己在 Gmail 按「不是垃圾郵件」、
+再建一個篩選器（寄件人名稱 `talkcal Grafana`）設成「一律不要傳送到垃圾郵件」，不然告警寄出去了也沒人看到。
+Mailpit 什麼都收，測不到這件事。
+
 ## 下一步（一次一件）
 
 1. **app 記錄送給模型的完整 prompt**：access log 已經記了使用者說了什麼（請求 body），
