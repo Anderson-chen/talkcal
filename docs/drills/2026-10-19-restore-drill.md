@@ -127,7 +127,7 @@ NOTICE:  database "talkcal_restore" does not exist, skipping
 ## 雲端那一半：`backup-to-s3.sh`（容器裡模擬 EC2，假的 aws）
 
 沒有真的 apply、沒動 AWS：在 `docker:27-cli` 容器裡掛 repo 到 `/opt/talkcaldrill/repo`、寫一份 `/opt/talkcal/deploy.env`
-（`PROJECT=talkcaldrill`，沒有 `BACKUPS_BUCKET`，模擬舊機器），`aws` 換成把 `s3 cp` 複製到本機資料夾的假程式。
+（`PROJECT=talkcaldrill`），`aws` 換成把 `s3 cp` 複製到本機資料夾的假程式。bucket 名稱一律由帳號 ID 推出來（`deploy.env` 不放這個欄位）。
 
 ```text
 == 1. 正常：備份並上傳
@@ -202,3 +202,81 @@ Unit talkcal-backup.timer has a bad unit file setting.
 
 - **真的 EC2 上的關機備份**：容器裡不是 PID 1 的 systemd，跑不了「關機時 ExecStop 在 Docker 之前跑」。依據是 systemd 關機時以啟動順序的反向停止 unit（`After=docker.service`）。下次開機器時要驗：`sudo systemctl stop talkcal-backup-on-shutdown` 看 S3 多一份，再真的 stop instance、開回來看 `journalctl -u talkcal-backup-on-shutdown -b -1`。
 - **真的 S3、IAM**：只跑了 `terraform validate`，沒有 apply。IAM 少給的權限要等真的上去才會報 AccessDenied。
+
+## 2026-10-28 補充：備份之後到現在變了什麼（PR 意見）
+
+PR 上問：「備份那個時間點之後到現在的差異資料，算哪一個情境？」原本 runbook 的情境 C 只教「撈回來」，沒教「先看出差了什麼」。
+補了 `deploy/backup/pg-diff.sh`，情境 C 改成「先看差異、再決定救哪些」。演練多造了三種備份之後的變化：多寫 1 則對話、改 1 個帳號名字、
+建一張沒有主鍵、有三列重複的表（像新的 migration），然後誤刪全部行程。
+
+| 反例 | 結果 |
+|---|---|
+| 剛備份完，`--verify-only` 留下的暫存庫 vs 線上 | `完全一樣`、結束碼 0（不誤報） |
+| 誤刪的 20000 筆、多寫的 1 則、改過的 1 個帳號 | 分別算成刪除 20000、新增 1、改過 1 |
+| 備份之後才建的表，三列一模一樣 | 新增 3（沒被合併成 1；表只在新的庫裡也比得到） |
+| 沒動的表 | `一樣` |
+
+演練當場抓到 `pg-diff.sh` 一個 bug：舊的庫那張表是空的時，awk 的 `NR == FNR` 在讀新的那份時也成立，新增被算成刪除（改用檔名分辨兩邊）。
+
+```text
+[  32s] ── 情境 C（runbook）：備份之後變了什麼 —— pg-diff.sh 備份的內容（現在的 talkcal）→ 被換下來的庫
+比較：talkcal（舊）→ talkcal_before_20261028_225708（新）
+  account                      新增 0、刪除 0、改過 1
+      ~ (5ba8660c-4549-ae4f-5c93-0f73a54815fb,user1,{bcrypt}x,"2026-10-28 22:56:51.649087+00","使用者 1") → (5ba8660c-4549-ae4f-5c93-0f73a54815fb,user1,{bcrypt}x,"2026-10-28 22:56:51.649087+00",備份之後改的名字)
+  account_identity             一樣
+  assistant_proposal           一樣
+  calendar_assistant_message   新增 1、刪除 0、改過 0
+      + (632a2406-bbcb-cd55-3eec-45ac14b40a0a,0,USER,備份之後才寫的,,,"2026-10-28 22:57:04.322487+00",5ba8660c-4549-ae4f-5c93-0f73a54815fb)
+  calendar_event               新增 0、刪除 20000、改過 0
+      - (8d37f129-43a2-98b8-9599-54c9fcab8e29,"行程 7358","2026-07-09 01:26:00","2026-07-09 02:26:00","2026-10-28 22:56:51.651826+00",HEALTH,,,76ccdce3-f27e-1aa4-ab4c
+  drill_after_backup           新增 3、刪除 0、改過 0
+      + (1)
+4 張表有差異
+✓ 結束碼 3（有差異）
+✓ 找到誤刪的 20000 筆行程
+✓ 找到備份之後多寫的 1 則對話
+✓ 找到備份之後改過的 1 個帳號
+✓ 找到備份之後才建的表、重複的 3 列沒被合併
+✓ 沒動的表不誤報
+```
+
+### 退回步驟有別的連線連著時
+
+master 合進來的 `postgres-exporter` 會一直連著 `talkcal`。原本 runbook 的退回步驟只停 app，改名會撞上它：
+
+```text
+== 反例：舊版 runbook（沒踢連線）
+DETAIL:  There is 1 other session using the database.
+== 新版 runbook（先 ALLOW_CONNECTIONS false、pg_terminate_backend）
+改名成功
+```
+
+演練的退回那步也改成先開一條一直連著的連線（模擬 exporter），再照 runbook 的 SQL 做：
+
+```text
+[  49s] ── 退回（runbook「還原之後發現選錯備份」）：換回被換下來的那份
+50 accounts, 0 events, 5001 messages
+✓ 回到還原之前（誤刪後）的樣子：退回的步驟可行
+```
+
+### 三個備份時機同一秒觸發
+
+每小時的 timer、部署前、關機前可能撞在一起。`backup-to-s3.sh` 加了 `flock`，`pg-backup.sh` 遇到同一秒已經有一份就等下一秒。
+第一次只加了鎖：三份會排隊，但 hourly 和 shutdown 落在同一秒，同一個檔名，後一份蓋掉前一份（三份只剩兩個檔）。再加上「等下一秒」之後：
+
+```text
+== 三個時機同一秒觸發
+hourly: [backup-to-s3] hourly：完成 → s3://talkcal-backups-123456789012/postgres/talkcal-20261028T225845Z.dump
+pre-deploy: [backup-to-s3] pre-deploy：完成 → s3://talkcal-backups-123456789012/postgres/talkcal-20261028T225843Z.dump
+shutdown: [backup-to-s3] shutdown：完成 → s3://talkcal-backups-123456789012/postgres/talkcal-20261028T225844Z.dump
+last-success
+talkcal-20261028T225843Z.dump
+talkcal-20261028T225843Z.dump.sha256
+talkcal-20261028T225844Z.dump
+talkcal-20261028T225844Z.dump.sha256
+talkcal-20261028T225845Z.dump
+talkcal-20261028T225845Z.dump.sha256
+talkcal-20261028T225843Z.dump: OK
+talkcal-20261028T225844Z.dump: OK
+talkcal-20261028T225845Z.dump: OK
+```
