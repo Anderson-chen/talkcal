@@ -86,6 +86,19 @@ services:
       - GF_AUTH_DISABLE_LOGIN_FORM=true
       # 少一個「要不要回報使用狀況」的背景行為
       - GF_ANALYTICS_REPORTING_ENABLED=false
+      # 告警寄信（#121）。值在不進 git 的 deploy/.env（範本 deploy/.env.example），所以起這組要帶上它：
+      #   docker compose --env-file ../deploy/.env up -d
+      # 沒帶或 ALERT_SMTP_HOST 沒填：SMTP 關著，告警照樣評估、在 Grafana 上看得到，只是不寄信。
+      # :+ 是「有值才換成 true」，沒值就是空字串（Grafana 當 false）。
+      - GF_SMTP_ENABLED=${ALERT_SMTP_HOST:+true}
+      - GF_SMTP_HOST=${ALERT_SMTP_HOST:-}
+      - GF_SMTP_USER=${ALERT_SMTP_USER:-}
+      - GF_SMTP_PASSWORD=${ALERT_SMTP_PASSWORD:-}
+      - GF_SMTP_FROM_ADDRESS=${ALERT_SMTP_FROM:-grafana@talkcal.invalid}
+      - GF_SMTP_FROM_NAME=talkcal Grafana
+      # 收件人：給 provisioning/alerting/contact-points.yaml 用。沒填就給一個 .invalid（保留的網域，寄不到任何人），
+      # 空字串的話 email contact point 驗證不過，Grafana 會起不來
+      - ALERT_EMAIL_TO=${ALERT_EMAIL_TO:-alerts@talkcal.invalid}
     volumes:
       # provisioning：讓 Grafana 一啟動就自動把 Mimir / Loki / Tempo 三個資料源接好，
       # 不必每次開 UI 手動加。設定用版控管，環境重建也一致。
@@ -135,6 +148,21 @@ services:
       - mimir
       - loki
       - tempo
+    restart: unless-stopped
+
+  # ── 假信箱（只在要試告警信時起）──────────────────────────────────
+  # Mailpit：一台只收不寄的 SMTP 伺服器，收到的信在網頁上看。試告警信不必動到真的信箱、也不必輸入任何密碼。
+  # profiles：平常 `docker compose up` 不會起它，雲端也不會；要試的時候：
+  #   1. deploy/.env 填 ALERT_SMTP_HOST=mailpit:1025（其他 ALERT_SMTP_* 留空）
+  #   2. docker compose --env-file ../deploy/.env --profile mailtest up -d
+  #   3. 開 http://localhost:8025 看信
+  mailpit:
+    image: axllent/mailpit:v1.31.6
+    container_name: talkcal-mailpit
+    profiles: ["mailtest"]
+    ports:
+      # 8025 是收件匣網頁。SMTP 的 1025 不對主機開：只有同網路的 grafana 會寄進來
+      - "127.0.0.1:8025:8025"
     restart: unless-stopped
 
 networks:

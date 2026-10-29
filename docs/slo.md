@@ -108,8 +108,10 @@ burn rate 是比例。一個小時只有 10 個請求、其中 1 個 502，比�
 
 ### 通知送去哪
 
-這份只寫規則。contact point（送 email）和 notification policy 是 #121 的範圍，放在同一個資料夾的另一個檔案。
-嚴重度用跟它同一套值：快燒 `severity=critical`（Workbook 說的 page）、慢燒 `severity=warning`（ticket），要分流時 policy 比對這個標籤就好。在那之前，規則照樣評估、狀態在 Grafana 的 **Alerting → Alert rules** 和 SLO 儀表板最下面看得到。
+這份只寫規則。送 email 的 contact point 和 notification policy 在同一個資料夾的 `contact-points.yaml`、`policies.yaml`（#121）：
+快燒、慢燒都寄到同一個信箱，同一條規則的告警合成一封，沒修好每 4 小時再提醒一次。
+嚴重度用同一套值：快燒 `severity=critical`（Workbook 說的 page）、慢燒 `severity=warning`（ticket），之後要分流（例如快燒另外推手機）時 policy 比對這個標籤就好。
+沒設 SMTP 時不寄信，規則照樣評估、狀態在 Grafana 的 **Alerting → Alert rules** 和 SLO 儀表板最下面看得到。
 
 ## 驗證：故障讓告警響、正常時不響
 

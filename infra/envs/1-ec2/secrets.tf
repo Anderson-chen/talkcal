@@ -43,6 +43,12 @@ resource "aws_ssm_parameter" "dotenv" {
     GOOGLE_CLIENT_SECRET=${var.google_client_secret}
     GITHUB_CLIENT_ID=${var.github_client_id}
     GITHUB_CLIENT_SECRET=${var.github_client_secret}
+    # Grafana 告警寄信（#121）：ops/ 的 compose 用 --env-file 讀同一份。alert_smtp_host 沒給就不寄信
+    ALERT_SMTP_HOST=${var.alert_smtp_host}
+    ALERT_SMTP_USER=${var.alert_smtp_user}
+    ALERT_SMTP_PASSWORD='${var.alert_smtp_password}'
+    ALERT_SMTP_FROM=${var.alert_smtp_from}
+    ALERT_EMAIL_TO=${var.alert_email_to}
     # Grafana 的 heartbeat（#40）：deploy.sh 起 ops/ 時用 --env-file 讀同一份
     HEARTBEAT_URL=${var.heartbeat_url}
   ENV

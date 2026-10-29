@@ -62,6 +62,7 @@ flowchart LR
 | `backend.tf`、`backend.hcl.example` | state 放 bootstrap 建的 S3 bucket；bucket 名稱帶帳號 ID，放在 gitignore 掉的 `backend.hcl` |
 | `variables.tf` | `model_backend` 和依它決定預設值的機型、磁碟；Google、GitHub 登入的 client id／secret（`sensitive`） |
 | `oauth.auto.tfvars.example` | 複製成 `oauth.auto.tfvars`（不進 git）填 Google、GitHub 的 client id／secret；沒填就只有帳密登入 |
+| `alerting.auto.tfvars.example` | 複製成 `alerting.auto.tfvars`（不進 git）填 Grafana 寄告警信的 SMTP 和收件人；沒填就不寄信（[#121](https://github.com/Anderson-chen/talkcal/issues/121)） |
 | `outputs.tf` | 網址、IP、instance id、Grafana 通道指令、要在 Google、GitHub 登記的回呼網址（`oauth_callback_urls`） |
 | `vpc.tf` | 一個公有子網，不建 NAT；可用區自動挑有這個機型的 |
 | `security-groups.tf` | 只開 80/443（含 HTTP/3 的 UDP 443）；22 預設關 |
@@ -90,6 +91,7 @@ flowchart LR
 | 登入機器 | 本機 | SSM Session Manager，不開 22 | `iam.tf` |
 | DB 密碼 | 自己填在不進 git 的 `deploy/.env`（[#123](https://github.com/Anderson-chen/talkcal/issues/123)） | Terraform 隨機產生 → SSM → 同一個位置的 `deploy/.env`（[#14](https://github.com/Anderson-chen/talkcal/issues/14)） | `secrets.tf`、`compose.ec2.yaml` |
 | Google、GitHub 登入 | client id／secret 填在 `deploy/.env`，回呼網址 `http://localhost:5173/...` | `oauth.auto.tfvars` → SSM → `deploy/.env`；回呼網址 `https://<網站>/...`，nginx 照轉 Caddy 的 `X-Forwarded-Proto`、app 信任它才組得出 https（[#127](https://github.com/Anderson-chen/talkcal/issues/127)） | `variables.tf`、`secrets.tf`、`web/nginx.conf` |
+| 告警寄信 | SMTP、收件人填在 `deploy/.env`，起 `ops/` 時帶 `--env-file ../deploy/.env`；試寄用 Mailpit（`--profile mailtest`） | `alerting.auto.tfvars` → SSM → `deploy/.env`，`deploy.sh` 起 `ops/` 時帶 `--env-file deploy/.env`（[#121](https://github.com/Anderson-chen/talkcal/issues/121)） | `variables.tf`、`secrets.tf`、`deploy.sh`、`ops/compose.yaml` |
 | app 記憶體 | 沒上限 | `mem_limit: 2g`：沒設的話 JVM 的 75% 是算整台（8GB 或 16GB） | `compose.ec2.yaml` |
 | Trace 取樣 | 全留 | 錯的、5xx、超過 5 秒的全留，其餘留 10%（[#37](https://github.com/Anderson-chen/talkcal/issues/37)，理由見 [ops/README.md](../../../ops/README.md)） | `compose.ops.yaml` |
 | 映像檔 | 本機 build | 在 EC2 上 build；做[版本 tag](https://github.com/Anderson-chen/talkcal/issues/25) 時再改成 CI 推到 ECR | `deploy.sh` |
@@ -112,6 +114,7 @@ cp backend.hcl.example backend.hcl        # 填入上一步輸出的 state_bucke
 terraform init -backend-config=backend.hcl
 # （要開 Google、GitHub 登入才做）cp oauth.auto.tfvars.example oauth.auto.tfvars 再填值，
 #  先 apply 一次拿到網址，再到 Google、GitHub 登記 terraform output oauth_callback_urls 印出來的回呼網址
+# （要收告警信才做）cp alerting.auto.tfvars.example alerting.auto.tfvars 再填 SMTP 和收件人
 terraform apply
 
 # 2.（只有 gpu）上傳模型檔（只要一次；SHA256SUMS 一起傳，model-seed 會驗）
@@ -146,7 +149,7 @@ sudo docker stats --no-stream && free -h       # gpu 再加 nvidia-smi
 terraform apply -replace='aws_iam_service_specific_credential.bedrock[0]'
 # 換 DB 密碼（例如懷疑外洩），再到機器上重跑 deploy.sh：它會把資料庫裡的密碼同步成新的那組
 terraform apply -replace=random_password.db
-# 換 Google、GitHub 的 secret（或第一次填）：改 oauth.auto.tfvars，apply 之後再到機器上重跑 deploy.sh
+# 換 Google、GitHub 的 secret、告警信的 SMTP（或第一次填）：改 oauth.auto.tfvars／alerting.auto.tfvars，apply 之後再到機器上重跑 deploy.sh
 terraform apply
 # Google、GitHub 要登記的回呼網址（Elastic IP 換了就會跟著換，要重新登記）
 terraform output oauth_callback_urls
@@ -213,6 +216,7 @@ export HEALTHCHECKS_API_KEY=...   # 有設 heartbeat_url 才需要，見下面
 | 第 4 步報「缺 DB_PASSWORD」 | snap 版的 aws 輸出導向檔案時結束碼 0、寫出 0 bytes（導向管線才正常），`deploy/.env` 是空的 | [#74](https://github.com/Anderson-chen/talkcal/issues/74)：改用 AWS 官方安裝程式；`deploy.sh` 寫完 `.env` 先檢查有 `DB_PASSWORD` |
 | AI 助理回 502：`The model 'gpt-5-mini' does not exist` | Spring AI 2.0.1 看到請求自帶選項就整份照用、不補設定檔的預設，模型名稱從沒生效；本機 llama-server 不看名稱所以一直沒事 | [#76](https://github.com/Anderson-chen/talkcal/issues/76)：請求的選項從 `chatModel.getOptions()` 開始再蓋 |
 | 部署成功、首頁 200，但 `/api` 全部 502；nginx log 是 `connect() failed` 連到舊 IP | 這次只重建了 app、web 沒重建：nginx 只在啟動時把 `app` 解析一次，app 換了 IP 它還連舊的 | [#90](https://github.com/Anderson-chen/talkcal/issues/90)：`web/nginx.conf` 改成執行期問 Docker DNS（`resolver 127.0.0.11 valid=10s`）；本機用「佔掉舊 IP、重建 app」重現，舊版 502、新版 200 |
+| （2026-10-29）從 Windows apply 之後部署，app 一直重啟：`password authentication failed for user "talkcal"` | 這台的 `core.autocrlf=true`，`.tf` 取出是 CRLF，`secrets.tf` 的 heredoc 連 `\r` 寫進 SSM 的 `.env`；`deploy.sh` 用 grep 取出的 DB 密碼多一個 `\r`，`ALTER ROLE` 設成它，compose 交給 app 的卻沒有 | [#121](https://github.com/Anderson-chen/talkcal/issues/121)：`.gitattributes` 把 `*.tf` 釘成 LF；SSM 參數裡 `\r` 從 15 個變 0 個，重新 apply、部署後 app healthy |
 
 其他預期可能遇到的：
 
