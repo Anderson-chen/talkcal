@@ -300,7 +300,7 @@ const F={
 "infra/envs/1-ec2/s3.tf":[["7–10","aws_s3_bucket.models","s3m"],["12–21","加密","s3m"],["23–31","公開封鎖","s3m"]],
 "infra/envs/1-ec2/user-data.sh.tftpl":[["全檔","第一次開機腳本","ec2"]],
 "infra/envs/1-ec2/deploy.sh":[["31–40","連 release tag 一起拉、算版本號（cd/version.sh）","app"],["60","從 SSM 拉 .env","dotenv"],["65","檢查 .env（smoke.sh env），起容器之前","dotenv"],["72","疊三份 compose","ec2"],["77","compose config -q：compose 檔裡 ${X:?} 的必要 key","dotenv"],["84–90","起 postgres、ALTER ROLE","postgres"],["93","up -d --build","app"],["100","起觀測（疊 compose.ops.yaml；--env-file 帶告警寄信的 SMTP）","obs"],["107","冒煙測試（smoke.sh services）","obs"]],
-"infra/envs/1-ec2/smoke.sh":[["54–75",".env 不是 CRLF；有設 SMTP 就要有收件人","dotenv"],["77–84","https 的網站首頁和 /api（走 Caddy）","caddy"],["86–102","Grafana 資料源連得上、Alloy 抓得到 app","obs"],["104–144","有設 SMTP 時寄測試信（receivers test API）","obs"]],
+"infra/envs/1-ec2/smoke.sh":[["56–77",".env 不是 CRLF；有設 SMTP 就要有收件人","dotenv"],["79–86","https 的網站首頁和 /api（走 Caddy）","caddy"],["88–104","Grafana 資料源連得上、Alloy 抓得到 app","obs"],["106–151","有設 SMTP 時寄測試信（receivers test API）","obs"]],
 "infra/envs/1-ec2/compose.ec2.yaml":[["18–20","postgres 密碼","postgres"],["22–30","app 密碼、session cookie Secure、mem_limit","app"],["36–53","caddy","caddy"],["55–57","caddy volumes","caddy"]],
 "infra/envs/1-ec2/compose.bedrock.yaml":[["11–12","model-seed 不起","seed"],["13–14","llm-chat 不起","llm"],["16–27","app 改打 Bedrock，token 指標標成 bedrock","app"]],
 "infra/envs/1-ec2/compose.gpu.yaml":[["8–10","model-seed 改掛 S3 拉下來的資料夾","seed"]],
@@ -342,7 +342,7 @@ app:{"image":D+":219","mem_limit":E+"compose.ec2.yaml:30","SESSION_COOKIE_SECURE
 postgres:{"image":D+":161","POSTGRES_PASSWORD":E+"compose.ec2.yaml:20","密碼同步":E+"deploy.sh:89","postgres-exporter":D+":191","--no-collector.stat_user_tables":D+":199"},
 llm:{"-ngl":D+":107","-c / -np":D+":109","--kv-unified":D+":116"},
 seed:{"sha256sum -c":D+":80"},
-obs:{"Alloy":O+":114","Mimir":O+":23","Loki":O+":43","Tempo":O+":57","Grafana":O+":70","Grafana 埠":O+":76","告警":O+":89","Trace 取樣":E+"compose.ops.yaml:11","Alloy 抓指標":"ops/alloy/config.alloy:59","metrics-generator":"ops/tempo/tempo.yaml:46","OTLP 入口":"ops/alloy/config.alloy:158","SLO":"ops/mimir/rules/anonymous/slo.yaml:38","冒煙測試":E+"smoke.sh:146"}
+obs:{"Alloy":O+":114","Mimir":O+":23","Loki":O+":43","Tempo":O+":57","Grafana":O+":70","Grafana 埠":O+":76","告警":O+":89","Trace 取樣":E+"compose.ops.yaml:11","Alloy 抓指標":"ops/alloy/config.alloy:59","metrics-generator":"ops/tempo/tempo.yaml:46","OTLP 入口":"ops/alloy/config.alloy:158","SLO":"ops/mimir/rules/anonymous/slo.yaml:38","冒煙測試":E+"smoke.sh:153"}
 };
 // t：步驟標題（短）；d：說明。依 model_backend 不同的寫成 {bedrock, gpu}
 const ROUTES={

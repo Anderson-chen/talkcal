@@ -21,7 +21,8 @@ MIMIR_URL="${MIMIR_URL:-http://127.0.0.1:9009}"
 
 failures=()
 pass() { echo "  ✓ $1"; }
-fail() { echo "  ✗ $1" >&2; failures+=("$1"); }
+# ✗ 也印到 stdout：跟 ✓ 同一個串流才保得住順序（SSM 會把 stdout、stderr 分開收）
+fail() { echo "  ✗ $1"; failures+=("$1"); }
 
 finish() {
   if [ "${#failures[@]}" -gt 0 ]; then
@@ -42,8 +43,9 @@ env_get() {
 
 # 剛 up 完的服務要一點時間：Grafana 啟動、Alloy 抓第一輪（15 秒一次）再推進 Mimir。
 # 所有檢查共用一個期限，每 5 秒試一次；期限過了，後面的檢查只試一次。
+# 預設 180 秒：全新機器第一次部署時 Mimir 從零起、Caddy 第一次申請憑證，都比平常慢。
 # 不各給一段時間：東西壞掉時每項都等滿，部署要多卡好幾分鐘才說出哪裡壞
-deadline=$((SECONDS + ${SMOKE_WAIT_SECONDS:-120}))
+deadline=$((SECONDS + ${SMOKE_WAIT_SECONDS:-180}))
 retry() {
   until "$@"; do
     [ "$SECONDS" -lt "$deadline" ] || return 1
@@ -101,6 +103,10 @@ app_scraped() {
     | python3 -c 'import json,sys; r=json.load(sys.stdin)["data"]["result"]; sys.exit(0 if r and all(x["value"][1]=="1" for x in r) else 1)' 2>/dev/null
 }
 
+grafana_alerting_config() {
+  curl -fsS --max-time 10 "$GRAFANA_URL/api/alertmanager/grafana/config/api/v1/alerts"
+}
+
 # 用 Grafana 的 receivers test API 寄一封。拿 Grafana 現在用的 email contact point 去寄（不是從 .env 另外組），
 # 驗到的就是告警真的會走的那一份設定。回傳每個 receiver 的 status；失敗時 error 是 SMTP 的回應（例如 535 帳密錯），不含密碼
 check_email() {
@@ -113,7 +119,8 @@ check_email() {
     return
   fi
   local body result
-  if ! body="$(curl -fsS --max-time 10 "$GRAFANA_URL/api/alertmanager/grafana/config/api/v1/alerts" | python3 -c '
+  # 讀設定可以重試（Grafana 剛在第 5 步重建時可能還沒載入）；寄信本身不重試，失敗就是失敗
+  if ! retry grafana_alerting_config >/dev/null || ! body="$(grafana_alerting_config | python3 -c '
 import json, sys
 receivers = [r for r in json.load(sys.stdin)["alertmanager_config"]["receivers"] if r["name"] == "email"]
 print(json.dumps({
@@ -130,7 +137,7 @@ print(json.dumps({
     "$GRAFANA_URL/api/alertmanager/grafana/config/api/v1/receivers/test" | python3 -c '
 import json, sys
 resp = json.load(sys.stdin)
-configs = [c for r in resp.get("receivers") or [] for c in r["grafana_managed_receiver_configs"]]
+configs = [c for r in resp.get("receivers") or [] for c in r.get("grafana_managed_receiver_configs") or []]
 if not configs:
     print("Grafana 沒有回傳任何 receiver：%s" % resp.get("message", ""))
     sys.exit(1)
