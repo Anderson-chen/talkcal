@@ -176,6 +176,29 @@ docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新
 
 5、7 的規劃見 [infra/](../infra/README.md)。
 
+## 故障演練（Toxiproxy）
+
+想看「模型或資料庫壞了，app 會怎樣」時，疊上 `compose.chaos.yaml` 起：
+
+```bash
+docker compose -f compose.yaml -f compose.chaos.yaml up -d
+```
+
+app 跟模型、跟資料庫之間各插一段 [Toxiproxy](https://github.com/Shopify/toxiproxy)（`toxiproxy.json` 裡的 `llm`、`postgres`），
+平常原樣轉發；要弄壞哪一段就對它下指令，其他段照常。比 `docker stop`、`docker pause` 整個容器多了「變慢」「時好時壞」可以模擬，
+而且只壞 app 這一條連線，其他也連著模型的東西（例如 Alloy 抓模型的指標）不受影響。
+
+| 想模擬 | 指令 |
+|---|---|
+| 斷線 | `docker exec talkcal-toxiproxy /toxiproxy-cli toggle llm`（再下一次接回） |
+| 很慢 | `docker exec talkcal-toxiproxy /toxiproxy-cli toxic add -t latency -a latency=40000 -n slow llm` |
+| 卡住（連得上、永遠不回） | `docker exec talkcal-toxiproxy /toxiproxy-cli toxic add -t timeout -a timeout=0 -u -n hang llm`（`-u`：擋在送出去的方向，請求到不了模型） |
+| 拿掉某個毒 | `docker exec talkcal-toxiproxy /toxiproxy-cli toxic remove -n slow llm` |
+| 現在的狀態 | `docker exec talkcal-toxiproxy /toxiproxy-cli list` |
+
+按時弄壞、恢復、同時量 app 的反應，用 `perf/outage.js`（見 [perf/README.md](../perf/README.md)）。
+演練完不疊這份再 `up -d` 一次，app 就直接連回模型和資料庫。正式環境（EC2 的 `deploy.sh`）不疊它。
+
 ## 行程與對話記憶（PostgreSQL）
 
 app 把行程（`calendar_event`）和 AI 助理的對話記憶（`calendar_assistant_message`，一則訊息一列、連工具呼叫一起存）

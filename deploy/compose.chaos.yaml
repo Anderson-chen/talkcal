@@ -1,0 +1,45 @@
+# 故障演練用：疊在 compose.yaml 上，在 app 和它的兩個依賴（模型、PostgreSQL）中間各插一段 Toxiproxy（#44）。
+#
+#   docker compose -f deploy/compose.yaml -f deploy/compose.chaos.yaml up -d
+#
+# 平常不疊：Toxiproxy 什麼都不做時只是原樣轉發，但多一跳就多一個會壞的東西，正式環境不需要它。
+# 演練完不疊這份再 up 一次，app 就直接連回模型和資料庫。
+#
+# 為什麼不用 docker stop／pause 模型容器來演練：
+#   - 只能模擬「斷線」「完全卡住」兩種；「慢但會回」「時好時壞」做不到
+#   - 停的是整個容器，其他也連著它的東西（例如 ops/ 的 Alloy 抓模型的指標）一起受影響；Toxiproxy 只弄壞 app 這一條
+#   - 故障要人在另一個終端機手動下指令，時間抓不準。Toxiproxy 有 HTTP API，perf/outage.js 自己就能按時弄壞、按時恢復
+# Toxiproxy 走 TCP 層，所以資料庫也能弄壞，不只 HTTP。
+# 「卡住」的毒要加在 upstream（-u，app → 依賴）：加在預設的 downstream，請求照樣送到、依賴回完就關連線，
+# app 收到的是連線中斷（斷線），不是卡住。
+#
+# 手動弄壞（Toxiproxy 的 CLI 就在容器裡），兩段 proxy 的名字是 llm、postgres（見 toxiproxy.json）：
+#   docker exec talkcal-toxiproxy /toxiproxy-cli toggle llm                                         # 斷線／接回
+#   docker exec talkcal-toxiproxy /toxiproxy-cli toxic add -t latency -a latency=40000 -n slow llm   # 每個回應慢 40 秒
+#   docker exec talkcal-toxiproxy /toxiproxy-cli toxic add -t timeout -a timeout=0 -u -n hang llm    # 卡住：連得上、永遠不回
+#   docker exec talkcal-toxiproxy /toxiproxy-cli toxic remove -n slow llm                           # 拿掉
+#   docker exec talkcal-toxiproxy /toxiproxy-cli list                                               # 現在有哪些
+
+services:
+  toxiproxy:
+    # 版本釘死，跟其他映像檔一樣
+    image: ghcr.io/shopify/toxiproxy:2.13.0
+    container_name: talkcal-toxiproxy
+    # 兩段 proxy 啟動時就從設定檔建好，不必每次演練前先用 API 建
+    command: ["-host=0.0.0.0", "-config=/config/toxiproxy.json"]
+    volumes:
+      - ./toxiproxy.json:/config/toxiproxy.json:ro
+    ports:
+      # 只發佈控制用的 API（k6、CLI 從主機打）。兩段 proxy 本身只給同網路的 app 連，不發佈
+      - "127.0.0.1:8474:8474"
+    restart: unless-stopped
+
+  app:
+    environment:
+      # 改連 Toxiproxy，由它轉給 llm-chat、postgres（蓋掉 application-docker.properties 裡的服務名稱）
+      SPRING_AI_OPENAI_CHAT_BASEURL: http://toxiproxy:18080/v1
+      SPRING_DATASOURCE_URL: jdbc:postgresql://toxiproxy:15432/talkcal
+    depends_on:
+      toxiproxy:
+        # 映像檔裡沒有 curl 之類的工具，做不了 healthcheck；它起得很快，起了就能轉
+        condition: service_started
