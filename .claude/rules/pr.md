@@ -12,6 +12,7 @@
     用 `--detach` 是因為一個分支同時只能被一個 worktree 簽出，平行的 session 會互卡。
   - push 被拒（別的 session 先推了）就 `git pull --rebase origin evidence` 再推，重新取 SHA；不 force-push，舊 PR 引用的 SHA 才一直找得到。
   - 文件（README、`docs/`）要引用的圖才進 master，放 `docs/images/`。
+  - 演練紀錄（runbook、腳本會連過去的 .md）算文件，放 `docs/drills/`，它引用的圖一樣放 `docs/images/`。
 - PR 描述不要有 `Generated with Claude Code`。
 - PR 不貼 label：分類（`stage:`／`product:`、`p0`／`p1`、`area:`）都看它 `Closes` 的 issue，只維護一份。
   做的過程發現 issue 放錯段或少了 `area:`，回去改 issue 的 label。
