@@ -36,7 +36,7 @@ k6 ──> app（這個分支的 jar，主機上跑）──> cb44-toxiproxy ─
 [down-k6.txt](down-k6.txt)。跟 10/19 手動停容器的結果一致：前 5 次 502（19ms，連線被拒），斷路器打開，之後 503；
 11 次 502 = 打開前 5 次 + 三輪半開各 2 次試探。
 
-![斷線](down-grafana.jpg)
+![斷線](../../images/2026-10-29-toxiproxy-down.jpg)
 
 ### 模型變慢（這次才做得到）
 
@@ -46,7 +46,7 @@ k6 ──> app（這個分支的 jar，主機上跑）──> cb44-toxiproxy ─
 打開那一刻還在跑的回覆，第一步等了 40 秒拿到結果，第二步（呼叫工具後再問模型）才被擋，所以有一些 503 花了 40 秒；
 打開後才進來的都是幾十毫秒。全程沒有 502：慢不是失敗，是「太慢」本身讓斷路器打開。
 
-![變慢](slow-grafana.jpg)
+![變慢](../../images/2026-10-29-toxiproxy-slow.jpg)
 
 ### 模型卡住
 
@@ -57,7 +57,7 @@ bulkhead 用 `-Dresilience4j.bulkhead.instances.chat-model.max-concurrent-calls=
 - 卡住的請求 60 秒後逾時回 502，第 5 個時斷路器打開，之後 `MODEL_UNAVAILABLE`
 - 行程 API 全程沒被拖慢
 
-![卡住](hang-grafana.jpg)
+![卡住](../../images/2026-10-29-toxiproxy-hang.jpg)
 
 #### 第一次做「卡住」做錯了
 

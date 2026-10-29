@@ -38,7 +38,7 @@
 
 斷線本來就失敗得很快（連線被拒，34ms），所以這個情境裡熔斷省下的是「明知道會失敗還去叫」，以及讓前端拿到可以辨識的 503。
 
-![斷線演練的 Grafana](stop-grafana.jpg)
+![斷線演練的 Grafana](../../images/2026-10-19-model-outage-stop.jpg)
 
 ## 二、卡住（`docker pause`）
 
@@ -63,7 +63,7 @@
 - 行程 API 361 次全部 200，p95 25ms：模型卡住的整段期間完全沒被拖慢
 - MODEL_UNAVAILABLE 有兩個花了 54～57 秒：是半開時放進去試探、剛好被卡住的那幾個，模型恢復後才往下走，下一次叫模型時熔斷又已經打開。半開試探會用到真的使用者請求，這是 circuit breaker 本來的代價
 
-![卡住演練的 Grafana](pause-grafana.jpg)
+![卡住演練的 Grafana](../../images/2026-10-19-model-outage-pause.jpg)
 
 ## 意外發現：叫模型實際 60 秒就逾時，不是設定的 2 分鐘
 
