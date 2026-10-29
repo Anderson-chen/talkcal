@@ -65,7 +65,7 @@ Google SRE 的原則是**對症狀告警、不對原因告警**：原因有一�
 | 資料庫連不上 | postgres_exporter 的 `pg_up`、Alloy 的 `up{job="postgres"}` | #146（#32，接 exporter），已在 master |
 | 等不到資料庫連線 | app 的 HikariCP（Micrometer 自動產生） | 無，master 上就有 |
 | 模型熔斷持續打開 | app 的 Resilience4j（`resilience4j-micrometer`） | #161（#44，熔斷器），已在 master |
-| 備份太久沒成功 | `backup-to-s3.sh` 成功時寫 `/opt/talkcal/metrics/backup.prom`，Alloy 的 textfile collector 讀；開機時間由同一個 exporter 的 stat collector 給 | #159（#45，備份）。只有雲端有；本機手動備份不寫，查詢是空的 → 正常 |
+| 備份太久沒成功 | `backup-to-s3.sh` 成功時寫 `/opt/talkcal/metrics/backup.prom`，Alloy 的 textfile collector 讀；開機時間由同一個 exporter 的 stat collector 給 | #159（#45，備份），已在 master。只有雲端有；本機手動備份不寫，查詢是空的 → 正常 |
 
 **備份為什麼用 textfile**：備份是跑完就結束的批次工作，沒有 `/metrics` 可以抓。Prometheus 對這種工作的建議是
 node_exporter 的 textfile collector（工作結束時寫一個 `.prom` 檔）；另一個選項 Pushgateway 要多養一個服務，
