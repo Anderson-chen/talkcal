@@ -238,6 +238,40 @@ ci/rules.sh
 
 還沒做：加進 ruleset 的必過檢查（要手動加 `rules`）；pre-push 也還沒接這支。
 
+## 告警端到端測試
+
+`ci/rules.sh` 只驗得到 Mimir 錄製規則的算式；Grafana 的告警規則（門檻、`for`、`noDataState`）、contact point、通知政策、SMTP
+要真的跑起來才知道對不對。`ci/alerting.sh` 起 [ops/compose.yaml](../ops/compose.yaml) 的整組觀測加 Mailpit（假信箱），
+疊上 [ci/alerting/compose.yaml](alerting/compose.yaml)：換專案名、拿掉固定的容器名稱和主機埠、Alloy 接一個只有假 app 的網路，
+所以本機正在跑的那組不受影響。假 app（[ci/alerting/fake-app.py](alerting/fake-app.py)）只吐 `/actuator/prometheus`，可以切成全部回 5xx 或停掉。
+真的 app 不搬進來：要 build 映像檔、AI 助理還要模型，而這裡要驗的是「指標 → Mimir → Grafana → 寄信」，不是 app。
+
+```bash
+ci/alerting.sh            # 約 15 分鐘
+KEEP=1 ci/alerting.sh     # 跑完留著容器，到 localhost:13000（Grafana）、localhost:18025（Mailpit）看
+```
+
+| 步驟 | 要看到 | 實測 |
+|------|--------|------|
+| 正常流量 3 分鐘 | Mailpit 0 封 | — |
+| 假 app 全部回 5xx | `[FIRING:n] SLO 快燒…` | 約 4 分鐘 |
+| 停掉假 app | `[FIRING:n] talkcal app 掛了…` | 約 2 分鐘 |
+| 假 app 起來 | `[RESOLVED] talkcal app 掛了…` | 約 5 分鐘（要等 `policies.yaml` 的 `group_interval`） |
+
+每一步的時限寫在 `ci/alerting.sh` 的 `wait_until`，比實測多抓一倍。
+
+GitHub 上是另一支 workflow（`.github/workflows/alerting.yml`），只在 PR 改到告警相關的路徑時跑，另外可以手動按。
+不放進 `ci.yml`：GitHub 的 `paths` 只能設在整支 workflow 上，而這支 15 分鐘，不值得每個 PR 都等。
+也因為不是每個 PR 都會出現，不能設成 ruleset 的必過檢查。
+
+| 造出來的錯 | 結果 |
+|------------|------|
+| `rules.yaml` 的 app-down 門檻 `lt 1` 改成 `lt 0` | 紅：停掉假 app 5 分鐘內沒收到「app 掛了」 |
+| 規則不變 | 通過 |
+| PR 只改了這些路徑以外的檔案 | 不跑 |
+
+刻意不驗：慢燒（視窗要好幾小時，算式靠 `ci/rules.sh`）、真的信箱收不收得到、會不會進垃圾郵件（CI 裡沒有）。
+
 ## 刻意不做的
 
 - **GitHub 上跑 AI eval（`./gradlew eval`）**：沒有模型。本機的 pre-push 改到 prompt 或模型相關的檔案時才跑（`RUN_EVAL=1`），GitHub 上只確定它編得過。見 [#8 的「AI 品質回歸（eval）」段落](https://github.com/Anderson-chen/talkcal/issues/8)。
