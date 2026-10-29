@@ -8,6 +8,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import reactor.core.publisher.Flux;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -66,6 +67,15 @@ public final class GuardedChatModel implements ChatModel {
         } catch (BulkheadFullException e) {
             throw new ModelUnavailableException(ModelUnavailableException.Reason.BUSY, retryAfterBusy, e);
         }
+    }
+
+    /**
+     * 不支援串流：保護只做在 call() 上（串流要另外處理「開始回了才失敗」「回到一半卡住」，現在沒有人用）。
+     * 明寫出來而不是靠 ChatModel 的預設：之後有人要串流時，一看就知道要先補保護，不會改去拿沒包裝的那個、繞過斷路器。
+     */
+    @Override
+    public Flux<ChatResponse> stream(Prompt prompt) {
+        throw new UnsupportedOperationException("GuardedChatModel 只保護 call()，串流還沒有斷路器、bulkhead");
     }
 
     // 預設選項（模型名稱、max-tokens…）照原本的：呼叫端靠它沿用 application.properties 的設定
