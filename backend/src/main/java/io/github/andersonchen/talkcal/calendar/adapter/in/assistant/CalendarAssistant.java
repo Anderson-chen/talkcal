@@ -23,6 +23,7 @@ import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.support.ToolCallbacks;
+import org.springframework.ai.tool.execution.DefaultToolExecutionExceptionProcessor;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -114,7 +115,14 @@ public final class CalendarAssistant {
     private final ChatModel chatModel;
     // 擁有者 → 這個人名下的對話記憶。框架的 ChatMemoryRepository 只認 conversationId，擁有者要在拿到它之前先決定
     private final Function<OwnerId, ChatMemoryRepository> memories;
-    private final ToolCallingManager toolCallingManager = ToolCallingManager.builder().build();
+    // 工具裡叫模型被斷路器、bulkhead 擋下（ModelUnavailableException，#44）要原樣丟出來，回 503。
+    // Spring AI 預設把工具丟的例外轉成一段文字交給模型（讓模型自己道歉、改問別的），那樣使用者會拿到 200 和一段模型編的話，
+    // 看不出「現在不能用、過一陣子再來」。其他例外照預設，轉成文字讓模型處理
+    private final ToolCallingManager toolCallingManager = ToolCallingManager.builder()
+            .toolExecutionExceptionProcessor(DefaultToolExecutionExceptionProcessor.builder()
+                    .rethrowExceptions(List.of(ModelUnavailableException.class))
+                    .build())
+            .build();
     private final ParseEventsUseCase parseEvents;
     private final ListEventsUseCase listEvents;
     private final FindFreeSlotsUseCase findFreeSlots;
@@ -174,8 +182,8 @@ public final class CalendarAssistant {
      *
      * 失敗時（模型、資料庫出事、繞圈超過 MAX_STEPS）一律丟 IllegalStateException：
      * 背後的例外型別五花八門，裡面還可能混著 IllegalArgumentException，不包起來會被誤認成「呼叫端送錯」。
-     * 例外是「模型這次沒被叫」（ModelUnavailableException，#44）：不管被包了幾層（例如抽行程的工具裡叫模型被擋下，
-     * 經過工具框架、port 再傳回來），都把它原樣丟出去，呼叫端才回得出 503 而不是 502。
+     * 「模型這次沒被叫」（ModelUnavailableException，#44）本來就是 IllegalStateException，原樣丟出去，呼叫端才回得出 503；
+     * 工具裡被擋下的也一樣（見 toolCallingManager）。
      */
     public Reply reply(OwnerId owner, String conversationId, String message) {
         Objects.requireNonNull(owner, "owner 不可為 null");
@@ -261,26 +269,11 @@ public final class CalendarAssistant {
                 correction = List.of();
             }
             throw new IllegalStateException("AI 助理呼叫工具超過 " + MAX_STEPS + " 次還沒回話");
+        } catch (IllegalStateException e) {
+            throw e;
         } catch (RuntimeException e) {
-            ModelUnavailableException unavailable = modelUnavailable(e);
-            if (unavailable != null) {
-                throw unavailable;
-            }
-            if (e instanceof IllegalStateException failure) {
-                throw failure;
-            }
             throw new IllegalStateException("AI 助理失敗：" + e.getMessage(), e);
         }
-    }
-
-    // 沿著 cause 找：中間每一層（工具框架、port、Spring AI）都可能再包一次
-    private static ModelUnavailableException modelUnavailable(Throwable failure) {
-        for (Throwable t = failure; t != null; t = t.getCause()) {
-            if (t instanceof ModelUnavailableException unavailable) {
-                return unavailable;
-            }
-        }
-        return null;
     }
 
     /** 回覆裡有沒有網址不在使用者說過的話裡（大小寫不分）。使用者自己貼的網址，助理照著講是正常的。 */

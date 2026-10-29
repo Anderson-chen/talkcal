@@ -223,18 +223,36 @@ class CalendarAssistantTest {
     }
 
     @Test
-    @DisplayName("#44 模型這次沒被叫（斷路器打開）：就算中間被包了一層（例如抽行程的工具裡被擋下），也原樣丟出去，不變成一般的失敗")
-    void modelUnavailablePassesThroughWrapping() {
+    @DisplayName("#44 抽行程的工具裡叫模型被斷路器擋下：經過 Spring AI 的工具框架也原樣丟出去（回 503），不是轉成文字讓模型自己編一段回覆")
+    void modelUnavailableInsideToolPassesThrough() {
         ModelUnavailableException unavailable =
-                new ModelUnavailableException(ModelUnavailableException.Reason.CIRCUIT_OPEN, Duration.ofSeconds(30), null);
-        ChatModel wrapped = new ChatModel() {
-            @Override
-            public ChatResponse call(Prompt prompt) {
-                throw new IllegalStateException("呼叫模型抽行程失敗", new RuntimeException("工具執行失敗", unavailable));
-            }
-        };
+                new ModelUnavailableException(ModelUnavailableException.Reason.BUSY, Duration.ofSeconds(5), null);
+        CalendarAssistant assistant = new CalendarAssistant(
+                scripted(proposes("明天晚上七點吃飯"), says("抱歉，現在加不了行程。")),
+                owner -> memory,
+                description -> {
+                    throw unavailable;
+                },
+                (owner, start, end) -> List.of(),
+                (owner, start, end, period, minimum) -> List.of(), TUE);
 
-        assertSame(unavailable, assertThrows(ModelUnavailableException.class, () -> assistant(wrapped).reply(OWNER, ID, "嗨")));
+        assertSame(unavailable, assertThrows(ModelUnavailableException.class, () -> assistant.reply(OWNER, ID, "晚上")));
+        assertEquals(1, prompts.size(), "工具失敗之後不該再叫模型");
+    }
+
+    @Test
+    @DisplayName("反例：工具裡其他的失敗照 Spring AI 預設轉成文字交給模型，這一輪照樣有回覆")
+    void otherToolFailuresStillGoBackToModel() {
+        CalendarAssistant assistant = new CalendarAssistant(
+                scripted(proposes("明天晚上七點吃飯"), says("抱歉，剛剛沒整理好，請再說一次。")),
+                owner -> memory,
+                description -> {
+                    throw new IllegalStateException("呼叫模型抽行程失敗：連線逾時");
+                },
+                (owner, start, end) -> List.of(),
+                (owner, start, end, period, minimum) -> List.of(), TUE);
+
+        assertEquals("抱歉，剛剛沒整理好，請再說一次。", assistant.reply(OWNER, ID, "晚上").text());
     }
 
     @Test
