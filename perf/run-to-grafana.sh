@@ -5,7 +5,7 @@
 #   STEPS=1,2,4 HOLD_S=10 perf/run-to-grafana.sh perf/knee.js     # 腳本自己的參數照常用環境變數給
 #   perf/run-to-grafana.sh perf/load.js -o web-dashboard           # 後面的參數原樣交給 k6 run
 #
-# 要先起 ops/（docker compose -f ops/compose.yaml up -d），看 Grafana 的「talkcal — 壓測（k6）」dashboard。
+# 要先起 ops/（docker compose --env-file deploy/.env -f ops/compose.yaml up -d），看 Grafana 的「talkcal — 壓測（k6）」dashboard。
 # ops/ 沒起也照樣壓得完，只是指標送不出去，k6 會印錯誤訊息。
 #
 # 為什麼包成一支：下面每一個設定都少不得，漏一個 dashboard 就對不上，靠人記不住。
