@@ -1,0 +1,41 @@
+# 告警端到端測試：改到告警相關的設定時，真的造出問題、確認告警信寄得出來（實際邏輯在 ci/alerting.sh，本機也能跑）。
+#
+# 為什麼不放進 ci.yml：那邊每個 PR 都跑；這支要 15 分鐘，只在改到會影響告警的檔案時才值得等。
+# GitHub 的 paths 篩選只能設在整支 workflow 的觸發條件上，不能設在單一 job，所以另開一支。
+# 沒改到下面的路徑時這支整個不會出現在 PR 上，所以不能設成 ruleset 的必過檢查（必過但沒跑 = PR 永遠等不到）。
+
+name: Alerting
+
+on:
+  pull_request:
+    paths:
+      - ops/grafana/provisioning/alerting/**   # 規則、contact point、通知政策
+      - ops/grafana/provisioning/datasources/** # 告警規則用 datasourceUid: mimir 查詢
+      - ops/mimir/**                           # SLO 錄製規則、ruler 設定
+      - ops/alloy/**                           # 抓 app 的 target、job 名稱
+      - ops/compose.yaml                       # Grafana 的 SMTP 環境變數、Alloy 接的網路
+      - ci/alerting.sh
+      - ci/alerting/**
+      - .github/workflows/alerting.yml
+  # 手動按：例如升級 Grafana、Mimir 映像檔之前先跑一次
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  alerting:
+    runs-on: ubuntu-latest
+    # 實測約 15 分鐘；每一步的時限加起來約 33 分鐘，再加拉映像檔的時間
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - run: ci/alerting.sh
+
+      - name: 時間軸貼到結果頁
+        if: always()
+        run: cat ci/build/alerting.md >> "$GITHUB_STEP_SUMMARY" || true

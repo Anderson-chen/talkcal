@@ -101,6 +101,10 @@ vulnerabilities:
     paths: [usr/local/bin/gosu]
     statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
     expired_at: 2027-01-14
+  - id: CVE-2026-56857
+    paths: [usr/local/bin/gosu]
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭（2026-10-29 加：這條是 Windows 上 Root.Mkdir 跟著 junction 跳出根目錄，容器是 Linux，gosu 也不建資料夾）
+    expired_at: 2027-01-14
   - id: CVE-2026-56858
     paths: [usr/local/bin/gosu]
     statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
