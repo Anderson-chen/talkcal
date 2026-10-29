@@ -164,9 +164,18 @@ terraform output -raw grafana_tunnel
 關機時還在收費的只有 EBS（bedrock 30GB、gpu 150GB 的 gp3）和沒掛在執行中機器上的 Elastic IP。Bedrock 按 token 計費，不叫就不收。
 
 ```bash
-aws ec2 stop-instances  --instance-ids "$(terraform output -raw instance_id)" --region ap-northeast-1 --profile DEV
-aws ec2 start-instances --instance-ids "$(terraform output -raw instance_id)" --region ap-northeast-1 --profile DEV
+export HEALTHCHECKS_API_KEY=...   # 有設 heartbeat_url 才需要，見下面
+./power.sh stop                   # 先暫停 Healthchecks 的 check，再關機
+./power.sh start                  # 開機，等到 Healthchecks 收到 heartbeat、恢復監控
 ```
+
+為什麼不直接 `aws ec2 stop-instances`：關機後 Grafana 的 heartbeat 也停了（#40），不先暫停的話 Healthchecks 約 6 分鐘後
+會寄一封「掛了」的信，關一次響一次。`power.sh stop` 先用 Healthchecks 的 API 暫停，再關機；
+暫停中的 check 收到 Grafana 的第一個 heartbeat 就自己回到監控（本機實測過）。但 Grafana 開機後沒起來的話，
+它會一直停在暫停、不會寄信，所以 `power.sh start` 開機後會等到 check 回到 up；10 分鐘還沒恢復就報錯，要自己連進去看。
+
+`HEALTHCHECKS_API_KEY` 在 Healthchecks.io 的 Project Settings → API Access 產生，要能寫的那種（read-only 不能暫停）。
+只有這支腳本用得到、機器上不需要，所以不放 SSM、不進 git，用環境變數給。沒給的話照樣關機，只是會收到那封信。
 
 容器都設了 `restart: unless-stopped`，開機後會自己起來，不必重跑 deploy.sh；gpu 時模型要重新載入，第一個請求會等比較久。
 徹底收攤用 `terraform destroy`：IP 釋出、網址跟著換，資料庫資料也會一起消失。

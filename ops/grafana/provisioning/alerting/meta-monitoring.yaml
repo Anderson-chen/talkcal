@@ -1,0 +1,193 @@
+# 監控本身掛掉（#40）：Alloy、Mimir、Loki、Tempo 停了要被發現，不能讓 dashboard 一片空白就以為沒事。
+#
+# 誰負責發現誰：
+#
+#   停掉的         | 怎麼看出來                                   | 誰通知
+#   ---------------|----------------------------------------------|-----------------------------------
+#   Loki、Tempo    | Alloy 還在抓，up{job="loki"} = 0             | Grafana（下面第 3 條）
+#   Alloy          | 指標整個不再進來：最後一個點越來越舊         | Grafana（第 1 條）
+#   Mimir          | Grafana 查詢直接失敗                         | Grafana（第 2 條，查詢錯誤算出事）
+#   Grafana 自己   | 沒有人發告警了 —— 只能靠外面的人發現        | 外部服務（第 4 條 Watchdog 停止 heartbeat）
+#
+# 第 4 條是 dead man's switch：一條永遠在響的告警，每分鐘打一次外部服務（Healthchecks.io）的網址。
+# Grafana 掛了、機器整台斷線、通知管線壞了，打的動作就停了，由外部服務寄信。為什麼選它見 ops/README.md。
+#
+# 寄給誰：1～3 條沒寫，走 notification policy（#121 的 policies.yaml，寄 email）；severity 用同一套值
+# （critical = 什麼都看不到了、warning = 少了一種訊號）。第 4 條用 notification_settings 直接指定 heartbeat，
+# 不經過 policy 樹，所以不必改 policies.yaml，也不會混進 email。
+#
+# 跟 rules.yaml 一樣：這個檔 Grafana 不做環境變數展開，annotations 裡的 $ 照寫一個；
+# 只有 contactPoints 那段的 $HEARTBEAT_URL 會被換成環境變數（contact point 會展開，實測過）。
+
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: heartbeat
+    receivers:
+      - uid: talkcal-heartbeat
+        type: webhook
+        settings:
+          # 外部服務的 ping 網址（https://hc-ping.com/<uuid>），是祕密：值在 deploy/.env，沒設時的行為見 ops/compose.yaml
+          url: $HEARTBEAT_URL
+          httpMethod: POST
+        # 只送「還在響」，Watchdog 本來就不會恢復；就算恢復了也不該被當成一次 ping
+        disableResolveMessage: true
+
+groups:
+  - orgId: 1
+    name: meta-monitoring
+    folder: talkcal
+    interval: 1m
+    rules:
+      # ── 1. Alloy 停了：指標不再進來 ───────────────────────────────
+      - uid: meta-alloy-down
+        title: Alloy 停了，指標不再進來
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: mimir
+            model:
+              refId: A
+              instant: true
+              # 不用 up < 1：Alloy 死掉時不會再寫 up，Mimir 查詢會往回找 5 分鐘、一直拿到最後那個 1，
+              # 要 5 分鐘後才變成「沒資料」。改看最後一個點離現在幾秒，Alloy 一停就開始變大。
+              # up{job="alloy"} 是 Alloy 抓自己（config.alloy 的 prometheus.exporter.self）
+              expr: time() - max(timestamp(up{job="alloy"}))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                # 60 秒 = 連續 4 次（15 秒一次）沒進來。Alloy 重啟只要幾秒，最多漏一次，到不了 60
+                - evaluator: { type: gt, params: [60] }
+        # 再等 2 分鐘：重啟卡久一點（拉新映像、WAL 重放）也不叫人；真的停了約 3～4 分鐘寄信
+        for: 2m
+        # 停超過 5 分鐘後連最後的點都查不到 → 沒資料，一樣是出事
+        noDataState: Alerting
+        # Mimir 查不到由第 2 條負責，這裡不重複寄
+        execErrState: OK
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Alloy 已經 {{ humanizeDuration $values.A.Value }} 沒送指標進 Mimir'
+          description: >-
+            指標、log、trace 都經過 Alloy，它停了三種都斷，dashboard 會一片空白。
+            `docker compose ps alloy` 看是不是停了；活著的話開 127.0.0.1:12345 看 remote_write 有沒有在報錯。
+            log 在 Alloy 回來後會補讀（docker 的 log 檔還在），指標和 trace 那段會缺。
+
+      # ── 2. Mimir 查不到 ──────────────────────────────────────────
+      - uid: meta-mimir-down
+        title: Mimir 查不到，指標類告警全部失效
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: mimir
+            model:
+              refId: A
+              instant: true
+              # 不看任何資料，只看「查不查得到」：Mimir 活著一定回 1。
+              # 真正的判斷在下面 execErrState —— 查詢失敗（連不上、逾時）就算出事
+              expr: vector(1)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+        # 2 分鐘：Mimir 重啟（WAL 重放）一兩分鐘內回來的不叫人
+        for: 2m
+        noDataState: Alerting
+        execErrState: Alerting
+        labels:
+          severity: critical
+        annotations:
+          summary: Grafana 連續 2 分鐘查不到 Mimir
+          description: >-
+            所有用 Mimir 的告警（app 掛了、5xx、延遲、SLO）這段時間都在「查詢失敗」，不會正常觸發。
+            `docker compose ps mimir`、`docker compose logs mimir` 看原因（常見：硬碟滿、記憶體被砍）。
+            Alloy 會先把指標留在自己的 WAL，Mimir 回來後補送，短時間停掉不太會缺資料。
+
+      # ── 3. Loki、Tempo 掛了 ──────────────────────────────────────
+      - uid: meta-backend-down
+        title: Loki 或 Tempo 抓不到
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: mimir
+            model:
+              refId: A
+              instant: true
+              # by (job)：Loki、Tempo 各算一個，同時掛時信裡分得出是哪個
+              expr: min by (job) (up{job=~"loki|tempo"})
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+        for: 2m
+        # 沒資料 = Alloy 沒在送，那是第 1 條的事
+        noDataState: OK
+        execErrState: OK
+        labels:
+          # 少的是 log 或 trace 其中一種，指標和告警都還在，不必半夜叫醒人
+          severity: warning
+        annotations:
+          summary: '{{ $labels.job }} 連續 2 分鐘抓不到'
+          description: >-
+            Loki 停了：log 會先留在 Docker 的 log 檔，回來後 Alloy 補送。
+            Tempo 停了：這段時間的 trace 會掉（Alloy 只在記憶體排隊重試）。
+            `docker compose ps {{ $labels.job }}`、`docker compose logs {{ $labels.job }}` 看原因。
+
+      # ── 4. Watchdog：永遠在響，停了才是出事 ──────────────────────
+      - uid: meta-watchdog
+        title: Watchdog（永遠在響，送 heartbeat 給外部服務）
+        condition: C
+        data:
+          # 不查任何資料源，只算一個常數：Mimir 掛掉時照樣響（那個情況第 2 條會寄信），
+          # heartbeat 只負責「Grafana 和通知管線還活著」，不跟 Mimir 一起停、同一件事吵兩次
+          - refId: A
+            datasourceUid: __expr__
+            model:
+              refId: A
+              type: math
+              expression: '1'
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: Alerting
+        execErrState: Alerting
+        labels:
+          # 不給 severity：它不是事件，不進 email；萬一有人改了下面的 notification_settings，policy 也比對不到它
+          alert_type: watchdog
+        annotations:
+          summary: 這條永遠在響是正常的；它停了，外部服務會寄信
+          description: >-
+            每分鐘打一次 HEARTBEAT_URL。外部服務超過寬限時間沒收到，就代表 Grafana 停了、
+            機器斷線，或 Grafana 的通知送不出去。雲端機器關機用 infra/envs/1-ec2/power.sh stop，它會先暫停外部服務的 check，見 ops/README.md。
+        # 不走 policy 樹，直接送 heartbeat。
+        # Grafana 的通知每 group_interval 檢查一次，離上次送出已滿 repeat_interval 就重送 —— 這就是 heartbeat 的節奏。
+        # 不設成 1m／1m：實測每 2 分鐘才送一次。第 60 秒那次檢查時離上次送出差幾毫秒不滿 1 分鐘，要等下一輪。
+        # 30s 檢查一次、滿 50 秒就送：第 30 秒的檢查不夠、第 60 秒的一定夠，穩定每分鐘一次
+        notification_settings:
+          receiver: heartbeat
+          group_by: ['alertname']
+          group_wait: 0s
+          group_interval: 30s
+          repeat_interval: 50s

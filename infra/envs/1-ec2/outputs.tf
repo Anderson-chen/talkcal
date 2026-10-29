@@ -38,3 +38,9 @@ output "oauth_callback_urls" {
     github = "https://${local.site_address}/api/auth/oauth2/callback/github"
   }
 }
+
+output "heartbeat_url" {
+  description = "Grafana 打的 heartbeat 網址（#40）。power.sh stop 從這裡取 check 的 UUID 去暫停"
+  value       = var.heartbeat_url
+  sensitive   = true
+}
