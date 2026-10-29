@@ -268,7 +268,8 @@ const FP={
 "infra/envs/1-ec2/secrets.tf":"產生 DB 密碼，連同網址、Bedrock 設定、Google／GitHub 的 client secret、告警寄信的 SMTP 寫成一份 .env 存進 SSM。",
 "infra/envs/1-ec2/s3.tf":"（gpu）模型檔的 bucket。",
 "infra/envs/1-ec2/user-data.sh.tftpl":"第一次開機跑一次：裝或驗證 Docker、clone repo、呼叫 deploy.sh。",
-"infra/envs/1-ec2/deploy.sh":"在機器上跑的部署：拉版本、算版本號 →（gpu）拉模型 → 拉 .env → 同步 DB 密碼 → 兩組 compose up。",
+"infra/envs/1-ec2/deploy.sh":"在機器上跑的部署：拉版本、算版本號 →（gpu）拉模型 → 拉 .env、檢查 .env → 同步 DB 密碼 → 兩組 compose up → 冒煙測試。",
+"infra/envs/1-ec2/smoke.sh":"部署的冒煙測試，deploy.sh 呼叫兩次：起容器之前查 .env 不是 CRLF（必要的 key 由 deploy.sh 用 compose config 查）；全部起來之後查 https 的網站和 /api、Grafana 資料源、Alloy 抓得到 app、bedrock 時用 .env 的 key 問 Bedrock 一句、有設 SMTP 時寄測試信。沒過就讓部署失敗。",
 "infra/envs/1-ec2/compose.ec2.yaml":"疊在 deploy/compose.yaml 上、兩種 model_backend 共用的雲端差異：DB 密碼、session cookie 只走 HTTPS、app 記憶體上限、Caddy。",
 "infra/envs/1-ec2/compose.bedrock.yaml":"（bedrock）不起模型容器，app 的模型位址、key、名稱換成 Bedrock 的。",
 "infra/envs/1-ec2/compose.gpu.yaml":"（gpu）模型來源換成從 S3 拉下來的資料夾。",
@@ -298,7 +299,8 @@ const F={
 "infra/envs/1-ec2/secrets.tf":[["7–23","locals（site_address、backend_env）","dotenv"],["11","site_address（也是 Caddy 的網址）","caddy"],["25–28","random_password.db","pwd"],["31–53","aws_ssm_parameter.dotenv（含 Google、GitHub 的 client id／secret、告警寄信的 SMTP）","dotenv"]],
 "infra/envs/1-ec2/s3.tf":[["7–10","aws_s3_bucket.models","s3m"],["12–21","加密","s3m"],["23–31","公開封鎖","s3m"]],
 "infra/envs/1-ec2/user-data.sh.tftpl":[["全檔","第一次開機腳本","ec2"]],
-"infra/envs/1-ec2/deploy.sh":[["31–40","連 release tag 一起拉、算版本號（cd/version.sh）","app"],["60","從 SSM 拉 .env","dotenv"],["72","疊三份 compose","ec2"],["83–89","起 postgres、ALTER ROLE","postgres"],["92","up -d --build","app"],["99","起觀測（疊 compose.ops.yaml；--env-file 帶告警寄信的 SMTP）","obs"]],
+"infra/envs/1-ec2/deploy.sh":[["31–40","連 release tag 一起拉、算版本號（cd/version.sh）","app"],["60","從 SSM 拉 .env","dotenv"],["65","檢查 .env（smoke.sh env），起容器之前","dotenv"],["72","疊三份 compose","ec2"],["77","compose config -q：compose 檔裡 ${X:?} 的必要 key","dotenv"],["84–90","起 postgres、ALTER ROLE","postgres"],["93","up -d --build","app"],["100","起觀測（疊 compose.ops.yaml；--env-file 帶告警寄信的 SMTP）","obs"],["107","冒煙測試（smoke.sh services）","obs"]],
+"infra/envs/1-ec2/smoke.sh":[["56–77",".env 不是 CRLF；有設 SMTP 就要有收件人","dotenv"],["79–86","https 的網站首頁和 /api（走 Caddy）","caddy"],["88–104","Grafana 資料源連得上、Alloy 抓得到 app","obs"],["106–151","bedrock 時用 .env 的 key 和模型問一句（max_tokens=1）","bsvc"],["153–198","有設 SMTP 時寄測試信（receivers test API）","obs"]],
 "infra/envs/1-ec2/compose.ec2.yaml":[["18–20","postgres 密碼","postgres"],["22–30","app 密碼、session cookie Secure、mem_limit","app"],["36–53","caddy","caddy"],["55–57","caddy volumes","caddy"]],
 "infra/envs/1-ec2/compose.bedrock.yaml":[["11–12","model-seed 不起","seed"],["13–14","llm-chat 不起","llm"],["16–27","app 改打 Bedrock，token 指標標成 bedrock","app"]],
 "infra/envs/1-ec2/compose.gpu.yaml":[["8–10","model-seed 改掛 S3 拉下來的資料夾","seed"]],
@@ -326,7 +328,7 @@ eip:{"domain":E+"ec2.tf:34","association":E+"ec2.tf:86"},
 ec2:{"instance_type":E+"ec2.tf:5","root_volume_size":E+"ec2.tf:6","http_tokens":E+"ec2.tf:55","hop_limit":E+"ec2.tf:59","user_data_replace_on_change":E+"ec2.tf:74","ignore_changes":E+"ec2.tf:78"},
 ami:{"dlami":E+"ec2.tf:20","ubuntu":E+"ec2.tf:27"},
 dotenv:{"site_address":E+"secrets.tf:11","name":E+"secrets.tf:32","type":E+"secrets.tf:34","GOOGLE_*、GITHUB_*":E+"secrets.tf:42","ALERT_SMTP_*、ALERT_EMAIL_TO":E+"secrets.tf:47"},
-bsvc:{"BEDROCK_BASE_URL":E+"secrets.tf:19","BEDROCK_MODEL":E+"variables.tf:68"},
+bsvc:{"BEDROCK_BASE_URL":E+"secrets.tf:19","BEDROCK_MODEL":E+"variables.tf:68","部署時問一句":E+"smoke.sh:109"},
 s3m:{"count":E+"s3.tf:8","bucket":E+"s3.tf:9"},
 tfstate:{"bucket":B+"main.tf:33","prevent_destroy":B+"main.tf:36","versioning":B+"main.tf:44","sse_algorithm":B+"main.tf:53"},
 role:{"assume_role":E+"iam.tf:8","SSM attachment":E+"iam.tf:20","ReadDotenv":E+"iam.tf:32","ReadModels":E+"iam.tf:41"},
@@ -337,10 +339,10 @@ budget:{"limit_amount":B+"variables.tf:19","80% ACTUAL / 100% FORECASTED":B+"mai
 caddy:{"image":E+"compose.ec2.yaml:37","ports":E+"compose.ec2.yaml:39","caddy-data:/data":E+"compose.ec2.yaml:48","reverse_proxy":E+"Caddyfile:9"},
 web:{"ports":D+":280","limit_req":"web/nginx.conf:27","set_real_ip_from":"web/nginx.conf:52","resolver":"web/nginx.conf:89","X-Forwarded-Proto":"web/nginx.conf:97","proxy_read_timeout":"web/nginx.conf:115","otel_trace":"web/nginx.conf:104","image":"web/Dockerfile:25"},
 app:{"image":D+":219","mem_limit":E+"compose.ec2.yaml:30","SESSION_COOKIE_SECURE":E+"compose.ec2.yaml:26","SPRING_AI_OPENAI_*":{bedrock:E+"compose.bedrock.yaml:18",gpu:"backend/src/main/resources/application-docker.properties:8"},"TALKCAL_AI_BACKEND":{bedrock:E+"compose.bedrock.yaml:22",gpu:"backend/src/main/resources/application.properties:20"},"depends_on":{bedrock:E+"compose.bedrock.yaml:25",gpu:D+":242"},"management 埠":"backend/src/main/resources/application.properties:110","healthcheck":D+":254","stop_grace_period":D+":264"},
-postgres:{"image":D+":161","POSTGRES_PASSWORD":E+"compose.ec2.yaml:20","密碼同步":E+"deploy.sh:88","postgres-exporter":D+":191","--no-collector.stat_user_tables":D+":199"},
+postgres:{"image":D+":161","POSTGRES_PASSWORD":E+"compose.ec2.yaml:20","密碼同步":E+"deploy.sh:89","postgres-exporter":D+":191","--no-collector.stat_user_tables":D+":199"},
 llm:{"-ngl":D+":107","-c / -np":D+":109","--kv-unified":D+":116"},
 seed:{"sha256sum -c":D+":80"},
-obs:{"Alloy":O+":114","Mimir":O+":23","Loki":O+":43","Tempo":O+":57","Grafana":O+":70","Grafana 埠":O+":76","告警":O+":89","Trace 取樣":E+"compose.ops.yaml:11","Alloy 抓指標":"ops/alloy/config.alloy:59","metrics-generator":"ops/tempo/tempo.yaml:46","OTLP 入口":"ops/alloy/config.alloy:158","SLO":"ops/mimir/rules/anonymous/slo.yaml:38"}
+obs:{"Alloy":O+":114","Mimir":O+":23","Loki":O+":43","Tempo":O+":57","Grafana":O+":70","Grafana 埠":O+":76","告警":O+":89","Trace 取樣":E+"compose.ops.yaml:11","Alloy 抓指標":"ops/alloy/config.alloy:59","metrics-generator":"ops/tempo/tempo.yaml:46","OTLP 入口":"ops/alloy/config.alloy:158","SLO":"ops/mimir/rules/anonymous/slo.yaml:38","冒煙測試":E+"smoke.sh:200"}
 };
 // t：步驟標題（短）；d：說明。依 model_backend 不同的寫成 {bedrock, gpu}
 const ROUTES={
