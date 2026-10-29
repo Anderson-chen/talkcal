@@ -143,7 +143,7 @@ cd backend && ./gradlew classes     # 後端：編譯就是檢查
 
 挑工具時看三件事：**授權**（只用 MIT、Apache-2.0；這些都是開發工具，不會打包進 jar 或映像檔）、
 **社群熱門度**（維護者、星數、下載量，最後一次發版多久以前）、**版本發布滿兩週**（新版被植入惡意程式碼通常幾天內就會被發現；
-Trivy 2026-03 的事件見下面的「漏洞掃描」）。前端套件的兩週規則寫在 `web/pnpm-workspace.yaml`（`minimumReleaseAge`），`pnpm add` 自動套用，連間接依賴也算進去。
+Trivy 2026-03 的事件見下面的「漏洞掃描」）。前端套件的兩週規則寫在 `web/pnpm-workspace.yaml`（`minimumReleaseAge`），`pnpm add` 自動套用，連間接依賴也算進去；`checks.sh` 的 `pnpm install --frozen-lockfile` 也照它檢查 lockfile，不滿兩週的版本進不了 master。
 
 **後端：Error Prone，不加 SpotBugs、Checkstyle、PMD**
 

@@ -51,7 +51,9 @@ pnpm e2e:ui          # 同上，開視窗一步一步看每個動作前後的畫
 - **找元素用使用者看得到的東西**：role、label、按鈕上的字，不用 CSS class。名字撞到時用範圍限定（在某一塊裡找），不用 `.first()`、`.last()` —— 那是靠順序，版面一改就點錯而且不會報錯。
 - **寫 E2E 之前先打開頁面看**：只看原始碼會猜錯畫面上實際有什麼（手機版有兩個同名的「新增行程」）。
 - **時間固定在 2026-10-06 11:30**（`page.clock`）：行事曆到處用到「今天」。
-- 版本都釘死、只挑發布超過兩週的版本：寫在 `pnpm-workspace.yaml`（`saveExact`、`minimumReleaseAge`），`pnpm add` 自動套用。CI 映像檔裡的 Chromium 版本從 `package.json` 讀（`ci/Dockerfile`）。
+- 版本都釘死、只挑發布超過兩週的版本：寫在 `pnpm-workspace.yaml`（`saveExact`、`minimumReleaseAge`），`pnpm add` 自動套用；
+  CI 的 `pnpm install --frozen-lockfile` 也照它檢查整份 lockfile，有不滿兩週的版本就失敗（不管是誰、用什麼方式改的 lock）。
+  真的要提早用（例如緊急的安全修補），在 `pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude` 列出那個套件，理由寫在旁邊。CI 映像檔裡的 Chromium 版本從 `package.json` 讀（`ci/Dockerfile`）。
 
 部署：在 `backend/` 裡 `./gradlew deployWeb`，開 http://localhost:18080。
 映像檔是 `Dockerfile` 兩段式（Node build → nginx），nginx 的設定在 `nginx.conf`。
@@ -103,7 +105,7 @@ pnpm e2e:ui          # 同上，開視窗一步一步看每個動作前後的畫
   - 版本釘在 `package.json` 的 `packageManager`（含 sha512），由 Node 附的 corepack 下載、驗證，本機、CI 映像檔、
     `Dockerfile` 用的都是同一版。用 11 不用最新的 12：pnpm 12 改發原生執行檔，Node 22.14 附的 corepack 0.31 跑不起來
   - pnpm 11 只讀 `pnpm_config_` 開頭的環境變數（例如 `pnpm_config_store_dir`），`npm_config_` 開頭的它不看；
-    專案設定也不讀 `.npmrc`，寫在 `pnpm-workspace.yaml`
+    pnpm 自己的設定（例如 `minimumReleaseAge`、`saveExact`）寫在 `pnpm-workspace.yaml`
   - 硬連結只在本機省得到：容器裡（CI、`Dockerfile`）store 在 volume／快取上、專案在另一個檔案系統，連不過去，pnpm 自動改成複製
   - 量測（2026-10-19，Windows 11，在專案同層開全新 worktree，從 `git worktree add` 完到 `test` 跑完；
     「冷」是空的 npm cache／pnpm store，「熱」是已經裝過一次）：
@@ -113,7 +115,7 @@ pnpm e2e:ui          # 同上，開視窗一步一步看每個動作前後的畫
     | npm（`npm ci`） | 5.5 秒 | 3.6–4.0 秒 | 95 MB，1731 個檔案 | 95 MB |
     | pnpm（`pnpm install --frozen-lockfile`） | 6.8 秒 | 3.4 秒 | 95 MB，1785 個檔案 | 不到 1 MB（其餘是指向 store 的硬連結） |
 
-    時間差不多：這裡只有 68 個套件，裝起來本來就快；冷的時候 pnpm 還要多建 store，反而慢一點。
+    時間差不多：量的時候（還沒加 ESLint）只有 68 個套件，裝起來本來就快；冷的時候 pnpm 還要多建 store，反而慢一點。
     省下來的是磁碟：每多開一個 worktree，npm 多 95 MB，pnpm 幾乎不多占。
     「新占的磁碟」是 `find node_modules -type f -links 1` 加總：硬連結數大於 1 的檔案跟 store 共用同一份資料
   - 反例（嚴格有沒有真的擋）：在 `src/` 加一支 `import { capitalize } from '@vue/shared'`（vue 的依賴，沒寫在 `package.json`）。
