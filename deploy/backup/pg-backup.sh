@@ -22,8 +22,11 @@ KEEP_MIN="${KEEP_MIN:-7}"
 
 log() { echo "[pg-backup] $*" >&2; }
 
+# 備份裡有所有人的行程和對話：目錄和檔案只給擁有者讀寫，跟 deploy.sh 寫 .env 時的 umask 077 一樣
+umask 077
 mkdir -p "$BACKUP_DIR"
-name="$PG_DB-$(date -u +%Y%m%dT%H%M%SZ).dump"
+# 檔名只精確到秒：同一秒已經有一份（前一份剛做完，backup-to-s3.sh 的鎖讓它們排隊），就等到下一秒，不蓋掉它
+while name="$PG_DB-$(date -u +%Y%m%dT%H%M%SZ).dump"; [ -e "$BACKUP_DIR/$name" ]; do sleep 1; done
 final="$BACKUP_DIR/$name"
 tmp="$BACKUP_DIR/.$name.tmp"
 # 中途失敗（容器沒在跑、磁碟滿、被中斷）只會留下 .tmp，而且會被清掉：
@@ -46,7 +49,7 @@ fi
 entries=$(grep -c ' TABLE DATA ' <<< "$toc" || true)
 
 mv "$tmp" "$final"
-# 完整性檢查二：雜湊。之後複製、上傳、下載途中壞掉（或被改過），還原前一比就知道
+# 完整性檢查二：雜湊。之後複製、上傳、下載途中壞掉，還原前一比就知道
 ( cd "$BACKUP_DIR" && sha256sum "$name" > "$name.sha256" )
 
 size=$(wc -c < "$final" | tr -d ' ')
