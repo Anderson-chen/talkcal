@@ -1,0 +1,7 @@
+# pnpm 的專案設定（pnpm 11 讀這裡，不讀 .npmrc）。寫在這裡，打 pnpm add、pnpm update 時自動套用，不靠人記得帶參數
+
+# 只裝發布超過兩週（分鐘）的版本，連間接依賴也算：新版被植入惡意程式碼通常幾天內就會被發現
+minimumReleaseAge: 20160
+
+# pnpm add 寫進 package.json 的是確切版本（7.0.0），不是範圍（^7.0.0）
+saveExact: true

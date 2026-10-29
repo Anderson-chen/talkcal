@@ -51,7 +51,7 @@ pnpm e2e:ui          # 同上，開視窗一步一步看每個動作前後的畫
 - **找元素用使用者看得到的東西**：role、label、按鈕上的字，不用 CSS class。名字撞到時用範圍限定（在某一塊裡找），不用 `.first()`、`.last()` —— 那是靠順序，版面一改就點錯而且不會報錯。
 - **寫 E2E 之前先打開頁面看**：只看原始碼會猜錯畫面上實際有什麼（手機版有兩個同名的「新增行程」）。
 - **時間固定在 2026-10-06 11:30**（`page.clock`）：行事曆到處用到「今天」。
-- 版本都釘死（`pnpm add --save-exact`），挑發布超過兩週的版本。CI 映像檔裡的 Chromium 版本從 `package.json` 讀（`ci/Dockerfile`）。
+- 版本都釘死、只挑發布超過兩週的版本：寫在 `pnpm-workspace.yaml`（`saveExact`、`minimumReleaseAge`），`pnpm add` 自動套用。CI 映像檔裡的 Chromium 版本從 `package.json` 讀（`ci/Dockerfile`）。
 
 部署：在 `backend/` 裡 `./gradlew deployWeb`，開 http://localhost:18080。
 映像檔是 `Dockerfile` 兩段式（Node build → nginx），nginx 的設定在 `nginx.conf`。
@@ -102,7 +102,9 @@ pnpm e2e:ui          # 同上，開視窗一步一步看每個動作前後的畫
   沒寫在 `package.json` 的套件 import 不到，不會因為「剛好被別的套件帶進來」而能用，哪天那個套件不帶了才壞。
   - 版本釘在 `package.json` 的 `packageManager`（含 sha512），由 Node 附的 corepack 下載、驗證，本機、CI 映像檔、
     `Dockerfile` 用的都是同一版。用 11 不用最新的 12：pnpm 12 改發原生執行檔，Node 22.14 附的 corepack 0.31 跑不起來
-  - pnpm 11 只讀 `pnpm_config_` 開頭的環境變數（例如 `pnpm_config_store_dir`），`npm_config_` 開頭的它不看
+  - pnpm 11 只讀 `pnpm_config_` 開頭的環境變數（例如 `pnpm_config_store_dir`），`npm_config_` 開頭的它不看；
+    專案設定也不讀 `.npmrc`，寫在 `pnpm-workspace.yaml`
+  - 硬連結只在本機省得到：容器裡（CI、`Dockerfile`）store 在 volume／快取上、專案在另一個檔案系統，連不過去，pnpm 自動改成複製
   - 量測（2026-10-19，Windows 11，在專案同層開全新 worktree，從 `git worktree add` 完到 `test` 跑完；
     「冷」是空的 npm cache／pnpm store，「熱」是已經裝過一次）：
 
@@ -116,6 +118,8 @@ pnpm e2e:ui          # 同上，開視窗一步一步看每個動作前後的畫
     「新占的磁碟」是 `find node_modules -type f -links 1` 加總：硬連結數大於 1 的檔案跟 store 共用同一份資料
   - 反例（嚴格有沒有真的擋）：在 `src/` 加一支 `import { capitalize } from '@vue/shared'`（vue 的依賴，沒寫在 `package.json`）。
     npm：`vitest`、`vue-tsc` 都過；pnpm：`vitest` 報 `Cannot find package '@vue/shared'`、`vue-tsc` 報 `TS2307`，兩個都失敗
+  - 反例（`pnpm-workspace.yaml` 的規則有沒有生效，2026-10-30）：空資料夾 `pnpm add -D vite`，有設定裝到 8.3.4（10/8），
+    沒設定裝到 8.3.5（10/21，不滿兩週）；`pnpm add -D is-number` 有設定寫成 `7.0.0`，沒設定寫成 `^7.0.0`
 - **用 proxy 不用 CORS**：開發時 Vite 轉 `/api`，部署時 nginx 轉，瀏覽器永遠只看到一個來源。
 - **TypeScript 釘在 5.9**：TS 7 是 Go 重寫的版本，沒有舊的 JS API，vue-tsc 3 還接不上
   （會噴 `Package subpath './lib/tsc' is not defined`）。等 vue-tsc 支援再升。
