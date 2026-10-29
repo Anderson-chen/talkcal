@@ -66,6 +66,7 @@ CI 每天掃漏洞（`ci/vulns.sh`），掃到了也只會紅燈，還是要人�
 - 多一個第三方服務能讀寫這個 repo（Mend 的 App 要 contents、pull requests、issues 的寫入權限）。
 - 設定比 Dependabot 複雜，寫錯不一定會被 validator 擋下來（實測：拼錯欄位、型別錯會擋；列舉值打錯、regex 少了捕捉群組不會擋），所以改設定要跑本機 dry-run 看實際抓到什麼。
 - `pr-issue` 檢查要放過 Renovate 的 PR（它們沒有對應的 issue），追蹤改看 Dependency Dashboard。
+- Docker Hub 不登入翻不到舊 tag 的發佈時間，映像檔設成「拿不到時間就不等」，所以沒有日期的映像檔版本不受 14 天保護（要補的話給 Renovate 一把 Docker Hub 唯讀 token）。
 - 所有更新都晚 14 天；HIGH、CRITICAL 要提早得有人看 Dashboard、勾選，前端還要手動在 `pnpm-workspace.yaml` 放行那一版。
 
 ## 什麼時候重想
@@ -73,6 +74,7 @@ CI 每天掃漏洞（`ci/vulns.sh`），掃到了也只會紅燈，還是要人�
 - Dependabot 支援 pnpm 11，而且 shell 腳本裡的版本改成別的方式釘（例如全部搬進 Dockerfile） → Dependabot 的「零安裝」就值得了。
 - repo 搬離 GitHub → Renovate 支援 GitLab、Bitbucket 等，設定可以照搬；Dependabot 不行。
 - 要自動合併 patch → 先有足夠的測試覆蓋，再對 devDependencies 的 patch 開 `automerge`。
+- 架構頁的版本靠 regex 從 HTML 裡抓，頁面格式一改就默默抓不到 → 改成頁面從 compose 讀版本，或在 CI 比對兩邊，拿掉這兩個 regex。
 - Mend 的 App 改成收費或限制公開 repo → 改用 `renovatebot/github-action` 自己跑，同一份設定。
 
 ## 證據

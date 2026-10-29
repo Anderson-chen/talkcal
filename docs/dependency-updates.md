@@ -150,24 +150,28 @@ dry-run 抓到的問題（validator 都沒擋）：
 C、E、F 想放行 HIGH 都沒成功，結果跟 D 一樣 —— 漏洞的設定是 Renovate 最後用 `force` 蓋上去的（原始碼 `vulnerabilityToPackageRules`），
 `packageRules` 改不動它。所以分流放在人那一步（上面的「HIGH、CRITICAL 漏洞要提早升」）。
 
-### 4. 目前過期的套件（2026-10-19 dry-run 結果）
+### 4. 目前過期的套件（2026-10-30 dry-run 結果，對 master 跑）
+
+共 10 個分支。「等待中」是發佈還不滿 14 天，Renovate 先不開。
 
 | 套件 | 在哪 | 目前 | 可升到 | 進哪個 PR |
 |---|---|---|---|---|
-| Gradle | wrapper、`backend/Dockerfile` | 9.2.1 | 9.8.1 | `renovate/gradle` |
-| tools.jackson（Jackson 3 BOM） | `build.gradle` | 3.1.7 | 3.2.3 | `renovate/backend-minor-patch` |
-| com.fasterxml.jackson（Jackson 2 BOM） | `build.gradle` | 2.22.3 | 2.22.4（當時還沒到等待期） | 同上 |
-| ArchUnit | `build.gradle` | 1.4.1 | 1.5.1 | 同上 |
+| **vite**（有漏洞，GHSA-587h-7wmj-h5pm 等） | `web/package.json` | 8.3.2 | 8.3.3 | `renovate/npm-vite-vulnerability`（安全修補，單獨一個） |
+| Gradle | wrapper、`backend/Dockerfile` | 9.2.1 | 9.8.1／9.8.2 | `renovate/gradle` |
+| Jackson 3 BOM、ArchUnit | `build.gradle` | 3.1.7、1.4.1 | 3.2.3、1.5.1 | `renovate/backend-minor-patch` |
+| Spring Boot、Spring AI、springdoc、Error Prone、Jackson 2 BOM | `build.gradle` | 4.1.1、2.0.1、3.1.1、2.50.0、2.22.3 | 4.1.2、2.0.2、3.2.0、2.51.0、2.22.4（等待中） | 同上 |
 | @playwright/test | `web/package.json` | 1.63.0 | 1.64.1 | `renovate/web-minor-patch` |
-| vue、vite、vitest、vue-tsc、@vitejs/plugin-vue | `web/package.json` | — | 各一個 patch | 同上 |
-| Trivy | `ci/vulns.sh` | 0.74.0 | 0.76.0 | `renovate/images-minor-patch` |
-| Caddy | `compose.ec2.yaml`、架構頁 | 2.10.0 | 2.11.7（要勾選） | 同上 |
-| Alloy | `ops/compose.yaml`、架構頁 | v1.11.0 | v1.20.1 | `renovate/observability-minor-patch` |
-| Loki | 同上 | 3.3.0 | 3.7.8 | 同上 |
-| Mimir | 同上 | 3.2.1 | 3.2.2 | 同上 |
-| Grafana | 同上 | 11.4.0 | 11.6.16；major 13.2.4（要勾選） | 同上；`renovate/major-grafana-monorepo` |
+| vue、vitest、vue-tsc、@vitejs/plugin-vue、@vitest/coverage-v8 | `web/package.json` | — | 各一個 patch | 同上 |
+| eslint、eslint-plugin-vue | `web/package.json` | 10.12.0、10.11.1 | 10.13.0、10.12.0（等待中） | 同上 |
+| Trivy、Prometheus（`ci/rules.sh`） | `ci/*.sh` | 0.74.0、v3.14.0 | 0.76.0、v3.15.0 | `renovate/images-minor-patch` |
+| python（告警測試的假 app） | `ci/alerting/compose.yaml` | 3.13-alpine | 3.15、digest 更新 | 同上 |
+| Caddy | `compose.ec2.yaml`、架構頁 | 2.10.0 | 2.11.6（要勾選） | 同上 |
+| mailpit | `ops/compose.yaml` | v1.31.6 | v1.32.0（等待中） | 同上 |
+| Alloy、Loki、Mimir、Tempo、Grafana | `ops/compose.yaml`、架構頁 | v1.11.0、3.3.0、3.2.1、3.1.0、11.4.0 | v1.20.1、3.7.9、3.2.2、3.1.1、11.6.16 | `renovate/observability-minor-patch` |
+| Grafana major | 同上 | 11.4.0 | 13.3.0（要勾選） | `renovate/major-grafana-monorepo` |
 | Terraform aws provider | `infra/` 鎖檔 | 6.68.0 | 6.69.1 | `renovate/terraform-minor-patch` |
-| Node | `web/Dockerfile`、`ci/Dockerfile` | 22 | 24（major，要勾選） | `renovate/major-node` |
+| Node | `web/Dockerfile`、`ci/Dockerfile` | 22 | 26（major，要勾選） | `renovate/major-node` |
 
-已是最新：Spring Boot 4.1.1、Spring AI 2.0.1、springdoc 3.1.1、temurin 25、postgres 18.6、Tempo 3.1.0、gitleaks v8.30.1、
-所有 GitHub Actions、Terraform 本體、llama.cpp b10964、nginx 1.30（stable 線，見上）。
+已是最新：temurin 25、postgres 18.6、gitleaks v8.30.1、所有 GitHub Actions、Terraform 本體、llama.cpp b10964、nginx 1.30（stable 線）。
+`ci/rules.sh`、`ops/` 的 mailpit 是這份設定寫好之後才加進 master 的，沒改設定就被抓到了：mailpit 走內建的 compose 管理器，
+`ci/rules.sh` 的 Prometheus 走自訂 regex —— 它抓的是「`ci/*.sh` 裡的 `image=`」這個寫法，不是一個一個列。
