@@ -3,6 +3,12 @@
 - PR 標題跟 commit 標題同一種寫法（見 `commit.md`）。
 - PR 描述照 `.github/pull_request_template.md`：大標題用英文（`Summary`、`Dependencies`、`Evidence`、`Test Plan`、`Risk`），
   內文用中文，不適用的段落整段拿掉。演練時間軸這類很長的紀錄收進 `<details>`。
+- PR 描述的截圖放 orphan 分支 `evidence` 的 `pr-<編號>/`，不 commit 進 PR 分支：圖只有審查當下有用，一進 master 就永遠留在歷史裡，每次 clone 都要下載。
+  - 網址用 commit SHA：`https://github.com/Anderson-chen/talkcal/blob/<sha>/pr-<編號>/<檔名>?raw=true`。
+    不用分支名稱：合併後分支會被刪，圖就 404（#148 就這樣壞過）。
+  - 加圖：`git worktree add <暫存資料夾> evidence`，放進 `pr-<編號>/`、commit、push，再用 `git rev-parse HEAD` 取 SHA。
+    只往上加 commit、不 force-push，舊 PR 引用的 SHA 才一直找得到。
+  - 文件（README、`docs/`）要引用的圖才進 master，放 `docs/images/`。
 - PR 描述不要有 `Generated with Claude Code`。
 - PR 不貼 label：分類（`stage:`／`product:`、`p0`／`p1`、`area:`）都看它 `Closes` 的 issue，只維護一份。
   做的過程發現 issue 放錯段或少了 `area:`，回去改 issue 的 label。

@@ -183,7 +183,7 @@ sum by (service) (count_over_time({env="docker"} | json | log_level=~"WARN|ERROR
 app 對每個請求開一個 trace、全部送出（`management.tracing.sampling.probability=1.0`），
 用 OTLP 推給 Alloy 的 4318，Alloy 決定留哪些（見下面「Trace 取樣」）再轉給 Tempo。
 
-一個助理請求實際的樹（2026-10-19 量的，截圖在 [docs/evidence/2026-10-19-request-trace.png](../docs/evidence/2026-10-19-request-trace.png)）：
+一個助理請求實際的樹（2026-10-19 量的，截圖在 [docs/images/2026-10-19-request-trace.png](../docs/images/2026-10-19-request-trace.png)）：
 
 ```
 talkcal-web  POST /api                          ← nginx（web/nginx.conf 的 otel_trace），trace 從這裡開始
