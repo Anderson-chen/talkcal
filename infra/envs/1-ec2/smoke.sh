@@ -113,29 +113,40 @@ check_bedrock() {
     pass "Bedrock：跳過（沒有 BEDROCK_BASE_URL，模型不走 Bedrock）"
     return
   fi
-  local body result
+  local body key result status attempt
   body="$(python3 -c 'import json,sys; print(json.dumps({"model": sys.argv[1], "max_tokens": 1, "messages": [{"role": "user", "content": "ping"}]}))' "$(env_get BEDROCK_MODEL)")"
-  # key 用 -K - 從 stdin 給 curl：放在 -H 參數的話，ps 看得到
-  if result="$(printf 'header = "Authorization: Bearer %s"\n' "$(env_get BEDROCK_API_KEY)" \
-    | curl -sS -K - --max-time 60 -w '\n%{http_code}' -H 'Content-Type: application/json' -d "$body" \
-      "$base_url/chat/completions" | python3 -c '
+  # key 用 -K - 從 stdin 給 curl：放在 -H 參數的話，ps 看得到。curl 設定檔的字串裡 \ 和 " 要跳脫
+  key="$(env_get BEDROCK_API_KEY)"
+  key="${key//\\/\\\\}"
+  key="${key//\"/\\\"}"
+  # 429、5xx、連不上可能只是一時的，最多試 3 次；401、404 這種設定錯的，試幾次都一樣，馬上失敗
+  for attempt in 1 2 3; do
+    status=0
+    result="$(printf 'header = "Authorization: Bearer %s"\n' "$key" \
+      | curl -sS -K - --max-time 60 -w '\n%{http_code}' -H 'Content-Type: application/json' -d "$body" \
+        "$base_url/chat/completions" 2>/dev/null | python3 -c '
 import json, sys
 *lines, code = sys.stdin.read().split("\n")
 if code == "200":
     sys.exit(0)
 if code == "000":
     print("連不上（DNS、網路或逾時）")
-    sys.exit(1)
+    sys.exit(2)
 try:
     err = json.loads("\n".join(lines)).get("error") or {}
     msg = err.get("message", "") if isinstance(err, dict) else str(err)
 except ValueError:
     msg = "\n".join(lines)
 print("HTTP %s %s" % (code, msg[:300]))
-sys.exit(1)')"; then
+sys.exit(2 if code == "429" or code.startswith("5") else 1)')" || status=$?
+    [ "$status" = 2 ] && [ "$attempt" -lt 3 ] || break
+    sleep 5
+  done
+  unset key
+  if [ "$status" = 0 ]; then
     pass "Bedrock：用 .env 的 key 和模型問一句，回 200"
   else
-    fail "Bedrock：${result:-連不上 $base_url}"
+    fail "Bedrock：${result:-連不上 $base_url}（試了 $attempt 次）"
   fi
 }
 

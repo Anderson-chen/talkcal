@@ -219,7 +219,7 @@ aws ec2 start-instances --instance-ids "$(terraform output -raw instance_id)" --
 | 症狀 | 檢查 |
 |---|---|
 | `terraform apply` 開不出機器，說 vCPU 上限 | gpu：GPU 配額還沒申請或還沒核准（Service Quotas → EC2 → Running On-Demand G and VT instances） |
-| AI 助理回 502、app log 說 401／403 | Bedrock API key：過期了（`terraform output` 看不到，到 IAM → Users → talkcal-bedrock 看）、或 `.env` 是舊的（apply 後要重跑 deploy.sh） |
+| AI 助理回 502、app log 說 401／403；或部署第 6 步 `✗ Bedrock：HTTP 401` | Bedrock API key：過期了（`terraform output` 看不到，到 IAM → Users → talkcal-bedrock 看）、或 `.env` 是舊的（apply 後要重跑 deploy.sh） |
 | app log 說 429 | Bedrock 的 token 配額：新帳號預設比較低，Service Quotas → Amazon Bedrock 查 Qwen3 32B 的 tokens per minute |
 | Alloy 一直報抓不到 `llm-chat:8080` | bedrock 時沒有 llm-chat，`ops/` 那份抓模型指標的設定落空，無害 |
 | user_data 沒跑完 | `sudo cat /var/log/user-data.log`。bedrock：看 Docker 的 apt 安裝那段；gpu：`nvidia-smi` 失敗是 AMI 驅動的問題；`docker compose` 失敗看 compose / buildx 有沒有裝上 |
