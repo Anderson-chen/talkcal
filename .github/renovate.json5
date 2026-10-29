@@ -133,17 +133,13 @@
     // ── major：不自動開 PR，在 Dependency Dashboard 勾了才開 ────────
     // major 常要改程式碼（API 改名、設定格式換掉），排程到了就丟 PR 只會積著沒人處理。
     // 放在 Dashboard 上看得到「有哪些 major 可以升」，決定要做時勾一下，Renovate 才開 PR
+    // GitHub Actions 例外：major 多半只是換 Node 執行環境，跟著 Actions 的群組開
     {
-      description: 'major 要在 Dependency Dashboard 勾選才開 PR',
+      description: 'major 要在 Dependency Dashboard 勾選才開 PR（GitHub Actions 除外）',
+      matchManagers: ['!github-actions'],
       matchUpdateTypes: ['major'],
       dependencyDashboardApproval: true,
-      labels: ['dependencies', 'major'],
-    },
-    {
-      description: 'GitHub Actions 的 major 例外：不用等勾選，跟著 Actions 的群組開',
-      matchManagers: ['github-actions'],
-      matchUpdateTypes: ['major'],
-      dependencyDashboardApproval: false,
+      addLabels: ['major'],
     },
 
     // ── 刻意釘住的：理由寫在原本的檔案，這裡只防 Renovate 一直來敲門 ──
@@ -155,7 +151,7 @@
     {
       description: 'Caddy 換 minor 要先在機器上驗過一次 HTTPS 憑證流程（docs/architecture 的 caddy 元件），minor 也要勾選才開',
       matchPackageNames: ['caddy'],
-      matchUpdateTypes: ['minor', 'major'],
+      matchUpdateTypes: ['minor'],
       dependencyDashboardApproval: true,
     },
     {
