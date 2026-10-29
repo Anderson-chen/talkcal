@@ -12,7 +12,7 @@
                 使用者已經受影響？
                 ┌───────────────┴───────────────┐
                是（症狀）                        還沒，或量不到（原因）
-   SLO burn rate、5xx 比例、p95、app 掛了     資料庫、連線池、模型熔斷、備份
+   SLO burn rate、app 掛了                    資料庫、連線池、模型熔斷、備份
    → 真正叫醒人的是這些                        → 只在「低流量時症狀看不到」或「一眼指出處理方向」時才加
                 └───────────────┬───────────────┘
                      監控本身（Alloy、Mimir、Loki、Tempo、Grafana）
@@ -45,9 +45,6 @@ Google SRE 的原則是**對症狀告警、不對原因告警**：原因有一�
 | 告警（uid） | 檔案（PR） | 式子（摘要） | 門檻 | 持續 | 沒資料時 | severity | 為什麼要有 |
 |---|---|---|---|---|---|---|---|
 | `talkcal-app-down` app 掛了或抓不到指標 | `rules.yaml`（#152） | `max(up{job="talkcal-app"})` | < 1 | 1m | **出事** | critical | 最根本的「活著嗎」。app 掛掉時 SLO 是「沒資料」不是「壞」，只有這條看得到 |
-| `talkcal-5xx-ratio` 5xx 比例 | `rules.yaml`（#152） | 5xx ÷ 全部（5 分鐘至少 20 個請求） | > 5% | 5m | 正常 | warning | SLO 之前的暫時版，照實測留餘裕；SLO 上線後跟快燒重疊，保留作為「不分 API」的總覽 |
-| `talkcal-api-p95` 行程 API p95 | `rules.yaml`（#152） | `histogram_quantile(0.95, …)`，不含助理 | > 1s | 10m | 正常 | warning | 同上；實測 p95 約 0.18 秒，1 秒是使用者明顯覺得卡的線 |
-| `talkcal-assistant-p95` AI 助理 p95 | `rules.yaml`（#152） | 同上，只看 `/api/calendar/assistant` | > 30s | 10m | 正常 | warning | 同上；實測約 3 秒，30 秒時使用者多半已經放棄 |
 | `slo-fast-burn` SLO 快燒 | `slo-burn-rate.yaml`（#154） | `slo:burn_rate:1h`＋`5m` > 13.44，或 `6h`＋`30m` > 5.6 | > 0（有任一 SLO 成立） | 0s | 正常 | critical | 照這速度 2～5 天燒光 28 天的 budget。症狀告警的主角，四個 SLO 各一個實例 |
 | `slo-slow-burn` SLO 慢燒 | `slo-burn-rate.yaml`（#154） | `1d`＋`2h` > 2.8，或 `3d`＋`6h` > 0.933 | > 0 | 0s | 正常 | warning | 不急但這個月會不達標，開 issue 上班處理 |
 | `talkcal-db-down` 資料庫連不上 | `respond.yaml`（#39） | `min(pg_up{job="postgres"})`，exporter 抓不到也算 0 | < 1 | 1m | 正常 | critical | 低流量時沒有 5xx、SLO 不燒；exporter 每 15 秒自己連一次，不靠使用者 |
