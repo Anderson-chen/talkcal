@@ -35,7 +35,7 @@ compactor:
 # 錄製規則（recording rules）：Mimir 的 ruler 定時跑 PromQL，把結果寫回成新的時間序列。
 # 目前只有 SLO 那一份（rules/anonymous/slo.yaml，理由見 docs/slo.md）。
 # local = 從掛進來的資料夾讀、唯讀：規則跟 dashboard 一樣進版控，不走 API 上傳（那樣的規則只存在容器的資料裡，重建就沒了）。
-# 代價是只在啟動時讀一次，改了規則要重啟 mimir。
+# 改了規則不用重啟：ruler 每 10 分鐘（-ruler.poll-interval 的預設值）重讀一次；要馬上生效就 restart mimir。
 # 資料夾底下一層是租戶名稱：關掉多租戶時只有 anonymous 一個。
 ruler_storage:
   backend: local

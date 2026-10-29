@@ -93,6 +93,11 @@ export function loadThemeKey(): ThemeKey {
   return 'sky'
 }
 
+/** 行事曆還沒建好主題狀態時（登入頁、連線中、連不上），直接用上次選的主題：登入前後顏色一致 */
+export function savedThemeVars(): Record<string, string> {
+  return toCssVars(THEMES[loadThemeKey()])
+}
+
 export function saveThemeKey(key: ThemeKey): void {
   try {
     localStorage.setItem(STORAGE_KEY, key)

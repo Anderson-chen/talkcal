@@ -46,7 +46,7 @@ resource "aws_ssm_parameter" "dotenv" {
     # Grafana 告警寄信（#121）：ops/ 的 compose 用 --env-file 讀同一份。alert_smtp_host 沒給就不寄信
     ALERT_SMTP_HOST=${var.alert_smtp_host}
     ALERT_SMTP_USER=${var.alert_smtp_user}
-    ALERT_SMTP_PASSWORD=${var.alert_smtp_password}
+    ALERT_SMTP_PASSWORD='${var.alert_smtp_password}'
     ALERT_SMTP_FROM=${var.alert_smtp_from}
     ALERT_EMAIL_TO=${var.alert_email_to}
     # Grafana 的 heartbeat（#40）：ops/ 的 compose 用 --env-file 讀同一份（#121 的 deploy.sh）

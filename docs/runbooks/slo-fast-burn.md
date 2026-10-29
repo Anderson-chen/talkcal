@@ -68,7 +68,9 @@ sudo GIT_REF=<上一個 commit> bash /opt/talkcal/repo/infra/envs/1-ec2/deploy.s
 
 ### 4. 模型塞車（`assistant-latency`）
 
-同時用的人超過容量 → [talkcal-assistant-p95](talkcal-assistant-p95.md) 的原因 1。
+同時用的人超過容量（本機的 llama-server 約同時 2 人）：llama-cpp dashboard 的排隊數（`requests_deferred`）很高、
+每一次叫模型都正常、只是在排。SLO 文件量過：吞吐量在 2 人時就到頂，之後只是排隊。
+短時間沒辦法加容量；確認不是異常流量（同一個人狂送），nginx 對 AI 發問有限流。
 
 ### 5. 流量太小造成的誤報
 

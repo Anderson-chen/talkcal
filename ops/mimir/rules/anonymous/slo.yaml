@@ -1,29 +1,36 @@
 # SLO 的錄製規則（recording rules）。目標和理由見 docs/slo.md，這裡只負責「把數字算好存起來」。
 #
 # 為什麼要先錄製、不讓儀表板和告警直接算：
-#   - 告警每分鐘評估一次，每次都要看 5 分鐘到 3 天的視窗；28 天視窗更是每次掃四週的原始資料。
+#   - 告警每分鐘評估一次，每次都要看 5 分鐘到 3 天的視窗；error budget 更要看 28 天。
 #     錄成一條新的時間序列之後，告警和儀表板只讀一個現成的數字，便宜又一致（兩邊看到的是同一個值）。
 #   - 名稱照 Prometheus 的慣例 level:metric:operations，例如 slo:sli_error:ratio_rate1h = 「SLO 層級、壞事件比例、1 小時視窗」。
 #
 # 這個檔案由 Mimir 的 ruler 讀（mimir.yaml 的 ruler_storage.backend: local）。
 # 路徑裡的 anonymous 是租戶名稱：mimir.yaml 關掉了多租戶，所有資料都歸在 anonymous 這個租戶底下，規則也一樣。
-# 改了這個檔要重啟 mimir（docker compose restart mimir）；local 後端只在啟動時讀一次。
+# 改了這個檔，ruler 10 分鐘內會自己重讀（-ruler.poll-interval 預設 10m）；要馬上生效就 docker compose restart mimir。
+# 改之前先跑 ci/rules.sh（語法檢查＋單元測試 ops/mimir/slo.test.yaml）。
+#
+# 分兩層，跟 Sloth、Pyrra 產生的規則同一個做法：
+#   第一層：每個 SLO 每 5 分鐘的「全部事件率」和「壞事件率」。哪些請求算哪個 SLO、門檻是多少，只寫在這一層。
+#   第二層：每個視窗的壞事件比例 = 視窗內壞事件率加總 / 全部事件率加總，一條式子同時算四個 SLO。
+#     長視窗不必每次從原始資料掃四週，只讀第一層錄好的序列（每條每分鐘一個點）。
+#     一定要分子分母分開加總再相除；對錄好的比例取平均，流量少的時段會被算得跟尖峰一樣重。
+#     代價：ruler 停掉的那段沒有錄到，事後補不回來（原始資料還在，但這裡不會再算）；視窗邊界差 5 分鐘以內。
 #
 # 每個 SLO 都寫成同一個形狀：壞事件 / 全部事件，標籤 slo=<名稱> 分開四個 SLO。
 #   可用性：壞 = 5xx。4xx 是呼叫端的錯（格式不對、沒登入），不算服務沒做好。
 #   延遲：  壞 = 比門檻慢。用「全部 - 落在門檻那個 bucket 以內的」算，所以 app 一定要有剛好在門檻上的 bucket
-#          （application.properties 的 management.metrics.distribution.slo.http.server.requests=300ms,8s）。
+#          （application.properties 的 management.metrics.distribution.slo.http.server.requests=300ms,8s，兩邊要一起改）。
 # 範圍：
-#   calendar-*  = 一般 API：行程的增刪查（/api/calendar/events…）＋讀對話紀錄（GET /api/calendar/assistant/{id}）
+#   calendar-*  = 一般 API：行程的增刪查（/api/calendar/events…）＋讀對話紀錄（GET /api/calendar/assistant/{id}）＋拒絕卡片（POST /api/calendar/assistant/dismissals）
 #   assistant-* = 跟助理說話（POST /api/calendar/assistant）。後面要叫模型好幾次，慢是預期的，所以門檻分開定
-# 「沒有錯也要有 0」：沒有任何 5xx 時分子那一項是空的，空 / 數字 = 空，SLI 會變成沒資料。
-#   補 or vector(0) 讓它是 0。完全沒有請求時分母也是空的，結果就是沒資料——沒人用，不算好也不算壞。
-#
-# 同一個式子要每個視窗各寫一份（PromQL 的視窗不能當參數），所以看起來很長；換 SLO 門檻時每個視窗都要改。
+# 「沒有錯也要有 0」：沒有任何 5xx 時壞事件那一項是空的，空 / 數字 = 空，SLI 會變成沒資料。
+#   補 or vector(0) 讓它是 0。完全沒有請求時全部事件也是空的，結果就是沒資料——沒人用，不算好也不算壞。
+#   視窗裡請求數是 0（app 開著但沒人用，counter 還在、rate 是 0）時一樣當沒資料：分母加 > 0，不然 0/0 會錄成 NaN。
 
 groups:
-  # 短視窗（5 分鐘～6 小時）：快燒告警要用，每分鐘算一次
-  - name: slo-fast
+  # 同一組裡的規則照順序算，後面的讀得到前面這一輪剛錄的值。
+  - name: slo
     interval: 1m
     rules:
       # 目標本身也錄成一條序列：burn rate、error budget 都要拿它來除，儀表板也要畫它。
@@ -41,225 +48,69 @@ groups:
         labels: { slo: assistant-latency }
         expr: vector(0.95)
 
+      # 第一層：全部事件率、壞事件率
+      - record: slo:sli_events:rate5m
+        labels: { slo: calendar-availability }
+        expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[5m]))
+      - record: slo:sli_bad_events:rate5m
+        labels: { slo: calendar-availability }
+        expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", status=~"5.."}[5m])) or vector(0)
+      - record: slo:sli_events:rate5m
+        labels: { slo: calendar-latency }
+        expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[5m]))
+      - record: slo:sli_bad_events:rate5m
+        labels: { slo: calendar-latency }
+        expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[5m])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", le="0.3"}[5m]))
+      - record: slo:sli_events:rate5m
+        labels: { slo: assistant-availability }
+        expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[5m]))
+      - record: slo:sli_bad_events:rate5m
+        labels: { slo: assistant-availability }
+        expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", status=~"5.."}[5m])) or vector(0)
+      - record: slo:sli_events:rate5m
+        labels: { slo: assistant-latency }
+        expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[5m]))
+      - record: slo:sli_bad_events:rate5m
+        labels: { slo: assistant-latency }
+        expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[5m])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri="/api/calendar/assistant", method="POST", le="8.0"}[5m]))
+
+      # 第二層：各視窗的壞事件比例和 burn rate。
       # burn rate = 壞事件比例 / 允許的壞事件比例（1 - 目標）。
       # 1 = 剛好在 28 天內把 error budget 用完；13.44 = 照這個速度 2 天就用完（28 天 / 13.44 ≈ 2.08 天）。
       - record: slo:sli_error:ratio_rate5m
-        labels: { slo: calendar-availability }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", status=~"5.."}[5m])) or vector(0))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[5m]))
-      - record: slo:sli_error:ratio_rate5m
-        labels: { slo: calendar-latency }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[5m])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", le="0.3"}[5m])))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[5m]))
-      - record: slo:sli_error:ratio_rate5m
-        labels: { slo: assistant-availability }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", status=~"5.."}[5m])) or vector(0))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[5m]))
-      - record: slo:sli_error:ratio_rate5m
-        labels: { slo: assistant-latency }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[5m])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri="/api/calendar/assistant", method="POST", le="8.0"}[5m])))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[5m]))
+        expr: slo:sli_bad_events:rate5m / (slo:sli_events:rate5m > 0)
       - record: slo:burn_rate:5m
         expr: slo:sli_error:ratio_rate5m / on (slo) group_left () (1 - slo:objective:ratio)
       - record: slo:sli_error:ratio_rate30m
-        labels: { slo: calendar-availability }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", status=~"5.."}[30m])) or vector(0))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[30m]))
-      - record: slo:sli_error:ratio_rate30m
-        labels: { slo: calendar-latency }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[30m])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", le="0.3"}[30m])))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[30m]))
-      - record: slo:sli_error:ratio_rate30m
-        labels: { slo: assistant-availability }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", status=~"5.."}[30m])) or vector(0))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[30m]))
-      - record: slo:sli_error:ratio_rate30m
-        labels: { slo: assistant-latency }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[30m])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri="/api/calendar/assistant", method="POST", le="8.0"}[30m])))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[30m]))
+        expr: sum_over_time(slo:sli_bad_events:rate5m[30m]) / (sum_over_time(slo:sli_events:rate5m[30m]) > 0)
       - record: slo:burn_rate:30m
         expr: slo:sli_error:ratio_rate30m / on (slo) group_left () (1 - slo:objective:ratio)
       - record: slo:sli_error:ratio_rate1h
-        labels: { slo: calendar-availability }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", status=~"5.."}[1h])) or vector(0))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[1h]))
-      - record: slo:sli_error:ratio_rate1h
-        labels: { slo: calendar-latency }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[1h])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", le="0.3"}[1h])))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[1h]))
-      - record: slo:sli_error:ratio_rate1h
-        labels: { slo: assistant-availability }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", status=~"5.."}[1h])) or vector(0))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[1h]))
-      - record: slo:sli_error:ratio_rate1h
-        labels: { slo: assistant-latency }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[1h])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri="/api/calendar/assistant", method="POST", le="8.0"}[1h])))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[1h]))
+        expr: sum_over_time(slo:sli_bad_events:rate5m[1h]) / (sum_over_time(slo:sli_events:rate5m[1h]) > 0)
       - record: slo:burn_rate:1h
         expr: slo:sli_error:ratio_rate1h / on (slo) group_left () (1 - slo:objective:ratio)
       - record: slo:sli_error:ratio_rate2h
-        labels: { slo: calendar-availability }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", status=~"5.."}[2h])) or vector(0))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[2h]))
-      - record: slo:sli_error:ratio_rate2h
-        labels: { slo: calendar-latency }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[2h])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", le="0.3"}[2h])))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[2h]))
-      - record: slo:sli_error:ratio_rate2h
-        labels: { slo: assistant-availability }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", status=~"5.."}[2h])) or vector(0))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[2h]))
-      - record: slo:sli_error:ratio_rate2h
-        labels: { slo: assistant-latency }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[2h])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri="/api/calendar/assistant", method="POST", le="8.0"}[2h])))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[2h]))
+        expr: sum_over_time(slo:sli_bad_events:rate5m[2h]) / (sum_over_time(slo:sli_events:rate5m[2h]) > 0)
       - record: slo:burn_rate:2h
         expr: slo:sli_error:ratio_rate2h / on (slo) group_left () (1 - slo:objective:ratio)
       - record: slo:sli_error:ratio_rate6h
-        labels: { slo: calendar-availability }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", status=~"5.."}[6h])) or vector(0))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[6h]))
-      - record: slo:sli_error:ratio_rate6h
-        labels: { slo: calendar-latency }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[6h])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", le="0.3"}[6h])))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[6h]))
-      - record: slo:sli_error:ratio_rate6h
-        labels: { slo: assistant-availability }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", status=~"5.."}[6h])) or vector(0))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[6h]))
-      - record: slo:sli_error:ratio_rate6h
-        labels: { slo: assistant-latency }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[6h])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri="/api/calendar/assistant", method="POST", le="8.0"}[6h])))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[6h]))
+        expr: sum_over_time(slo:sli_bad_events:rate5m[6h]) / (sum_over_time(slo:sli_events:rate5m[6h]) > 0)
       - record: slo:burn_rate:6h
         expr: slo:sli_error:ratio_rate6h / on (slo) group_left () (1 - slo:objective:ratio)
-
-  # 長視窗（1 天～28 天）：慢燒告警和 error budget 用。視窗長、算一次要掃比較多資料，不必每分鐘算。
-  # 但不能拉到 5 分鐘：查詢只往回找 5 分鐘內最近的一個點（lookback），間隔剛好 5 分鐘時，
-  # 告警、儀表板在兩次評估中間查會偶爾查不到。2 分鐘留了一倍多的餘裕。
-  - name: slo-slow
-    interval: 2m
-    rules:
       - record: slo:sli_error:ratio_rate1d
-        labels: { slo: calendar-availability }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", status=~"5.."}[1d])) or vector(0))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[1d]))
-      - record: slo:sli_error:ratio_rate1d
-        labels: { slo: calendar-latency }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[1d])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", le="0.3"}[1d])))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[1d]))
-      - record: slo:sli_error:ratio_rate1d
-        labels: { slo: assistant-availability }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", status=~"5.."}[1d])) or vector(0))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[1d]))
-      - record: slo:sli_error:ratio_rate1d
-        labels: { slo: assistant-latency }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[1d])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri="/api/calendar/assistant", method="POST", le="8.0"}[1d])))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[1d]))
+        expr: sum_over_time(slo:sli_bad_events:rate5m[1d]) / (sum_over_time(slo:sli_events:rate5m[1d]) > 0)
       - record: slo:burn_rate:1d
         expr: slo:sli_error:ratio_rate1d / on (slo) group_left () (1 - slo:objective:ratio)
       - record: slo:sli_error:ratio_rate3d
-        labels: { slo: calendar-availability }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", status=~"5.."}[3d])) or vector(0))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[3d]))
-      - record: slo:sli_error:ratio_rate3d
-        labels: { slo: calendar-latency }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[3d])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", le="0.3"}[3d])))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[3d]))
-      - record: slo:sli_error:ratio_rate3d
-        labels: { slo: assistant-availability }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", status=~"5.."}[3d])) or vector(0))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[3d]))
-      - record: slo:sli_error:ratio_rate3d
-        labels: { slo: assistant-latency }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[3d])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri="/api/calendar/assistant", method="POST", le="8.0"}[3d])))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[3d]))
+        expr: sum_over_time(slo:sli_bad_events:rate5m[3d]) / (sum_over_time(slo:sli_events:rate5m[3d]) > 0)
       - record: slo:burn_rate:3d
         expr: slo:sli_error:ratio_rate3d / on (slo) group_left () (1 - slo:objective:ratio)
       - record: slo:sli_error:ratio_rate28d
-        labels: { slo: calendar-availability }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", status=~"5.."}[28d])) or vector(0))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[28d]))
-      - record: slo:sli_error:ratio_rate28d
-        labels: { slo: calendar-latency }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[28d])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", le="0.3"}[28d])))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[28d]))
-      - record: slo:sli_error:ratio_rate28d
-        labels: { slo: assistant-availability }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", status=~"5.."}[28d])) or vector(0))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[28d]))
-      - record: slo:sli_error:ratio_rate28d
-        labels: { slo: assistant-latency }
-        expr: |
-          (sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[28d])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri="/api/calendar/assistant", method="POST", le="8.0"}[28d])))
-          /
-          sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST"}[28d]))
+        expr: sum_over_time(slo:sli_bad_events:rate5m[28d]) / (sum_over_time(slo:sli_events:rate5m[28d]) > 0)
       - record: slo:burn_rate:28d
         expr: slo:sli_error:ratio_rate28d / on (slo) group_left () (1 - slo:objective:ratio)
 
       # error budget 還剩幾成：1 = 一點都沒用，0 = 剛好用完，負的 = 超支（這 28 天沒達標）。
-      # 28 天的壞事件比例 / 允許的比例 = 已經用掉的部分。
+      # 28 天的 burn rate 就是「已經用掉的部分」。
       - record: slo:error_budget:remaining_ratio
-        expr: 1 - slo:sli_error:ratio_rate28d / on (slo) group_left () (1 - slo:objective:ratio)
+        expr: 1 - slo:burn_rate:28d

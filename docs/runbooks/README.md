@@ -9,9 +9,6 @@
 | talkcal 資料庫連不上 | critical | [talkcal-db-down](talkcal-db-down.md) |
 | SLO 快燒 | critical | [slo-fast-burn](slo-fast-burn.md) |
 | SLO 慢燒 | warning | [slo-slow-burn](slo-slow-burn.md) |
-| talkcal 5xx 比例超過 5% | warning | [talkcal-5xx-ratio](talkcal-5xx-ratio.md) |
-| talkcal 行程 API p95 延遲超過 1 秒 | warning | [talkcal-api-p95](talkcal-api-p95.md) |
-| talkcal AI 助理 p95 延遲超過 30 秒 | warning | [talkcal-assistant-p95](talkcal-assistant-p95.md) |
 | talkcal 有請求等不到資料庫連線 | warning | [talkcal-db-pool-timeout](talkcal-db-pool-timeout.md) |
 | talkcal 模型熔斷持續打開 | warning | [talkcal-model-circuit-open](talkcal-model-circuit-open.md) |
 | talkcal 資料庫備份太久沒成功 | warning | [talkcal-backup-stale](talkcal-backup-stale.md) |

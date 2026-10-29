@@ -3,7 +3,7 @@
 # 只有規則，不管「告警送去哪」：contact point 和 notification policy 由 #121 那份檔案負責。
 # 每條規則都帶 severity 標籤，用跟 #121 基本告警同一套值：critical（快燒，Workbook 說的 page，現在就要處理）、
 # warning（慢燒，Workbook 說的 ticket，上班時間處理）。policy 要分流時用它比對。
-# 沒有 policy 的時候，Grafana 照預設送到預設的 contact point，規則本身照樣評估、狀態照樣看得到。
+# policies.yaml 目前把所有告警（不分 severity）都寄到同一個信箱；沒設 SMTP 時不寄，規則照樣評估、狀態照樣看得到。
 #
 # 做法是 Google SRE Workbook 第 5 章的 multi-window, multi-burn-rate（Grafana 的 SLO 功能、Sloth、Pyrra 也都是這套）：
 #   - 只看一個長視窗：事情結束了很久告警還響著（1 小時的平均要等很久才降下來）。

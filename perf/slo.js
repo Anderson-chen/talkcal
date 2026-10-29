@@ -18,7 +18,7 @@
 import './lib/docker-target.js';
 import http from 'k6/http';
 import { check } from 'k6';
-import { BASE_URL, MESSAGES, jsonParams, say, signIn, useSession } from './lib/assistant.js';
+import { BASE_URL, MESSAGES, jsonParams, listMonth, say, signIn, useSession } from './lib/assistant.js';
 
 const CRUD_RPS = Number(__ENV.CRUD_RPS || 10);
 const ASSIST_PER_MIN = Number(__ENV.ASSIST_PER_MIN || 6);
@@ -28,6 +28,7 @@ const scenarios = {
   crud: {
     executor: 'constant-arrival-rate',
     exec: 'crud',
+    tags: { api: 'crud' },
     rate: CRUD_RPS,
     timeUnit: '1s',
     duration: DURATION,
@@ -39,6 +40,7 @@ if (ASSIST_PER_MIN > 0) {
   scenarios.assistant = {
     executor: 'constant-arrival-rate',
     exec: 'assistant',
+    tags: { api: 'assistant' },
     rate: ASSIST_PER_MIN,
     timeUnit: '1m',
     duration: DURATION,
@@ -47,7 +49,8 @@ if (ASSIST_PER_MIN > 0) {
   };
 }
 
-// 不拿門檻判成敗（造錯的時候本來就該失敗），只是讓收工報表分開印行程 API 和助理（k6 只印有門檻的子指標）
+// 不拿門檻判成敗（造錯的時候本來就該失敗），只是讓收工報表分開印行程 API 和助理（k6 只印有門檻的子指標）。
+// api tag 設在 scenario 上，那個 scenario 發的請求都會帶；setup() 的登入不在 scenario 裡，不會被算進去。
 export const options = {
   scenarios,
   thresholds: {
@@ -63,21 +66,16 @@ export function setup() {
   return signIn();
 }
 
-// 月曆一頁：前端打開月曆就是這個請求，最常見
-function listMonth() {
-  return http.get(`${BASE_URL}/api/calendar/events?from=2026-10-01&to=2026-11-01`, { tags: { api: 'crud' } });
-}
-
 export function crud(session) {
   useSession(session);
   // 十次裡兩次「新增一筆再刪掉」：寫入路徑也算進來，又不讓測試帳號的行程越積越多
   if (Math.random() < 0.2) {
     const body = { events: [{ title: 'slo 壓測', start: '2026-10-20T09:00:00', end: '2026-10-20T10:00:00', category: 'WORK' }] };
-    const created = http.post(`${BASE_URL}/api/calendar/events`, JSON.stringify(body), jsonParams({ tags: { api: 'crud' } }));
+    const created = http.post(`${BASE_URL}/api/calendar/events`, JSON.stringify(body), jsonParams());
     check(created, { '新增回 201': (r) => r.status === 201 });
     if (created.status === 201) {
       const id = created.json('events.0.id');
-      http.del(`${BASE_URL}/api/calendar/events/${id}`, null, jsonParams({ tags: { api: 'crud' } }));
+      http.del(`${BASE_URL}/api/calendar/events/${id}`, null, jsonParams());
     }
     return;
   }
@@ -86,5 +84,5 @@ export function crud(session) {
 
 export function assistant(session) {
   useSession(session);
-  say(MESSAGES[Math.floor(Math.random() * MESSAGES.length)], { tags: { api: 'assistant' } });
+  say(MESSAGES[Math.floor(Math.random() * MESSAGES.length)]);
 }

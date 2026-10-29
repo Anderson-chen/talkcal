@@ -15,13 +15,19 @@ DEPLOY_ENV=/opt/talkcal/deploy.env
 # shellcheck source=/dev/null
 [ -f "$DEPLOY_ENV" ] && source "$DEPLOY_ENV"
 : "${PROJECT:?}" "${AWS_REGION:?}"
-# 舊版 user_data 寫的 deploy.env 沒有 BACKUPS_BUCKET（那時還沒有這個 bucket）：照 backups.tf 的命名規則推出來。
-# get-caller-identity 不需要任何 IAM 權限
-BACKUPS_BUCKET="${BACKUPS_BUCKET:-$PROJECT-backups-$(aws sts get-caller-identity --region "$AWS_REGION" --query Account --output text)}"
+# bucket 名稱照 backups.tf 的命名規則推出來，不寫進 deploy.env：那份由 user_data 寫，只在第一次開機跑，
+# 已經在跑的機器拿不到；改 user_data 還會讓 Terraform 停機更新。get-caller-identity 不需要任何 IAM 權限
+BACKUPS_BUCKET="$PROJECT-backups-$(aws sts get-caller-identity --region "$AWS_REGION" --query Account --output text)"
 
 ROOT="/opt/$PROJECT"
+# 容器名稱用 pg-backup.sh 的預設（talkcal-postgres）：deploy/compose.yaml 的 container_name 是寫死的，不跟著 PROJECT 變
 export BACKUP_DIR="$ROOT/backups" KEEP_DAYS=2 KEEP_MIN=3
-export PG_CONTAINER="$PROJECT-postgres"
+
+# 三個時機可能撞在一起（整點剛好在部署、或部署時關機）：同一時間只跑一份，後到的等前一份做完再做。
+# 不鎖的話，同一秒開始的兩份會寫同一個檔名、互相刪掉對方的暫存檔
+mkdir -p "$BACKUP_DIR"
+exec 9> "$BACKUP_DIR/.lock"
+flock 9
 
 echo "[backup-to-s3] $reason：開始"
 dump="$(bash "$ROOT/repo/deploy/backup/pg-backup.sh")"
