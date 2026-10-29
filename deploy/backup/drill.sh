@@ -4,7 +4,7 @@
 #
 #   bash deploy/backup/drill.sh
 #
-# 結果（時間軸、每一步的輸出）就是 docs/evidence/2026-10-19-restore-drill.md 那份紀錄的來源。
+# 結果（時間軸、每一步的輸出）就是 docs/drills/2026-10-19-restore-drill.md 那份紀錄的來源。
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"

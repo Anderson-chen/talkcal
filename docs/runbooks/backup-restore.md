@@ -2,7 +2,7 @@
 
 > 沒還原過的備份不算備份。這份是「照著做就能完成」的步驟；為什麼這樣設計寫在最後一節。
 > 追蹤：[#45](https://github.com/Anderson-chen/talkcal/issues/45)（epic [#38](https://github.com/Anderson-chen/talkcal/issues/38) ④ Respond）。
-> 最近一次演練：[2026-10-19](../evidence/2026-10-19-restore-drill.md)，2 萬筆行程誤刪，`pg-restore.sh` **3 秒**換回來（含停、起假 app）。
+> 最近一次演練：[2026-10-19](../drills/2026-10-19-restore-drill.md)，2 萬筆行程誤刪，`pg-restore.sh` **3 秒**換回來（含停、起假 app）。
 
 ## 一眼看懂
 
@@ -199,7 +199,7 @@ cat /opt/talkcal/backups/last-success             # 最後一次成功的時間�
 
 ### 為什麼 RTO 是這些數字
 
-- 實測（[演練紀錄](../evidence/2026-10-19-restore-drill.md)）：2 萬筆行程、5 千則對話，`pg-restore.sh` 從開始到換好 3 秒（驗雜湊、目錄、還原到暫存庫、改名）。還原時間跟資料量大致成正比；talkcal 的實際資料量比演練小得多。
+- 實測（[演練紀錄](../drills/2026-10-19-restore-drill.md)）：2 萬筆行程、5 千則對話，`pg-restore.sh` 從開始到換好 3 秒（驗雜湊、目錄、還原到暫存庫、改名）。還原時間跟資料量大致成正比；talkcal 的實際資料量比演練小得多。
 - 演練用的是會立刻處理 SIGTERM 的假 app。第一次演練的假 app 不處理 SIGTERM，`docker stop` 白等 10 秒才 SIGKILL，整段變 13 秒——真的 app 也一樣：它會等手上的請求做完（最多 2 分鐘），再加上 Spring 啟動約 30 秒，所以本機抓 5 分鐘、裡面大部分是停、起 app 和人的時間。
 - 雲端的 15 分鐘是「人」的時間為主：發現問題、開機（1–2 分）、SSM 連線、選備份、下載（幾百 KB，秒級）、還原、真的 app 重啟（Spring 啟動約 30 秒，`stop_grace_period` 最多 2 分半）。
 
