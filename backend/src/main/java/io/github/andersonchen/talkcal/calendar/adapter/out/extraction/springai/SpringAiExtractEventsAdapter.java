@@ -1,5 +1,6 @@
 package io.github.andersonchen.talkcal.calendar.adapter.out.extraction.springai;
 
+import io.github.andersonchen.talkcal.calendar.adapter.shared.ModelUnavailableException;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventDescription;
 import io.github.andersonchen.talkcal.calendar.application.port.out.ExtractEventsPort;
@@ -36,6 +37,10 @@ public final class SpringAiExtractEventsAdapter implements ExtractEventsPort {
         ChatResponse response;
         try {
             response = chatModel.call(ExtractionRequest.prompt(description, now, chatModel.getOptions()));
+        } catch (ModelUnavailableException e) {
+            // 沒叫模型就被擋下（#44）：本來就是 IllegalStateException，不再包一層，
+            // 助理的工具框架認的是這個型別（見 CalendarAssistant 的 toolCallingManager），包了就認不出來
+            throw e;
         } catch (RuntimeException e) {
             // port 的契約是失敗丟 IllegalStateException（CalendarController 翻成 502）。
             // ChatModel 失敗時丟的是 OpenAI SDK 自己的例外，而且型別隨失敗原因不同（連不上、逾時、HTTP 4xx/5xx），

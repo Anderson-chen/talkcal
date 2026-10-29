@@ -78,6 +78,8 @@ docker cp "$container:/work/backend/build/reports" "$out/reports" >/dev/null 2>&
 docker cp "$container:/work/backend/build/eval" "$out/eval" >/dev/null 2>&1 || true
 # 前端 E2E 失敗時的 HTML 報告（每一步的截圖、trace）：pnpm --dir web exec playwright show-report ../ci/build/playwright-report
 docker cp "$container:/work/web/playwright-report" "$out/playwright-report" >/dev/null 2>&1 || true
+# 前端的覆蓋率報告（#23）；後端的在上面的 reports/jacoco/ 裡一起拿回來了
+docker cp "$container:/work/web/coverage" "$out/web-coverage" >/dev/null 2>&1 || true
 
 if [ $status -eq 0 ]; then
     echo "── CI 通過 ──"
