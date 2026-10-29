@@ -9,16 +9,18 @@ WORKDIR /src
 
 # pnpm 不另外裝，由 Node 附的 corepack 照 package.json 的 packageManager 下載（見 README.md 的「用 pnpm 不用 npm」）。
 # 不關掉提示的話，corepack 第一次下載前會停下來問 Y/n
+# pnpm 本體在自己這一層下載、留在映像檔層裡：只有 package.json 改了才重新下載，後面 install、build 都直接用。
+# （放 BuildKit 的快取不行：快取只掛在那一個 RUN，後面的 RUN pnpm run build 看不到，又會再下載一次）
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN corepack enable
+COPY package.json ./
+RUN corepack enable && corepack install
 
-# 先只放「決定依賴是什麼」的檔案——只改 src/ 時這層快取不失效，不必每次重裝依賴。
+# 再放其餘「決定依賴是什麼」的檔案——只改 src/ 時這層快取不失效，不必每次重裝依賴。
 # --frozen-lockfile：嚴格照 pnpm-lock.yaml 裝，lock 跟 package.json 對不上就直接失敗，
 # 不會偷偷升級（TypeScript 釘在 5.9 的理由見 web/README.md）。
-# store 和 corepack 下載的 pnpm 本體都放 BuildKit 的快取：依賴改了重裝時不必重新下載
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN --mount=type=cache,target=/pnpm-store --mount=type=cache,target=/root/.cache/node/corepack \
-    pnpm_config_store_dir=/pnpm-store pnpm install --frozen-lockfile
+# store 放 BuildKit 的快取：依賴改了重裝時，沒變的套件不必重新下載
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,target=/pnpm-store pnpm_config_store_dir=/pnpm-store pnpm install --frozen-lockfile
 
 COPY . .
 # build 會先跑 vue-tsc 型別檢查：型別錯就 build 失敗，壞的前端進不了映像檔
