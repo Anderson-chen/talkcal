@@ -1,0 +1,134 @@
+14:50:50 assistant status=200 code=ok 2075ms
+14:50:55 assistant status=200 code=ok 3690ms
+14:50:56 assistant status=200 code=ok 2056ms
+14:51:00 assistant status=200 code=ok 2763ms
+14:51:04 assistant status=200 code=ok 3673ms
+14:51:07 assistant status=200 code=ok 3564ms
+14:51:08 assistant status=200 code=ok 1736ms
+14:51:12 assistant status=200 code=ok 2634ms
+14:51:13 assistant status=200 code=ok 865ms
+14:51:18 assistant status=200 code=ok 2603ms
+14:51:21 assistant status=200 code=ok 2619ms
+14:51:24 assistant status=200 code=ok 2651ms
+14:51:27 assistant status=200 code=ok 2735ms
+14:51:29 assistant status=200 code=ok 1460ms
+14:51:33 assistant status=200 code=ok 2675ms
+14:51:35 assistant status=200 code=ok 1570ms
+14:51:39 assistant status=200 code=ok 2762ms
+14:51:40 assistant status=200 code=ok 913ms
+14:51:43 assistant status=200 code=ok 905ms
+14:51:47 assistant status=200 code=ok 1666ms
+14:51:48 ===== 弄壞 llm（hang） =====
+14:52:18 assistant status=503 code=MODEL_BUSY 8ms retry-after=5
+14:52:21 assistant status=503 code=MODEL_BUSY 14ms retry-after=5
+14:52:24 assistant status=503 code=MODEL_BUSY 6ms retry-after=5
+14:52:27 assistant status=503 code=MODEL_BUSY 8ms retry-after=5
+14:52:30 assistant status=503 code=MODEL_BUSY 5ms retry-after=5
+14:52:33 assistant status=503 code=MODEL_BUSY 34ms retry-after=5
+14:52:36 assistant status=503 code=MODEL_BUSY 7ms retry-after=5
+14:52:39 assistant status=503 code=MODEL_BUSY 7ms retry-after=5
+14:52:42 assistant status=503 code=MODEL_BUSY 10ms retry-after=5
+14:52:45 assistant status=503 code=MODEL_BUSY 6ms retry-after=5
+14:52:48 assistant status=502 code=ASSISTANT_FAILED 60031ms
+14:52:51 assistant status=503 code=MODEL_BUSY 21ms retry-after=5
+14:52:51 assistant status=502 code=ASSISTANT_FAILED 60033ms
+14:52:54 assistant status=502 code=ASSISTANT_FAILED 60017ms
+14:52:57 assistant status=502 code=ASSISTANT_FAILED 60035ms
+14:53:00 assistant status=502 code=ASSISTANT_FAILED 60026ms
+14:53:03 assistant status=502 code=ASSISTANT_FAILED 60029ms
+14:53:03 assistant status=503 code=MODEL_UNAVAILABLE 25ms retry-after=30
+14:53:06 assistant status=503 code=MODEL_UNAVAILABLE 14ms retry-after=30
+14:53:06 assistant status=502 code=ASSISTANT_FAILED 60022ms
+14:53:09 assistant status=503 code=MODEL_UNAVAILABLE 17ms retry-after=30
+14:53:09 assistant status=502 code=ASSISTANT_FAILED 60033ms
+14:53:12 assistant status=502 code=ASSISTANT_FAILED 60015ms
+14:53:12 assistant status=503 code=MODEL_UNAVAILABLE 21ms retry-after=30
+14:53:15 assistant status=503 code=MODEL_UNAVAILABLE 27ms retry-after=30
+14:53:15 assistant status=502 code=ASSISTANT_FAILED 60032ms
+14:53:18 assistant status=503 code=MODEL_UNAVAILABLE 24ms retry-after=30
+14:53:21 assistant status=503 code=MODEL_UNAVAILABLE 13ms retry-after=30
+14:53:24 assistant status=503 code=MODEL_UNAVAILABLE 8ms retry-after=30
+14:53:27 assistant status=503 code=MODEL_UNAVAILABLE 21ms retry-after=30
+14:53:30 assistant status=503 code=MODEL_UNAVAILABLE 4ms retry-after=30
+14:53:39 assistant status=503 code=MODEL_UNAVAILABLE 14ms retry-after=30
+14:53:42 assistant status=503 code=MODEL_UNAVAILABLE 5ms retry-after=30
+14:53:45 assistant status=503 code=MODEL_UNAVAILABLE 7ms retry-after=30
+14:53:48 assistant status=503 code=MODEL_UNAVAILABLE 7ms retry-after=30
+14:53:48 assistant status=502 code=ASSISTANT_FAILED 60049ms
+14:53:51 assistant status=503 code=MODEL_UNAVAILABLE 7ms retry-after=30
+14:53:54 assistant status=503 code=MODEL_UNAVAILABLE 8ms retry-after=30
+14:53:54 assistant status=502 code=ASSISTANT_FAILED 60019ms
+14:53:57 assistant status=503 code=MODEL_UNAVAILABLE 7ms retry-after=30
+14:53:57 assistant status=502 code=ASSISTANT_FAILED 60031ms
+14:54:00 assistant status=503 code=MODEL_UNAVAILABLE 23ms retry-after=30
+14:54:00 assistant status=502 code=ASSISTANT_FAILED 60028ms
+14:54:03 assistant status=503 code=MODEL_UNAVAILABLE 7ms retry-after=30
+14:54:06 assistant status=503 code=MODEL_UNAVAILABLE 8ms retry-after=30
+14:54:09 assistant status=503 code=MODEL_UNAVAILABLE 24ms retry-after=30
+14:54:12 assistant status=503 code=MODEL_UNAVAILABLE 3ms retry-after=30
+14:54:15 assistant status=503 code=MODEL_UNAVAILABLE 8ms retry-after=30
+14:54:18 assistant status=503 code=MODEL_UNAVAILABLE 18ms retry-after=30
+14:54:21 assistant status=503 code=MODEL_UNAVAILABLE 9ms retry-after=30
+14:54:28 ===== 恢復 llm =====
+14:54:30 assistant status=200 code=ok 2757ms
+14:54:30 assistant status=200 code=ok 5774ms
+14:54:30 assistant status=200 code=ok 53805ms
+14:54:32 assistant status=200 code=ok 58916ms
+14:54:32 assistant status=200 code=ok 2026ms
+14:54:36 assistant status=200 code=ok 2854ms
+14:54:39 assistant status=200 code=ok 2622ms
+14:54:41 assistant status=200 code=ok 1422ms
+14:54:43 assistant status=200 code=ok 871ms
+14:54:46 assistant status=200 code=ok 885ms
+14:54:51 assistant status=200 code=ok 2650ms
+14:54:54 assistant status=200 code=ok 2803ms
+14:54:57 assistant status=200 code=ok 2681ms
+14:54:59 assistant status=200 code=ok 1463ms
+14:55:02 assistant status=200 code=ok 1490ms
+14:55:06 assistant status=200 code=ok 2834ms
+14:55:09 assistant status=200 code=ok 2557ms
+14:55:11 assistant status=200 code=ok 1624ms
+14:55:15 assistant status=200 code=ok 2727ms
+14:55:17 assistant status=200 code=ok 1440ms
+14:55:21 assistant status=200 code=ok 2758ms
+14:55:24 assistant status=200 code=ok 2800ms
+14:55:26 assistant status=200 code=ok 1478ms
+14:55:29 assistant status=200 code=ok 1757ms
+14:55:33 assistant status=200 code=ok 2937ms
+14:55:37 assistant status=200 code=ok 3669ms
+14:55:39 assistant status=200 code=ok 2320ms
+14:55:41 assistant status=200 code=ok 1662ms
+14:55:43 assistant status=200 code=ok 988ms
+14:55:48 assistant status=200 code=ok 3067ms
+14:55:50 assistant status=200 code=ok 1543ms
+14:55:53 assistant status=200 code=ok 1492ms
+14:55:57 assistant status=200 code=ok 2800ms
+14:55:59 assistant status=200 code=ok 1596ms
+14:56:02 assistant status=200 code=ok 1409ms
+14:56:06 assistant status=200 code=ok 2839ms
+14:56:08 assistant status=200 code=ok 1354ms
+14:56:12 assistant status=200 code=ok 2606ms
+14:56:13 assistant status=200 code=ok 920ms
+14:56:18 assistant status=200 code=ok 2618ms
+14:56:20 assistant status=200 code=ok 1440ms
+14:56:23 assistant status=200 code=ok 1342ms
+14:56:25 assistant status=200 code=ok 985ms
+14:56:30 assistant status=200 code=ok 2680ms
+14:56:31 assistant status=200 code=ok 987ms
+14:56:35 assistant status=200 code=ok 1501ms
+14:56:37 assistant status=200 code=ok 887ms
+14:56:42 assistant status=200 code=ok 2664ms
+14:56:44 assistant status=200 code=ok 1367ms
+14:56:48 assistant status=200 code=ok 2737ms
+14:56:51 assistant status=200 code=ok 2602ms
+
+助理（每分鐘 20 人，共 360 秒；第 60 秒弄壞 llm（hang）、第 220 秒恢復）
+    次數      中位數        最久  結果
+     71     2557ms    58916ms  200 正常回覆
+     14    60030ms    60049ms  502 ASSISTANT_FAILED（叫了、失敗）
+     25        9ms       27ms  503 MODEL_UNAVAILABLE（熔斷，沒叫模型）
+     11        8ms       34ms  503 MODEL_BUSY（滿載，沒叫模型）
+      0                        其他（含沒拿到回應）
+
+行程 API（每秒 1 人）：361 次，失敗 0 次，p95 19ms，最久 30ms
+k6 沒送出去（dropped_iterations）：0

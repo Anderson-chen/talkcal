@@ -3,6 +3,14 @@
 - PR 標題跟 commit 標題同一種寫法（見 `commit.md`）。
 - PR 描述照 `.github/pull_request_template.md`：大標題用英文（`Summary`、`Dependencies`、`Evidence`、`Test Plan`、`Risk`），
   內文用中文，不適用的段落整段拿掉。演練時間軸這類很長的紀錄收進 `<details>`。
+- PR 描述的截圖直接傳進 PR，不 commit 進分支：圖只有審查當下有用，一進 master 就永遠留在歷史裡，每次 clone 都要下載。
+  - 用 `gh pr create` 或 `gh pr edit` 的 `--attach <檔案>`（gh 2.99.0 起才有）。描述裡先寫 `![說明](<本機路徑>)`，
+    gh 上傳後會換成 GitHub 的網址；網頁上直接拖進描述也一樣。圖片最多 10 MB，影片（MP4、MOV、WebM）也能傳。
+  - 傳完看一次描述：本機路徑都換成 `https://github.com/user-attachments/...` 才算成功，沒換到的會被加在描述最後，原處留下壞圖。
+  - `gh --version` 不到 2.99.0 就停下來請使用者升級，不要退回把圖 commit 進分支。
+  - 截圖先存在 scratchpad 這類 repo 外面的資料夾，不要放進 worktree，免得順手 commit 進去。
+  - 文件（README、`docs/`）要引用的圖才進 master，放 `docs/images/`。
+  - 演練紀錄（runbook、腳本會連過去的 .md）算文件，放 `docs/drills/`，它引用的圖一樣放 `docs/images/`。
 - PR 描述不要有 `Generated with Claude Code`。
 - PR 不貼 label：分類（`stage:`／`product:`、`p0`／`p1`、`area:`）都看它 `Closes` 的 issue，只維護一份。
   做的過程發現 issue 放錯段或少了 `area:`，回去改 issue 的 label。

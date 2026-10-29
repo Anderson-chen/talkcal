@@ -30,8 +30,13 @@ import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsageP
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPort;
 import io.github.andersonchen.talkcal.app.job.AssistantMemoryCleanup;
 
+import io.github.andersonchen.talkcal.calendar.adapter.shared.GuardedChatModel;
+
+import io.github.resilience4j.bulkhead.BulkheadRegistry;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -66,12 +71,32 @@ import java.time.ZoneId;
 @EnableScheduling
 class CalendarConfiguration {
 
+    private static final String GUARDED_CHAT_MODEL = "guardedChatModel";
+
     // ChatModel 是 Spring AI 依 spring.ai.openai.chat.* 自動建好的，跟 AI 助理背後是同一個。
     // 抽行程自己的需求（溫度 0、max_tokens 1024、JSON Schema）在每個請求的選項裡帶，不必另建一個。
     // 代價：逾時也跟助理共用（2 分鐘）。以前這裡自己建 RestClient、30 秒就放棄；現在靠 max_tokens 擋住失控
     @Bean
-    ExtractEventsPort extractEventsPort(ChatModel chatModel) {
+    ExtractEventsPort extractEventsPort(@Qualifier(GUARDED_CHAT_MODEL) ChatModel chatModel) {
         return new SpringAiExtractEventsAdapter(chatModel);
+    }
+
+    /**
+     * 模型外面包一層 GuardedChatModel（#44），助理和抽行程都用這一個：背後是同一顆模型，壞就一起壞。
+     * 規則在 application.properties 的 resilience4j.*.instances.chat-model。
+     *
+     * 每一次呼叫的逾時也是在這裡補上的（GuardedChatModel.getOptions）：Spring AI 自動建的那個沒包保護，每次呼叫只等 60 秒，
+     * 之後有新的地方要叫模型，一樣用 @Qualifier(GUARDED_CHAT_MODEL) 拿這一個。
+     *
+     * defaultCandidate = false：它也是 ChatModel，一般按型別要 ChatModel 的地方（例如 Spring AI 自己的 ChatClient.Builder）
+     * 看不到它、照樣拿 Spring AI 自動建的那個；只有指名 @Qualifier(GUARDED_CHAT_MODEL) 的才拿得到。
+     */
+    @Bean(name = GUARDED_CHAT_MODEL, defaultCandidate = false)
+    ChatModel guardedChatModel(ChatModel chatModel, CircuitBreakerRegistry breakers, BulkheadRegistry bulkheads,
+                               @Value("${talkcal.model.busy-retry-after}") Duration busyRetryAfter,
+                               @Value("${spring.ai.openai.chat.timeout}") Duration callTimeout) {
+        return new GuardedChatModel(chatModel, breakers.circuitBreaker(ResilienceConfiguration.CHAT_MODEL),
+                bulkheads.bulkhead(ResilienceConfiguration.CHAT_MODEL), busyRetryAfter, callTimeout);
     }
 
     // 一個實作三個 port：回傳型別只能寫實作本身，下面的 use case 照樣用各自的 port 介面收它
@@ -103,12 +128,15 @@ class CalendarConfiguration {
      * 直接拿 ChatModel（跟抽行程背後是同一個），agent loop 由 CalendarAssistant 自己跑。
      * 記憶不用 Spring AI 自動組裝的那個（JdbcChatMemoryRepository 會把工具訊息濾掉），用自己的表，原因寫在 V7。
      * 記憶依擁有者分開（V11）：助理每一句話先拿「這個人名下的記憶」（assistantMemory::of），再照框架的介面讀寫。
+     * 模型跟抽行程用同一個包好保護的（見 guardedChatModel）。
      */
     @Bean
-    CalendarAssistant calendarAssistant(ChatModel chatModel, JdbcAssistantMemoryRepository assistantMemory,
+    CalendarAssistant calendarAssistant(@Qualifier(GUARDED_CHAT_MODEL) ChatModel chatModel,
+                                        JdbcAssistantMemoryRepository assistantMemory,
                                         ParseEventsUseCase parseEvents, ListEventsUseCase listEvents,
                                         FindFreeSlotsUseCase findFreeSlots, @Value("${calendar.zone}") ZoneId zone) {
-        return new CalendarAssistant(chatModel, assistantMemory::of, parseEvents, listEvents, findFreeSlots, Clock.system(zone));
+        return new CalendarAssistant(chatModel, assistantMemory::of,
+                parseEvents, listEvents, findFreeSlots, Clock.system(zone));
     }
 
     @Bean

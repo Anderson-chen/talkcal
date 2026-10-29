@@ -131,11 +131,11 @@ burn rate 是比例。一個小時只有 10 個請求、其中 1 個 502，比�
 | 01:08–01:16 | **資料庫停掉**：`docker stop` postgres | 行程 API 全部 502（5m burn 200 = 100% 失敗），01:15 快燒 `calendar-availability` 進 firing；助理也要讀資料庫，`assistant-availability` 跟著燒 |
 | 01:16–01:50 | 重新啟動 postgres，只剩平常流量 | 01:50 快燒全部解除：5m、30m 的 burn rate 都回到 0，但 1h（`calendar-availability` 8.3）、6h（6.5）還很高——**故障結束後告警不會因為長視窗還沒降下來就一直響** |
 
-![平常流量：budget 100%、burn rate 0](evidence/2026-10-19-slo-dashboard-normal.jpg)
+![平常流量：budget 100%、burn rate 0](images/2026-10-19-slo-dashboard-normal.jpg)
 
-![模型斷線時的 SLO 儀表板](evidence/2026-10-19-slo-dashboard-model-down.jpg)
+![模型斷線時的 SLO 儀表板](images/2026-10-19-slo-dashboard-model-down.jpg)
 
-![資料庫停掉時快燒告警的實例](evidence/2026-10-19-slo-fast-burn-firing-db-down.jpg)
+![資料庫停掉時快燒告警的實例](images/2026-10-19-slo-fast-burn-firing-db-down.jpg)
 
 讀這組結果要注意：驗證用的 Mimir 只有不到 1 小時的資料，所以 6h、1d、3d、28d 視窗看到的其實都是這 1 小時——
 
