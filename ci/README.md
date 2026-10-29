@@ -251,12 +251,14 @@ ci/alerting.sh            # 約 15 分鐘
 KEEP=1 ci/alerting.sh     # 跑完留著容器，到 localhost:13000（Grafana）、localhost:18025（Mailpit）看
 ```
 
-| 步驟 | 要看到 | 時限 |
+| 步驟 | 要看到 | 實測 |
 |------|--------|------|
 | 正常流量 3 分鐘 | Mailpit 0 封 | — |
-| 假 app 全部回 5xx | `[FIRING:n] SLO 快燒…` | 10 分鐘（實測約 4 分鐘） |
-| 停掉假 app | `[FIRING:n] talkcal app 掛了…` | 5 分鐘（實測約 2 分鐘） |
-| 假 app 起來 | `[RESOLVED] talkcal app 掛了…` | 8 分鐘（要等 `group_interval` 5 分鐘） |
+| 假 app 全部回 5xx | `[FIRING:n] SLO 快燒…` | 約 4 分鐘 |
+| 停掉假 app | `[FIRING:n] talkcal app 掛了…` | 約 2 分鐘 |
+| 假 app 起來 | `[RESOLVED] talkcal app 掛了…` | 約 5 分鐘（要等 `policies.yaml` 的 `group_interval`） |
+
+每一步的時限寫在 `ci/alerting.sh` 的 `wait_until`，比實測多抓一倍。
 
 GitHub 上是另一支 workflow（`.github/workflows/alerting.yml`），只在 PR 改到告警相關的路徑時跑，另外可以手動按。
 不放進 `ci.yml`：GitHub 的 `paths` 只能設在整支 workflow 上，而這支 15 分鐘，不值得每個 PR 都等。

@@ -19,25 +19,22 @@ cd "$(git rev-parse --show-toplevel)"
 export MSYS_NO_PATHCONV=1  # 同 run.sh：別讓 Git Bash 把容器裡的 /tmp 改寫成 Windows 路徑
 
 project=talkcal-alerttest
-network=talkcal-alerttest-deploy   # 跟 ci/alerting/compose.yaml 的 networks 一樣
 mimir=http://127.0.0.1:19009
 grafana=http://127.0.0.1:13000
 mailpit=http://127.0.0.1:18025
 mkdir -p ci/build
 summary=ci/build/alerting.md
 
-# compose 不會自己讀 deploy/.env；這裡另給一份，只有寄信要的兩個值。.test 是保留網域，信只會進 Mailpit。
-# 放 ci/build/ 不放 mktemp：mktemp 給的 /tmp/… 在 MSYS_NO_PATHCONV=1 下不會轉成 Windows 路徑，docker compose 找不到
-envfile=ci/build/alerting.env
-cat > "$envfile" <<'EOF'
-ALERT_SMTP_HOST=mailpit:1025
-ALERT_EMAIL_TO=oncall@example.test
-EOF
+# ops/compose.yaml 平常從 deploy/.env 拿寄信的設定；這裡不讀它，只給寄信要的兩個值（shell 的環境變數優先於 .env 檔）。
+# .test 是保留網域，信只會進 Mailpit
+export ALERT_SMTP_HOST=mailpit:1025
+export ALERT_EMAIL_TO=oncall@example.test
 
 dc() {
-  docker compose -p "$project" --env-file "$envfile" --profile mailtest \
-    -f ops/compose.yaml -f ci/alerting/compose.yaml "$@"
+  docker compose -p "$project" --profile mailtest -f ops/compose.yaml -f ci/alerting/compose.yaml "$@"
 }
+# 容器、volume、網路一起收掉
+teardown() { dc down -v --remove-orphans >/dev/null 2>&1 || true; }
 
 start=$(date +%s)
 log() {
@@ -58,13 +55,10 @@ cleanup() {
     log "失敗"
   fi
   if [ "${KEEP:-}" = 1 ]; then
-    echo "KEEP=1：容器留著，收的時候跑 docker compose -p $project down -v && docker network rm $network"
+    echo "KEEP=1：容器留著，收的時候跑 docker compose -p $project down -v"
   else
-    dc down -v --remove-orphans >/dev/null 2>&1 || true
-    docker network rm "$network" >/dev/null 2>&1 || true
+    teardown
   fi
-  # 最後才刪：dc 每次都要讀它，先刪的話上面的 down 會失敗（錯誤又被吞掉），容器全留著
-  rm -f "$envfile"
   exit "$status"
 }
 trap cleanup EXIT
@@ -103,27 +97,27 @@ mailpit_up() { curl -fsS "$mailpit/api/v1/messages" >/dev/null; }
 printf '| 經過時間、事件 |\n|---|\n' > "$summary"
 
 # 上一次沒收乾淨（例如 KEEP=1）就從頭來：全新的 Mimir 才不會被舊流量稀釋
-dc down -v --remove-orphans >/dev/null 2>&1 || true
-docker network rm "$network" >/dev/null 2>&1 || true
-docker network create "$network" >/dev/null
+teardown
+# 映像檔一次平行拉好，不必等 Mimir 收到 up 之後才開始拉 grafana
+dc pull --quiet
 
 # 先讓指標流起來，再起 Grafana：一起起的話，Grafana 第一次評估時 Mimir 可能還沒有 up，
 # app-down（noDataState: Alerting）會照規則當成「抓不到」。真的環境也是 app 先起、觀測後到
 log "起 mimir、alloy、假 app"
-dc up -d --quiet-pull mimir alloy fake-app
+dc up -d mimir alloy fake-app
 wait_until "Mimir 收到假 app 的 up = 1" 180 mimir_has_up
 
 log "起 grafana、mailpit"
-dc up -d --quiet-pull grafana mailpit
+dc up -d grafana mailpit
 wait_until "Grafana 載入告警規則（talkcal-app-down、slo-fast-burn）" 180 rules_loaded
 wait_until "Mailpit 可以查信" 60 mailpit_up
 
 log "1. 正常流量 3 分鐘"
 sleep 180
-count=$(subjects | grep -c . || true)
-if [ "$count" -ne 0 ]; then
-  log "❌ 正常流量卻收到 $count 封信："
-  subjects
+mails=$(subjects)
+if [ -n "$mails" ]; then
+  log "❌ 正常流量卻收到信："
+  echo "$mails"
   exit 1
 fi
 log "✅ 正常流量 3 分鐘：0 封"

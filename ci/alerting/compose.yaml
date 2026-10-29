@@ -6,7 +6,7 @@
 #   - 專案名由 ci/alerting.sh 用 -p 給，volume 也跟著換名字（全新的 Mimir、Grafana，沒有舊資料）
 #   - container_name 拿掉：讓 compose 照專案名取名
 #   - 主機埠拿掉，只留腳本要查的三個（Mimir、Grafana、Mailpit），換成不常用的號碼
-#   - Alloy 接的「deploy 網路」換成這次專用的，上面只有假 app（腳本自己建、自己刪）
+#   - Alloy 接的「deploy 網路」換成這組自己的，上面只有假 app（不是 external：compose 自己建、down 時自己刪）
 # !reset、!override 是 Compose 2.24 起的寫法：一般的覆寫檔對清單是「合併」，拿不掉原本的埠。
 
 services:
@@ -45,4 +45,5 @@ services:
 
 networks:
   talkcal-deploy:
-    name: talkcal-alerttest-deploy
+    external: false
+    name: !reset null     # 拿掉 talkcal-deploy_default，照專案名取名
