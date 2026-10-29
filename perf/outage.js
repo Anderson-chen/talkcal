@@ -8,7 +8,7 @@
 // 故障由 k6 自己按時製造：給了 FAULT，就在第 FAULT_AT_S 秒透過 Toxiproxy 的 API 弄壞 app 跟模型之間那一段，
 // 第 RECOVER_AT_S 秒恢復（deploy/ 要疊 compose.chaos.yaml 起，app 才經過 Toxiproxy）。每一次都同樣的時間點，結果才能重現：
 //   FAULT=down  斷線：停用那段 proxy                → 連不上，幾毫秒就失敗
-//   FAULT=hang  卡住：連得上、永遠不回（timeout 毒）  → 要等到叫模型的逾時才失敗
+//   FAULT=hang  卡住：連得上、回應晚 10 分鐘才到（latency 毒）→ 比叫模型的逾時還久，要等到逾時才失敗
 //   FAULT=slow  很慢：每個回應慢 SLOW_MS 毫秒（latency 毒，預設 40 秒）→ 會回，但超過 30 秒的慢呼叫門檻
 // 不給 FAULT 就不碰 Toxiproxy，由人在另一個終端機弄壞（toxiproxy-cli，見 deploy/README.md 的「故障演練」）。
 // 每一句的結果都印一行（帶時間），弄壞、恢復的那一刻也各印一行，對著看。
@@ -41,6 +41,7 @@ const PROXY = __ENV.PROXY || 'llm'; // deploy/toxiproxy.json 裡的名字：llm 
 const FAULT_AT_S = Number(__ENV.FAULT_AT_S || 60); // 前一分鐘是正常的，當對照
 const RECOVER_AT_S = Number(__ENV.RECOVER_AT_S || 180);
 const SLOW_MS = Number(__ENV.SLOW_MS || 40000);
+const HANG_MS = 600000; // 10 分鐘：比叫模型的逾時（2 分鐘）久，對 app 來說就是永遠不回
 const TOXIC = 'outage'; // 這支腳本加的毒都叫這個名字，恢復時照名字拿掉
 
 // 每種故障：怎麼弄壞、怎麼恢復。都只動 PROXY 那一段，另一段照常
@@ -50,10 +51,11 @@ const FAULTS = {
     recover: () => setEnabled(true),
   },
   hang: {
-    // timeout 0：資料一律不轉、連線也不關，就是「連得上、永遠不回」。
-    // 要加在 upstream（app → 模型），請求根本到不了模型：加在 downstream 的話，請求照樣送到、模型算完回應就關連線，
-    // Toxiproxy 跟著把 app 這端也關掉，app 幾秒就收到「連線中斷」—— 那是斷線，不是卡住（2026-10-29 實際踩到）
-    inject: () => addToxic('timeout', { timeout: 0 }, 'upstream'),
+    // 用超長的 latency，不用 Toxiproxy 的 timeout 毒（「資料不轉、連線不關」）：實測 timeout 毒擋不住「關連線」——
+    // 加在 downstream，模型回完就關連線；加在 upstream，請求到不了模型，llama-server 對閒置 5 秒的連線也會關掉。
+    // 兩種 Toxiproxy 都把關閉傳回 app，app 幾秒就收到「連線中斷」，那是斷線不是卡住（2026-10-29 兩種都踩過）。
+    // latency 毒會把回應連同關閉一起延後，app 這端就真的是一直等
+    inject: () => addToxic('latency', { latency: HANG_MS }, 'downstream'),
     recover: removeToxic,
   },
   slow: {
