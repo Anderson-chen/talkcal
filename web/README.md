@@ -56,9 +56,9 @@ npm run e2e:ui      # 同上，開視窗一步一步看每個動作前後的畫�
 ## 壞掉的時候畫面怎麼說（#43）
 
 原則：說**發生什麼事**（用使用者聽得懂的話，不說 503、熔斷），再說**可以怎麼做**；使用者打的字不會不見。
-判斷依據是後端分類好的 `code`（#44 的 `AssistantFailure`）和 HTTP 狀態，不看 `error` 的字面。
-分類在 `src/calendar/assistantFailure.ts`，畫面在 `AssistantChat.vue`，實測截圖在
-[`docs/evidence/2026-10-19-failure-ux/`](../docs/evidence/2026-10-19-failure-ux/README.md)。
+判斷依據是後端分類好的 `code`（`CalendarAssistantController` 的 `AssistantFailure`，#161）和 HTTP 狀態，不看 `error` 的字面。
+分類在 `src/calendar/assistantFailure.ts`，畫面在 `AssistantChat.vue`。每一種怎麼造出來、改前改後的對照在
+[`docs/drills/2026-10-19-failure-ux/`](../docs/drills/2026-10-19-failure-ux/README.md)，截圖在 [PR #174](https://github.com/Anderson-chen/talkcal/pull/174)。
 
 **AI 助理**：沒送成功的那句留在對話裡、標「沒送出」；助理那邊是一則紅色邊的說明，附「再試一次」（原封不動再送那句）。
 

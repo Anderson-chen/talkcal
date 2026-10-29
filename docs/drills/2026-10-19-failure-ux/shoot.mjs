@@ -1,14 +1,17 @@
 // #43 失敗畫面演練：把每一種失敗真的造出來，桌面、手機各截一張。
 //
 // 前提：compose.yaml 那組 talkcal43-* 已經起來（web 18443、app 18843），模型是 llm-proxy 裡的假模型（fake-model.conf）。
-// 跑：cd web && node ../docs/evidence/2026-10-19-failure-ux/shoot.mjs before|after
+// 跑：cd web && node ../docs/drills/2026-10-19-failure-ux/shoot.mjs before|after [截圖資料夾]
 //   before = 改之前的前端（現況），after = 這個 PR 的前端。兩次用同一組步驟，截圖檔名只差前綴
+//   截圖預設存到系統暫存資料夾的 talkcal-failure-ux/，不進 repo：圖用 gh --attach 傳進 PR（.claude/rules/pr.md）
 //
 // 故障都打在容器上（見 compose.yaml），真正的模型和共用的 talkcal-* 都不動。
 // 帳號每次現註冊一個用完即丟的（隨機名稱、隨機密碼，不寫下來）；登入直接打 app 的埠，不經過 nginx 的登入限流。
 import { execSync } from 'node:child_process'
+import { mkdirSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -17,7 +20,9 @@ const require = createRequire(join(here, '../../../web/package.json'))
 const { chromium, devices, request } = require('@playwright/test')
 
 const phase = process.argv[2]
-if (!['before', 'after'].includes(phase)) throw new Error('用法：shoot.mjs before|after')
+if (!['before', 'after'].includes(phase)) throw new Error('用法：shoot.mjs before|after [截圖資料夾]')
+const shots = process.argv[3] ?? join(tmpdir(), 'talkcal-failure-ux')
+mkdirSync(shots, { recursive: true })
 
 const WEB = 'http://127.0.0.1:18443'
 const APP = 'http://127.0.0.1:18843'
@@ -71,7 +76,7 @@ async function main() {
   await openPages()
 
   const shot = async (name, scenario) => {
-    const file = join(here, `${phase}-${scenario}-${name}.png`)
+    const file = join(shots, `${phase}-${scenario}-${name}.png`)
     await pages[name].screenshot({ path: file })
     log('截圖', `${phase}-${scenario}-${name}.png`)
   }

@@ -10,8 +10,8 @@
 #   docker pause talkcal43-llm-proxy   模型卡住（bulkhead 縮成 1：第二個人 503 MODEL_BUSY）
 #   docker stop  talkcal43-app         app 停掉（nginx 自己回 502/504，沒有 JSON、沒有 code）
 #
-# 起：docker compose -f docs/evidence/2026-10-19-failure-ux/compose.yaml up -d --build
-# 收：docker compose -f docs/evidence/2026-10-19-failure-ux/compose.yaml down -v
+# 起：docker compose -f docs/drills/2026-10-19-failure-ux/compose.yaml up -d --build
+# 收：docker compose -f docs/drills/2026-10-19-failure-ux/compose.yaml down -v
 name: talkcal43
 
 services:
