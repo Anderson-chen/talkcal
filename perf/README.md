@@ -70,7 +70,7 @@ $env:K6_WEB_DASHBOARD_EXPORT="perf/results/smoke-report.html"; k6 run -o web-das
 
 ### 接進 Grafana：跟 app、模型的指標疊在同一個時間軸
 
-先起 `ops/`（`docker compose -f ops/compose.yaml up -d`），然後把 `k6 run` 換成這支（Git Bash）：
+先起 `ops/`（`docker compose --env-file deploy/.env -f ops/compose.yaml up -d`），然後把 `k6 run` 換成這支（Git Bash）：
 
 ```bash
 perf/run-to-grafana.sh perf/knee.js
