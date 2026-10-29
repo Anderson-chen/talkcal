@@ -3,12 +3,11 @@
 // 跟登入頁分開畫：這時候不知道使用者有沒有登入，畫登入頁會讓登入著的人以為被登出，而且那時候登入也一樣失敗。
 // 「重新連線」再問一次「我是誰」；網路回來時（瀏覽器的 online 事件）自己問，不必等使用者按。
 import { onMounted, onUnmounted, ref } from 'vue'
-import { loadThemeKey, THEMES, toCssVars } from './calendar/theme'
+import { savedThemeVars } from './calendar/theme'
 
 const props = defineProps<{ reason: string; retry: () => Promise<void> }>()
 
-// 行事曆還沒建好主題狀態，跟登入頁一樣直接用上次選的主題
-const vars = toCssVars(THEMES[loadThemeKey()])
+const vars = savedThemeVars()
 const busy = ref(false)
 
 async function reconnect() {

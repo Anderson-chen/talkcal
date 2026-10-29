@@ -26,8 +26,6 @@ function when(draft: EventFields) {
 
 const pendingCount = (msg: ChatMessage) => msg.proposals.filter((p) => p.status === 'pending').length
 
-// 現在能不能送：在等回覆、或還在倒數就不行
-const blocked = computed(() => assistant.typing.value || assistant.waitSeconds.value > 0)
 const placeholder = computed(() =>
   assistant.waitSeconds.value > 0 ? `${assistant.waitSeconds.value} 秒後可以再問，可以先打字` : '例如：下週二早上10點面試')
 const thinking = computed(() =>
@@ -65,7 +63,7 @@ const thinking = computed(() =>
             </div>
             <span v-else-if="m.proposals.length && m.proposals.every((p) => p.status === 'removed')" class="cancelled">已取消</span>
             <span v-if="m.error" role="alert" class="error">{{ m.error }}</span>
-            <button v-if="assistant.canRetry(m)" type="button" class="retry" :disabled="blocked" @click="assistant.retry(m)">
+            <button v-if="assistant.canRetry(m)" type="button" class="retry" :disabled="assistant.blocked.value" @click="assistant.retry(m)">
               {{ assistant.waitSeconds.value > 0 ? `${assistant.waitSeconds.value} 秒後可以再試` : '再試一次' }}
             </button>
           </div>
@@ -74,12 +72,12 @@ const thinking = computed(() =>
       </div>
     </div>
     <div class="suggestions">
-      <button v-for="s in SUGGESTIONS" :key="s" type="button" :disabled="blocked" @click="assistant.send(s)">{{ s }}</button>
+      <button v-for="s in SUGGESTIONS" :key="s" type="button" :disabled="assistant.blocked.value" @click="assistant.send(s)">{{ s }}</button>
     </div>
     <form class="input" @submit.prevent="assistant.send()">
       <label :for="inputId" class="visually-hidden">輸入訊息</label>
       <input :id="inputId" v-model="assistant.input.value" type="text" autocomplete="off" :placeholder="placeholder" />
-      <button type="submit" aria-label="送出" :disabled="blocked || !assistant.input.value.trim()"><Icon name="send" :size="18" /></button>
+      <button type="submit" aria-label="送出" :disabled="assistant.blocked.value || !assistant.input.value.trim()"><Icon name="send" :size="18" /></button>
     </form>
   </div>
 </template>

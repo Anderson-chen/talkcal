@@ -4,7 +4,8 @@
 // 沒有 code；網路斷了連回應都沒有。每一種用 page.route 演一次（後註冊的 route 先比對，蓋得過 fakeApi 的總攔截）。
 //
 // 倒數用 Playwright 的假時鐘（page.clock）：不必真的等 30 秒，也證明得了「倒數完之前送不出去」。
-import { expect, test, type Page, type Route } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
+import { assistantReplies, failure, hang, ok } from './assistantReplies'
 import { fakeApi } from './fakeApi'
 
 const INPUT = '例如：下週二早上10點面試'
@@ -12,27 +13,6 @@ const INPUT = '例如：下週二早上10點面試'
 test.beforeEach(async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-06T11:30:00+08:00') })
 })
-
-type Reply = (route: Route) => Promise<void>
-
-const ok: Reply = (route) => route.fulfill({ status: 200, json: { conversationId: 'c1', reply: '明天沒有行程。', proposals: [] } })
-const failure = (status: number, code: string, retryAfterSeconds?: number): Reply => (route) =>
-  route.fulfill({
-    status,
-    json: { error: '後端的話', code, ...(retryAfterSeconds ? { retryAfterSeconds } : {}) },
-    headers: retryAfterSeconds ? { 'Retry-After': String(retryAfterSeconds) } : {},
-  })
-
-/** 助理照順序回這幾種；用完了就一直回最後一種。回傳收到幾次請求。 */
-async function assistantReplies(page: Page, ...replies: Reply[]) {
-  const calls = { count: 0 }
-  await page.route('**/api/calendar/assistant', (route) => {
-    const reply = replies[Math.min(calls.count, replies.length - 1)]
-    calls.count++
-    return reply(route)
-  })
-  return calls
-}
 
 async function ask(page: Page, text: string) {
   const input = page.getByPlaceholder(INPUT)
@@ -263,7 +243,7 @@ test('打開頁面時伺服器遲遲不回：1 秒後說「正在連線」，不
 test('送出去、還沒回就重新整理：那句還在輸入框裡，不必重打', async ({ page }) => {
   await fakeApi(page)
   // 模型一直沒回：請求卡著，使用者等不及按了重新整理
-  await page.route('**/api/calendar/assistant', () => new Promise<void>(() => {}))
+  await assistantReplies(page, hang)
   await page.goto('/')
 
   await ask(page, '下週三早上九點看牙醫')
@@ -285,10 +265,8 @@ test('反例：回成功之後重新整理，輸入框是空的（送成功的�
 
 test('送到一半重新整理、後端卻已經做完：讀回的對話裡有那句，輸入框就不再放著它（免得又送一次）', async ({ page }) => {
   await fakeApi(page)
-  let calls = 0
-  await page.route('**/api/calendar/assistant', (route) =>
-    // 第一句正常回（拿到 conversationId），第二句卡住：使用者等不及重新整理
-    calls++ === 0 ? ok(route) : new Promise<void>(() => {}))
+  // 第一句正常回（拿到 conversationId），第二句卡住：使用者等不及重新整理
+  await assistantReplies(page, ok, hang)
   await page.route('**/api/calendar/assistant/c1', (route) => route.fulfill({
     status: 200,
     json: { conversationId: 'c1', messages: [

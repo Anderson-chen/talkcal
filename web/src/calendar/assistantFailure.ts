@@ -36,9 +36,7 @@ export interface AssistantFailureView {
 const DEFAULT_WAIT = { unavailable: 30, busy: 5, 'rate-limited': 60 } as const
 
 export function describeAssistantFailure(e: unknown): AssistantFailureView {
-  if (!(e instanceof ApiError)) {
-    return { kind: 'other', text: `助理暫時沒辦法回應：${message(e)}`, waitSeconds: 0, canRetry: true }
-  }
+  if (!(e instanceof ApiError)) return other(e)
   const { status, code, retryAfterSeconds } = e.detail
   const wait = (fallback: number) => retryAfterSeconds ?? fallback
 
@@ -84,5 +82,9 @@ export function describeAssistantFailure(e: unknown): AssistantFailureView {
       waitSeconds: 0, canRetry: true,
     }
   }
-  return { kind: 'other', text: `助理暫時沒辦法回應：${e.message}`, waitSeconds: 0, canRetry: true }
+  return other(e)
+}
+
+function other(e: unknown): AssistantFailureView {
+  return { kind: 'other', text: `助理暫時沒辦法回應：${message(e)}`, waitSeconds: 0, canRetry: true }
 }

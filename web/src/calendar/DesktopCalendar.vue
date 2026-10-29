@@ -10,6 +10,7 @@ import ClearChatButton from './ClearChatButton.vue'
 import EventDetail from './EventDetail.vue'
 import EventForm from './EventForm.vue'
 import Icon from './Icon.vue'
+import LoadError from './LoadError.vue'
 import MiniMonth from './MiniMonth.vue'
 import MonthGrid from './MonthGrid.vue'
 import ThemePicker from './ThemePicker.vue'
@@ -84,10 +85,7 @@ const noEventsToday = computed(() => calendar.view.value === 'day' && calendar.e
         <button type="button" class="ai-toggle" :aria-pressed="aiOpen" @click="aiOpen = !aiOpen"><Icon name="sparkle" :size="18" />AI 助理</button>
         <ViewTabs />
       </div>
-      <p v-if="calendar.loadError.value" role="alert" class="error">
-        讀不到行程：{{ calendar.loadError.value }}
-        <button type="button" class="reload" @click="calendar.reload()">重新讀取</button>
-      </p>
+      <LoadError />
 
       <MonthGrid v-if="calendar.view.value === 'month'" />
 
@@ -172,8 +170,6 @@ const noEventsToday = computed(() => calendar.view.value === 'day' && calendar.e
 h1 { margin: 0; font-size: 24px; font-weight: 700; flex: 1; min-width: 200px; }
 .ai-toggle { height: 40px; padding: 0 14px 0 10px; border-radius: 10px; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; border: 1px solid var(--field); background: var(--card); color: var(--accent); }
 .ai-toggle[aria-pressed='true'] { border-color: var(--accent); background: var(--accentSoft); }
-.error { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--dangerSoft); color: var(--danger); font-size: 14px; }
-.error .reload { display: block; margin-top: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--danger); border-radius: 8px; background: transparent; color: var(--danger); font-size: 13px; font-weight: 700; }
 
 .panel { flex: 1; min-height: 420px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
 .week-head, .strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 8px; border-bottom: 1px solid var(--line); }

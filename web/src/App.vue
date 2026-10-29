@@ -11,13 +11,13 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import { connect, me, meUnreachable } from './auth'
 import CalendarView from './calendar/CalendarView.vue'
 import LoginView from './LoginView.vue'
-import { loadThemeKey, THEMES, toCssVars } from './calendar/theme'
+import { savedThemeVars } from './calendar/theme'
 import ServerUnreachable from './ServerUnreachable.vue'
 
 const slow = ref(false)
 const timer = setTimeout(() => (slow.value = true), 1000)
 onUnmounted(() => clearTimeout(timer))
-const vars = toCssVars(THEMES[loadThemeKey()])
+const vars = savedThemeVars()
 
 onMounted(connect)
 </script>

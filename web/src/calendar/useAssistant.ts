@@ -120,6 +120,8 @@ export function useAssistant(calendar: CalendarState) {
 
   /** 還要等幾秒才能再送；0 就是現在可以 */
   const waitSeconds = computed(() => Math.max(0, Math.ceil((retryAt.value - now.value) / 1000)))
+  // 在等回覆或還在倒數：這時送了一定失敗，送出、建議說法、再試都停用
+  const blocked = computed(() => typing.value || waitSeconds.value > 0)
   /** 這一句已經等了幾秒（沒在等就是 0） */
   const waitedSeconds = computed(() => (typing.value ? Math.max(0, Math.floor((now.value - typingSince) / 1000)) : 0))
   // 後端那段對話的身分：第一句之後才有，之後每句都帶著；重新整理後從 localStorage 拿回來
@@ -165,7 +167,7 @@ export function useAssistant(calendar: CalendarState) {
 
   async function send(text = input.value) {
     const said = text.trim()
-    if (!said || typing.value || waitSeconds.value > 0) return
+    if (!said || blocked.value) return
     // 從陣列拿回來的才是 reactive 的那一個：之後標「沒送出」要改它，畫面才會跟著變
     const mine = messages.value[messages.value.push(say('me', said)) - 1]
     // 從輸入框送的才清掉輸入框；按建議、按「再試一次」送的，不動使用者正在打的字
@@ -201,7 +203,7 @@ export function useAssistant(calendar: CalendarState) {
 
   /** 「再試一次」：拿掉沒送出的那句和說明，原封不動再送。只有最後一則說明有這顆鈕，不會把舊的問題插到新對話中間 */
   function retry(notice: ChatMessage) {
-    if (!canRetry(notice) || typing.value || waitSeconds.value > 0) return
+    if (!canRetry(notice) || blocked.value) return
     // 說明一定緊跟在沒送出的那句後面（等回覆時送不出別的）
     const at = messages.value.length - 1
     const said = messages.value[at - 1].text
@@ -256,7 +258,7 @@ export function useAssistant(calendar: CalendarState) {
     })
   }
 
-  return { messages, input, typing, saving, waitSeconds, waitedSeconds, send, retry, canRetry, confirm, cancel, drop, edit, clear }
+  return { messages, input, typing, saving, waitSeconds, blocked, waitedSeconds, send, retry, canRetry, confirm, cancel, drop, edit, clear }
 }
 
 export type AssistantState = ReturnType<typeof useAssistant>
