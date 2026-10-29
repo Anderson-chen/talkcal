@@ -101,9 +101,9 @@ docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/co
 
 docker compose "${compose_files[@]}" ps
 
-echo "── 6. 冒煙測試：網站、觀測、告警寄信"
+echo "── 6. 冒煙測試：網站、觀測、Bedrock、告警寄信"
 # --wait 只證明容器的 healthcheck 過了；這裡從外面走一遍：https 的網站和 /api、Grafana 資料源、
-# Alloy 抓得到 app、（有設 SMTP 時）寄一封測試信。沒過就讓部署失敗（#225）
+# Alloy 抓得到 app、（bedrock 時）問 Bedrock 一句、（有設 SMTP 時）寄一封測試信。沒過就讓部署失敗（#225）
 bash infra/envs/1-ec2/smoke.sh services deploy/.env
 
 echo "完成。網址：https://$(grep '^SITE_ADDRESS=' deploy/.env | cut -d= -f2)"

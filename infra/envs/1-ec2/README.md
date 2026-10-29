@@ -73,7 +73,7 @@ flowchart LR
 | `secrets.tf` | 產生 DB 密碼，連同網址（和 Bedrock 的位址、key、模型、Google／GitHub 的 secret）寫成一份 `.env` 存進 SSM |
 | `user-data.sh.tftpl` | 第一次開機：裝或驗證 Docker（gpu 再驗 GPU）、補 compose/buildx、clone、第一次部署 |
 | `deploy.sh` | 在機器上跑的部署：拉版本 →（gpu）拉模型 → 拉 `.env` → 兩組 compose up → 冒煙測試 |
-| `smoke.sh` | 部署的冒煙測試，`deploy.sh` 呼叫兩次（[#225](https://github.com/Anderson-chen/talkcal/issues/225)）：起容器之前查 `.env` 沒有 `\r`（必要的 key 由 `deploy.sh` 用 `docker compose config -q` 查）；全部起來之後查 https 的網站和 `/api`、Grafana 資料源、Alloy 抓得到 app、（有設 SMTP 時）寄一封測試信。任一項沒過，部署就失敗並印出是哪一項，不印值 |
+| `smoke.sh` | 部署的冒煙測試，`deploy.sh` 呼叫兩次（[#225](https://github.com/Anderson-chen/talkcal/issues/225)）：起容器之前查 `.env` 沒有 `\r`（必要的 key 由 `deploy.sh` 用 `docker compose config -q` 查）；全部起來之後查 https 的網站和 `/api`、Grafana 資料源、Alloy 抓得到 app、（bedrock 時）用 `.env` 的 key 問 Bedrock 一句、（有設 SMTP 時）寄一封測試信。任一項沒過，部署就失敗並印出是哪一項，不印值 |
 | `compose.ec2.yaml` | 疊在 `deploy/compose.yaml` 上、兩種共用的雲端差異：DB 密碼、app 記憶體上限、Caddy |
 | `compose.bedrock.yaml` | 不起 `llm-chat`、`model-seed`；app 的模型位址、key、名稱換成 Bedrock 的 |
 | `compose.gpu.yaml` | 模型來源換成從 S3 拉下來的資料夾 |

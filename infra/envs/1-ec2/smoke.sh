@@ -4,7 +4,7 @@
 # deploy.sh 呼叫兩次，任何一項沒過就結束碼 1，deploy.sh 跟著失敗：
 #
 #   bash smoke.sh env deploy/.env        # 啟動容器之前：.env 的換行、告警收件人
-#   bash smoke.sh services deploy/.env   # 全部起來之後：網站、觀測、告警寄信
+#   bash smoke.sh services deploy/.env   # 全部起來之後：網站、觀測、Bedrock、告警寄信
 #
 # compose 檔裡 ${X:?} 的必要 key 不在這裡列：deploy.sh 用 `docker compose config -q` 讓 compose 自己查，清單只有一份。
 # 只印 key 的名字和檢查結果，不印任何值。
@@ -103,6 +103,42 @@ app_scraped() {
     | python3 -c 'import json,sys; r=json.load(sys.stdin)["data"]["result"]; sys.exit(0 if r and all(x["value"][1]=="1" for x in r) else 1)' 2>/dev/null
 }
 
+# bedrock 時直接用 .env 的 key 問 Bedrock 一句：key 過期（預設 90 天）、模型名稱錯、token 配額用完，
+# 都只有真的叫一次才知道，/api 健康檢查不會叫到模型。不經過 app：要登入、會在正式資料庫留下對話；
+# 代價是 app 自己的設定（例如 Spring AI 送出的選項，#76）驗不到。max_tokens=1，一次只花幾個 token
+check_bedrock() {
+  local base_url
+  base_url="$(env_get BEDROCK_BASE_URL)"
+  if [ -z "$base_url" ]; then
+    pass "Bedrock：跳過（沒有 BEDROCK_BASE_URL，模型不走 Bedrock）"
+    return
+  fi
+  local body result
+  body="$(python3 -c 'import json,sys; print(json.dumps({"model": sys.argv[1], "max_tokens": 1, "messages": [{"role": "user", "content": "ping"}]}))' "$(env_get BEDROCK_MODEL)")"
+  # key 用 -K - 從 stdin 給 curl：放在 -H 參數的話，ps 看得到
+  if result="$(printf 'header = "Authorization: Bearer %s"\n' "$(env_get BEDROCK_API_KEY)" \
+    | curl -sS -K - --max-time 60 -w '\n%{http_code}' -H 'Content-Type: application/json' -d "$body" \
+      "$base_url/chat/completions" | python3 -c '
+import json, sys
+*lines, code = sys.stdin.read().split("\n")
+if code == "200":
+    sys.exit(0)
+if code == "000":
+    print("連不上（DNS、網路或逾時）")
+    sys.exit(1)
+try:
+    err = json.loads("\n".join(lines)).get("error") or {}
+    msg = err.get("message", "") if isinstance(err, dict) else str(err)
+except ValueError:
+    msg = "\n".join(lines)
+print("HTTP %s %s" % (code, msg[:300]))
+sys.exit(1)')"; then
+    pass "Bedrock：用 .env 的 key 和模型問一句，回 200"
+  else
+    fail "Bedrock：${result:-連不上 $base_url}"
+  fi
+}
+
 grafana_alerting_config() {
   curl -fsS --max-time 10 "$GRAFANA_URL/api/alertmanager/grafana/config/api/v1/alerts"
 }
@@ -167,6 +203,7 @@ check_services() {
     fail 'Alloy 抓不到 app：Mimir 裡沒有 up{job="talkcal-app"} == 1（看 Alloy 的除錯頁 127.0.0.1:12345）'
   fi
 
+  check_bedrock
   check_email
 }
 
