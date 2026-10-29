@@ -412,6 +412,10 @@ docker compose --env-file ../deploy/.env --profile mailtest up -d   # 多起一�
 Grafana 的 **Alerting → Alert rules** 看每條規則現在是 Normal / Pending / Firing；
 **Contact points** 那一頁的 **Test** 可以不等規則觸發，直接寄一封測試信。
 
+改了告警相關的設定（`grafana/provisioning/alerting/`、`mimir/`、`alloy/`、這份 `compose.yaml`），
+PR 上的 `Alerting` workflow 會另起一組全新的觀測、假 app、Mailpit，真的造出 5xx、停掉 app，確認快燒、app 掛了、恢復三封信都寄得到。
+本機也能跑 `ci/alerting.sh`（約 15 分鐘，跟正在跑的這組分開，不互相干擾），做法見 [ci/README.md](../ci/README.md#告警端到端測試)。
+
 寄到 Gmail 會進垃圾郵件（2026-10-29 在 AWS 上用 Gmail SMTP 實測：三封都寄出、SMTP 沒報錯，但都在 Spam，
 Gmail 的理由是「跟以前的垃圾信相似」——Grafana 預設模板人人在用）。收件人要自己在 Gmail 按「不是垃圾郵件」、
 再建一個篩選器（寄件人名稱 `talkcal Grafana`）設成「一律不要傳送到垃圾郵件」，不然告警寄出去了也沒人看到。
