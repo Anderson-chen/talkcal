@@ -36,6 +36,8 @@ services:
   fake-app:
     image: python:3.13-alpine@sha256:8bcfa47b04b853a17aaf909362b847b2112fd6ec4105ea553ef9a43bafbb5916
     command: ["python", "-u", "/fake-app.py"]
+    # python 當 PID 1 不理 SIGTERM，stop 要等 10 秒才被砍；SIGINT 會變成 KeyboardInterrupt 馬上結束
+    stop_signal: SIGINT
     volumes:
       # 相對路徑以 ops/ 為準（第一個 -f 檔案所在的資料夾），不是這個檔案的位置
       - ../ci/alerting/fake-app.py:/fake-app.py:ro

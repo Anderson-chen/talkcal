@@ -26,9 +26,11 @@ mkdir -p ci/build
 summary=ci/build/alerting.md
 
 # ops/compose.yaml 平常從 deploy/.env 拿寄信的設定；這裡不讀它，只給寄信要的兩個值（shell 的環境變數優先於 .env 檔）。
-# .test 是保留網域，信只會進 Mailpit
+# .test 是保留網域，信只會進 Mailpit。其他 ALERT_SMTP_* 明寫成空的：
+# 不然呼叫的 shell 裡剛好有（例如測過 Gmail 的帳密）就會被帶進來，對 Mailpit 做 AUTH 失敗，也等於把真密碼交給測試容器
 export ALERT_SMTP_HOST=mailpit:1025
 export ALERT_EMAIL_TO=oncall@example.test
+export ALERT_SMTP_USER= ALERT_SMTP_PASSWORD= ALERT_SMTP_FROM=
 
 dc() {
   docker compose -p "$project" --profile mailtest -f ops/compose.yaml -f ci/alerting/compose.yaml "$@"

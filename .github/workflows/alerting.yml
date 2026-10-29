@@ -10,6 +10,7 @@ on:
   pull_request:
     paths:
       - ops/grafana/provisioning/alerting/**   # 規則、contact point、通知政策
+      - ops/grafana/provisioning/datasources/** # 告警規則用 datasourceUid: mimir 查詢
       - ops/mimir/**                           # SLO 錄製規則、ruler 設定
       - ops/alloy/**                           # 抓 app 的 target、job 名稱
       - ops/compose.yaml                       # Grafana 的 SMTP 環境變數、Alloy 接的網路

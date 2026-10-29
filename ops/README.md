@@ -412,7 +412,7 @@ docker compose --env-file ../deploy/.env --profile mailtest up -d   # 多起一�
 Grafana 的 **Alerting → Alert rules** 看每條規則現在是 Normal / Pending / Firing；
 **Contact points** 那一頁的 **Test** 可以不等規則觸發，直接寄一封測試信。
 
-改了告警相關的設定（`grafana/provisioning/alerting/`、`mimir/`、`alloy/`、這份 `compose.yaml`），
+改了告警相關的設定（`grafana/provisioning/alerting/`、`grafana/provisioning/datasources/`、`mimir/`、`alloy/`、這份 `compose.yaml`），
 PR 上的 `Alerting` workflow 會另起一組全新的觀測、假 app、Mailpit，真的造出 5xx、停掉 app，確認快燒、app 掛了、恢復三封信都寄得到。
 本機也能跑 `ci/alerting.sh`（約 15 分鐘，跟正在跑的這組分開，不互相干擾），做法見 [ci/README.md](../ci/README.md#告警端到端測試)。
 
