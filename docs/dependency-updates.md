@@ -24,14 +24,19 @@
 
 | 種類 | 何時開 | 分組 |
 |---|---|---|
-| 安全修補（OSV 資料庫查到漏洞） | **立刻**，不等排程、不等 3 天 | 單獨一個 PR，label `security` |
-| minor、patch | 週一早上（台灣時間 9 點前），新版發佈滿 3 天 | 依生態系各一個：後端、前端、映像檔、觀測堆疊、Terraform |
+| 安全修補（OSV 資料庫查到漏洞） | 不等週一，修補版發佈**滿 14 天**就開；HIGH、CRITICAL 要更早見下面 | 單獨一個 PR，label `security` |
+| minor、patch | 週一早上（台灣時間 9 點前），新版發佈滿 14 天 | 依生態系各一個：後端、前端、映像檔、觀測堆疊、Terraform |
 | 要對齊的 | 同上 | Gradle（wrapper＋映像檔）、JDK（各處 temurin）、Node（各處 node） |
 | GitHub Actions | 同上 | 全部一個 PR（含 major） |
 | major | **不自動開**，列在 Dependency Dashboard | 勾了才開，一個套件一個 PR，label `major` |
 | 鎖檔整理（間接依賴） | 每月 1 號 | 一個 PR，只動鎖檔 |
 
 同時最多 5 個 PR、每小時最多 2 個；超過的排在 Dependency Dashboard（Renovate 開的一個 issue）上。
+
+**為什麼等 14 天**：跟 repo 選套件的兩週規則一致（[ci/README.md](../ci/README.md) 的選型段落）——被植入惡意程式碼的版本通常幾天內就被發現下架。
+前端還有第二道：[#107](https://github.com/Anderson-chen/talkcal/issues/107) 在 `web/pnpm-workspace.yaml` 設了 `minimumReleaseAge`（兩週），
+CI 的 `pnpm install --frozen-lockfile` 遇到 lockfile 裡不滿兩週的版本直接失敗。Renovate 等得比它短，開出來的 PR 只會紅燈。
+鎖檔整理不用另外設：鎖檔是 Renovate 呼叫 pnpm 重新產生的，pnpm 自己會跳過不滿兩週的版本。
 
 ## 誰審、怎麼合
 
@@ -57,6 +62,20 @@
 3. 要一起動的：JDK major 還要改 `build.gradle` 的 `toolchain`；Node major 要確認本機開發用的 Node 也一起換；
    PostgreSQL major 要資料遷移（`pg_upgrade` 或倒出再匯入），不能只換 tag。
 4. 暫時不做：留在 Dashboard 上不勾，它不會吵。
+
+### HIGH、CRITICAL 漏洞要提早升
+
+嚴重度的分界跟 `ci/vulns.sh` 同一條線：HIGH、CRITICAL 會讓 CI 的 `vulns` 紅燈，不能等兩週；MODERATE、LOW 照常等。
+Renovate 自己分不出來（設定上做不到，實測見下面「依嚴重度分流」），所以提早這一步由人做：
+
+1. **發現**：每天的 `vulns` 排程紅燈，或 Dependency Dashboard 的「Pending Status Checks」裡有 `[SECURITY]` 的項目（還沒滿 14 天的更新都排在這裡）。
+   嚴重度看 Renovate 列的 GHSA／CVE 連結。
+2. **勾選**：在 Dashboard 勾那一項，Renovate 就不等了，馬上開 PR。
+3. **前端還要放行 pnpm**（後端、映像檔沒有這一道，跳過）：在 PR 的分支上改 `web/pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude`，
+   寫成 `套件@版本`（例如 `vite@8.3.5`，只放行那一版，下一版照樣要等），旁邊註明漏洞編號。
+   新版帶進來、也不滿兩週的間接依賴要一起列 —— 跑 `pnpm install`，被擋的會一個一個報出來。Renovate 改不到這個檔，所以這步一定是人（或 AI）補。
+   補完 push，CI 綠燈才合。
+4. **收尾**：滿兩週後把那幾行刪掉（寫法和理由見 [web/README.md](../web/README.md)）。
 
 ### AI 寫的 PR 跟 Renovate 的 PR
 
@@ -109,22 +128,39 @@ dry-run 抓到的問題（validator 都沒擋）：
 - **分組全部擠成一個 PR**：`groupName` 用中文，Renovate 拿它產生分支名時把中文拿掉，五組都變成 `renovate/minorpatch`。
   補上 `groupSlug` 之後是 9 個分支，各組分開。
 - **Docker 映像檔的更新全部卡在等待**：Docker Hub 不登入只給翻前 10 頁 tag，第 11 頁回 403，
-  拿不到發佈時間的版本在 `minimumReleaseAge` 下會一直被當成「還沒滿 3 天」。docker 改成拿不到時間就不等。
+  拿不到發佈時間的版本在 `minimumReleaseAge` 下會一直被當成「還沒到等待期」。docker 改成拿不到時間就不等。
 - **nginx 會被升到 mainline**：1.30 是 stable 線（`web/Dockerfile` 的註解寫了為什麼不用 mainline），Renovate 不分，把 1.31 當成 minor。
   加 `allowedVersions` 只允許偶數小版本之後，nginx 變成「已是最新」。
 - **CUDA 被抓到了**：Renovate 會展開 Dockerfile 的 `ARG`，`nvidia/cuda:${CUDA_VERSION}…` 也被當成可升；CUDA 跟主機驅動綁定，關掉。
 
-### 3. 目前過期的套件（2026-10-19 dry-run 結果）
+### 3. 安全修補等不等（依嚴重度分流）
+
+用真的漏洞當測試資料：`vite` 7.3.6 有 HIGH（[GHSA-587h-7wmj-h5pm](https://github.com/advisories/GHSA-587h-7wmj-h5pm)）和幾個 MODERATE、LOW，
+都修在 7.3.7（2026-10-06 發佈）。只放一個 `package.json`，等待期暫時調成 30 天讓 7.3.7 算「太新」，dry-run 看 7.3.7 有沒有被擋（2026-10-30）：
+
+| 設定 | 7.3.7 |
+|---|---|
+| A. `vulnerabilityAlerts` 不寫等待期 | **不等**：Renovate 預設讓安全修補跳過等待（所以設定裡要明寫 `minimumReleaseAge: '14 days'`） |
+| B. `vulnerabilityAlerts.minimumReleaseAge: '30 days'` | 等（這份設定採用的寫法） |
+| C. B ＋ `packageRules` 用 `matchJsonata` 比對 `vulnerabilitySeverity` 是 HIGH、CRITICAL 就不等 | 還是等 |
+| D. 同 C 但只比對 CRITICAL（反例：不該放行 HIGH） | 等 |
+| E. 把 C 的規則寫進 `vulnerabilityAlerts.packageRules` | 還是等 |
+| F. C 的規則改用 `force` | 還是等 |
+
+C、E、F 想放行 HIGH 都沒成功，結果跟 D 一樣 —— 漏洞的設定是 Renovate 最後用 `force` 蓋上去的（原始碼 `vulnerabilityToPackageRules`），
+`packageRules` 改不動它。所以分流放在人那一步（上面的「HIGH、CRITICAL 漏洞要提早升」）。
+
+### 4. 目前過期的套件（2026-10-19 dry-run 結果）
 
 | 套件 | 在哪 | 目前 | 可升到 | 進哪個 PR |
 |---|---|---|---|---|
 | Gradle | wrapper、`backend/Dockerfile` | 9.2.1 | 9.8.1 | `renovate/gradle` |
 | tools.jackson（Jackson 3 BOM） | `build.gradle` | 3.1.7 | 3.2.3 | `renovate/backend-minor-patch` |
-| com.fasterxml.jackson（Jackson 2 BOM） | `build.gradle` | 2.22.3 | 2.22.4（未滿 3 天） | 同上 |
+| com.fasterxml.jackson（Jackson 2 BOM） | `build.gradle` | 2.22.3 | 2.22.4（當時還沒到等待期） | 同上 |
 | ArchUnit | `build.gradle` | 1.4.1 | 1.5.1 | 同上 |
 | @playwright/test | `web/package.json` | 1.63.0 | 1.64.1 | `renovate/web-minor-patch` |
 | vue、vite、vitest、vue-tsc、@vitejs/plugin-vue | `web/package.json` | — | 各一個 patch | 同上 |
-| Trivy | `ci/vulns.sh` | 0.74.0 | 0.76.0 | 同上 |
+| Trivy | `ci/vulns.sh` | 0.74.0 | 0.76.0 | `renovate/images-minor-patch` |
 | Caddy | `compose.ec2.yaml`、架構頁 | 2.10.0 | 2.11.7（要勾選） | 同上 |
 | Alloy | `ops/compose.yaml`、架構頁 | v1.11.0 | v1.20.1 | `renovate/observability-minor-patch` |
 | Loki | 同上 | 3.3.0 | 3.7.8 | 同上 |

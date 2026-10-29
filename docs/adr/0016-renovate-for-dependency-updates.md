@@ -53,9 +53,10 @@ CI 每天掃漏洞（`ci/vulns.sh`），掃到了也只會紅燈，還是要人�
 
 設定的取捨（細節寫在設定檔註解）：
 
-- **排程**：週一早上台灣時間 9 點前開；新版滿 3 天才開（被入侵的版本通常幾天內就被下架）。
+- **排程**：週一早上台灣時間 9 點前開；新版滿 14 天才開，跟 repo 選套件的兩週規則、`web/pnpm-workspace.yaml` 的 `minimumReleaseAge`（#107）一致 —— 比 pnpm 短的話，CI 的 `pnpm install --frozen-lockfile` 會擋下 Renovate 的 PR。
 - **分組**：minor、patch 依生態系各一個 PR（後端、前端、映像檔、Actions、Terraform）；要一起升的綁在一起（Gradle wrapper ＋ gradle 映像檔、各處的 JDK、各處的 Node、觀測堆疊）。
-- **安全修補**：不等排程、不等 3 天，馬上開。repo 沒開 GitHub 的 Dependabot alerts，所以讓 Renovate 自己查 OSV。
+- **安全修補**：不等週一的排程，但一樣滿 14 天才開。repo 沒開 GitHub 的 Dependabot alerts，所以讓 Renovate 自己查 OSV。
+  HIGH、CRITICAL 要提早由人在 Dependency Dashboard 勾選：Renovate 的設定做不到依嚴重度分流（實測見 [docs/dependency-updates.md](../dependency-updates.md)）。
 - **major**：只列在 Dependency Dashboard，勾了才開 PR。GitHub Actions 例外（major 多半只是換 Node 執行環境）。
 - **不自動合併**：每個 PR 都由使用者看過、CI 綠燈才合（[docs/dependency-updates.md](../dependency-updates.md)）。
 - **用 App 不自己跑**：自己用 Actions 跑要一把能開 PR、能觸發 CI 的 token（PAT 或自建 GitHub App），還要自己升 Renovate 本身；App 這些都不用管。
@@ -65,7 +66,7 @@ CI 每天掃漏洞（`ci/vulns.sh`），掃到了也只會紅燈，還是要人�
 - 多一個第三方服務能讀寫這個 repo（Mend 的 App 要 contents、pull requests、issues 的寫入權限）。
 - 設定比 Dependabot 複雜，寫錯不一定會被 validator 擋下來（實測：拼錯欄位、型別錯會擋；列舉值打錯、regex 少了捕捉群組不會擋），所以改設定要跑本機 dry-run 看實際抓到什麼。
 - `pr-issue` 檢查要放過 Renovate 的 PR（它們沒有對應的 issue），追蹤改看 Dependency Dashboard。
-- `minimumReleaseAge` 讓一般更新晚 3 天。
+- 所有更新都晚 14 天；HIGH、CRITICAL 要提早得有人看 Dashboard、勾選，前端還要手動在 `pnpm-workspace.yaml` 放行那一版。
 
 ## 什麼時候重想
 
