@@ -28,9 +28,7 @@ contactPoints:
       - uid: talkcal-heartbeat
         type: webhook
         settings:
-          # 外部服務給的 ping 網址，例如 https://hc-ping.com/<uuid>。這串網址本身就是祕密（拿到就能假裝我們還活著），
-          # 所以放不進 git 的 deploy/.env，由 ops/compose.yaml 交給 grafana 容器。沒設時 compose 給一個 .invalid 位址：
-          # 打不出去（Grafana log 裡會有送不出去的 error），但 Grafana 照常啟動、其他告警不受影響
+          # 外部服務的 ping 網址（https://hc-ping.com/<uuid>），是祕密：值在 deploy/.env，沒設時的行為見 ops/compose.yaml
           url: $HEARTBEAT_URL
           httpMethod: POST
         # 只送「還在響」，Watchdog 本來就不會恢復；就算恢復了也不該被當成一次 ping
@@ -162,13 +160,14 @@ groups:
         title: Watchdog（永遠在響，送 heartbeat 給外部服務）
         condition: C
         data:
+          # 不查任何資料源，只算一個常數：Mimir 掛掉時照樣響（那個情況第 2 條會寄信），
+          # heartbeat 只負責「Grafana 和通知管線還活著」，不跟 Mimir 一起停、同一件事吵兩次
           - refId: A
-            relativeTimeRange: { from: 600, to: 0 }
-            datasourceUid: mimir
+            datasourceUid: __expr__
             model:
               refId: A
-              instant: true
-              expr: vector(1)
+              type: math
+              expression: '1'
           - refId: C
             datasourceUid: __expr__
             model:
@@ -178,8 +177,6 @@ groups:
               conditions:
                 - evaluator: { type: gt, params: [0] }
         for: 0s
-        # Mimir 掛掉時照樣響：那個情況第 2 條會寄信，heartbeat 只負責「Grafana 和通知管線還活著」。
-        # 讓它跟著 Mimir 一起停的話，Mimir 一掛就同時收到 email 跟外部服務的通知，是同一件事吵兩次
         noDataState: Alerting
         execErrState: Alerting
         labels:
@@ -191,7 +188,7 @@ groups:
           summary: 這條永遠在響是正常的；它停了，外部服務會寄信
           description: >-
             每分鐘打一次 HEARTBEAT_URL。外部服務超過寬限時間沒收到，就代表 Grafana 停了、
-            機器斷線，或 Grafana 的通知送不出去。機器排程關機前先到外部服務按 Pause，見 ops/README.md。
+            機器斷線，或 Grafana 的通知送不出去。雲端機器關機用 infra/envs/1-ec2/power.sh stop，它會先暫停外部服務的 check，見 ops/README.md。
         # 不走 policy 樹，直接送 heartbeat。
         # Grafana 的通知每 group_interval 檢查一次，離上次送出已滿 repeat_interval 就重送 —— 這就是 heartbeat 的節奏。
         # 不設成 1m／1m：實測每 2 分鐘才送一次。第 60 秒那次檢查時離上次送出差幾毫秒不滿 1 分鐘，要等下一輪。

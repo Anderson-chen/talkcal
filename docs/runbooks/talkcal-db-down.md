@@ -138,4 +138,4 @@ postgres log 一直出 `PANIC`、`invalid page`、`could not read block`，重�
 
 | 日期 | 原因 | 花多久恢復 | 備註 |
 |------|------|-----------|------|
-| 2026-10-20 | 演練：`docker stop postgres`（原因 1） | 照 runbook 39 秒；故障到恢復信約 12 分鐘 | [演練紀錄](../evidence/2026-10-20-runbook-drills.md)；補了「同一件事會連帶收到好幾封」 |
+| 2026-10-20 | 演練：`docker stop postgres`（原因 1） | 照 runbook 39 秒；故障到恢復信約 12 分鐘 | [演練紀錄](../drills/2026-10-20-runbook-drills.md)；補了「同一件事會連帶收到好幾封」 |

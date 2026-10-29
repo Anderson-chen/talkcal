@@ -51,7 +51,7 @@
 - 照 runbook 從確認到恢復：**39 秒**
 - 影響：12 個列月曆的請求失敗（每個等 30 秒）
 
-![資料庫連不上的告警信，下面有 View runbook](2026-10-20-drill-db-down-email-runbook.jpg)
+![資料庫連不上的告警信，下面有 View runbook](../images/2026-10-20-drill-db-down-email-runbook.jpg)
 
 **這次學到、已改進 runbook 的**：同一件事會連帶收到好幾封（等不到連線、SLO 快燒、SLO 慢燒），值班的人要知道「都是同一個原因」，不用分頭查 —— 補在 runbook 的「對使用者的影響」。
 
@@ -75,7 +75,7 @@
 - 照 runbook 從確認到恢復：**1 分 17 秒**
 - 影響（20:20:58～20:34:01）：助理 40 個 502、77 個 503；**列月曆 712 個全部 200** —— 行程功能照常
 
-![模型熔斷的告警信](2026-10-20-drill-model-circuit-email-runbook.jpg)
+![模型熔斷的告警信](../images/2026-10-20-drill-model-circuit-email-runbook.jpg)
 
 **這次學到、已改進 runbook 的**：
 

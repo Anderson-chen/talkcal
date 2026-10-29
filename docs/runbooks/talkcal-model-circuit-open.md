@@ -114,4 +114,4 @@ ERROR log 有 `404`、`ValidationException ... model identifier is invalid`。�
 
 | 日期 | 原因 | 花多久恢復 | 備註 |
 |------|------|-----------|------|
-| 2026-10-20 | 演練：`docker stop llm-chat`（原因 1） | 照 runbook 1 分 17 秒 | [演練紀錄](../evidence/2026-10-20-runbook-drills.md)；補了 `Caused by` 對照表、失敗率 -1 的意思 |
+| 2026-10-20 | 演練：`docker stop llm-chat`（原因 1） | 照 runbook 1 分 17 秒 | [演練紀錄](../drills/2026-10-20-runbook-drills.md)；補了 `Caused by` 對照表、失敗率 -1 的意思 |
