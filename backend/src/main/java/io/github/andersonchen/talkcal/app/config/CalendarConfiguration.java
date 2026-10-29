@@ -90,9 +90,10 @@ class CalendarConfiguration {
      */
     @Bean(name = GUARDED_CHAT_MODEL, defaultCandidate = false)
     ChatModel guardedChatModel(ChatModel chatModel, CircuitBreakerRegistry breakers, BulkheadRegistry bulkheads,
-                               @Value("${talkcal.model.busy-retry-after}") Duration busyRetryAfter) {
+                               @Value("${talkcal.model.busy-retry-after}") Duration busyRetryAfter,
+                               @Value("${spring.ai.openai.chat.timeout}") Duration callTimeout) {
         return new GuardedChatModel(chatModel, breakers.circuitBreaker(ResilienceConfiguration.CHAT_MODEL),
-                bulkheads.bulkhead(ResilienceConfiguration.CHAT_MODEL), busyRetryAfter);
+                bulkheads.bulkhead(ResilienceConfiguration.CHAT_MODEL), busyRetryAfter, callTimeout);
     }
 
     // 一個實作三個 port：回傳型別只能寫實作本身，下面的 use case 照樣用各自的 port 介面收它
