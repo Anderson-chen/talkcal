@@ -3,14 +3,11 @@
 - PR 標題跟 commit 標題同一種寫法（見 `commit.md`）。
 - PR 描述照 `.github/pull_request_template.md`：大標題用英文（`Summary`、`Dependencies`、`Evidence`、`Test Plan`、`Risk`），
   內文用中文，不適用的段落整段拿掉。演練時間軸這類很長的紀錄收進 `<details>`。
-- PR 描述的截圖不 commit 進 PR 分支：圖只有審查當下有用，一進 master 就永遠留在歷史裡，每次 clone 都要下載。
-  在網頁上直接拖進描述的不用改；用 CLI 的放 orphan 分支 `evidence` 的 `pr-<編號>/`。
-  - 網址用 commit SHA：`https://github.com/{owner}/{repo}/blob/<sha>/pr-<編號>/<檔名>?raw=true`。
-    不用分支名稱：合併後分支會被刪，圖就 404（#148 就這樣壞過）。
-  - 加圖（Bash）：`git fetch origin evidence && git worktree add --detach <暫存資料夾> origin/evidence`，
-    放進 `pr-<編號>/`、commit，`git push origin HEAD:evidence`，再用 `git rev-parse HEAD` 取 SHA，最後 `git worktree remove <暫存資料夾>`。
-    用 `--detach` 是因為一個分支同時只能被一個 worktree 簽出，平行的 session 會互卡。
-  - push 被拒（別的 session 先推了）就 `git pull --rebase origin evidence` 再推，重新取 SHA；不 force-push，舊 PR 引用的 SHA 才一直找得到。
+- PR 描述的截圖直接傳進 PR，不 commit 進分支：圖只有審查當下有用，一進 master 就永遠留在歷史裡，每次 clone 都要下載。
+  - 用 `gh pr create` 或 `gh pr edit` 的 `--attach <檔案>`（gh 2.99.0 起才有）。描述裡先寫 `![說明](<本機路徑>)`，
+    gh 上傳後會換成 GitHub 的網址；網頁上直接拖進描述也一樣。每張最多 10 MB。
+  - 截圖先存在 scratchpad 這類 repo 外面的資料夾，不要放進 worktree，免得順手 commit 進去。
+  - orphan 分支 `evidence` 是 gh 有 `--attach` 之前的做法，只留給舊 PR 的連結用，不再往裡面加圖、也不要刪或 force-push。
   - 文件（README、`docs/`）要引用的圖才進 master，放 `docs/images/`。
   - 演練紀錄（runbook、腳本會連過去的 .md）算文件，放 `docs/drills/`，它引用的圖一樣放 `docs/images/`。
 - PR 描述不要有 `Generated with Claude Code`。
