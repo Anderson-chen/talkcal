@@ -134,9 +134,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - alloy-data:/var/lib/alloy/data
       # 備份腳本寫的 .prom（最後一次成功備份的時間），Alloy 讀了變成指標，備份太久沒成功就告警（#39）。
-      # 雲端的 deploy.sh 給 TEXTFILE_DIR=/opt/talkcal/metrics（backup-to-s3.sh 寫的地方）；
-      # 本機沒給，就是下面那個空的具名 volume —— 寫成空的主機路徑的話，Docker 會在 ops/ 裡建一個沒追蹤的資料夾
-      - ${TEXTFILE_DIR:-alloy-textfile}:/var/lib/alloy/textfile:ro
+      # 本機沒有備份排程，掛一個空的具名 volume；雲端由 infra/envs/1-ec2/compose.ops.yaml 換成 backup-to-s3.sh 寫的資料夾
+      - alloy-textfile:/var/lib/alloy/textfile:ro
     networks:
       # default：這組自己的網路，用服務名稱找 mimir、loki、tempo。
       # talkcal-deploy：deploy/ 那組的網路。接上後就能直接用服務名稱抓 app:8090、llm-chat:8080，

@@ -99,11 +99,10 @@ docker compose "${compose_files[@]}" up -d --build --remove-orphans
 
 echo "── 5. 觀測（ops/ + compose.ops.yaml）"
 # 要在 deploy/ 之後：Alloy 要加入的網路是 deploy/ 建的。
-# 設定跟本機同一份，compose.ops.yaml 只蓋掉雲端不一樣的值（trace 取樣比例）
+# 設定跟本機同一份，compose.ops.yaml 只蓋掉雲端不一樣的值（trace 取樣比例、備份告警讀的資料夾）
 # --env-file：Grafana 寄告警信的 SMTP 設定在同一份 deploy/.env（#121）。
 # compose 預設只讀第一個 compose 檔所在資料夾（ops/）的 .env，不帶的話 Grafana 拿不到、就不寄信
-# TEXTFILE_DIR：backup-to-s3.sh 寫「最後一次成功備份」的地方，掛給 Alloy 讀，太久沒成功就告警（#39）
-TEXTFILE_DIR="$ROOT/metrics" docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml up -d
+docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml up -d
 
 echo "── 6. 備份排程（#45）：每小時一次、關機前一次"
 # 寫在這裡、不寫在 user_data：user_data 只在第一次開機跑，已經在跑的機器重跑 deploy.sh 才裝得上。

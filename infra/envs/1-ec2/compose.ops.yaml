@@ -11,3 +11,7 @@ services:
       TRACE_SAMPLING_PERCENT: "10"
       # 要比最慢的請求還久，慢請求的根 span 才趕得上：叫模型的逾時 2 分鐘（spring.ai.openai.chat.timeout）＋ 5 秒餘裕
       TRACE_SAMPLING_DECISION_WAIT: 125s
+    volumes:
+      # backup-to-s3.sh 寫「最後一次成功備份」的 .prom 的地方（$ROOT/metrics），換掉本機那個空 volume（#39）。
+      # volumes 依容器裡的路徑合併，所以這行蓋掉 ops/compose.yaml 掛在同一個路徑的那個
+      - /opt/talkcal/metrics:/var/lib/alloy/textfile:ro
