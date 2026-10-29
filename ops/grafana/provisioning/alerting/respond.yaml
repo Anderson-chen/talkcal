@@ -164,6 +164,7 @@ groups:
               # 只有雲端（有跑 backup-to-s3.sh）才有這個指標；本機手動備份不寫，查詢是空的 → 正常。
               # 不寫成 max(最後成功 or 開機時間)：PromQL 的 or 比對標籤時不看指標名稱，兩個的標籤一樣，
               # 右邊會整個被丟掉（反例實測過，第一版就是這樣，剛開機就誤響）。
+              # 8100 跟下面 evaluator 的門檻是同一個值，要改兩處一起改
               expr: >-
                 (time() - max(talkcal_backup_last_success_timestamp_seconds{job="talkcal-backup"}))
                 and on()

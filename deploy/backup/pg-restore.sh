@@ -17,8 +17,8 @@ set -euo pipefail
 PG_CONTAINER="${PG_CONTAINER:-talkcal-postgres}"
 PG_USER="${PG_USER:-talkcal}"
 PG_DB="${PG_DB:-talkcal}"
-# 還原時要先停掉的 app 容器（它握著連線，資料庫改不了名）。設成空字串就不停（演練用）
-APP_CONTAINER="${APP_CONTAINER-talkcal-app}"
+# 還原時要先停掉的 app 容器（它握著連線，資料庫改不了名）
+APP_CONTAINER="${APP_CONTAINER:-talkcal-app}"
 
 log() { echo "[pg-restore] $*" >&2; }
 die() { log "停止：$*"; exit 1; }
@@ -76,10 +76,11 @@ if [ "$mode" = --verify-only ]; then
 fi
 
 log "4/4 換上：$PG_DB → ${PG_DB}_before_*，$scratch → $PG_DB"
-if [ -n "$APP_CONTAINER" ] && [ "$(docker inspect -f '{{.State.Running}}' "$APP_CONTAINER" 2>/dev/null)" = true ]; then
+if [ "$(docker inspect -f '{{.State.Running}}' "$APP_CONTAINER" 2>/dev/null)" = true ]; then
   log "停 $APP_CONTAINER（它握著連線）"
   docker stop "$APP_CONTAINER" > /dev/null
-  restart_app=1
+  # 換上成功或失敗，離開前都把 app 起回來：之後在中間多加一個 die 也不會忘
+  trap 'log "起 $APP_CONTAINER"; docker start "$APP_CONTAINER" > /dev/null' EXIT
 fi
 # 資料庫名稱沒加引號會被轉成小寫，所以時間格式只用數字和底線，印出來的跟實際的名稱一樣
 old="${PG_DB}_before_$(date -u +%Y%m%d_%H%M%S)"
@@ -96,13 +97,7 @@ COMMIT;
 SQL
 then
   psql_admin -c "ALTER DATABASE $PG_DB ALLOW_CONNECTIONS true"
-  [ "${restart_app:-}" = 1 ] && docker start "$APP_CONTAINER" > /dev/null
   die "換上失敗，已經復原成原本的 $PG_DB（暫存庫 $scratch 還在，可以再試一次）"
 fi
 log "換上完成。被換下來的是 $old（確認沒問題後再 DROP，指令見 runbook）"
-
-if [ "${restart_app:-}" = 1 ]; then
-  log "起 $APP_CONTAINER"
-  docker start "$APP_CONTAINER" > /dev/null
-fi
 log "還原完成（$(( $(date +%s) - start )) 秒）"

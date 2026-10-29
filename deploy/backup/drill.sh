@@ -35,6 +35,10 @@ expect_fail() {
   if "$@" > /dev/null 2>"$BACKUP_DIR/err.txt"; then echo "✗ 預期失敗卻成功了：$*"; exit 1; fi
   echo "✓ 擋下來了：$(grep -E '停止|error|Error' "$BACKUP_DIR/err.txt" | head -2 | tr '\n' ' ')"
 }
+# 正例：條件不成立就讓演練失敗。check '條件' '成立時印的' '不成立時印的'
+check() {
+  if eval "$1"; then echo "✓ $2"; else echo "✗ $3"; exit 1; fi
+}
 cleanup() { docker rm -fv "$app" "$pg" > /dev/null 2>&1 || true; docker network rm "$net" > /dev/null 2>&1 || true; }
 trap cleanup EXIT
 
@@ -47,10 +51,11 @@ until docker exec "$pg" pg_isready -U talkcal -d talkcal -q 2>/dev/null; do slee
 sleep 2   # 官方映像檔初始化時會重啟一次伺服器，等它真的穩定
 migrations="$repo/backend/src/main/resources/db/migration"
 # 照 Flyway 的版本順序跑（V2 在 V10 前面：sort -V 才排得對）
-for f in $(ls "$migrations" | sort -V); do
+mapfile -t files < <(ls "$migrations" | sort -V)
+for f in "${files[@]}"; do
   sql -q < "$migrations/$f"
 done
-echo "migration：$(ls "$migrations" | sort -V | paste -sd' ')"
+echo "migration：${files[*]}"
 # 假 app：跟真的 app 一樣一直握著連線、斷了就重連。還原那一步要能把它停掉、踢掉它的連線。
 # 收到 SIGTERM 馬上結束（真的 app 也會處理 SIGTERM，只是要等手上的請求做完）：不處理的話 docker stop 要白等 10 秒才 SIGKILL
 docker run -d --name "$app" --network "$net" -e PGPASSWORD=drill "$image" \
@@ -104,7 +109,7 @@ step "驗證：資料一筆不差地回來、假 app 又連上了、被換下來
 echo "$(counts)"
 after=$(fingerprint)
 echo "指紋：$after"
-[ "$before" = "$after" ] && echo "✓ 指紋跟備份當下一樣" || { echo "✗ 指紋不一樣"; exit 1; }
+check '[ "$before" = "$after" ]' "指紋跟備份當下一樣" "指紋不一樣"
 sleep 3
 echo "假 app 狀態：$(docker inspect -f '{{.State.Status}}' "$app")，連線數：$(sql -c "SELECT count(*) FROM pg_stat_activity WHERE datname = 'talkcal' AND application_name = 'psql' AND pid <> pg_backend_pid()")"
 old=$(DB=postgres sql -c "SELECT datname FROM pg_database WHERE datname LIKE 'talkcal_before_%'")
@@ -116,7 +121,8 @@ echo "被換下來的庫裡有沒有：$(DB=$old sql -c "SELECT count(*) FROM ca
 step "情境 C（runbook）：從被換下來的庫只撈回備份之後才寫的那則，線上已有的不重複"
 docker exec "$pg" sh -c "pg_dump -U talkcal -d $old --data-only --inserts --on-conflict-do-nothing -t calendar_assistant_message | psql -U talkcal -d talkcal -q -v ON_ERROR_STOP=1" > /dev/null
 echo "$(counts)"
-[ "$(sql -c "SELECT count(*) FROM calendar_assistant_message WHERE content = '備份之後才寫的'")" = 1 ]   && echo "✓ 撈回來了，其他 5000 則沒有重複" || { echo "✗ 沒撈回來"; exit 1; }
+recovered=$(sql -c "SELECT count(*) FROM calendar_assistant_message WHERE content = '備份之後才寫的'")
+check '[ "$recovered" = 1 ]' "撈回來了，其他 5000 則沒有重複" "沒撈回來"
 before=$(fingerprint)   # 之後的反例拿這個當基準：線上資料不能再變
 
 step "反例 1：備份檔中間被改了一個 byte → 雜湊擋下"
@@ -144,13 +150,13 @@ step "反例 5：資料庫沒在跑時備份 → 失敗，而且不留下半成�
 ls_before=$(ls -A "$BACKUP_DIR" | sort)
 docker stop "$pg" > /dev/null
 expect_fail bash "$here/pg-backup.sh"
-[ "$ls_before" = "$(ls -A "$BACKUP_DIR" | sort)" ] && echo "✓ 備份資料夾沒有多出任何檔案" || { echo "✗ 留下了檔案"; exit 1; }
+check '[ "$ls_before" = "$(ls -A "$BACKUP_DIR" | sort)" ]' "備份資料夾沒有多出任何檔案" "留下了檔案"
 docker start "$pg" > /dev/null
 until docker exec "$pg" pg_isready -U talkcal -d talkcal -q 2>/dev/null; do sleep 1; done
 
 step "反例都跑完：線上的資料沒被任何一個壞備份動到"
 final=$(fingerprint)
-[ "$final" = "$before" ] && echo "✓ 指紋還是 $final" || { echo "✗ 線上資料變了"; exit 1; }
+check '[ "$final" = "$before" ]' "指紋還是 $final" "線上資料變了"
 
 step "退回（runbook「還原之後發現選錯備份」）：換回被換下來的那份"
 docker stop "$app" > /dev/null
@@ -162,6 +168,6 @@ COMMIT;
 SQL
 docker start "$app" > /dev/null
 echo "$(counts)"
-[ "$(sql -c "SELECT count(*) FROM calendar_event")" = 0 ] && echo "✓ 回到還原之前（誤刪後）的樣子：退回的步驟可行" || { echo "✗ 沒有退回"; exit 1; }
+check '[ "$(sql -c "SELECT count(*) FROM calendar_event")" = 0 ]' "回到還原之前（誤刪後）的樣子：退回的步驟可行" "沒有退回"
 
 step "全部通過，清掉演練容器"
