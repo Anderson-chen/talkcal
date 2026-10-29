@@ -60,11 +60,9 @@ umask 077
 aws ssm get-parameter --name "$DOTENV_PARAM" --with-decryption \
   --region "$AWS_REGION" --query Parameter.Value --output text > "$REPO/deploy/.env"
 umask 022
-# 寫出空檔案卻回 0 的事真的發生過（snap 版的 aws，#74）。不擋的話要到第 4 步 compose 才報「缺 DB_PASSWORD」，看不出原因
-if ! grep -q '^DB_PASSWORD=' "$REPO/deploy/.env"; then
-  echo "deploy/.env 是空的或缺 DB_PASSWORD：檢查 aws --version、SSM 參數 $DOTENV_PARAM" >&2
-  exit 1
-fi
+# 冒煙測試的前半（#225）：.env 是空的（snap 版的 aws，#74）、帶 \r（從 Windows apply）、缺必要的 key，
+# 都在啟動任何容器之前就擋下、說出是哪一項。不擋的話要等 app 起不來、--wait 判 unhealthy 才失敗，看不出原因
+bash "$REPO/infra/envs/1-ec2/smoke.sh" env "$REPO/deploy/.env"
 
 cd "$REPO"
 
@@ -74,6 +72,9 @@ compose_files=(
   -f infra/envs/1-ec2/compose.ec2.yaml              # 雲端共用：DB 密碼、記憶體上限、Caddy
   -f "infra/envs/1-ec2/compose.$MODEL_BACKEND.yaml" # 模型從哪來
 )
+# 必要的 key 交給 compose 自己查：compose 檔裡每個 ${X:?缺 X} 都會檢查到，不另外維護一份清單。
+# config 只解析、不啟動任何容器
+docker compose "${compose_files[@]}" config -q
 
 echo "── 4. 服務（deploy/ + compose.ec2.yaml + compose.$MODEL_BACKEND.yaml）"
 # 先只起 postgres，把資料庫裡的密碼同步成 .env 這一份，app 才起來（#14）。
@@ -99,4 +100,10 @@ echo "── 5. 觀測（ops/ + compose.ops.yaml）"
 docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml up -d
 
 docker compose "${compose_files[@]}" ps
+
+echo "── 6. 冒煙測試：網站、觀測、Bedrock、告警寄信"
+# --wait 只證明容器的 healthcheck 過了；這裡從外面走一遍：https 的網站和 /api、Grafana 資料源、
+# Alloy 抓得到 app、（bedrock 時）問 Bedrock 一句、（有設 SMTP 時）寄一封測試信。沒過就讓部署失敗（#225）
+bash infra/envs/1-ec2/smoke.sh services deploy/.env
+
 echo "完成。網址：https://$(grep '^SITE_ADDRESS=' deploy/.env | cut -d= -f2)"
