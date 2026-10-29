@@ -20,31 +20,37 @@
   // 一次最多開 5 個 PR、每小時最多 2 個：一個人審得完的量，超過的排在 Dependency Dashboard 上
   prConcurrentLimit: 5,
   prHourlyLimit: 2,
-  // 新版發佈滿 3 天才開 PR：被入侵的版本通常幾小時到一兩天內就被下架（2025 年 npm 的 Shai-Hulud、
-  // 2026-03 的 Trivy 都是這樣），等幾天讓別人先踩。安全修補不受這條限制（見下面 vulnerabilityAlerts）
-  minimumReleaseAge: '3 days',
+  // 新版發佈滿 14 天才開 PR，跟 repo 選套件的兩週規則一致（ci/README.md 的選型段落）：被植入惡意程式碼的版本
+  // 通常幾天內就被發現下架（2025 年 npm 的 Shai-Hulud、2026-03 的 Trivy）。前端還有第二道：web/pnpm-workspace.yaml 的
+  // minimumReleaseAge（#107），CI 的 pnpm install --frozen-lockfile 遇到不滿兩週的版本直接失敗 —— 這裡比它短的話，PR 只會紅燈
+  minimumReleaseAge: '14 days',
 
   // ── PR 長什麼樣 ──────────────────────────────────────────────────
-  // commit 訊息照 repo 的慣例用 [類型] 開頭（CLAUDE.md）：依賴升級屬於 [chore]
-  semanticCommits: 'disabled',
-  commitMessagePrefix: '[chore]',
+  // commit 標題照 repo 的慣例 `類型(範圍): …`（.claude/rules/commit.md）：依賴升級是 chore(deps)
+  semanticCommits: 'enabled',
+  semanticCommitType: 'chore',
+  semanticCommitScope: 'deps',
   labels: ['dependencies'],
   // 一律不自動合併：要等使用者看過、CI 綠燈才合（流程見 docs/dependency-updates.md）
   automerge: false,
-  // 鎖檔裡沒直接寫在 package.json 的間接依賴，一個月整理一次（只動鎖檔，例如 pnpm-lock.yaml）
+  // 鎖檔裡沒直接寫在 package.json 的間接依賴，一個月整理一次（只動鎖檔，例如 pnpm-lock.yaml）。
+  // 這裡不用另外設等待：鎖檔是 Renovate 呼叫 pnpm 重新產生的，pnpm 自己會照 pnpm-workspace.yaml 跳過不滿兩週的版本
   lockFileMaintenance: {
     enabled: true,
     schedule: ['* 0-8 1 * *'],
   },
 
-  // ── 安全修補：不等排程，立刻開 ───────────────────────────────────
+  // ── 安全修補：不等週一的排程，滿兩週就開 ─────────────────────────
   // repo 沒開 GitHub 的 Dependabot alerts（Renovate 預設讀那裡），所以另外讓 Renovate 自己查 OSV 漏洞資料庫。
-  // 修漏洞的 PR 不受上面的排程、3 天等待和 PR 數量上限限制
+  // 修漏洞的 PR 不等週一、不受 PR 數量上限限制，但一樣等 14 天：Renovate 預設讓它不等（minimumReleaseAge: null），
+  // 這裡要明寫蓋掉。不能「HIGH、CRITICAL 不等，其他等」：漏洞的設定是 Renovate 最後用 force 蓋上去的，
+  // packageRules 依嚴重度（matchJsonata 的 vulnerabilitySeverity）改不動它（四種寫法實測，見 docs/dependency-updates.md）。
+  // HIGH、CRITICAL 要提早的話由人在 Dependency Dashboard 勾選，流程也在那份文件
   osvVulnerabilityAlerts: true,
   vulnerabilityAlerts: {
     labels: ['dependencies', 'security'],
     schedule: ['at any time'],
-    minimumReleaseAge: null,
+    minimumReleaseAge: '14 days',
     prCreation: 'immediate',
   },
 
