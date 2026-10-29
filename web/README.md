@@ -53,7 +53,9 @@ pnpm e2e:ui          # 同上，開視窗一步一步看每個動作前後的畫
 - **時間固定在 2026-10-06 11:30**（`page.clock`）：行事曆到處用到「今天」。
 - 版本都釘死、只挑發布超過兩週的版本：寫在 `pnpm-workspace.yaml`（`saveExact`、`minimumReleaseAge`），`pnpm add` 自動套用；
   CI 的 `pnpm install --frozen-lockfile` 也照它檢查整份 lockfile，有不滿兩週的版本就失敗（不管是誰、用什麼方式改的 lock）。
-  真的要提早用（例如緊急的安全修補），在 `pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude` 列出那個套件，理由寫在旁邊。CI 映像檔裡的 Chromium 版本從 `package.json` 讀（`ci/Dockerfile`）。
+  只有一種情況提早：修 HIGH、CRITICAL 漏洞的版本（跟 `ci/vulns.sh` 同一條線）。在 `pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude`
+  寫 `套件@版本`（例如 `vite@8.3.5`，只放行那一版，下一版照樣要等），旁邊註明漏洞編號；新版帶進來、也不滿兩週的間接依賴要一起列。
+  滿兩週後把那幾行刪掉。實測：寫 `vite@8.3.5` 放行，寫 `vite@8.3.4` 時 8.3.5 照樣被擋。CI 映像檔裡的 Chromium 版本從 `package.json` 讀（`ci/Dockerfile`）。
 
 部署：在 `backend/` 裡 `./gradlew deployWeb`，開 http://localhost:18080。
 映像檔是 `Dockerfile` 兩段式（Node build → nginx），nginx 的設定在 `nginx.conf`。
