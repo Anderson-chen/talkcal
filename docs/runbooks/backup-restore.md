@@ -218,7 +218,8 @@ journalctl -u talkcal-backup-on-shutdown -b -1    # 上次關機前那次的輸�
 cat /opt/talkcal/backups/last-success             # 最後一次成功的時間（UTC）
 ```
 
-「太久沒備份就告警」要等告警的 contact point（#152）合併；`last-success` 就是給它判斷用的。
+太久沒成功也會寄告警信（`respond.yaml` 的 `talkcal-backup-stale`，#39）：它讀的是同時寫的 `/opt/talkcal/metrics/backup.prom`，
+不是 `last-success`（那份是給人 `cat` 看的）。
 
 ---
 

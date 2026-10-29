@@ -37,6 +37,16 @@ dest="s3://$BACKUPS_BUCKET/postgres/"
 aws s3 cp "$dump" "$dest" --region "$AWS_REGION" --only-show-errors
 aws s3 cp "$dump.sha256" "$dest" --region "$AWS_REGION" --only-show-errors
 
-# 最後一次成功的時間。告警（#152 合併後）可以拿它判斷「太久沒備份」；現在先給人用 cat 看
+# 最後一次成功的時間，給人用 cat 看
 date -u +%Y-%m-%dT%H:%M:%SZ > "$BACKUP_DIR/last-success"
+# 同一件事給 Alloy 讀（textfile collector 的格式），備份太久沒成功就告警（#39）。
+# 先寫暫存檔再 mv：Alloy 隨時可能來讀，mv 是原子的，不會讀到寫一半的檔
+METRICS_DIR="$ROOT/metrics"
+mkdir -p "$METRICS_DIR"
+cat > "$METRICS_DIR/.backup.prom.tmp" <<PROM
+# HELP talkcal_backup_last_success_timestamp_seconds 最後一次備份成功傳上 S3 的時間（Unix 秒）
+# TYPE talkcal_backup_last_success_timestamp_seconds gauge
+talkcal_backup_last_success_timestamp_seconds $(date -u +%s)
+PROM
+mv "$METRICS_DIR/.backup.prom.tmp" "$METRICS_DIR/backup.prom"
 echo "[backup-to-s3] $reason：完成 → $dest$(basename "$dump")"

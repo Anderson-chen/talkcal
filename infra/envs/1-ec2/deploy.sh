@@ -99,7 +99,7 @@ docker compose "${compose_files[@]}" up -d --build --remove-orphans
 
 echo "── 5. 觀測（ops/ + compose.ops.yaml）"
 # 要在 deploy/ 之後：Alloy 要加入的網路是 deploy/ 建的。
-# 設定跟本機同一份，compose.ops.yaml 只蓋掉雲端不一樣的值（trace 取樣比例）
+# 設定跟本機同一份，compose.ops.yaml 只蓋掉雲端不一樣的值（trace 取樣比例、備份告警讀的資料夾）
 # --env-file：Grafana 寄告警信的 SMTP 設定在同一份 deploy/.env（#121）。
 # compose 預設只讀第一個 compose 檔所在資料夾（ops/）的 .env，不帶的話 Grafana 拿不到、就不寄信
 docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml up -d

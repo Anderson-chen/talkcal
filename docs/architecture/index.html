@@ -254,7 +254,7 @@ app:{n:"services.app（Spring）",d:"talkcal 本體：行程與 AI 助理。",de
 postgres:{n:"services.postgres",d:"行程與對話記憶。",deps:["dotenv","s3b"],p:[["image","postgres:18.6-alpine","釘版本；alpine 較小"],["POSTGRES_PASSWORD","${DB_PASSWORD}","Terraform 隨機產生，不再寫死"],["密碼同步","ALTER ROLE","映像檔只在第一次初始化時讀密碼"],["部署前備份","backup-to-s3.sh pre-deploy","新版 migration 改壞資料時回得去；備份失敗就不部署"],["備份排程","每小時＋關機前（systemd）","開機期間 RPO ≤ 1 小時，正常關機 RPO 0"],["postgres-exporter","v0.20.1","給 Alloy 抓 max_connections、pg_stat_activity 各狀態連線數（#32）"],["--no-collector.stat_user_tables","關","逐表統計會被鎖表卡住，資料庫出事時整次抓取逾時"]],ind:"RDS / Aurora；manage_master_user_password（replica、Blue/Green 不支援）。連線數改看 CloudWatch 的 DatabaseConnections，或 RDS Proxy 擋在 app 前面。",when:"需要備份 SLA 時。",chk:"ok",src:["rds"]},
 llm:{n:"services.llm-chat",only:"gpu",d:"自己跑的 llama-server。",deps:["seed"],p:[["-ngl","99","全部層放 GPU"],["-c / -np","32768 / 200","同時處理的請求數"],["--kv-unified","開","給了 -np 就要明講，不然 context 被均分到每個 slot 只剩約 163"]],ind:"多人 API 多選 vLLM；llama.cpp 強在 GGUF 與單人延遲。",when:"GPU 配額下來時。",chk:"ok",src:["vllm"]},
 seed:{n:"services.model-seed",only:"gpu",d:"複製模型並驗 SHA256。",deps:["s3m"],p:[["sha256sum -c","驗證","確定模型檔沒有傳壞或被換掉"]],ind:"k8s initContainer 或 Mountpoint for S3。",when:"上 EKS 時。",chk:"ok",src:["mp"]},
-obs:{n:"ops/compose.yaml",d:"觀測堆疊：跟本機同一份，compose.ops.yaml 只蓋掉 trace 取樣比例。",deps:["app"],p:[["Alloy","v1.11.0","收集三種訊號"],["Mimir","3.2.1","存指標"],["Loki","3.3.0","存日誌"],["Tempo","3.1.0","存追蹤"],["Grafana","11.4.0","畫圖；版本都釘死，換機器拉到同一版"],["Grafana 埠","127.0.0.1:3000","不對外，走 SSM port forwarding"],["告警","app 掛了＋SLO burn-rate → email","SMTP 從同一份 .env（--env-file）；沒填就不寄、只在 Grafana 上看（#121）"],["Trace 取樣","10%，等 125s","Alloy tail sampling：錯的、5xx、超過 5 秒的全留，其餘留 10%（本機 100%）"],["Alloy 抓指標","app、llama-cpp、postgres-exporter","每 15 秒；資料庫那頭的連線數是 #32 加的"],["metrics-generator","service-graphs、span-metrics → Mimir","Grafana 的 service map 靠它；取樣在它前面，抽樣後的請求數會少算（#31）"],["OTLP 入口","4318 HTTP（app）、4317 gRPC（nginx）","nginx 的模組只會 gRPC（#31）"],["SLO","4 個、滾動 28 天","Mimir 錄製 SLI 與 burn rate，Grafana 發 burn-rate 告警（docs/slo.md）"]],ind:"放在被觀測系統之外：Amazon Managed Prometheus / Grafana、Grafana Cloud、CloudWatch、Datadog。",when:"上正式環境時。",chk:"ok",src:["amg"]}
+obs:{n:"ops/compose.yaml",d:"觀測堆疊：跟本機同一份，compose.ops.yaml 只蓋掉 trace 取樣比例和備份告警讀的資料夾。",deps:["app"],p:[["Alloy","v1.11.0","收集三種訊號"],["Mimir","3.2.1","存指標"],["Loki","3.3.0","存日誌"],["Tempo","3.1.0","存追蹤"],["Grafana","11.4.0","畫圖；版本都釘死，換機器拉到同一版"],["Grafana 埠","127.0.0.1:3000","不對外，走 SSM port forwarding"],["告警","app 掛了＋SLO burn-rate＋資料庫、連線池、模型熔斷、備份 → email","SMTP 從同一份 .env（--env-file）；沒填就不寄、只在 Grafana 上看（#121）。總表 docs/alerts.md（#39）"],["備份告警的指標","/opt/talkcal/metrics → Alloy（compose.ops.yaml）","backup-to-s3.sh 成功時寫 .prom，Alloy 的 textfile collector 讀；太久沒成功就告警（#39）"],["Trace 取樣","10%，等 125s","Alloy tail sampling：錯的、5xx、超過 5 秒的全留，其餘留 10%（本機 100%）"],["Alloy 抓指標","app、llama-cpp、postgres-exporter","每 15 秒；資料庫那頭的連線數是 #32 加的"],["metrics-generator","service-graphs、span-metrics → Mimir","Grafana 的 service map 靠它；取樣在它前面，抽樣後的請求數會少算（#31）"],["OTLP 入口","4318 HTTP（app）、4317 gRPC（nginx）","nginx 的模組只會 gRPC（#31）"],["SLO","4 個、滾動 28 天","Mimir 錄製 SLI 與 burn rate，Grafana 發 burn-rate 告警（docs/slo.md）"]],ind:"放在被觀測系統之外：Amazon Managed Prometheus / Grafana、Grafana Cloud、CloudWatch、Datadog。",when:"上正式環境時。",chk:"ok",src:["amg"]}
 };
 const FP={
 "infra/bootstrap/main.tf":"整個帳號只跑一次：建放 state 的 S3 bucket 和每月花費告警。用本機 state，解掉「state bucket 誰來建」的雞生蛋問題。",
@@ -275,13 +275,13 @@ const FP={
 "infra/envs/1-ec2/backups.tf":"資料庫備份的 bucket：版本控制、加密、公開封鎖，保留期由 lifecycle 刪（#45）。",
 "infra/envs/1-ec2/user-data.sh.tftpl":"第一次開機跑一次：裝或驗證 Docker、clone repo、呼叫 deploy.sh。",
 "infra/envs/1-ec2/deploy.sh":"在機器上跑的部署：拉版本、算版本號 →（gpu）拉模型 → 拉 .env、檢查 .env → 同步 DB 密碼 → 備份 → 兩組 compose up → 裝備份排程 → 冒煙測試。",
-"infra/envs/1-ec2/backup-to-s3.sh":"在機器上跑：pg-backup.sh 備份、傳到 S3。每小時、關機前由 systemd 叫它，部署前由 deploy.sh 叫它。",
+"infra/envs/1-ec2/backup-to-s3.sh":"在機器上跑：pg-backup.sh 備份、傳到 S3，成功才寫最後成功時間（告警用）。每小時、關機前由 systemd 叫它，部署前由 deploy.sh 叫它。",
 "infra/envs/1-ec2/smoke.sh":"部署的冒煙測試，deploy.sh 呼叫兩次：起容器之前查 .env 不是 CRLF（必要的 key 由 deploy.sh 用 compose config 查）；全部起來之後查 https 的網站和 /api、Grafana 資料源、Alloy 抓得到 app、bedrock 時用 .env 的 key 問 Bedrock 一句、有設 SMTP 時寄測試信。沒過就讓部署失敗。",
 "infra/envs/1-ec2/compose.ec2.yaml":"疊在 deploy/compose.yaml 上、兩種 model_backend 共用的雲端差異：DB 密碼、session cookie 只走 HTTPS、app 記憶體上限、Caddy。",
 "infra/envs/1-ec2/compose.bedrock.yaml":"（bedrock）不起模型容器，app 的模型位址、key、名稱換成 Bedrock 的。",
 "infra/envs/1-ec2/compose.gpu.yaml":"（gpu）模型來源換成從 S3 拉下來的資料夾。",
 "infra/envs/1-ec2/Caddyfile":"HTTPS 入口：網址、壓縮，全部轉給 web。",
-"infra/envs/1-ec2/compose.ops.yaml":"疊在 ops/compose.yaml 上的雲端差異：Alloy 的 trace 取樣比例（10%）和決定前等多久（125s）。",
+"infra/envs/1-ec2/compose.ops.yaml":"疊在 ops/compose.yaml 上的雲端差異：Alloy 的 trace 取樣比例（10%）和決定前等多久（125s）、備份寫的 .prom 掛給 Alloy。",
 "deploy/compose.yaml":"本機和雲端共用的服務定義：模型、postgres（＋postgres-exporter）、app、web。",
 "deploy/backup/pg-backup.sh":"本機和雲端共用的備份：pg_dump -Fc、驗目錄、寫雜湊、清過期的舊檔。",
 "deploy/backup/pg-restore.sh":"還原：雜湊 → 目錄 → 整份還原到暫存庫 → 停 app、兩次改名換上。前三步失敗線上不動。",
@@ -311,22 +311,22 @@ const F={
 "infra/envs/1-ec2/backups.tf":[["8–11","aws_s3_bucket.backups（force_destroy = false）","s3b"],["15–21","versioning","s3b"],["23–31","加密","s3b"],["33–40","公開封鎖","s3b"],["44–64","lifecycle（保留期）","s3b"]],
 "infra/envs/1-ec2/user-data.sh.tftpl":[["全檔","第一次開機腳本","ec2"]],
 "infra/envs/1-ec2/deploy.sh":[["32–41","連 release tag 一起拉、算版本號（cd/version.sh）","app"],["61","從 SSM 拉 .env","dotenv"],["66","檢查 .env（smoke.sh env），起容器之前","dotenv"],["71","疊三份 compose","ec2"],["78","compose config -q：compose 檔裡 ${X:?} 的必要 key","dotenv"],["85–92","起 postgres、ALTER ROLE","postgres"],["96","部署前備份","s3b"],["98","up -d --build","app"],["105","起觀測（疊 compose.ops.yaml；--env-file 帶告警寄信的 SMTP）","obs"],["107–152","備份排程：每小時、關機前（systemd）","postgres"],["159","冒煙測試（smoke.sh services）","obs"]],
-"infra/envs/1-ec2/backup-to-s3.sh":[["14–20","讀部署設定、推出 bucket 名稱","s3b"],["26–30","同一時間只跑一份（flock）","postgres"],["33","pg-backup.sh","postgres"],["35–38","傳到 S3（先 dump 後雜湊）","s3b"]],
+"infra/envs/1-ec2/backup-to-s3.sh":[["14–20","讀部署設定、推出 bucket 名稱","s3b"],["26–30","同一時間只跑一份（flock）","postgres"],["33","pg-backup.sh","postgres"],["35–38","傳到 S3（先 dump 後雜湊）","s3b"],["40–51","寫最後成功時間：last-success 給人看、backup.prom 給告警（#39）","obs"]],
 "infra/envs/1-ec2/smoke.sh":[["56–77",".env 不是 CRLF；有設 SMTP 就要有收件人","dotenv"],["79–86","https 的網站首頁和 /api（走 Caddy）","caddy"],["88–104","Grafana 資料源連得上、Alloy 抓得到 app","obs"],["106–151","bedrock 時用 .env 的 key 和模型問一句（max_tokens=1）","bsvc"],["153–198","有設 SMTP 時寄測試信（receivers test API）","obs"]],
 "infra/envs/1-ec2/compose.ec2.yaml":[["18–20","postgres 密碼","postgres"],["22–30","app 密碼、session cookie Secure、mem_limit","app"],["36–53","caddy","caddy"],["55–57","caddy volumes","caddy"]],
 "infra/envs/1-ec2/compose.bedrock.yaml":[["11–12","model-seed 不起","seed"],["13–14","llm-chat 不起","llm"],["16–27","app 改打 Bedrock，token 指標標成 bedrock","app"]],
 "infra/envs/1-ec2/compose.gpu.yaml":[["8–10","model-seed 改掛 S3 拉下來的資料夾","seed"]],
 "infra/envs/1-ec2/Caddyfile":[["3–10","網域、encode、reverse_proxy","caddy"]],
-"infra/envs/1-ec2/compose.ops.yaml":[["11","TRACE_SAMPLING_PERCENT（一般請求留 10%）","obs"],["13","TRACE_SAMPLING_DECISION_WAIT（125s）","obs"]],
+"infra/envs/1-ec2/compose.ops.yaml":[["11","TRACE_SAMPLING_PERCENT（一般請求留 10%）","obs"],["13","TRACE_SAMPLING_DECISION_WAIT（125s）","obs"],["14–17","備份寫的 .prom（/opt/talkcal/metrics）掛給 Alloy（#39）","obs"]],
 "deploy/compose.yaml":[["22–25","x-llama-server","llm"],["29","x-gpu","llm"],["44–46","x-version-args（app、web 共用的版本參數）","app"],["56–90","model-seed","seed"],["92–157","llm-chat","llm"],["160–181","postgres","postgres"],["183–210","postgres-exporter（#32）","postgres"],["213–266","app","app"],["219–222","app 映像檔 tag、build args 帶版本號","app"],["268–295","web","web"],["297–303","volumes","postgres"]],
 "deploy/backup/pg-backup.sh":[["12–21","容器、目錄、保留規則","postgres"],["26","umask 077：備份只給擁有者讀","postgres"],["29","檔名（同一秒已有就等下一秒）","postgres"],["41","pg_dump -Fc","postgres"],["45–49","完整性檢查一：目錄","postgres"],["53","完整性檢查二：雜湊","postgres"],["58–66","過期刪除（最新幾份一定留）","postgres"]],
 "deploy/backup/pg-restore.sh":[["48–51","1. 雜湊","postgres"],["53–55","2. 目錄","postgres"],["57–66","3. 還原到暫存庫","postgres"],["79–108","4. 停 app、兩次改名換上","postgres"]],
 "deploy/backup/pg-diff.sh":[["26–31","要比的表：兩邊合起來","postgres"],["35–38","一張表倒成「主鍵、md5、整列」","postgres"],["40–44","主鍵欄位","postgres"],["51–76","依主鍵分成新增、刪除、改過","postgres"]],
 "web/nginx.conf":[["27–28","兩道限流 zone（每 IP、全站）","web"],["32–37","登入、註冊的限流 zone（每 IP）","web"],["44","超過回 429","web"],["52–53","真實 IP 取自 X-Forwarded-For","web"],["59–62","原本的 scheme（Caddy 帶的 X-Forwarded-Proto，沒有就 $scheme）","web"],["72–76","OpenTelemetry：送到 Alloy 的 4317、服務名 talkcal-web（#31）","web"],["89","resolver","web"],["97","X-Forwarded-Proto 照轉，回呼網址才是 https（#127）","web"],["104–108","/api 開 span、traceparent 傳給 app（#31）","web"],["115","proxy_read_timeout","web"],["118–121","限流套到 /api","web"]],
-"ops/compose.yaml":[["22","mimir","obs"],["36","mimir 掛 SLO 錄製規則","obs"],["42","loki","obs"],["56","tempo","obs"],["69–76","grafana","obs"],["85–97","grafana 告警寄信的 SMTP、收件人（#121）","obs"],["113","alloy","obs"],["149–162","mailpit（試寄信用，--profile mailtest 才起）","obs"]],
+"ops/compose.yaml":[["22","mimir","obs"],["36","mimir 掛 SLO 錄製規則","obs"],["42","loki","obs"],["56","tempo","obs"],["69–76","grafana","obs"],["85–97","grafana 告警寄信的 SMTP、收件人（#121）","obs"],["113","alloy","obs"],["136–138","alloy 掛備份寫的 .prom（本機是空 volume，雲端由 compose.ops.yaml 換掉，#39）","obs"],["152–165","mailpit（試寄信用，--profile mailtest 才起）","obs"],["182","alloy-textfile（本機的空 volume）","obs"]],
 "web/Dockerfile":[["25","nginx:1.30-alpine-otel","web"],["33","load_module ngx_otel_module","web"]],
 "ops/tempo/tempo.yaml":[["46–71","metrics_generator（service-graphs、peer_attributes）","obs"],["74–80","overrides：對預設租戶開 processor","obs"]],
-"ops/alloy/config.alloy":[["158–169","OTLP 入口：HTTP 4318、gRPC 4317","obs"],["183–195","transform：nginx span 改 client、SQL 的 peer.service（在取樣之前）","obs"]]
+"ops/alloy/config.alloy":[["66–100","資料庫備份：textfile collector 讀備份寫的 .prom（#39）","obs"],["194–205","OTLP 入口：HTTP 4318、gRPC 4317","obs"],["219–231","transform：nginx span 改 client、SQL 的 peer.service（在取樣之前）","obs"]]
 };
 const E="infra/envs/1-ec2/",B="infra/bootstrap/",D="deploy/compose.yaml",O="ops/compose.yaml";
 const L={
@@ -358,7 +358,7 @@ app:{"image":D+":219","mem_limit":E+"compose.ec2.yaml:30","SESSION_COOKIE_SECURE
 postgres:{"image":D+":161","POSTGRES_PASSWORD":E+"compose.ec2.yaml:20","密碼同步":E+"deploy.sh:90","部署前備份":E+"deploy.sh:96","備份排程":E+"deploy.sh:107","postgres-exporter":D+":191","--no-collector.stat_user_tables":D+":199"},
 llm:{"-ngl":D+":107","-c / -np":D+":109","--kv-unified":D+":116"},
 seed:{"sha256sum -c":D+":80"},
-obs:{"Alloy":O+":114","Mimir":O+":23","Loki":O+":43","Tempo":O+":57","Grafana":O+":70","Grafana 埠":O+":76","告警":O+":89","Trace 取樣":E+"compose.ops.yaml:11","Alloy 抓指標":"ops/alloy/config.alloy:59","metrics-generator":"ops/tempo/tempo.yaml:46","OTLP 入口":"ops/alloy/config.alloy:158","SLO":"ops/mimir/rules/anonymous/slo.yaml:38","冒煙測試":E+"smoke.sh:200"}
+obs:{"Alloy":O+":114","Mimir":O+":23","Loki":O+":43","Tempo":O+":57","Grafana":O+":70","Grafana 埠":O+":76","告警":O+":89","備份告警的指標":E+"compose.ops.yaml:17","Trace 取樣":E+"compose.ops.yaml:11","Alloy 抓指標":"ops/alloy/config.alloy:59","metrics-generator":"ops/tempo/tempo.yaml:46","OTLP 入口":"ops/alloy/config.alloy:194","SLO":"ops/mimir/rules/anonymous/slo.yaml:38","冒煙測試":E+"smoke.sh:200"}
 };
 // t：步驟標題（短）；d：說明。依 model_backend 不同的寫成 {bedrock, gpu}
 const ROUTES={

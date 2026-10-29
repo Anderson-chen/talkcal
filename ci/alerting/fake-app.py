@@ -7,7 +7,12 @@
 # 狀態碼看 /tmp/mode：沒有這個檔或內容是 ok → 200；內容是 5xx → 500。切換：
 #   docker compose exec fake-app sh -c 'echo 5xx > /tmp/mode'
 # 「app 掛了」直接 docker compose stop fake-app。
+#
+# 帶參數 postgres-exporter 時改當假的 postgres_exporter：在 9187 吐 pg_up 1。
+# 不然 Alloy 抓不到 postgres-exporter:9187，respond.yaml 的「資料庫連不上」在正常流量那步就會響。
+# 另外起一個容器、不跟假 app 共用：停掉假 app 那步才不會連資料庫告警一起響。
 
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REQUESTS_PER_SCRAPE = 20
@@ -56,4 +61,23 @@ class Handler(BaseHTTPRequestHandler):
         pass  # 每 15 秒一行，沒用
 
 
-ThreadingHTTPServer(("0.0.0.0", 8091), Handler).serve_forever()
+class PostgresExporterHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path != "/metrics":
+            self.send_error(404)
+            return
+        body = b"# TYPE pg_up gauge\npg_up 1\n"
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; version=0.0.4")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
+
+
+if sys.argv[1:] == ["postgres-exporter"]:
+    ThreadingHTTPServer(("0.0.0.0", 9187), PostgresExporterHandler).serve_forever()
+else:
+    ThreadingHTTPServer(("0.0.0.0", 8091), Handler).serve_forever()

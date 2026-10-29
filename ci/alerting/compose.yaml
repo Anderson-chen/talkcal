@@ -45,6 +45,17 @@ services:
       talkcal-deploy:
         aliases: [app]
 
+  # 假 postgres_exporter：吐 pg_up 1，資料庫告警（respond.yaml）在這裡維持正常。說明在 fake-app.py 開頭
+  fake-postgres-exporter:
+    image: python:3.13-alpine@sha256:8bcfa47b04b853a17aaf909362b847b2112fd6ec4105ea553ef9a43bafbb5916
+    command: ["python", "-u", "/fake-app.py", "postgres-exporter"]
+    stop_signal: SIGINT
+    volumes:
+      - ../ci/alerting/fake-app.py:/fake-app.py:ro
+    networks:
+      talkcal-deploy:
+        aliases: [postgres-exporter]
+
 networks:
   talkcal-deploy:
     external: false
