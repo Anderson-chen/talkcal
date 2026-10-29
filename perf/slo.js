@@ -18,7 +18,7 @@
 import './lib/docker-target.js';
 import http from 'k6/http';
 import { check } from 'k6';
-import { BASE_URL, MESSAGES, jsonParams, say, signIn, useSession } from './lib/assistant.js';
+import { BASE_URL, MESSAGES, jsonParams, listMonth, say, signIn, useSession } from './lib/assistant.js';
 
 const CRUD_RPS = Number(__ENV.CRUD_RPS || 10);
 const ASSIST_PER_MIN = Number(__ENV.ASSIST_PER_MIN || 6);
@@ -64,11 +64,6 @@ export const options = {
 
 export function setup() {
   return signIn();
-}
-
-// 月曆一頁：前端打開月曆就是這個請求，最常見
-function listMonth() {
-  return http.get(`${BASE_URL}/api/calendar/events?from=2026-10-01&to=2026-11-01`);
 }
 
 export function crud(session) {
