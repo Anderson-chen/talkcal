@@ -21,8 +21,8 @@
   prConcurrentLimit: 5,
   prHourlyLimit: 2,
   // 新版發佈滿 14 天才開 PR，跟 repo 選套件的兩週規則一致（ci/README.md 的選型段落）：被植入惡意程式碼的版本
-  // 通常幾天內就被發現下架（2025 年 npm 的 Shai-Hulud、2026-03 的 Trivy）。前端還有第二道：web/pnpm-workspace.yaml 的
-  // minimumReleaseAge（#107），CI 的 pnpm install --frozen-lockfile 遇到不滿兩週的版本直接失敗 —— 這裡比它短的話，PR 只會紅燈
+  // 通常幾天內就被發現下架（2025 年 npm 的 Shai-Hulud、2026-03 的 Trivy）。#107 合併後前端還有第二道：web/pnpm-workspace.yaml 的
+  // minimumReleaseAge，CI 的 pnpm install --frozen-lockfile 遇到不滿兩週的版本直接失敗 —— 這裡比它短的話，PR 只會紅燈
   minimumReleaseAge: '14 days',
 
   // ── PR 長什麼樣 ──────────────────────────────────────────────────
@@ -34,7 +34,8 @@
   // 一律不自動合併：要等使用者看過、CI 綠燈才合（流程見 docs/dependency-updates.md）
   automerge: false,
   // 鎖檔裡沒直接寫在 package.json 的間接依賴，一個月整理一次（只動鎖檔，例如 pnpm-lock.yaml）。
-  // 這裡不用另外設等待：鎖檔是 Renovate 呼叫 pnpm 重新產生的，pnpm 自己會照 pnpm-workspace.yaml 跳過不滿兩週的版本
+  // 間接依賴的發佈日期 Renovate 管不到，靠套件管理器：pnpm 會照 pnpm-workspace.yaml 跳過不滿兩週的版本；
+  // 換 pnpm（#107）之前的 npm 沒有這種設定（docs/dependency-updates.md）
   lockFileMaintenance: {
     enabled: true,
     schedule: ['* 0-8 1 * *'],

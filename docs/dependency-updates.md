@@ -34,9 +34,11 @@
 同時最多 5 個 PR、每小時最多 2 個；超過的排在 Dependency Dashboard（Renovate 開的一個 issue）上。
 
 **為什麼等 14 天**：跟 repo 選套件的兩週規則一致（[ci/README.md](../ci/README.md) 的選型段落）——被植入惡意程式碼的版本通常幾天內就被發現下架。
-前端還有第二道：[#107](https://github.com/Anderson-chen/talkcal/issues/107) 在 `web/pnpm-workspace.yaml` 設了 `minimumReleaseAge`（兩週），
+[#107](https://github.com/Anderson-chen/talkcal/issues/107)（PR #157，寫這份時還沒合併）讓前端多一道：`web/pnpm-workspace.yaml` 設 `minimumReleaseAge`（兩週），
 CI 的 `pnpm install --frozen-lockfile` 遇到 lockfile 裡不滿兩週的版本直接失敗。Renovate 等得比它短，開出來的 PR 只會紅燈。
-鎖檔整理不用另外設：鎖檔是 Renovate 呼叫 pnpm 重新產生的，pnpm 自己會跳過不滿兩週的版本。
+
+鎖檔整理（間接依賴）Renovate 自己管不到發佈日期，靠套件管理器：#157 合併後是 pnpm 照 `pnpm-workspace.yaml` 跳過不滿兩週的版本；
+合併前還是 npm，npm 沒有這種設定，鎖檔整理帶進來的間接依賴**不受兩週保護** —— 在那之前，鎖檔整理的 PR 要看一下新進來的套件。
 
 ## 誰審、怎麼合
 
@@ -71,7 +73,7 @@ Renovate 自己分不出來（設定上做不到，實測見下面「依嚴重�
 1. **發現**：每天的 `vulns` 排程紅燈，或 Dependency Dashboard 的「Pending Status Checks」裡有 `[SECURITY]` 的項目（還沒滿 14 天的更新都排在這裡）。
    嚴重度看 Renovate 列的 GHSA／CVE 連結。
 2. **勾選**：在 Dashboard 勾那一項，Renovate 就不等了，馬上開 PR。
-3. **前端還要放行 pnpm**（後端、映像檔沒有這一道，跳過）：在 PR 的分支上改 `web/pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude`，
+3. **前端還要放行 pnpm**（#157 合併後才有這一道；後端、映像檔沒有，跳過）：在 PR 的分支上改 `web/pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude`，
    寫成 `套件@版本`（例如 `vite@8.3.5`，只放行那一版，下一版照樣要等），旁邊註明漏洞編號。
    新版帶進來、也不滿兩週的間接依賴要一起列 —— 跑 `pnpm install`，被擋的會一個一個報出來。Renovate 改不到這個檔，所以這步一定是人（或 AI）補。
    補完 push，CI 綠燈才合。
@@ -131,6 +133,9 @@ dry-run 抓到的問題（validator 都沒擋）：
   拿不到發佈時間的版本在 `minimumReleaseAge` 下會一直被當成「還沒到等待期」。docker 改成拿不到時間就不等。
 - **nginx 會被升到 mainline**：1.30 是 stable 線（`web/Dockerfile` 的註解寫了為什麼不用 mainline），Renovate 不分，把 1.31 當成 minor。
   加 `allowedVersions` 只允許偶數小版本之後，nginx 變成「已是最新」。
+- **Gradle 兩處升到不同版**（2026-10-30，`/code-review` 抓到）：wrapper 查 Gradle 官方清單、映像檔查 Docker Hub，
+  映像檔拿不到發佈時間就不等，同一個 PR 變成 wrapper 9.8.1、映像檔 9.8.2（才發佈 11 天）。
+  改成映像檔那一處也用 regex 查 Gradle 官方清單（`gradle-version`），兩處都是 9.8.1。
 - **CUDA 被抓到了**：Renovate 會展開 Dockerfile 的 `ARG`，`nvidia/cuda:${CUDA_VERSION}…` 也被當成可升；CUDA 跟主機驅動綁定，關掉。
 
 ### 3. 安全修補等不等（依嚴重度分流）
@@ -157,7 +162,7 @@ C、E、F 想放行 HIGH 都沒成功，結果跟 D 一樣 —— 漏洞的設�
 | 套件 | 在哪 | 目前 | 可升到 | 進哪個 PR |
 |---|---|---|---|---|
 | **vite**（有漏洞，GHSA-587h-7wmj-h5pm 等） | `web/package.json` | 8.3.2 | 8.3.3 | `renovate/npm-vite-vulnerability`（安全修補，單獨一個） |
-| Gradle | wrapper、`backend/Dockerfile` | 9.2.1 | 9.8.1／9.8.2 | `renovate/gradle` |
+| Gradle | wrapper、`backend/Dockerfile` | 9.2.1 | 9.8.1（9.8.2 還不滿 14 天） | `renovate/gradle` |
 | Jackson 3 BOM、ArchUnit | `build.gradle` | 3.1.7、1.4.1 | 3.2.3、1.5.1 | `renovate/backend-minor-patch` |
 | Spring Boot、Spring AI、springdoc、Error Prone、Jackson 2 BOM | `build.gradle` | 4.1.1、2.0.1、3.1.1、2.50.0、2.22.3 | 4.1.2、2.0.2、3.2.0、2.51.0、2.22.4（等待中） | 同上 |
 | @playwright/test | `web/package.json` | 1.63.0 | 1.64.1 | `renovate/web-minor-patch` |

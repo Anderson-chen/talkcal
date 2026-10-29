@@ -53,7 +53,7 @@ CI 每天掃漏洞（`ci/vulns.sh`），掃到了也只會紅燈，還是要人�
 
 設定的取捨（細節寫在設定檔註解）：
 
-- **排程**：週一早上台灣時間 9 點前開；新版滿 14 天才開，跟 repo 選套件的兩週規則、`web/pnpm-workspace.yaml` 的 `minimumReleaseAge`（#107）一致 —— 比 pnpm 短的話，CI 的 `pnpm install --frozen-lockfile` 會擋下 Renovate 的 PR。
+- **排程**：週一早上台灣時間 9 點前開；新版滿 14 天才開，跟 repo 選套件的兩週規則、#107 要加的 `web/pnpm-workspace.yaml` 的 `minimumReleaseAge` 一致 —— 比 pnpm 短的話，CI 的 `pnpm install --frozen-lockfile` 會擋下 Renovate 的 PR。
 - **分組**：minor、patch 依生態系各一個 PR（後端、前端、映像檔、Actions、Terraform）；要一起升的綁在一起（Gradle wrapper ＋ gradle 映像檔、各處的 JDK、各處的 Node、觀測堆疊）。
 - **安全修補**：不等週一的排程，但一樣滿 14 天才開。repo 沒開 GitHub 的 Dependabot alerts，所以讓 Renovate 自己查 OSV。
   HIGH、CRITICAL 要提早由人在 Dependency Dashboard 勾選：Renovate 的設定做不到依嚴重度分流（實測見 [docs/dependency-updates.md](../dependency-updates.md)）。
