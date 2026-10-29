@@ -192,9 +192,12 @@ app 跟模型、跟資料庫之間各插一段 [Toxiproxy](https://github.com/Sh
 |---|---|
 | 斷線 | `docker exec talkcal-toxiproxy /toxiproxy-cli toggle llm`（再下一次接回） |
 | 很慢 | `docker exec talkcal-toxiproxy /toxiproxy-cli toxic add -t latency -a latency=40000 -n slow llm` |
-| 卡住（連得上、永遠不回） | `docker exec talkcal-toxiproxy /toxiproxy-cli toxic add -t timeout -a timeout=0 -u -n hang llm`（`-u`：擋在送出去的方向，請求到不了模型） |
+| 卡住（連得上、永遠不回） | `docker exec talkcal-toxiproxy /toxiproxy-cli toxic add -t timeout -a timeout=0 -u -n hang llm` |
 | 拿掉某個毒 | `docker exec talkcal-toxiproxy /toxiproxy-cli toxic remove -n slow llm` |
 | 現在的狀態 | `docker exec talkcal-toxiproxy /toxiproxy-cli list` |
+
+「卡住」要加 `-u`（擋在 app 送出去的方向）：不加的話預設擋回來的方向，請求照樣送到、模型回完就關連線，
+app 收到的是連線中斷，等於斷線而不是卡住。
 
 按時弄壞、恢復、同時量 app 的反應，用 `perf/outage.js`（見 [perf/README.md](../perf/README.md)）。
 演練完不疊這份再 `up -d` 一次，app 就直接連回模型和資料庫。正式環境（EC2 的 `deploy.sh`）不疊它。
