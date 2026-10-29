@@ -398,8 +398,8 @@ Alloy 只重啟一下（幾秒）不會響：要連續 60 秒沒資料、再持�
 外部服務超過寬限時間沒收到，就自己寄信。它不靠我們這台機器上的任何東西，所以 Grafana 怎麼死都會被發現。
 
 Watchdog 由 `policies.yaml` 的一條子路由（比對 `alert_type=watchdog`）送給 `heartbeat` 這個 contact point，比對到就不往下傳，
-不會混進 email。一開始寫在規則的 `notification_settings`，但 provisioning 的 `policies.yaml` 會整棵蓋掉通知樹，
-告警 CI 實測 Watchdog 照樣寄了 email，所以改成明寫在 policy 樹裡。Mimir 掛掉時 Watchdog 照樣響（它不查任何資料源，只算一個常數 1），
+不會混進 email。一開始寫在規則的 `notification_settings`，但規則剛建立、第一次評估時會繞到預設的 email
+（#41 的演練和告警 CI 都收到一封），所以改成明寫在 policy 樹裡，不靠 Grafana 自動產生的路由。Mimir 掛掉時 Watchdog 照樣響（它不查任何資料源，只算一個常數 1），
 因為那個情況上面那條已經寄信了，heartbeat 只負責「Grafana 和它的通知管線還活著」，不重複吵同一件事。
 
 ### 外部服務選 Healthchecks.io

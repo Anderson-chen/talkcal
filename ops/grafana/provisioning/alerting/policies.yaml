@@ -19,8 +19,8 @@ policies:
     repeat_interval: 4h
     routes:
       # Watchdog（meta-monitoring.yaml 第 4 條）：永遠在響，只送外部 heartbeat，不寄 email（#40）。
-      # 原本寫在規則的 notification_settings，但這份檔案會整棵蓋掉通知樹，CI 實測 Watchdog 照樣掉進上面的 email；
-      # 明寫成子路由、不往下傳（continue 預設 false），比對到就只送 heartbeat。
+      # 原本寫在規則的 notification_settings，但規則剛建立、第一次評估時會繞到上面的 email（#41 演練和告警 CI 都看到一封）；
+      # 明寫成子路由、不往下傳（continue 預設 false），不靠 Grafana 自動產生的路由，比對到就只送 heartbeat。
       # 節奏：每 group_interval 檢查一次，離上次送出已滿 repeat_interval 就重送。
       # 不設成 1m／1m：實測每 2 分鐘才送一次（第 60 秒那次檢查時離上次送出差幾毫秒不滿 1 分鐘）。
       # 30s 檢查一次、滿 50 秒就送：第 30 秒的檢查不夠、第 60 秒的一定夠，穩定每分鐘一次
