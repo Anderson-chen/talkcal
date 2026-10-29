@@ -1,0 +1,68 @@
+# 基本告警：app 活著嗎。寄給誰、多久寄一次在 policies.yaml。
+#
+# 錯誤和延遲交給 SLO 的 burn-rate 告警（slo-burn-rate.yaml，目標見 docs/slo.md）：
+# 那邊看的是「error budget 燒多快」，比固定門檻（5xx > 5%、p95 > 1 秒）更準，也不會跟這裡重複寄信。
+# 但 SLO 只算「有請求進來時好不好」，app 整個掛掉、或指標根本收不到時，那邊是沒資料（當成正常）——
+# 這個缺口由這裡補上。
+#
+# 規則的結構：
+#   A：PromQL 查 Mimir，算出一個數字（instant query，只要「現在」的值）
+#   C：threshold 運算，A 超過門檻就算成立；condition 指向 C
+#   for：要連續成立這麼久才真的觸發（Pending → Firing），擋掉一兩次評估的抖動
+#
+# 查詢用 job="talkcal-app"（Alloy 設的 job_name），不寫埠號：actuator 搬到哪個埠（#33）都不受影響。
+
+apiVersion: 1
+
+# 以前在這裡、改由 SLO 接手的三條（5xx 比例、行程 API p95、AI 助理 p95）。
+# provisioning 只會新增、更新，檔案裡拿掉的規則不會從 Grafana 消失（存在 grafana-data volume 裡），
+# 不明寫刪除的話，已經起過的 Grafana 會一直留著舊規則、跟 SLO 告警重複寄信。
+# 全新的 Grafana 裡本來就沒有這三條，刪不存在的 uid 不會報錯（實測過）。所有環境都重啟過一次之後就可以拿掉這段。
+deleteRules:
+  - orgId: 1
+    uid: talkcal-5xx-ratio
+  - orgId: 1
+    uid: talkcal-api-p95
+  - orgId: 1
+    uid: talkcal-assistant-p95
+
+groups:
+  - orgId: 1
+    name: talkcal-app
+    folder: talkcal
+    # 每分鐘評估一次。指標每 15 秒抓一次，再密也只是重複看同一批點
+    interval: 1m
+    rules:
+      # ── app 掛了（或抓不到它）─────────────────────────────────
+      - uid: talkcal-app-down
+        title: talkcal app 掛了或抓不到指標
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: mimir
+            model:
+              refId: A
+              instant: true
+              # up 是 Alloy 每次抓指標自己記的：抓到 1、抓不到 0。只看這個 job，跟埠號、路徑無關
+              expr: max(up{job="talkcal-app"})
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+        # 1 分鐘 = 連續 4 次抓不到（15 秒一次）。重啟一次 app 約 30 秒，不會被這條叫醒；真的掛了 1 分半內就寄信
+        for: 1m
+        # 查不到資料也算出事：Alloy 自己掛了、或 Mimir 收不到時 up 整條消失，這時一樣看不到 app，不能當沒事
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: talkcal app 連續 1 分鐘抓不到指標
+          description: >-
+            Alloy 抓 job="talkcal-app" 的 /actuator/prometheus 失敗（up 為 0 或整條沒資料）。
+            先看 `docker compose ps` 裡 app 是不是 healthy，再看 Alloy 的除錯頁（127.0.0.1:12345）。

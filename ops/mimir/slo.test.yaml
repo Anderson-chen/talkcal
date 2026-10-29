@@ -1,0 +1,76 @@
+# SLO 錄製規則（rules/anonymous/slo.yaml）的單元測試：餵假的 http_server_requests 序列，看算出來的 SLI、burn rate 對不對。
+# CI 的 rules job 跑（ci/rules.sh），本機也可以直接跑那支。
+#
+# 不放在 rules/ 底下：那個資料夾整個掛給 Mimir，底下每個子資料夾都會被當成一個租戶。
+#
+# 數字刻意挑 2 的次方（每分鐘 512 個請求、壞 8 個 = 1/64）。rate() 在序列頭尾、斜率轉折處會外推，
+# 算出來差一點點（0.015624999…），所以比例都乘上 1024 再取整數比：1/64 → 16。
+
+rule_files:
+  - rules/anonymous/slo.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      # 行程 API：前 120 分鐘每分鐘 512 個、全部成功；之後每分鐘 504 個成功 + 8 個 5xx。
+      # 延遲：從頭到尾每分鐘都有 8 個超過 300ms（成功的裡面），5xx 都很快。
+      - series: 'http_server_requests_seconds_count{job="talkcal-app",uri="/api/calendar/events",method="GET",status="200"}'
+        values: '0+512x120 61440+504x180'
+      - series: 'http_server_requests_seconds_bucket{job="talkcal-app",uri="/api/calendar/events",method="GET",status="200",le="0.3"}'
+        values: '0+504x120 60480+496x180'
+      - series: 'http_server_requests_seconds_count{job="talkcal-app",uri="/api/calendar/events",method="GET",status="500"}'
+        values: '0+0x120 0+8x180'
+      - series: 'http_server_requests_seconds_bucket{job="talkcal-app",uri="/api/calendar/events",method="GET",status="500",le="0.3"}'
+        values: '0+0x120 0+8x180'
+      # 反例：不在 SLO 範圍內的路徑一直 5xx，不該算進任何一個 SLO
+      - series: 'http_server_requests_seconds_count{job="talkcal-app",uri="/actuator/health",method="GET",status="500"}'
+        values: '0+1000x300'
+      # 助理：前 60 分鐘每分鐘 64 句、都在 8 秒內；之後沒人用（counter 停住，序列還在）
+      - series: 'http_server_requests_seconds_count{job="talkcal-app",uri="/api/calendar/assistant",method="POST",status="200"}'
+        values: '0+64x60 3840x240'
+      - series: 'http_server_requests_seconds_bucket{job="talkcal-app",uri="/api/calendar/assistant",method="POST",status="200",le="8.0"}'
+        values: '0+64x60 3840x240'
+
+    promql_expr_test:
+      # 正常時段：可用性 0、延遲 1/64；/actuator/health 的 5xx 沒被算進去
+      - expr: round(slo:sli_error:ratio_rate1h{slo=~"calendar-.*"} * 1024)
+        eval_time: 100m
+        exp_samples:
+          - labels: '{slo="calendar-availability"}'
+            value: 0
+          - labels: '{slo="calendar-latency"}'
+            value: 16
+      # 出事 2 小時後：可用性 1/64 ÷ 允許的 0.5% = burn rate 3.125；延遲 1/64 ÷ 1% = 1.5625
+      - expr: round(slo:burn_rate:1h{slo=~"calendar-.*"}, 0.0625)
+        eval_time: 240m
+        exp_samples:
+          - labels: '{slo="calendar-availability"}'
+            value: 3.125
+          - labels: '{slo="calendar-latency"}'
+            value: 1.5625
+      # 長視窗從 5 分鐘的錄製值加總：視窗裡前 2 小時沒錯、後 2 小時 1/64，每分鐘請求數一樣 → 一半 = 1/128 → 8
+      - expr: round(slo:sli_error:ratio_rate6h{slo="calendar-availability"} * 1024)
+        eval_time: 240m
+        exp_samples:
+          - labels: '{slo="calendar-availability"}'
+            value: 8
+      # 助理有人用的時候：0
+      - expr: slo:sli_error:ratio_rate5m{slo=~"assistant-.*"}
+        eval_time: 30m
+        exp_samples:
+          - labels: 'slo:sli_error:ratio_rate5m{slo="assistant-availability"}'
+            value: 0
+          - labels: 'slo:sli_error:ratio_rate5m{slo="assistant-latency"}'
+            value: 0
+      # 反例：沒人用的時候是「沒資料」，不是 0/0 = NaN，也不是 0
+      - expr: slo:sli_error:ratio_rate1h{slo=~"assistant-.*"}
+        eval_time: 200m
+        exp_samples: []
+      # 但 28 天視窗裡有前面那段，還算得出來
+      - expr: slo:sli_error:ratio_rate28d{slo="assistant-availability"}
+        eval_time: 200m
+        exp_samples:
+          - labels: 'slo:sli_error:ratio_rate28d{slo="assistant-availability"}'
+            value: 0

@@ -2,6 +2,7 @@ package io.github.andersonchen.talkcal.calendar.application.port.in;
 
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 
 import java.util.List;
@@ -19,11 +20,15 @@ import java.util.List;
  *
  * 存進 owner 的行事曆：之後只有同一個 owner 讀得到、刪得到（#104）。
  *
+ * adopting 是這批行程裡「從助理的提議卡片來的」那幾筆所帶的卡片 id（#223），只用來記產品指標，不影響存檔：
+ * 核對過是 owner 的、還沒表態過的卡片才算採納，其餘（含沒帶 id 的）都算手動。沒有從卡片來的就是空清單。
+ * 一筆行程最多對應一張卡片，所以 id 不會比行程多。
+ *
  * 失敗時：
- * - owner 是 null、events 是 null 或含 null → IllegalArgumentException
+ * - owner 是 null，events、adopting 是 null 或含 null，adopting 比 events 多 → IllegalArgumentException
  * - 資料庫出事 → IllegalStateException（outbound port 的約定），一筆都不會存進去
  */
 public interface AddEventsUseCase {
 
-    List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events);
+    List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events, List<ProposalId> adopting);
 }

@@ -1,0 +1,7 @@
+2026-10-19T10:22:36.463State transition from CLOSED to OPEN
+2026-10-19T10:23:09.448State transition from OPEN to HALF_OPEN
+2026-10-19T10:23:30.448State transition from HALF_OPEN to OPEN
+2026-10-19T10:24:00.449State transition from OPEN to HALF_OPEN
+2026-10-19T10:24:06.839State transition from HALF_OPEN to OPEN
+2026-10-19T10:24:39.445State transition from OPEN to HALF_OPEN
+2026-10-19T10:24:42.481State transition from HALF_OPEN to CLOSED
