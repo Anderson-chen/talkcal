@@ -32,7 +32,7 @@ export interface AssistantFailureView {
   canRetry: boolean
 }
 
-// 後端沒給秒數時的保底，跟後端的預設一致（talkcal.model.circuit-breaker.wait-duration-in-open-state、bulkhead.retry-after、nginx 的 Retry-After）
+// 後端沒給秒數時的保底，跟後端的預設一致（resilience4j.circuitbreaker.configs.default.wait-duration-in-open-state、talkcal.model.busy-retry-after、nginx 的 Retry-After）
 const DEFAULT_WAIT = { unavailable: 30, busy: 5, 'rate-limited': 60 } as const
 
 export function describeAssistantFailure(e: unknown): AssistantFailureView {
