@@ -143,7 +143,7 @@ cd backend && ./gradlew classes     # 後端：編譯就是檢查
 
 挑工具時看三件事：**授權**（只用 MIT、Apache-2.0；這些都是開發工具，不會打包進 jar 或映像檔）、
 **社群熱門度**（維護者、星數、下載量，最後一次發版多久以前）、**版本發布滿兩週**（新版被植入惡意程式碼通常幾天內就會被發現；
-Trivy 2026-03 的事件見下面的「漏洞掃描」）。npm 套件用 `npm install --before=<兩週前>` 裝，連間接依賴也算進去。
+Trivy 2026-03 的事件見下面的「漏洞掃描」）。前端套件用 `pnpm add --config.minimumReleaseAge=20160`（分鐘，兩週）裝，連間接依賴也算進去。
 
 **後端：Error Prone，不加 SpotBugs、Checkstyle、PMD**
 

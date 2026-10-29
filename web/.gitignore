@@ -5,5 +5,5 @@ dist/
 test-results/
 playwright-report/
 
-# Vitest 的覆蓋率報告（#23）：每次 npm test 都會重產
+# Vitest 的覆蓋率報告（#23）：每次 pnpm test 都會重產
 coverage/
