@@ -175,6 +175,20 @@ class ArchitectureTest {
                     .because("API 文件描述的是線路格式，屬於 inbound adapter，不該滲進業務規則");
 
     /**
+     * core 不准依賴 Resilience4j（#44）。跟 Spring、Jackson 那幾條同一個道理，只是換成容錯的函式庫。
+     *
+     * 斷路器、bulkhead 保護的是「呼叫外面的依賴」這件事，那是 adapter 的工作（見 GuardedChatModel）；
+     * 規則寫在 application.properties，之後上 k8s 還可能整個交給 service mesh。
+     * core 一旦直接用它（例如在 use case 裡包一個 CircuitBreaker），業務規則就跟「怎麼呼叫外面」焊在一起，
+     * 換成 mesh 那天得改到核心。
+     */
+    @ArchTest
+    static final ArchRule coreMustNotDependOnResilience4j =
+            noClasses().that().resideInAPackage("..application..")
+                    .should().dependOnClassesThat().resideInAPackage("io.github.resilience4j..")
+                    .because("容錯是呼叫外部依賴時的事，屬於 adapter；core 綁上它，之後就沒辦法交給平台（service mesh）處理");
+
+    /**
      * 模組之間互不認識：不同的業務各自一個模組。
      *
      * 目前只有 calendar 一個模組（一般問答的 conversation 模組已經拿掉），這條暫時不會擋到東西。

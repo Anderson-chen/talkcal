@@ -469,14 +469,27 @@
     },
     {
       "id": 13,
+      "type": "row",
+      "title": "叫模型的保護（斷路器、bulkhead）—— 模型掛了，助理是不是快速失敗",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 41
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 14,
       "type": "state-timeline",
       "title": "模型的熔斷狀態（#44）",
-      "description": "GuardedChatModel 的 circuit breaker。綠 = 關著（正常叫模型）；紅 = 打開（模型最近大多失敗或太慢，助理直接回 503 MODEL_UNAVAILABLE，不叫模型）；黃 = 半開（打開 30 秒後放 2 個請求去試，成功就關回來）。門檻和理由在 application.properties 的 talkcal.model.*。",
+      "description": "GuardedChatModel 的 circuit breaker。綠 = 關著（正常叫模型）；紅 = 打開（模型最近大多失敗或太慢，或有人手動強制打開；助理直接回 503 MODEL_UNAVAILABLE，不叫模型）；黃 = 半開（打開 30 秒後放 2 個請求去試，成功就關回來）。門檻和理由在 application.properties 的 resilience4j.*（chat-model）。",
       "gridPos": {
         "h": 5,
         "w": 24,
         "x": 0,
-        "y": 41
+        "y": 42
       },
       "datasource": {
         "type": "prometheus",
@@ -489,7 +502,7 @@
             "type": "prometheus",
             "uid": "mimir"
           },
-          "expr": "max(resilience4j_circuitbreaker_state{name=\"chat-model\",state=\"open\"}) * 2 + max(resilience4j_circuitbreaker_state{name=\"chat-model\",state=\"half_open\"})",
+          "expr": "max(resilience4j_circuitbreaker_state{name=\"chat-model\",state=~\"open|forced_open\"}) * 2 + max(resilience4j_circuitbreaker_state{name=\"chat-model\",state=\"half_open\"})",
           "legendFormat": "熔斷"
         }
       ],
@@ -551,7 +564,7 @@
       }
     },
     {
-      "id": 14,
+      "id": 15,
       "type": "timeseries",
       "title": "沒叫模型就擋下的助理請求 (req/s)",
       "description": "熔斷打開時擋下的（回 503 MODEL_UNAVAILABLE），以及同時等模型的已滿、bulkhead 擋下的（回 503 MODEL_BUSY）。這些請求幾毫秒就回，不佔執行緒；行程 CRUD 不經過模型，不會出現在這裡。",
@@ -559,7 +572,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 46
+        "y": 47
       },
       "datasource": {
         "type": "prometheus",
@@ -581,7 +594,7 @@
             "type": "prometheus",
             "uid": "mimir"
           },
-          "expr": "sum(rate(talkcal_model_bulkhead_rejected_total{name=\"chat-model\"}[1m]))",
+          "expr": "sum(rate(talkcal_bulkhead_rejected_total{name=\"chat-model\"}[1m]))",
           "legendFormat": "滿載擋下"
         }
       ],
@@ -610,7 +623,7 @@
       }
     },
     {
-      "id": 15,
+      "id": 16,
       "type": "timeseries",
       "title": "叫模型的失敗率、慢呼叫率（最近 10 次）",
       "description": "circuit breaker 自己算的：最近 10 次叫模型裡失敗、超過 30 秒的比例。任一條過 50% 熔斷就打開。不滿 5 次時 Resilience4j 回 -1（還不判斷），圖上不畫。400／422（請求本身有問題）不算失敗。",
@@ -618,7 +631,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 46
+        "y": 47
       },
       "datasource": {
         "type": "prometheus",
@@ -686,7 +699,7 @@
       }
     },
     {
-      "id": 16,
+      "id": 17,
       "type": "timeseries",
       "title": "同時在等模型的請求（bulkhead）",
       "description": "上限 50（Tomcat 200 條執行緒的四分之一）。模型卡住不回時這條會一路爬到上限，之後的助理請求直接回 503 MODEL_BUSY，剩下的執行緒留給行程 CRUD。",
@@ -694,7 +707,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 46
+        "y": 47
       },
       "datasource": {
         "type": "prometheus",

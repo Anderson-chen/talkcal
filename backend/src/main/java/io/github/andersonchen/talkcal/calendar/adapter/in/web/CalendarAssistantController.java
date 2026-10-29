@@ -3,12 +3,14 @@ package io.github.andersonchen.talkcal.calendar.adapter.in.web;
 import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.CalendarAssistant;
 import io.github.andersonchen.talkcal.calendar.adapter.in.web.CalendarController.EventFields;
 import io.github.andersonchen.talkcal.calendar.adapter.shared.ModelUnavailableException;
+
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalId;
 import io.github.andersonchen.talkcal.calendar.application.port.in.TrackProposalsUseCase;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -47,6 +49,10 @@ import java.util.stream.IntStream;
  *
  * 對話屬於登入者（#104）：拿別人的 conversationId 來讀是空的、拿來說話是在自己名下開一段新的，碰不到別人的那段。
  *
+ * 卡片的去向記成產品指標（#36）：回覆時每張卡片發一個 proposalId 並記下來（#223）；
+ * 按「加入行事曆」走 POST /events，每筆帶著它的 proposalId；按「取消」「移除」只改畫面，所以前端另外送 POST /dismissals 帶那幾張的 id。
+ * 伺服器只認自己發過、屬於登入者、還沒表態過的卡片，前端說了不算。
+ *
  * 失敗一律回 AssistantFailure：error 給人看，code 給程式判斷（前端依它決定怎麼顯示、要不要讓使用者重試，#43）。
  * <pre>
  * 400  INVALID_REQUEST    訊息空白、conversationId 不是 UUID。改了請求才會好
@@ -55,10 +61,6 @@ import java.util.stream.IntStream;
  * 503  MODEL_BUSY         同時在等模型的請求滿了，這次沒叫它。Retry-After 秒後再試
  * </pre>
  * 503 跟 502 分開：502 是「叫了、壞了」，503 是「知道叫了也沒用，先不叫」—— 前端看到 503 就不該讓使用者一直按重試。
- *
- * 卡片的去向記成產品指標（#36）：回覆時每張卡片發一個 proposalId 並記下來（#223）；
- * 按「加入行事曆」走 POST /events，每筆帶著它的 proposalId；按「取消」「移除」只改畫面，所以前端另外送 POST /dismissals 帶那幾張的 id。
- * 伺服器只認自己發過、屬於登入者、還沒表態過的卡片，前端說了不算。
  */
 @RestController
 @RequestMapping("/api/calendar/assistant")
@@ -108,7 +110,7 @@ public final class CalendarAssistantController {
             description = "按「取消」「移除」只改畫面、不經過後端，前端用這個告訴後端，產品指標才算得出採納率。不影響任何行程。"
                     + "只有自己的、還沒表態過的卡片才算，每張最多一次；別人的、沒發過的、已表態過的都靜靜略過。")
     @ApiResponse(responseCode = "204", description = "收到了（不透露每一張有沒有算）")
-    @ApiResponse(responseCode = "400", description = "沒帶 proposalIds，或某個 id 不是 UUID",
+    @ApiResponse(responseCode = "400", description = "沒帶 proposalIds，或某個 id 不是 UUID（code = INVALID_REQUEST）",
             content = @Content(schema = @Schema(implementation = AssistantFailure.class)))
     public void dismissed(Principal signedIn, @RequestBody AssistantDismissals request) {
         if (request.proposalIds() == null) {

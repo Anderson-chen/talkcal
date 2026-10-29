@@ -80,7 +80,7 @@ Mimir 只放得下「標籤 + 一個數字」，Loki 放的是一行一行文字
 
 ```bash
 cd deploy && docker compose up -d   # 先起被觀測的那組：它會建立 Alloy 要加入的網路
-cd ops && docker compose up -d      # 再起這組
+cd ops && docker compose --env-file ../deploy/.env up -d   # 再起這組；--env-file 帶告警寄信的 SMTP（沒帶就只是不寄信）
 docker compose ps                   # 看狀態
 docker compose logs -f              # 追 log（Ctrl+C 離開，不會關容器）
 docker compose down                 # 關掉（資料留著）
@@ -183,7 +183,7 @@ sum by (service) (count_over_time({env="docker"} | json | log_level=~"WARN|ERROR
 app 對每個請求開一個 trace、全部送出（`management.tracing.sampling.probability=1.0`），
 用 OTLP 推給 Alloy 的 4318，Alloy 決定留哪些（見下面「Trace 取樣」）再轉給 Tempo。
 
-一個助理請求實際的樹（2026-10-19 量的，截圖在 [docs/evidence/2026-10-19-request-trace.png](../docs/evidence/2026-10-19-request-trace.png)）：
+一個助理請求實際的樹（2026-10-19 量的，截圖在 [docs/images/2026-10-19-request-trace.png](../docs/images/2026-10-19-request-trace.png)）：
 
 ```
 talkcal-web  POST /api                          ← nginx（web/nginx.conf 的 otel_trace），trace 從這裡開始
@@ -384,6 +384,43 @@ Mimir 的 ruler 也能發告警，但那樣要再架一個 Alertmanager，通知
 | trace（Tempo） | 指標 | span 名稱旁的連結圖示 → 選一條：延遲 p95、5xx 比例、連線池、同一種 span 的 p95 | Tempo 資料源的 `tracesToMetrics`，時間是 span 前後各 5 分鐘 |
 | log（Loki） | 單一請求儀表板 | 展開一行 → **用「單一請求」dashboard 看** | 同一個 derived field 的第二個連結 |
 
+## 告警：出事寄信
+
+規則、收件人、寄信節奏都用 provisioning 管（`grafana/provisioning/alerting/`），Grafana 一啟動就建好，UI 上唯讀。
+
+| 規則 | 檔案 | 什麼時候響 | 嚴重度 |
+|------|------|------|------|
+| app 掛了或抓不到指標 | `rules.yaml` | `max(up{job="talkcal-app"}) < 1` 持續 1 分鐘；**沒資料也算**（Alloy 掛了一樣看不到 app） | critical |
+| SLO 快燒 | `slo-burn-rate.yaml` | 照這速度幾天內就燒光 error budget（[docs/slo.md](../docs/slo.md)） | critical |
+| SLO 慢燒 | `slo-burn-rate.yaml` | 照這速度這個月會不達標 | warning |
+
+錯誤、延遲只看 SLO 的 burn rate，不另外設「5xx > 5%」「p95 > 1 秒」這種固定門檻：兩邊都設的話同一件事會寄兩封、門檻還不一樣。
+SLO 管不到的是「根本沒資料」：app 掛掉時沒有請求，SLO 是沒資料（當正常），所以 `up` 這條另外留著。
+全部告警都寄到同一個信箱（`policies.yaml`）；要分流時比對 `severity` 標籤。
+
+寄信走 Grafana 內建的 SMTP，設定在不進 git 的 `deploy/.env`（`ALERT_SMTP_*`、`ALERT_EMAIL_TO`，範本 `deploy/.env.example`），
+所以起這組要帶 `--env-file ../deploy/.env`。雲端由 Terraform 寫進 SSM 的同一份 `.env`（`infra/envs/1-ec2/alerting.auto.tfvars.example`）。
+
+想試寄信、又不想動真的信箱：
+
+```bash
+# deploy/.env 填 ALERT_SMTP_HOST=mailpit:1025，其他 ALERT_SMTP_* 留空
+docker compose --env-file ../deploy/.env --profile mailtest up -d   # 多起一台只收不寄的 Mailpit
+# 收件匣：http://localhost:8025
+```
+
+Grafana 的 **Alerting → Alert rules** 看每條規則現在是 Normal / Pending / Firing；
+**Contact points** 那一頁的 **Test** 可以不等規則觸發，直接寄一封測試信。
+
+改了告警相關的設定（`grafana/provisioning/alerting/`、`grafana/provisioning/datasources/`、`mimir/`、`alloy/`、這份 `compose.yaml`），
+PR 上的 `Alerting` workflow 會另起一組全新的觀測、假 app、Mailpit，真的造出 5xx、停掉 app，確認快燒、app 掛了、恢復三封信都寄得到。
+本機也能跑 `ci/alerting.sh`（約 15 分鐘，跟正在跑的這組分開，不互相干擾），做法見 [ci/README.md](../ci/README.md#告警端到端測試)。
+
+寄到 Gmail 會進垃圾郵件（2026-10-29 在 AWS 上用 Gmail SMTP 實測：三封都寄出、SMTP 沒報錯，但都在 Spam，
+Gmail 的理由是「跟以前的垃圾信相似」——Grafana 預設模板人人在用）。收件人要自己在 Gmail 按「不是垃圾郵件」、
+再建一個篩選器（寄件人名稱 `talkcal Grafana`）設成「一律不要傳送到垃圾郵件」，不然告警寄出去了也沒人看到。
+Mailpit 什麼都收，測不到這件事。
+
 ## 下一步（一次一件）
 
 1. **app 記錄送給模型的完整 prompt**：access log 已經記了使用者說了什麼（請求 body），
@@ -398,7 +435,7 @@ Mimir 的 ruler 也能發告警，但那樣要再架一個 Alertmanager，通知
 
 ```
 ops/
-├── compose.yaml                              # 五個服務的定義
+├── compose.yaml                              # 五個服務的定義（加上試寄信用的 mailpit，平常不起）
 ├── alloy/config.alloy                        # 三條管線：抓誰的指標、收哪些容器的 log、trace 轉給誰
 ├── mimir/mimir.yaml                          # 指標：單機最小設定（關掉多租戶、複製、物件儲存）
 ├── mimir/rules/anonymous/slo.yaml            # SLO 的錄製規則（SLI、burn rate、error budget）
@@ -407,6 +444,6 @@ ops/
 ├── tempo/tempo.yaml                          # 追蹤：單機最小設定
 └── grafana/provisioning/
     ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
-    ├── alerting/slo-burn-rate.yaml           # SLO 的 burn-rate 告警（只有規則，通知管道在另一個檔）
+    ├── alerting/                             # 告警：rules（基本告警）、slo-burn-rate（SLO 的 burn-rate 告警）、contact-points（寄給誰）、policies（多久寄一次）
     └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces、talkcal-request（trace）、talkcal-k6（壓測）、talkcal-cost（成本）、talkcal-product（產品指標）、talkcal-slo
 ```

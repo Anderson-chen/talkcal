@@ -26,7 +26,9 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.openai.OpenAiChatOptions;
 
 /**
  * 兩道保護的行為：該打開的時候打開、不該打開的時候不打開（反例）、恢復後關回來、滿載時立刻拒絕。
@@ -37,8 +39,8 @@ import org.springframework.ai.chat.prompt.Prompt;
 class GuardedChatModelTest {
 
     private static final Duration OPEN_FOR = Duration.ofMillis(200);
-    private static final Duration RETRY_AFTER_OPEN = Duration.ofSeconds(30);
     private static final Duration RETRY_AFTER_BUSY = Duration.ofSeconds(5);
+    private static final Duration CALL_TIMEOUT = Duration.ofMinutes(2);
     private static final Prompt PROMPT = new Prompt("明天有什麼行程？");
 
     /** 假模型：照 behavior 決定這一次成功、失敗還是卡住；數自己被叫了幾次，才看得出「被擋下來的沒有叫到模型」。 */
@@ -72,13 +74,13 @@ class GuardedChatModelTest {
             .slowCallRateThreshold(50)
             .waitDurationInOpenState(OPEN_FOR)
             .permittedNumberOfCallsInHalfOpenState(2)
-            .recordException(GuardedChatModel::countsAgainstModel)
+            .recordException(new ModelFailurePredicate())
             .build());
 
     private GuardedChatModel guarded(int maxConcurrentCalls) {
         Bulkhead bulkhead = Bulkhead.of("chat-model", BulkheadConfig.custom()
                 .maxConcurrentCalls(maxConcurrentCalls).maxWaitDuration(Duration.ZERO).build());
-        return new GuardedChatModel(model, breaker, bulkhead, RETRY_AFTER_OPEN, RETRY_AFTER_BUSY);
+        return new GuardedChatModel(model, breaker, bulkhead, RETRY_AFTER_BUSY, CALL_TIMEOUT);
     }
 
     private final GuardedChatModel guarded = guarded(50);
@@ -136,7 +138,8 @@ class GuardedChatModelTest {
             assertThatThrownBy(() -> guarded.call(PROMPT))
                     .isInstanceOfSatisfying(ModelUnavailableException.class, e -> {
                         assertThat(e.reason()).isEqualTo(ModelUnavailableException.Reason.CIRCUIT_OPEN);
-                        assertThat(e.retryAfter()).isEqualTo(RETRY_AFTER_OPEN);
+                        // 建議多久再試 = 斷路器保持打開的時間，直接從它的設定讀
+                        assertThat(e.retryAfter()).isEqualTo(OPEN_FOR);
                     })
                     // 舊的契約照樣成立：沒認得它的呼叫端當成一般的失敗
                     .isInstanceOf(IllegalStateException.class);
@@ -166,8 +169,8 @@ class GuardedChatModelTest {
 
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
         // 包了一層也認得出來
-        assertThat(GuardedChatModel.countsAgainstModel(new RuntimeException("包一層", tooLong))).isFalse();
-        assertThat(GuardedChatModel.countsAgainstModel(new RuntimeException("包一層", connectionRefused()))).isTrue();
+        assertThat(new ModelFailurePredicate().test(new RuntimeException("包一層", tooLong))).isFalse();
+        assertThat(new ModelFailurePredicate().test(new RuntimeException("包一層", connectionRefused()))).isTrue();
     }
 
     @Test
@@ -244,6 +247,31 @@ class GuardedChatModelTest {
         // 位子空出來之後又收得進去
         model.works();
         oneAtATime.call(PROMPT);
+    }
+
+    @Test
+    @DisplayName("#231 預設選項帶上每一次呼叫的逾時，其他設定（模型名稱、max-tokens）照原本的")
+    void optionsCarryCallTimeout() {
+        ChatModel openAi = new ChatModel() {
+            @Override
+            public ChatResponse call(Prompt prompt) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public ChatOptions getOptions() {
+                // Spring AI 自動組裝的預設選項長這樣：有模型名稱、max-tokens，逾時是它自己的預設 60 秒
+                return OpenAiChatOptions.builder().model("qwen3-8b").maxTokens(2048).build();
+            }
+        };
+        Bulkhead bulkhead = Bulkhead.of("chat-model", BulkheadConfig.custom().build());
+
+        OpenAiChatOptions options = (OpenAiChatOptions) new GuardedChatModel(openAi, breaker, bulkhead, RETRY_AFTER_BUSY, CALL_TIMEOUT)
+                .getOptions();
+
+        assertThat(options.getTimeout()).isEqualTo(CALL_TIMEOUT);
+        assertThat(options.getModel()).isEqualTo("qwen3-8b");
+        assertThat(options.getMaxTokens()).isEqualTo(2048);
     }
 
     private static void sleep(long millis) {

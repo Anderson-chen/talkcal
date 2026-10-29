@@ -1,7 +1,5 @@
 package io.github.andersonchen.talkcal.calendar.adapter.shared;
 
-import com.openai.errors.BadRequestException;
-import com.openai.errors.UnprocessableEntityException;
 import io.github.resilience4j.bulkhead.Bulkhead;
 import io.github.resilience4j.bulkhead.BulkheadFullException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
@@ -10,6 +8,8 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.openai.OpenAiChatOptions;
+import reactor.core.publisher.Flux;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -33,8 +33,12 @@ import java.util.Objects;
  *
  * bulkhead 在外層：bulkhead 滿了不是模型的錯，不該記進 breaker 讓它打開。
  *
- * 兩個物件由 app.config 建好、設好門檻再交進來（門檻是部署決定，理由寫在 application.properties）；
+ * breaker、bulkhead 由 Resilience4j 的 starter 照 application.properties 的 resilience4j.*.instances.chat-model 建好，
+ * app.config 依名字取出來交進來（門檻是部署決定，理由寫在 application.properties）；
  * 助理和抽行程各包一個 GuardedChatModel，但共用同一組 breaker、bulkhead —— 背後是同一顆模型，壞就一起壞。
+ * 什麼失敗算模型出事，見 ModelFailurePredicate。
+ *
+ * 另外補上每一次呼叫最多等多久，見 getOptions（#231）。
  */
 public final class GuardedChatModel implements ChatModel {
 
@@ -43,24 +47,28 @@ public final class GuardedChatModel implements ChatModel {
     private final Bulkhead bulkhead;
     private final Duration retryAfterOpen;
     private final Duration retryAfterBusy;
+    private final ChatOptions options;
 
     /**
-     * @param retryAfterOpen 熔斷打開時建議多久後再試：跟 breaker 保持打開的時間一樣，早於這個時間重試一定還是被擋
-     * @param retryAfterBusy 滿載時建議多久後再試
+     * @param retryAfterBusy 滿載時建議多久後再試。
+     *                       熔斷打開時的建議時間不必給：就是 breaker 保持打開的時間，早於這個時間重試一定還是被擋，
+     *                       直接從 breaker 的設定讀，免得兩個地方各寫一次、改了一邊忘了另一邊
+     * @param callTimeout    每一次叫模型最多等多久（見 getOptions）
      */
-    public GuardedChatModel(ChatModel delegate, CircuitBreaker breaker, Bulkhead bulkhead,
-                            Duration retryAfterOpen, Duration retryAfterBusy) {
+    public GuardedChatModel(ChatModel delegate, CircuitBreaker breaker, Bulkhead bulkhead, Duration retryAfterBusy,
+                            Duration callTimeout) {
         this.delegate = Objects.requireNonNull(delegate, "delegate 不可為 null");
         this.breaker = Objects.requireNonNull(breaker, "breaker 不可為 null");
         this.bulkhead = Objects.requireNonNull(bulkhead, "bulkhead 不可為 null");
-        this.retryAfterOpen = Objects.requireNonNull(retryAfterOpen, "retryAfterOpen 不可為 null");
+        this.retryAfterOpen = Duration.ofMillis(breaker.getCircuitBreakerConfig().getWaitIntervalFunctionInOpenState().apply(1));
         this.retryAfterBusy = Objects.requireNonNull(retryAfterBusy, "retryAfterBusy 不可為 null");
+        this.options = withTimeout(delegate.getOptions(), Objects.requireNonNull(callTimeout, "callTimeout 不可為 null"));
     }
 
     @Override
     public ChatResponse call(Prompt prompt) {
         try {
-            return Bulkhead.decorateSupplier(bulkhead, CircuitBreaker.decorateSupplier(breaker, () -> delegate.call(prompt))).get();
+            return bulkhead.executeSupplier(() -> breaker.executeSupplier(() -> delegate.call(prompt)));
         } catch (CallNotPermittedException e) {
             throw new ModelUnavailableException(ModelUnavailableException.Reason.CIRCUIT_OPEN, retryAfterOpen, e);
         } catch (BulkheadFullException e) {
@@ -68,28 +76,30 @@ public final class GuardedChatModel implements ChatModel {
         }
     }
 
-    // 預設選項（模型名稱、max-tokens…）照原本的：呼叫端靠它沿用 application.properties 的設定
+    /**
+     * 不支援串流：保護只做在 call() 上（串流要另外處理「開始回了才失敗」「回到一半卡住」，現在沒有人用）。
+     * 明寫出來而不是靠 ChatModel 的預設：之後有人要串流時，一看就知道要先補保護，不會改去拿沒包裝的那個、繞過斷路器。
+     */
     @Override
-    public ChatOptions getOptions() {
-        return delegate.getOptions();
+    public Flux<ChatResponse> stream(Prompt prompt) {
+        throw new UnsupportedOperationException("GuardedChatModel 只保護 call()，串流還沒有斷路器、bulkhead");
     }
 
     /**
-     * 這個失敗算不算「模型出事」，要不要記進 breaker。
+     * 預設選項：照原本的（模型名稱、max-tokens…，呼叫端靠它沿用 application.properties 的設定），只多帶上每一次呼叫的逾時。
      *
-     * 不算的只有「這一個請求本身有問題」：400（例如對話太長超過 context）、422。換一個請求就會好，
-     * 算進去的話，一個使用者一直送超長的對話就能把所有人的助理關掉。
-     * 其他都算：連不上、逾時、5xx、429（模型塞爆）、401／403（雲端的金鑰失效）、404（模型名稱設錯）——
-     * 這些換一個請求也一樣失敗，正是 breaker 要擋的。
-     *
-     * 沿著 cause 往下找：Spring AI 可能把 SDK 的例外再包一層。
+     * 為什麼要在這裡補（#231）：Spring AI 2.0.1 的逾時有兩層，spring.ai.openai.chat.timeout 是建 client 時的，
+     * 每一次呼叫另外帶選項裡的 timeout，而且會蓋掉前者。自動組裝的預設選項不會帶上任何逾時
+     * （spring.ai.openai.chat.options.timeout 綁得進去、但組選項時沒讀它），於是每次呼叫都用 Spring AI 預設的 60 秒。
+     * 助理和抽行程都從這份預設開始組自己的選項，在這裡補一次兩邊都拿到。
      */
-    public static boolean countsAgainstModel(Throwable failure) {
-        for (Throwable t = failure; t != null; t = t.getCause()) {
-            if (t instanceof BadRequestException || t instanceof UnprocessableEntityException) {
-                return false;
-            }
-        }
-        return true;
+    @Override
+    public ChatOptions getOptions() {
+        return options;
+    }
+
+    // 不是 OpenAI 那套選項（例如測試用的假模型）就不動：只有 OpenAI 那套會把它變成每次呼叫的逾時
+    private static ChatOptions withTimeout(ChatOptions defaults, Duration callTimeout) {
+        return defaults instanceof OpenAiChatOptions openAi ? openAi.mutate().timeout(callTimeout).build() : defaults;
     }
 }
