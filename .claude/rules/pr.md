@@ -9,7 +9,6 @@
   - 傳完看一次描述：本機路徑都換成 `https://github.com/user-attachments/...` 才算成功，沒換到的會被加在描述最後，原處留下壞圖。
   - `gh --version` 不到 2.99.0 就停下來請使用者升級，不要退回把圖 commit 進分支。
   - 截圖先存在 scratchpad 這類 repo 外面的資料夾，不要放進 worktree，免得順手 commit 進去。
-  - orphan 分支 `evidence` 是 gh 有 `--attach` 之前的做法，只留給舊 PR 的連結用，不再往裡面加圖、也不要刪或 force-push。
   - 文件（README、`docs/`）要引用的圖才進 master，放 `docs/images/`。
   - 演練紀錄（runbook、腳本會連過去的 .md）算文件，放 `docs/drills/`，它引用的圖一樣放 `docs/images/`。
 - PR 描述不要有 `Generated with Claude Code`。
