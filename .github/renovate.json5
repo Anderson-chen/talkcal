@@ -110,6 +110,15 @@
       groupSlug: 'gradle',
     },
     {
+      // 映像檔那一處改由下面的 customManagers 用 wrapper 的資料來源追，這裡關掉 Dockerfile 管理器抓到的那一份。
+      // 不關的話兩邊查不同的地方：Docker Hub 拿不到發佈時間就不等，wrapper 會等滿 14 天，
+      // 同一個 PR 變成 wrapper 9.8.1、映像檔 9.8.2（2026-10-30 dry-run 實測）
+      description: 'backend/Dockerfile 的 gradle 映像檔不從 Docker Hub 追',
+      matchManagers: ['dockerfile'],
+      matchPackageNames: ['gradle'],
+      enabled: false,
+    },
+    {
       description: 'JDK：backend/Dockerfile、ci/Dockerfile 的 temurin 要同一版；major 還要手動改 build.gradle 的 toolchain',
       matchPackageNames: ['eclipse-temurin'],
       groupName: 'JDK',
@@ -173,6 +182,17 @@
 
   // ── 標準管理器看不到的版本 ───────────────────────────────────────
   customManagers: [
+    {
+      customType: 'regex',
+      description: 'backend/Dockerfile 的 gradle 映像檔版本，跟 wrapper 一樣查 Gradle 官方的版本清單',
+      managerFilePatterns: ['/^backend/Dockerfile$/'],
+      matchStrings: [
+        'FROM gradle:(?<currentValue>\\d+\\.\\d+(?:\\.\\d+)?)-jdk',
+      ],
+      depNameTemplate: 'gradle',
+      datasourceTemplate: 'gradle-version',
+      versioningTemplate: 'gradle',
+    },
     {
       // ci/secrets.sh、ci/vulns.sh 用 docker run 跑 gitleaks、Trivy，版本和 digest 寫在變數裡。
       // 掃描工具舊了會漏抓新的祕密格式、新的漏洞，所以也要追
