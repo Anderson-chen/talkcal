@@ -4,7 +4,7 @@
 #
 #   bash deploy/backup/drill.sh
 #
-# 結果（時間軸、每一步的輸出）就是 docs/drills/2026-10-19-restore-drill.md 那份紀錄的來源。
+# 結果（時間軸、每一步的輸出）就是 docs/drills/2026-10-19-restore-drill.md 的來源。
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -12,7 +12,8 @@ repo="$(cd "$here/../.." && pwd)"
 net=talkcaldrill
 pg=talkcaldrill-postgres
 app=talkcaldrill-app
-image=postgres:18.6-alpine           # 跟 deploy/compose.yaml 同一個版本
+# 跟 deploy/compose.yaml 同一個版本：從那裡讀，compose 升版時演練跟著升
+image=$(grep -m1 -oE 'postgres:[0-9.]+-alpine' "$repo/deploy/compose.yaml")   || { echo "deploy/compose.yaml 裡找不到 postgres:<版本>-alpine 的映像檔，改這行的規則" >&2; exit 1; }
 export BACKUP_DIR="${BACKUP_DIR:-$(mktemp -d)}"
 export PG_CONTAINER=$pg APP_CONTAINER=$app
 
@@ -29,12 +30,18 @@ SELECT md5(string_agg(t, '|' ORDER BY t)) FROM (
 ) x;
 SQL
 }
+late() { DB="${1:-talkcal}" sql -c "SELECT count(*) FROM calendar_assistant_message WHERE content = '備份之後才寫的'"; }
 counts() { sql -c "SELECT (SELECT count(*) FROM account) || ' accounts, ' || (SELECT count(*) FROM calendar_event) || ' events, ' || (SELECT count(*) FROM calendar_assistant_message) || ' messages'"; }
 # 反例：指令應該失敗。成功了就是檢查沒擋到，演練本身失敗
 expect_fail() {
   if "$@" > /dev/null 2>"$BACKUP_DIR/err.txt"; then echo "✗ 預期失敗卻成功了：$*"; exit 1; fi
   echo "✓ 擋下來了：$(grep -E '停止|error|Error' "$BACKUP_DIR/err.txt" | head -2 | tr '\n' ' ')"
 }
+# 檢查：條件成立印 ✓，不成立印 ✗ 並讓整個演練失敗
+check() { local msg=$1; shift; if "$@"; then echo "✓ $msg"; else echo "✗ $msg"; exit 1; fi; }
+# 給反例造雜湊檔：雜湊是對著這個（壞掉的）檔案算的，所以雜湊本身會過
+sum() { ( cd "$BACKUP_DIR" && sha256sum "$1" > "$1.sha256" ); }
+wait_pg() { until docker exec "$pg" pg_isready -U talkcal -d talkcal -q 2>/dev/null; do sleep 1; done; }
 cleanup() { docker rm -fv "$app" "$pg" > /dev/null 2>&1 || true; docker network rm "$net" > /dev/null 2>&1 || true; }
 trap cleanup EXIT
 
@@ -43,12 +50,12 @@ cleanup
 docker network create "$net" > /dev/null
 docker run -d --name "$pg" --network "$net" -p 127.0.0.1:15432:5432 \
   -e POSTGRES_DB=talkcal -e POSTGRES_USER=talkcal -e POSTGRES_PASSWORD=drill "$image" > /dev/null
-until docker exec "$pg" pg_isready -U talkcal -d talkcal -q 2>/dev/null; do sleep 1; done
+wait_pg
 sleep 2   # 官方映像檔初始化時會重啟一次伺服器，等它真的穩定
 migrations="$repo/backend/src/main/resources/db/migration"
 # 照 Flyway 的版本順序跑（V2 在 V10 前面：sort -V 才排得對）
 for f in $(ls "$migrations" | sort -V); do
-  sql -q < "$migrations/$f"
+  sql -q -1 < "$migrations/$f"   # -1：一個檔一個交易，跟 Flyway 一樣
 done
 echo "migration：$(ls "$migrations" | sort -V | paste -sd' ')"
 # 假 app：跟真的 app 一樣一直握著連線、斷了就重連。還原那一步要能把它停掉、踢掉它的連線。
@@ -84,10 +91,16 @@ echo "備份花了 $(( $(date +%s) - b0 )) 秒：$(basename "$dump")，$(wc -c <
 cat "$dump.sha256"
 
 step "演練還原（--verify-only）：證明這份備份還原得回來，線上不動"
-bash "$here/pg-restore.sh" "$dump" --verify-only
+KEEP_SCRATCH=1 bash "$here/pg-restore.sh" "$dump" --verify-only
+# 反例（不誤報）：剛備份完，備份和線上應該完全一樣
+check "pg-diff：剛備份完沒有差異" bash "$here/pg-diff.sh" talkcal_restore talkcal
+DB=postgres sql -q -c "DROP DATABASE talkcal_restore"
 
-step "備份之後又寫進一則對話（還原會讓它從線上消失：這就是 RPO）"
+step "備份之後又寫進一則對話、改了一個帳號的名字、建了一張表（還原會讓它們從線上消失：這就是 RPO）"
 sql -q -c "INSERT INTO calendar_assistant_message (owner_id, conversation_id, position, type, content) VALUES (md5('acct1')::uuid, md5('after')::uuid, 0, 'USER', '備份之後才寫的')"
+sql -q -c "UPDATE account SET display_name = '備份之後改的名字' WHERE username = 'user1'"
+# 備份之後才建的表（像新的 migration），而且沒有主鍵、有三列一模一樣：pg-diff 要比到它、也要算成 3 列
+sql -q -c "CREATE TABLE drill_after_backup (v int); INSERT INTO drill_after_backup VALUES (1), (1), (1)"
 
 step "事故：誤刪 —— DELETE 忘了加 WHERE"
 incident=$(date +%s)
@@ -104,31 +117,42 @@ step "驗證：資料一筆不差地回來、假 app 又連上了、被換下來
 echo "$(counts)"
 after=$(fingerprint)
 echo "指紋：$after"
-[ "$before" = "$after" ] && echo "✓ 指紋跟備份當下一樣" || { echo "✗ 指紋不一樣"; exit 1; }
+check "指紋跟備份當下一樣" [ "$before" = "$after" ]
 sleep 3
 echo "假 app 狀態：$(docker inspect -f '{{.State.Status}}' "$app")，連線數：$(sql -c "SELECT count(*) FROM pg_stat_activity WHERE datname = 'talkcal' AND application_name = 'psql' AND pid <> pg_backend_pid()")"
 old=$(DB=postgres sql -c "SELECT datname FROM pg_database WHERE datname LIKE 'talkcal_before_%'")
 echo "被換下來的庫：$old"
 DB=postgres sql -q -c "ALTER DATABASE $old ALLOW_CONNECTIONS true"
-echo "線上有沒有備份之後才寫的那則：$(sql -c "SELECT count(*) FROM calendar_assistant_message WHERE content = '備份之後才寫的'") 則（RPO 內的資料，還原會失去）"
-echo "被換下來的庫裡有沒有：$(DB=$old sql -c "SELECT count(*) FROM calendar_assistant_message WHERE content = '備份之後才寫的'") 則（還撈得回來）"
+echo "線上有沒有備份之後才寫的那則：$(late) 則（RPO 內的資料，還原會失去）"
+echo "被換下來的庫裡有沒有：$(late "$old") 則（還撈得回來）"
+
+step "情境 C（runbook）：備份之後變了什麼 —— pg-diff.sh 備份的內容（現在的 talkcal）→ 被換下來的庫"
+set +e; diff_out=$(SAMPLE=1 bash "$here/pg-diff.sh" talkcal "$old"); diff_rc=$?; set -e
+echo "$diff_out"
+check "結束碼 3（有差異）" [ "$diff_rc" = 3 ]
+check "找到誤刪的 20000 筆行程" grep -q 'calendar_event .*新增 0、刪除 20000、改過 0' <<< "$diff_out"
+check "找到備份之後多寫的 1 則對話" grep -q 'calendar_assistant_message .*新增 1、刪除 0、改過 0' <<< "$diff_out"
+check "找到備份之後改過的 1 個帳號" grep -q 'account .*新增 0、刪除 0、改過 1' <<< "$diff_out"
+check "找到備份之後才建的表、重複的 3 列沒被合併" grep -q 'drill_after_backup .*新增 3、刪除 0、改過 0' <<< "$diff_out"
+check "沒動的表不誤報" grep -q 'account_identity .*一樣' <<< "$diff_out"
 
 step "情境 C（runbook）：從被換下來的庫只撈回備份之後才寫的那則，線上已有的不重複"
 docker exec "$pg" sh -c "pg_dump -U talkcal -d $old --data-only --inserts --on-conflict-do-nothing -t calendar_assistant_message | psql -U talkcal -d talkcal -q -v ON_ERROR_STOP=1" > /dev/null
 echo "$(counts)"
-[ "$(sql -c "SELECT count(*) FROM calendar_assistant_message WHERE content = '備份之後才寫的'")" = 1 ]   && echo "✓ 撈回來了，其他 5000 則沒有重複" || { echo "✗ 沒撈回來"; exit 1; }
+check "撈回來了，其他 5000 則沒有重複" [ "$(late)" = 1 ] 
 before=$(fingerprint)   # 之後的反例拿這個當基準：線上資料不能再變
 
 step "反例 1：備份檔中間被改了一個 byte → 雜湊擋下"
 bad="$BACKUP_DIR/flipped.dump"
-cp "$dump" "$bad"; ( cd "$BACKUP_DIR" && sha256sum "$(basename "$dump")" | sed "s/$(basename "$dump")/flipped.dump/" > flipped.dump.sha256 )
+# 先算雜湊、再改內容：模擬「備份完好，傳輸途中壞了」
+cp "$dump" "$bad"; sum flipped.dump
 size=$(wc -c < "$bad" | tr -d ' ')
 printf '\xff' | dd of="$bad" bs=1 seek=$(( size / 2 )) conv=notrunc status=none
 expect_fail bash "$here/pg-restore.sh" "$bad"
 
 step "反例 2：備份檔只剩前半截（雜湊是截斷後才算的，所以雜湊會過）→ 暫存庫還原那步擋下"
 cut="$BACKUP_DIR/truncated.dump"
-head -c $(( size / 2 )) "$dump" > "$cut"; ( cd "$BACKUP_DIR" && sha256sum truncated.dump > truncated.dump.sha256 )
+head -c $(( size / 2 )) "$dump" > "$cut"; sum truncated.dump
 echo "目錄讀得出來嗎：$(docker exec -i "$pg" pg_restore --list < "$cut" > /dev/null 2>&1 && echo 讀得出來（只看目錄擋不到） || echo 讀不出來)"
 expect_fail bash "$here/pg-restore.sh" "$cut"
 
@@ -137,24 +161,29 @@ cp "$dump" "$BACKUP_DIR/nosum.dump"
 expect_fail bash "$here/pg-restore.sh" "$BACKUP_DIR/nosum.dump"
 
 step "反例 4：拿錯檔案（不是 pg_dump 的檔）→ 目錄那步擋下"
-echo "SELECT 1;" > "$BACKUP_DIR/wrong.dump"; ( cd "$BACKUP_DIR" && sha256sum wrong.dump > wrong.dump.sha256 )
+echo "SELECT 1;" > "$BACKUP_DIR/wrong.dump"; sum wrong.dump
 expect_fail bash "$here/pg-restore.sh" "$BACKUP_DIR/wrong.dump"
 
 step "反例 5：資料庫沒在跑時備份 → 失敗，而且不留下半成品"
 ls_before=$(ls -A "$BACKUP_DIR" | sort)
 docker stop "$pg" > /dev/null
 expect_fail bash "$here/pg-backup.sh"
-[ "$ls_before" = "$(ls -A "$BACKUP_DIR" | sort)" ] && echo "✓ 備份資料夾沒有多出任何檔案" || { echo "✗ 留下了檔案"; exit 1; }
+check "備份資料夾沒有多出任何檔案" [ "$ls_before" = "$(ls -A "$BACKUP_DIR" | sort)" ]
 docker start "$pg" > /dev/null
-until docker exec "$pg" pg_isready -U talkcal -d talkcal -q 2>/dev/null; do sleep 1; done
+wait_pg
 
 step "反例都跑完：線上的資料沒被任何一個壞備份動到"
 final=$(fingerprint)
-[ "$final" = "$before" ] && echo "✓ 指紋還是 $final" || { echo "✗ 線上資料變了"; exit 1; }
+check "指紋還是 $final（線上資料沒變）" [ "$final" = "$before" ]
 
 step "退回（runbook「還原之後發現選錯備份」）：換回被換下來的那份"
 docker stop "$app" > /dev/null
-DB=postgres sql -q <<SQL
+# 模擬 postgres-exporter：app 停了還有別的連線連著 talkcal。runbook 的 SQL 不先踢掉它的話，改名會失敗
+docker exec -d "$pg" psql -U talkcal -d talkcal -c "SELECT pg_sleep(300)"
+sleep 1
+DB=postgres sql -q > /dev/null <<SQL
+ALTER DATABASE talkcal ALLOW_CONNECTIONS false;
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'talkcal' AND pid <> pg_backend_pid();
 BEGIN;
 ALTER DATABASE talkcal RENAME TO talkcal_wrong_restore;
 ALTER DATABASE $old RENAME TO talkcal;
@@ -162,6 +191,6 @@ COMMIT;
 SQL
 docker start "$app" > /dev/null
 echo "$(counts)"
-[ "$(sql -c "SELECT count(*) FROM calendar_event")" = 0 ] && echo "✓ 回到還原之前（誤刪後）的樣子：退回的步驟可行" || { echo "✗ 沒有退回"; exit 1; }
+check "回到還原之前（誤刪後）的樣子：退回的步驟可行" [ "$(sql -c "SELECT count(*) FROM calendar_event")" = 0 ]
 
 step "全部通過，清掉演練容器"

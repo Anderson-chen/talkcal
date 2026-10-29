@@ -22,6 +22,7 @@
 |---|---|
 | `pg-backup.sh` | `pg_dump -Fc` → 驗目錄 → 寫 `.sha256` → 清過期的。本機、EC2 共用 |
 | `pg-restore.sh` | 驗雜湊 → 驗目錄 → 還原到暫存庫 → 停 app、兩次改名換上 |
+| `pg-diff.sh` | 比兩個資料庫：每張表依主鍵分成新增、刪除、改過（情境 C）。只讀 |
 | `drill.sh` | 在獨立的容器上演練一整輪（含反例），不碰正在用的資料庫 |
 | `infra/envs/1-ec2/backup-to-s3.sh` | （EC2）呼叫 `pg-backup.sh`，再傳上 S3 |
 
@@ -111,26 +112,65 @@ sudo GIT_REF=<上一個好的 commit 或 tag> bash /opt/talkcal/repo/infra/envs/
 > 注意：還原的備份如果比現在的程式**舊**，app 起來時 Flyway 會把缺的 migration 補上（正常）；
 > 如果比現在的程式**新**（有程式不認得的 migration），Flyway 會拒絕啟動——先把程式升到那一版。
 
-## 情境 C：只想救回幾筆，不想丟掉備份之後的新資料
+## 情境 C：備份之後到現在變了什麼？先看差異，再決定救哪些
 
-整份還原會讓「備份之後才寫的」從線上消失（這就是 RPO）。還原完它們還在 `talkcal_before_<時間>` 裡，可以撈回來：
+**備份的時間點**是 `pg_dump` 開始的那一刻（檔名上的 UTC 時間）：pg_dump 在一個交易快照裡讀，備份的過程中有人寫進來也不會混進這份，
+那些會進下一份。所以「備份那一刻 → 現在」之間寫進去、刪掉、改掉的，就是整份還原會丟掉的部分（RPO 內的資料）。
+不知道這段時間發生了什麼之前，不要急著整份還原：先用 `pg-diff.sh` 看出差異。
 
-```bash
-# 例：把被換下來那份裡、線上沒有的對話紀錄搬回來
-docker exec talkcal-postgres psql -U talkcal -d postgres -c "ALTER DATABASE talkcal_before_<時間> ALLOW_CONNECTIONS true"
-docker exec talkcal-postgres sh -c "pg_dump -U talkcal -d talkcal_before_<時間> --data-only --inserts --on-conflict-do-nothing   -t calendar_assistant_message | psql -U talkcal -d talkcal -q -v ON_ERROR_STOP=1"
-```
-
-`--inserts --on-conflict-do-nothing`：一列一個 `INSERT ... ON CONFLICT DO NOTHING`，線上已經有的（主鍵相同）跳過，只補進新的。
-不能用預設的 `COPY`：一列主鍵重複，整張表的 `COPY` 都會失敗。
-
-反過來（線上要保留、只要備份裡某張表的某幾筆）：用 `KEEP_SCRATCH=1` 演練，暫存庫 `talkcal_restore` 會留著，再用上面的方式從它搬：
+**C-1. 看差異**（只讀，線上不動）
 
 ```bash
-KEEP_SCRATCH=1 bash deploy/backup/pg-restore.sh ~/talkcal-backups/talkcal-<時間>.dump --verify-only
-docker exec talkcal-postgres sh -c "pg_dump -U talkcal -d talkcal_restore --data-only --inserts --on-conflict-do-nothing   -t calendar_event | psql -U talkcal -d talkcal -q -v ON_ERROR_STOP=1"
-docker exec talkcal-postgres psql -U talkcal -d postgres -c "DROP DATABASE talkcal_restore"
+KEEP_SCRATCH=1 bash deploy/backup/pg-restore.sh ~/talkcal-backups/talkcal-<時間>.dump --verify-only   # 留下 talkcal_restore = 備份的內容
+bash deploy/backup/pg-diff.sh talkcal_restore talkcal                                                # 備份（舊）→ 線上（新）
 ```
+
+每張表依主鍵對齊，分成三類，每類印前 5 筆（`SAMPLE=20` 可以多印）：
+
+| 輸出 | 意思 | 通常是 |
+|---|---|---|
+| `- …` 刪除 | 備份裡有、線上沒有 | 誤刪的 |
+| `+ …` 新增 | 備份之後才寫進去的 | 要留的新資料 |
+| `~ 舊 → 新` 改過 | 主鍵一樣、內容不一樣 | 被改壞的，或正常的修改 |
+
+演練時的輸出（備份之後多寫 1 則對話、改了 1 個帳號名字，然後誤刪全部行程）：
+
+```text
+比較：talkcal（舊）→ talkcal_before_20261028_141058（新）
+  account                      新增 0、刪除 0、改過 1
+      ~ (5ba8…,user1,…,"使用者 1") → (5ba8…,user1,…,備份之後改的名字)
+  account_identity             一樣
+  calendar_assistant_message   新增 1、刪除 0、改過 0
+      + (632a…,0,USER,備份之後才寫的,…)
+  calendar_event               新增 0、刪除 20000、改過 0
+3 張表有差異
+```
+
+結束碼 0 = 完全一樣、3 = 有差異，腳本裡可以拿來判斷。
+
+**C-2. 依差異決定怎麼救**
+
+- **只有「刪除」、沒有要留的新增和修改** → 整份還原就好（情境 A／B），什麼都不會丟。
+- **有要留的新資料** → 不要整份還原，只把誤刪的搬回來，線上其他的不動：
+
+  ```bash
+  docker exec talkcal-postgres sh -c "pg_dump -U talkcal -d talkcal_restore --data-only --inserts --on-conflict-do-nothing -t calendar_event | psql -U talkcal -d talkcal -q -v ON_ERROR_STOP=1"
+  bash deploy/backup/pg-diff.sh talkcal_restore talkcal calendar_event      # 再比一次：刪除應該變 0
+  docker exec talkcal-postgres psql -U talkcal -d postgres -c "DROP DATABASE talkcal_restore"
+  ```
+
+  `--inserts --on-conflict-do-nothing` 是一列一個 `INSERT ... ON CONFLICT DO NOTHING`：線上已經有的（主鍵相同）跳過，只補回不見的。
+  不能用預設的 `COPY`：一列主鍵重複，整張表的 `COPY` 都會失敗。
+  它**不會**把「改過」的改回去（主鍵已經在，被跳過）；要改回去的，照 `pg-diff.sh` 印出來的舊值手動 `UPDATE`。
+- **已經整份還原了，才想到備份之後的新資料** → 它們還在被換下來的 `talkcal_before_<時間>`，反過來比、反過來搬：
+
+  ```bash
+  docker exec talkcal-postgres psql -U talkcal -d postgres -c "ALTER DATABASE talkcal_before_<時間> ALLOW_CONNECTIONS true"
+  bash deploy/backup/pg-diff.sh talkcal talkcal_before_<時間>              # 「新增」就是備份之後才寫的
+  docker exec talkcal-postgres sh -c "pg_dump -U talkcal -d talkcal_before_<時間> --data-only --inserts --on-conflict-do-nothing -t calendar_assistant_message | psql -U talkcal -d talkcal -q -v ON_ERROR_STOP=1"
+  ```
+
+雲端一樣，指令前面加 `sudo`，備份檔的路徑換成 `/opt/talkcal/backups/`。
 
 ## 改壞了要退回：還原之後發現選錯備份
 
@@ -162,8 +202,10 @@ bash deploy/backup/drill.sh
 在獨立的 `talkcaldrill-postgres`（127.0.0.1:15432）上跑完整一輪，跑完自己刪掉容器，**不碰 `talkcal-postgres`**：
 
 1. 跑 backend 全部的 Flyway migration、種 2 萬筆行程
-2. 備份 → `--verify-only` 演練 → 誤刪（`DELETE` 忘了 `WHERE`）→ 還原 → 比對整庫指紋
-3. 反例：改一個 byte、截掉後半、沒有雜湊檔、拿錯檔案、資料庫沒在跑時備份 —— 每個都要被擋下，線上資料不能變
+2. 備份 → `--verify-only` 演練（`pg-diff.sh` 要說「完全一樣」）→ 備份之後多寫、改一筆 → 誤刪（`DELETE` 忘了 `WHERE`）→ 還原 → 比對整庫指紋
+3. 情境 C：`pg-diff.sh` 要找出誤刪的、多寫的、改過的，沒動的表不能誤報；再從被換下來的庫撈回多寫的那筆
+4. 反例：改一個 byte、截掉後半、沒有雜湊檔、拿錯檔案、資料庫沒在跑時備份 —— 每個都要被擋下，線上資料不能變
+5. 退回：反向改名，回到還原之前
 
 任何一步跟預期不同，腳本就以非 0 結束。也可以拿正式的備份檔演練：`pg-restore.sh <檔> --verify-only` 不動線上。
 
