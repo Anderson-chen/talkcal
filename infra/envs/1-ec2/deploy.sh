@@ -29,9 +29,16 @@ MODELS_DIR="$ROOT/models"
 echo "── 1. 原始碼：$GIT_REF"
 # 正在跑的這支腳本也會被換掉：git 是刪掉舊檔、寫新檔，bash 手上拿的還是舊檔，不會讀到一半變內容。
 # 新版的腳本從下次部署開始生效。
-git -C "$REPO" fetch --depth 1 origin "$GIT_REF"
+# --tags：連 release tag 一起拉，cd/version.sh 才認得出這個 commit 是不是某個 v<版本>（#25）。
+# 淺 clone 也沒關係：version.sh 只看「指著 HEAD 的 tag」，不需要歷史
+git -C "$REPO" fetch --depth 1 --tags origin "$GIT_REF"
 git -C "$REPO" checkout --detach FETCH_HEAD
 git -C "$REPO" log -1 --oneline
+# 映像檔的 tag 和 label 都用這組，跟本機的 cd/apply.sh 同一支 version.sh
+APP_VERSION="$(bash "$REPO/cd/version.sh")"
+GIT_COMMIT="$(git -C "$REPO" rev-parse HEAD)"
+export APP_VERSION GIT_COMMIT
+echo "版本：$APP_VERSION"
 
 if [ "$MODEL_BACKEND" = gpu ]; then
   echo "── 2. 模型檔：s3://$MODELS_BUCKET → $MODELS_DIR"
@@ -54,11 +61,9 @@ umask 077
 aws ssm get-parameter --name "$DOTENV_PARAM" --with-decryption \
   --region "$AWS_REGION" --query Parameter.Value --output text > "$REPO/deploy/.env"
 umask 022
-# 寫出空檔案卻回 0 的事真的發生過（snap 版的 aws，#74）。不擋的話要到第 4 步 compose 才報「缺 DB_PASSWORD」，看不出原因
-if ! grep -q '^DB_PASSWORD=' "$REPO/deploy/.env"; then
-  echo "deploy/.env 是空的或缺 DB_PASSWORD：檢查 aws --version、SSM 參數 $DOTENV_PARAM" >&2
-  exit 1
-fi
+# 冒煙測試的前半（#225）：.env 是空的（snap 版的 aws，#74）、帶 \r（從 Windows apply）、缺必要的 key，
+# 都在啟動任何容器之前就擋下、說出是哪一項。不擋的話要等 app 起不來、--wait 判 unhealthy 才失敗，看不出原因
+bash "$REPO/infra/envs/1-ec2/smoke.sh" env "$REPO/deploy/.env"
 
 cd "$REPO"
 
@@ -68,6 +73,9 @@ compose_files=(
   -f infra/envs/1-ec2/compose.ec2.yaml              # 雲端共用：DB 密碼、記憶體上限、Caddy
   -f "infra/envs/1-ec2/compose.$MODEL_BACKEND.yaml" # 模型從哪來
 )
+# 必要的 key 交給 compose 自己查：compose 檔裡每個 ${X:?缺 X} 都會檢查到，不另外維護一份清單。
+# config 只解析、不啟動任何容器
+docker compose "${compose_files[@]}" config -q
 
 echo "── 4. 服務（deploy/ + compose.ec2.yaml + compose.$MODEL_BACKEND.yaml）"
 # 先只起 postgres，把資料庫裡的密碼同步成 .env 這一份，app 才起來（#14）。
@@ -89,12 +97,13 @@ bash infra/envs/1-ec2/backup-to-s3.sh pre-deploy
 
 docker compose "${compose_files[@]}" up -d --build --remove-orphans
 
-echo "── 5. 觀測（ops/，跟本機同一份）"
-# 要在 deploy/ 之後：Alloy 要加入的網路是 deploy/ 建的
+echo "── 5. 觀測（ops/ + compose.ops.yaml）"
+# 要在 deploy/ 之後：Alloy 要加入的網路是 deploy/ 建的。
+# 設定跟本機同一份，compose.ops.yaml 只蓋掉雲端不一樣的值（trace 取樣比例）
 # --env-file：Grafana 寄告警信的 SMTP 設定在同一份 deploy/.env（#121）。
-# compose 預設只讀 compose 檔所在資料夾（ops/）的 .env，不帶的話 Grafana 拿不到、就不寄信
+# compose 預設只讀第一個 compose 檔所在資料夾（ops/）的 .env，不帶的話 Grafana 拿不到、就不寄信
 # TEXTFILE_DIR：backup-to-s3.sh 寫「最後一次成功備份」的地方，掛給 Alloy 讀，太久沒成功就告警（#39）
-TEXTFILE_DIR="$ROOT/metrics" docker compose --env-file deploy/.env -f ops/compose.yaml up -d
+TEXTFILE_DIR="$ROOT/metrics" docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml up -d
 
 echo "── 6. 備份排程（#45）：每小時一次、關機前一次"
 # 寫在這裡、不寫在 user_data：user_data 只在第一次開機跑，已經在跑的機器重跑 deploy.sh 才裝得上。
@@ -144,4 +153,10 @@ systemctl enable --now "$PROJECT-backup.timer" "$PROJECT-backup-on-shutdown.serv
 systemctl list-timers "$PROJECT-backup.timer" --no-pager
 
 docker compose "${compose_files[@]}" ps
+
+echo "── 7. 冒煙測試：網站、觀測、Bedrock、告警寄信"
+# --wait 只證明容器的 healthcheck 過了；這裡從外面走一遍：https 的網站和 /api、Grafana 資料源、
+# Alloy 抓得到 app、（bedrock 時）問 Bedrock 一句、（有設 SMTP 時）寄一封測試信。沒過就讓部署失敗（#225）
+bash infra/envs/1-ec2/smoke.sh services deploy/.env
+
 echo "完成。網址：https://$(grep '^SITE_ADDRESS=' deploy/.env | cut -d= -f2)"

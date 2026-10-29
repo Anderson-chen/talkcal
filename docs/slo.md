@@ -17,7 +17,7 @@ dashboard 看得到數字，但數字要跟一條線比才知道該不該處理�
 
 | SLO | 範圍 | 好的請求 | 目標 | error budget（28 天） |
 |-----|------|----------|------|------------------------|
-| `calendar-availability` | 一般 API：`/api/calendar/events…`、`GET /api/calendar/assistant/{id}` | 不是 5xx | **99.5%** | 0.5% 的請求可以失敗 |
+| `calendar-availability` | 一般 API：`/api/calendar/events…`、`GET /api/calendar/assistant/{id}`、`POST /api/calendar/assistant/dismissals` | 不是 5xx | **99.5%** | 0.5% 的請求可以失敗 |
 | `calendar-latency` | 同上 | 300ms 內回應 | **99%** | 1% 的請求可以超過 300ms |
 | `assistant-availability` | 跟助理說話：`POST /api/calendar/assistant` | 不是 5xx | **99%** | 1% |
 | `assistant-latency` | 同上 | 8 秒內回應 | **95%** | 5% 的請求可以超過 8 秒 |
@@ -108,15 +108,19 @@ burn rate 是比例。一個小時只有 10 個請求、其中 1 個 502，比�
 
 ### 通知送去哪
 
-這份只寫規則。contact point（送 email）和 notification policy 是 #121 的範圍，放在同一個資料夾的另一個檔案。
-嚴重度用跟它同一套值：快燒 `severity=critical`（Workbook 說的 page）、慢燒 `severity=warning`（ticket），要分流時 policy 比對這個標籤就好。在那之前，規則照樣評估、狀態在 Grafana 的 **Alerting → Alert rules** 和 SLO 儀表板最下面看得到。
+這份只寫規則。送 email 的 contact point 和 notification policy 在同一個資料夾的 `contact-points.yaml`、`policies.yaml`（#121）：
+快燒、慢燒都寄到同一個信箱，同一條規則的告警合成一封，沒修好每 4 小時再提醒一次。
+嚴重度用同一套值：快燒 `severity=critical`（Workbook 說的 page）、慢燒 `severity=warning`（ticket），之後要分流（例如快燒另外推手機）時 policy 比對這個標籤就好。
+沒設 SMTP 時不寄信，規則照樣評估、狀態在 Grafana 的 **Alerting → Alert rules** 和 SLO 儀表板最下面看得到。
 
 ## 驗證：故障讓告警響、正常時不響
 
 在獨立的一組容器裡做（自己的 app、postgres、mimir、alloy、grafana，compose 專案 `talkcal-34-verify`），
 `perf/slo.js` 一直送平常流量（每秒 5 個行程請求、每分鐘 6 句助理），再一次弄壞一種依賴：
 
-2026-10-19 實測（時間是 UTC）：
+2026-10-19 實測（時間是 UTC）。當時的規則是每個視窗直接從原始 histogram 算；之後改成兩層
+（先錄 5 分鐘的事件率、各視窗再加總，見 `slo.yaml` 開頭），算的是同一個比例。改完之後由單元測試
+[ops/mimir/slo.test.yaml](../ops/mimir/slo.test.yaml)（`ci/rules.sh`，CI 的 `rules` job）驗算式，沒有重跑這組故障演練：
 
 | 時段 | 做了什麼 | 結果 |
 |------|----------|------|
@@ -127,11 +131,11 @@ burn rate 是比例。一個小時只有 10 個請求、其中 1 個 502，比�
 | 01:08–01:16 | **資料庫停掉**：`docker stop` postgres | 行程 API 全部 502（5m burn 200 = 100% 失敗），01:15 快燒 `calendar-availability` 進 firing；助理也要讀資料庫，`assistant-availability` 跟著燒 |
 | 01:16–01:50 | 重新啟動 postgres，只剩平常流量 | 01:50 快燒全部解除：5m、30m 的 burn rate 都回到 0，但 1h（`calendar-availability` 8.3）、6h（6.5）還很高——**故障結束後告警不會因為長視窗還沒降下來就一直響** |
 
-![平常流量：budget 100%、burn rate 0](evidence/2026-10-19-slo-dashboard-normal.jpg)
+![平常流量：budget 100%、burn rate 0](images/2026-10-19-slo-dashboard-normal.jpg)
 
-![模型斷線時的 SLO 儀表板](evidence/2026-10-19-slo-dashboard-model-down.jpg)
+![模型斷線時的 SLO 儀表板](images/2026-10-19-slo-dashboard-model-down.jpg)
 
-![資料庫停掉時快燒告警的實例](evidence/2026-10-19-slo-fast-burn-firing-db-down.jpg)
+![資料庫停掉時快燒告警的實例](images/2026-10-19-slo-fast-burn-firing-db-down.jpg)
 
 讀這組結果要注意：驗證用的 Mimir 只有不到 1 小時的資料，所以 6h、1d、3d、28d 視窗看到的其實都是這 1 小時——
 
@@ -143,7 +147,7 @@ burn rate 是比例。一個小時只有 10 個請求、其中 1 個 502，比�
 
 ## 怎麼改目標
 
-1. 改 `ops/mimir/rules/anonymous/slo.yaml` 的 `slo:objective:ratio`（目標）或延遲門檻的 `le`。
+1. 改 `ops/mimir/rules/anonymous/slo.yaml` 的 `slo:objective:ratio`（目標），或第一層 `slo:sli_bad_events:rate5m` 裡延遲門檻的 `le`（範圍和門檻只寫在第一層，各視窗都從那裡推算）。
 2. 改延遲門檻時，`application.properties` 的 `management.metrics.distribution.slo.http.server.requests` 也要有那個值，不然沒有那個 bucket。
-3. 重啟 mimir（`docker compose restart mimir`）；改了 app 的設定要重新部署 app。
+3. 跑 `ci/rules.sh`（單元測試的期望值也要跟著改）。mimir 10 分鐘內會自己重讀規則，要馬上生效就 `docker compose restart mimir`；改了 app 的設定要重新部署 app。
 4. 這份文件的表和理由一起改。

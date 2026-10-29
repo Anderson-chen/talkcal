@@ -45,10 +45,11 @@ export function jsonParams(extra) {
   return Object.assign(
     {
       headers,
-      // app 叫一次模型最多等 2 分鐘，k6 這端也要放寬到同等級。
+      // app 叫一次模型最多等 2 分鐘，k6 這端要比它長一點：剛好 120 秒的話兩邊同時到點，
+      // 模型卡住時 app 回的 502 常常被 k6 自己的斷線搶先，演練記成「沒拿到回應」（#231 修好逾時後實際碰到）。
       // 不設的話 k6 預設 60 秒就自己斷線，會把「模型還在想」誤判成「app 掛了」。
-      // 助理一輪可能叫好幾次模型，這個上限擋的是「卡死」，不保證每輪都在 2 分鐘內。
-      timeout: '120s',
+      // 助理一輪可能叫好幾次模型，這個上限擋的是「卡死」，不保證每輪都在這個時間內。
+      timeout: '150s',
     },
     extra,
   );
@@ -67,13 +68,19 @@ export function say(message, extra) {
 }
 
 // 把欄位安全地挖出來：body 不是預期的 JSON（例如 502 回了錯誤物件）時不要讓腳本自己炸，
-// 回空字串讓 check 判它是「沒拿到」就好。
-function field(res, name) {
+// 回空字串讓 check 判它是「沒拿到」就好。outage.js 也用它讀錯誤回應的 code
+export function field(res, name) {
   try {
     return res.json(name) || '';
   } catch (e) {
     return '';
   }
+}
+
+// 月曆一頁：前端打開月曆就是這個請求，最常見。只碰資料庫、不經過模型 ——
+// slo.js 拿它當平常流量，outage.js 拿它確認「模型掛了，行程 API 照常」。兩支讀的是同一個月，結果才比得起來
+export function listMonth() {
+  return http.get(`${BASE_URL}/api/calendar/events?from=2026-10-01&to=2026-11-01`);
 }
 
 // ── 登入（#103）────────────────────────────────────────────────────────

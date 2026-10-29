@@ -2,13 +2,14 @@
 # 規則（rules.yaml）只管「現在是不是出事」，寄不寄、合不合併、多久重寄都在這裡決定。
 #
 # 注意：provisioning 的 policies 會整棵蓋掉 Grafana 原本的通知樹，UI 上也就不能改了 —— 要改改這個檔。
+# 下面四個時間、分組的值跟 Grafana 預設一樣，刻意寫出來：一眼看得到信多久來一封，不必去翻文件。
 
 apiVersion: 1
 
 policies:
   - orgId: 1
     receiver: email               # contact-points.yaml 的 name
-    # 同一條規則的告警合成一封：app 掛掉時 5xx、延遲可能一起響，各自一封，同一條規則的多個序列併成一封
+    # 同一條規則的告警合成一封：例如 SLO 快燒同時有好幾個 SLO 在燒（每個 SLO 一個告警實例），併成一封
     group_by: ['grafana_folder', 'alertname']
     # 第一次觸發後等 30 秒再寄：同一批一起響的湊進同一封，不會一秒來三封
     group_wait: 30s

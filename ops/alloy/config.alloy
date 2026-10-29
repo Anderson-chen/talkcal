@@ -25,16 +25,16 @@
 //
 // target 直接寫「服務名:容器內的埠」：Alloy 加入了 deploy/ 的網路（見 compose.yaml），
 // 跟 deploy/ 裡 app 打 http://llm-chat:8080 是同一套規則，不看主機發佈成幾號埠。
-// 本機 bootRun 的 app 不在這個網路裡，不會被抓；要看它的指標直接開 localhost:8090/actuator/prometheus。
+// 本機 bootRun 的 app 不在這個網路裡，不會被抓；要看它的指標直接開 localhost:8091/actuator/prometheus。
 //
 // job_name 寫明：不寫的話 job 標籤會變成元件名（prometheus.scrape.talkcal_app），儀表板的查詢就對不上了。
 // scrape_interval 寫明：Alloy 預設 60 秒，比 Prometheus 慣用的 15 秒粗很多。
 
-// (1) 我們的 Spring app —— deploy/ 的 app 服務。8090 是容器「裡面」的埠，
-//     主機上看到的 18090 只是 ports 發佈出去給瀏覽器用的，容器之間用不到。
+// (1) 我們的 Spring app —— deploy/ 的 app 服務。8091 是 actuator 專用的 management 埠（#33），
+//     API 的 8090 上沒有 /actuator。8091 沒有發佈到主機，只有同一個 Docker 網路裡的 Alloy 連得到。
 prometheus.scrape "talkcal_app" {
   job_name        = "talkcal-app"
-  targets         = [{"__address__" = "app:8090"}]
+  targets         = [{"__address__" = "app:8091"}]
   metrics_path    = "/actuator/prometheus"   // Spring Boot 吐 Prometheus 指標的預設路徑
   scrape_interval = "15s"
   forward_to      = [prometheus.remote_write.mimir.receiver]
@@ -52,7 +52,18 @@ prometheus.scrape "llama_cpp" {
   forward_to      = [prometheus.remote_write.mimir.receiver]
 }
 
-// (3) 資料庫備份 —— 不是一個服務，是每小時跑一次就結束的批次工作（#45 的 backup-to-s3.sh），沒有 /metrics 可以抓。
+// (3) PostgreSQL —— deploy/ 的 postgres-exporter 替資料庫翻成 Prometheus 格式（#32）。
+//     看得到的指標：pg_settings_max_connections（上限）、pg_stat_activity_count{state=...}（各狀態幾條連線）、
+//     pg_up（exporter 連不連得上資料庫；它自己的 up 是 1 不代表資料庫活著）。
+//     跟 app 的 hikaricp_connections_* 疊在一起看：app 借了幾條 vs. 資料庫那頭實際開著幾條。
+prometheus.scrape "postgres" {
+  job_name        = "postgres"
+  targets         = [{"__address__" = "postgres-exporter:9187"}]
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+}
+
+// (4) 資料庫備份 —— 不是一個服務，是每小時跑一次就結束的批次工作（#45 的 backup-to-s3.sh），沒有 /metrics 可以抓。
 //     做法照 node_exporter 的 textfile collector：工作成功時把「最後成功時間」寫成一個 .prom 檔，這裡定時讀。
 //     為什麼不用 Pushgateway：還要多養一個服務，而且它會一直保留最後一次推上來的值 —— 跟 textfile 一樣，沒有比較好。
 //     看得到的指標：talkcal_backup_last_success_timestamp_seconds（備份腳本寫的）、
@@ -169,7 +180,9 @@ loki.write "local" {
 
 // ═══ 追蹤 ═══════════════════════════════════════════════════════════
 //
-//   app ──OTLP/HTTP──▶ otelcol.receiver.otlp ──▶ otelcol.processor.batch ──▶ otelcol.exporter.otlp ──▶ Tempo
+//   app ──OTLP/HTTP──┐
+//   web ──OTLP/gRPC──┴▶ otelcol.receiver.otlp ──▶ otelcol.processor.transform（為 service map 改屬性）
+//                       ──▶ otelcol.processor.tail_sampling（錯的、慢的全留，其餘抽樣）──▶ otelcol.processor.batch ──▶ otelcol.exporter.otlp ──▶ Tempo
 //
 // trace 也是「推」：span 在請求結束時才完整，只能由 app 主動送出來。
 // OTLP 是 OpenTelemetry 的標準協定，app 那頭只認得它，不知道後面接的是 Tempo。
@@ -177,13 +190,122 @@ loki.write "local" {
 
 // 收：開 OTLP 的 HTTP 入口（4318 是 OTLP/HTTP 的慣用埠）。
 // app 在容器裡用 http://alloy:4318 找到這裡；本機 bootRun 走 compose 發佈到主機的 127.0.0.1:4318。
+// gRPC 入口（4317）給前端的 nginx（#31）：它的 OpenTelemetry 模組只會講 gRPC。只在 deploy/ 的網路裡用，不發佈到主機
 otelcol.receiver.otlp "default" {
   http {
     endpoint = "0.0.0.0:4318"
   }
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
   output {
-    traces  = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.transform.service_graph.input]
     metrics = [otelcol.processor.batch.default.input]   // k6 壓測的指標，見下面「壓測」那一段
+  }
+}
+
+// 送進 Tempo 之前改兩個屬性，讓 Tempo 畫的 service map 對得上真的架構（#31，Tempo 怎麼畫見 tempo/tempo.yaml）。
+// Tempo 認邊的規則：一個 client span + 接在它底下的 server span 是一條邊；client span 底下沒有 server span 的
+// （資料庫、模型不送 span），就照 peer.service 這類屬性造一個虛擬節點。
+//
+// (1) nginx 的 span 改標成 client：nginx 的 OpenTelemetry 模組一個請求只開一個 server span（收到瀏覽器的請求），
+//     沒有另外開「轉給 app」的 client span，app 的 server span 直接接在另一個 server span 下面，Tempo 配不成對，
+//     圖上 talkcal-web 和 talkcal 之間就沒有邊。nginx 這個 span 本來就同時是「收」和「轉送」
+//     （從收到到 app 回完，時間幾乎一樣長），標成 client 就配得起來。
+//     代價：圖上少了 nginx 前面的「user」節點（Tempo 只替最上層的 server span 造它）——瀏覽器那段要等前端自己送 span（Faro）才真的有。
+// (2) SQL span 的 peer.service 換成資料庫種類：datasource-micrometer 把它設成資料庫名稱，我們的資料庫剛好也叫 talkcal，
+//     圖上會變成 talkcal 自己連自己（Tempo 給資料庫節點取名時 peer.service 優先，tempo.yaml 改不掉）。
+//     換成 db.system.name 的值（postgresql）。只動有 db.system.name 的 span，也就是只動 SQL
+otelcol.processor.transform "service_graph" {
+  error_mode = "ignore"
+  trace_statements {
+    context    = "span"
+    statements = [
+      `set(span.kind, SPAN_KIND_CLIENT) where resource.attributes["service.name"] == "talkcal-web" and span.kind == SPAN_KIND_SERVER`,
+      `set(span.attributes["peer.service"], span.attributes["db.system.name"]) where span.attributes["db.system.name"] != nil`,
+    ]
+  }
+  output {
+    traces = [otelcol.processor.tail_sampling.default.input]
+  }
+}
+
+// 取樣：決定哪些 trace 留進 Tempo（#37，為什麼這樣選見 README 的「Trace 取樣」）。
+//
+// 為什麼在這裡（tail）而不是 app 端（head，management.tracing.sampling.probability）：
+// head 在請求「剛開始」就擲骰子，那時還不知道它會不會出錯、會不會慢，丟掉的 90% 裡錯誤和慢請求一樣被丟。
+// tail 等一個 trace 的 span 到齊、看完整棵樹才決定，所以能「錯的、慢的全留，其餘抽樣」。
+// 代價：每個 trace 要在 Alloy 記憶體裡等 decision_wait；所有 span 必須進同一個 Alloy（現在只有一個）。
+// 所以 app 端一律 100% 全送（application.properties），只在這裡丟。
+//
+// 本機和雲端用同一份，差在環境變數：本機不設，用下面 coalesce 的預設值；雲端由 infra/envs/1-ec2/compose.ops.yaml 給：
+//   TRACE_SAMPLING_PERCENT       一般請求留幾 %。本機 100（每筆都找得到）、雲端 10
+//   TRACE_SAMPLING_DECISION_WAIT 等多久才決定。本機 5s（打完請求很快就查得到）、雲端 125s（見下面）
+otelcol.processor.tail_sampling "default" {
+  // 從 trace 的第一個 span 到達開始算。span 是「結束時」才送出，根 span（整個 HTTP 請求）最後到；
+  // 等不夠久就決定的話，慢請求的根 span 還沒到，看起來不慢 → 被當一般請求抽掉。
+  // 所以雲端要比最慢的請求還久：叫模型的逾時是 2 分鐘（spring.ai.openai.chat.timeout），取 125s。
+  // 本機 100% 怎麼決定都是留，等短一點只是讓 trace 早點進 Tempo。
+  decision_wait = coalesce(sys.env("TRACE_SAMPLING_DECISION_WAIT"), "5s")
+
+  // 同時在記憶體裡等決定的 trace 上限，滿了最舊的先被迫決定。
+  // 雲端估算：每秒 50 個請求 × 等 125 秒 ≈ 6,250 個，留三倍餘裕。現在的流量遠低於此。
+  num_traces = 20000
+
+  // 決定之後還晚到的 span（例如等太久才結束的請求）：記住「這個 trace id 留過／丟過」，照同一個決定處理。
+  // 不記的話晚到的 span 會被當成新 trace 重新擲骰，Tempo 裡出現只有半截的 trace。
+  // 只存 trace id，很省，所以給得比 num_traces 大得多（官方文件的建議）。
+  decision_cache = {
+    sampled_cache_size     = 200000,
+    non_sampled_cache_size = 200000,
+  }
+
+  // 多條規則：任一條說「留」就留。
+  // (1) span 狀態是 ERROR：丟例外的請求、叫模型失敗之類
+  policy {
+    name = "errors"
+    type = "status_code"
+    status_code {
+      status_codes = ["ERROR"]
+    }
+  }
+
+  // (2) 回 5xx 的請求。不能只靠 (1)：Spring 的 HTTP span 回 500 時狀態是空的（UNSET），
+  //     只有 outcome 這個屬性記著 SERVER_ERROR（實測：連線池等不到連線的 500，status 是 {}）。
+  //     4xx（CLIENT_ERROR）不在這裡：未登入的 401、打錯的 404 是使用者的事，量大又不代表系統出問題。
+  policy {
+    name = "server-errors"
+    type = "string_attribute"
+    string_attribute {
+      key    = "outcome"
+      values = ["SERVER_ERROR"]
+    }
+  }
+
+  // (3) 慢的：整個 trace 超過 5 秒。
+  //     AI 助理一次正常約 2–3 秒（後面是 LLM），行程的增刪查是幾十毫秒；5 秒是助理正常值的兩倍，
+  //     行程 API 慢到這樣一定是出事。代價：行程 API 在 1–5 秒之間的「有點慢」只按比例留。
+  //     等 #34 定了 SLO，門檻改成跟 SLO 的延遲目標對齊。
+  policy {
+    name = "slow"
+    type = "latency"
+    latency {
+      threshold_ms = 5000
+    }
+  }
+
+  // (4) 其餘的按比例留。依 trace id 雜湊決定，同一個 trace 的 span 一定同進同出。
+  policy {
+    name = "baseline"
+    type = "probabilistic"
+    probabilistic {
+      // 環境變數是字串，sampling_percentage 要數字，用 JSON 解析轉成數字
+      sampling_percentage = encoding.from_json(coalesce(sys.env("TRACE_SAMPLING_PERCENT"), "100"))
+    }
+  }
+
+  output {
+    traces = [otelcol.processor.batch.default.input]
   }
 }
 

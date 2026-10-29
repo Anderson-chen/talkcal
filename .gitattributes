@@ -10,3 +10,6 @@ cd/envs/*.env text eol=lf
 backend/gradlew text eol=lf
 # Terraform 範本裡的 user_data：Terraform 在 Windows 上讀檔、原樣送到 EC2 給 bash 跑，CRLF 一樣會壞
 *.tftpl text eol=lf
+# .tf 也是：secrets.tf 的 heredoc 原樣寫進 SSM 的 .env，CRLF 讓每行多一個 \r，
+# deploy.sh 用 grep 取出的 DB 密碼就多一個字元，ALTER ROLE 設錯密碼、app 連不上資料庫
+*.tf text eol=lf
