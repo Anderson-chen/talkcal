@@ -6,7 +6,7 @@
 #   KEEP_SCRATCH=1 bash deploy/backup/pg-restore.sh <備份檔.dump> --verify-only   # 演練完留著暫存庫，只撈幾筆回來用
 #
 # 順序是「先證明備份是好的，才動線上」：
-#   1. 雜湊對得上（傳輸途中沒壞、沒被改）
+#   1. 雜湊對得上（複製、傳輸途中沒壞）。雜湊跟備份由同一個角色寫，防得了損壞、防不了蓄意竄改
 #   2. pg_restore 讀得出目錄
 #   3. 整份還原到暫存庫 <db>_restore 成功（後半截不見、資料違反約束，都在這裡失敗）
 #   4. 停 app → 線上庫改名成 <db>_before_<時間>（留著，不刪）→ 暫存庫改名成 <db> → 起 app
@@ -30,10 +30,11 @@ mode="${2:-}"
 case "$mode" in ""|--verify-only) ;; *) die "不認得的參數：$mode" ;; esac
 
 scratch="${PG_DB}_restore"
-psql_admin() { docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -q -X -U "$PG_USER" -d postgres "$@"; }
+psql_db() { local db=$1; shift; docker exec -i "$PG_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U "$PG_USER" -d "$db" "$@"; }
+psql_admin() { psql_db postgres -q "$@"; }
 row_counts() {
   # 每張表的筆數（精確的 count，不是統計估計值），兩邊並排給人看還原的是不是預期的那份
-  docker exec -i "$PG_CONTAINER" psql -X -At -U "$PG_USER" -d "$1" <<'SQL'
+  psql_db "$1" -At <<'SQL'
 SELECT format('%s=%s', table_name,
               (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', table_schema, table_name), false, true, '')))[1]::text)
 FROM information_schema.tables
@@ -81,6 +82,8 @@ if [ -n "$APP_CONTAINER" ] && [ "$(docker inspect -f '{{.State.Running}}' "$APP_
   docker stop "$APP_CONTAINER" > /dev/null
   restart_app=1
 fi
+# 第 4 步停掉的 app 要起回來：換上成功或失敗都要
+start_app() { if [ "${restart_app:-}" = 1 ]; then log "起 $APP_CONTAINER"; docker start "$APP_CONTAINER" > /dev/null; fi; }
 # 資料庫名稱沒加引號會被轉成小寫，所以時間格式只用數字和底線，印出來的跟實際的名稱一樣
 old="${PG_DB}_before_$(date -u +%Y%m%d_%H%M%S)"
 # 先不讓新的連線進來、再踢掉剩下的（psql、postgres_exporter 之類），改名才不會撞上「有人在用」。
@@ -96,13 +99,10 @@ COMMIT;
 SQL
 then
   psql_admin -c "ALTER DATABASE $PG_DB ALLOW_CONNECTIONS true"
-  [ "${restart_app:-}" = 1 ] && docker start "$APP_CONTAINER" > /dev/null
+  start_app
   die "換上失敗，已經復原成原本的 $PG_DB（暫存庫 $scratch 還在，可以再試一次）"
 fi
 log "換上完成。被換下來的是 $old（確認沒問題後再 DROP，指令見 runbook）"
 
-if [ "${restart_app:-}" = 1 ]; then
-  log "起 $APP_CONTAINER"
-  docker start "$APP_CONTAINER" > /dev/null
-fi
+start_app
 log "還原完成（$(( $(date +%s) - start )) 秒）"
