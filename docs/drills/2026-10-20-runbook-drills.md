@@ -85,4 +85,5 @@
 ## 附帶發現
 
 - **Watchdog 寄了一封 email**（20:05:15）：#175 的設計是 Watchdog 只走 `notification_settings` 送 heartbeat。之後每 30 秒都正常送 heartbeat（測試環境沒設網址，Grafana log 是送不出去的錯誤），沒有再寄 email；只有 Grafana 換上新設定、第一次評估那一次。看起來是規則剛建立時繞到了預設 policy。影響很小（換設定時多一封信），記給 #175。
+  - 後續（2026-10-30）：告警 CI 在「正常流量 0 封」那步也抓到同一封信。#175 改成在 `policies.yaml` 明寫一條子路由（`alert_type=watchdog` → heartbeat），不靠規則上的 `notification_settings`。
 - 資料庫停掉時，「有請求等不到資料庫連線」比「資料庫連不上」**早**一分鐘到：有流量時逾時馬上就發生，資料庫那條要撐滿 1 分鐘。兩條都寄是對的（一條說使用者受影響、一條說原因）。
