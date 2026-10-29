@@ -53,7 +53,7 @@ groups:
               type: threshold
               expression: A
               conditions:
-                - evaluator: { type: lt, params: [1] }
+                - evaluator: { type: lt, params: [0] }
         # 1 分鐘 = 連續 4 次抓不到（15 秒一次）。重啟一次 app 約 30 秒，不會被這條叫醒；真的掛了 1 分半內就寄信
         for: 1m
         # 查不到資料也算出事：Alloy 自己掛了、或 Mimir 收不到時 up 整條消失，這時一樣看不到 app，不能當沒事
