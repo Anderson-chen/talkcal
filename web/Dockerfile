@@ -7,17 +7,18 @@
 FROM node:22-alpine AS build
 WORKDIR /src
 
-# pnpm 不另外裝：Node 附的 corepack 照 package.json 的 packageManager 下載那一版（含 sha512 驗證），
-# 本機、CI、這裡用的都是同一版。不關掉提示的話，corepack 第一次下載前會停下來問 Y/n
+# pnpm 不另外裝，由 Node 附的 corepack 照 package.json 的 packageManager 下載（見 README.md 的「用 pnpm 不用 npm」）。
+# 不關掉提示的話，corepack 第一次下載前會停下來問 Y/n
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 
-# 先只放「決定依賴是什麼」的兩個檔案——只改 src/ 時這層快取不失效，不必每次重裝依賴。
+# 先只放「決定依賴是什麼」的檔案——只改 src/ 時這層快取不失效，不必每次重裝依賴。
 # --frozen-lockfile：嚴格照 pnpm-lock.yaml 裝，lock 跟 package.json 對不上就直接失敗，
 # 不會偷偷升級（TypeScript 釘在 5.9 的理由見 web/README.md）。
-# store 放 BuildKit 的快取：重 build 不必重新下載。pnpm 11 只認 pnpm_config_ 開頭的環境變數，npm_config_ 的它不看
-COPY package.json pnpm-lock.yaml ./
-RUN --mount=type=cache,target=/pnpm-store pnpm_config_store_dir=/pnpm-store pnpm install --frozen-lockfile
+# store 和 corepack 下載的 pnpm 本體都放 BuildKit 的快取：依賴改了重裝時不必重新下載
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,target=/pnpm-store --mount=type=cache,target=/root/.cache/node/corepack \
+    pnpm_config_store_dir=/pnpm-store pnpm install --frozen-lockfile
 
 COPY . .
 # build 會先跑 vue-tsc 型別檢查：型別錯就 build 失敗，壞的前端進不了映像檔

@@ -18,7 +18,7 @@
 #   Gradle  —— backend/gradle/wrapper/gradle-wrapper.properties（由 wrapper 自己下載，不另外寫版本）
 
 # Node 從官方映像檔整包搬過來，不在 Ubuntu 上另外裝：
-# 官方映像檔裡的 node、npm 就是 web/Dockerfile 打包時用的那一組，不必再信任第三方的套件來源
+# 官方映像檔裡的 node、corepack 就是 web/Dockerfile 打包時用的那一組，不必再信任第三方的套件來源
 FROM node:22-bookworm-slim AS node
 
 # 底用 JDK（不是 JRE）：CI 要編譯、跑測試。noble 是 Ubuntu 24.04，跟 app 映像檔同一個發行版
@@ -26,14 +26,15 @@ FROM eclipse-temurin:25-jdk-noble
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
-RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
-    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+# 只接 corepack，不接 npm、npx：容器裡的前端指令都走 pnpm（為什麼見 web/README.md 的「用 pnpm 不用 npm」）。
+# corepack enable 建出 pnpm 這個指令，實際用哪一版等下面讀到 package.json 才決定
+RUN ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
+    && corepack enable --install-directory /usr/local/bin
 
 # Gradle 的家目錄分兩半：
 #   wrapper/ —— Gradle 本體（約 140MB）。烤在映像檔裡
 #   caches/  —— 下載的 Java 函式庫。run.sh 只把這一個子目錄掛成 volume，蓋不到 wrapper/
-# pnpm_config_store_dir：pnpm 的 store（下載過的套件，各專案的 node_modules 從這裡硬連結過去）。
-#   pnpm 11 只認 pnpm_config_ 開頭的環境變數，寫成 npm_config_ 會被忽略、store 落在容器裡跟著刪掉
+# pnpm_config_store_dir：pnpm 的 store（下載過的套件），run.sh 掛 volume 上來。前綴不能寫成 npm_config_（見 web/README.md）
 ENV GRADLE_USER_HOME=/opt/gradle-home \
     pnpm_config_store_dir=/cache/pnpm-store
 
@@ -52,17 +53,17 @@ RUN ./gradlew --version --no-daemon
 # --with-deps：順便用 apt 裝 Chromium 需要的系統函式庫（字型、libnss 等），Ubuntu 基底映像檔裡沒有。
 # 瀏覽器放在固定位置、烤進映像檔：跟 Gradle 本體同一個道理，很少變，不必每次 CI 都下載
 #
-# pnpm 也在這一層備好：corepack 照 package.json 的 packageManager 下載那一版（含 sha512 驗證），
-# 放在 COREPACK_HOME 烤進映像檔，每次 CI 不必再下載 pnpm 本體；版本也只寫在 package.json 一個地方
+# pnpm 本體也在這一層下載（corepack install 讀 packageManager），烤在 COREPACK_HOME，每次 CI 不必再下載。
+# pnpm dlx 下載的 playwright 套件放暫時的 store、用完刪掉：預設的 store 位置會被 run.sh 的 volume 蓋住，留著只是占映像檔
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
     COREPACK_HOME=/opt/corepack \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 WORKDIR /opt/playwright
 COPY web/package.json ./
-RUN ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
-    && corepack enable --install-directory /usr/local/bin \
-    && corepack install \
-    && pnpm dlx "playwright@$(node -p "require('./package.json').devDependencies['@playwright/test']")" install --with-deps chromium
+RUN corepack install \
+    && pnpm_config_store_dir=/tmp/dlx-store \
+       pnpm dlx "playwright@$(node -p "require('./package.json').devDependencies['@playwright/test']")" install --with-deps chromium \
+    && rm -rf /tmp/dlx-store
 
 # 程式碼由 run.sh 用 git archive 複製到這裡（只有要測的那個 commit，沒有沒 commit 的檔案）
 WORKDIR /work
