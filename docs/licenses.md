@@ -2,7 +2,7 @@
 
 目的：用到的模型、套件、映像檔都可以合法這樣用；之後有人加了不能用的套件，CI 會擋下來（#53）。
 
-最後核對：2026-10-19
+最後核對：2026-10-30
 
 ## 結論
 
@@ -102,6 +102,60 @@ CI 的規則因此是：**前端、後端會打包的依賴都不能是 GPL、AG
 | `grafana/alloy` | 觀測：收集 | Apache-2.0 | |
 | `grafana/grafana`、`loki`、`tempo`、`mimir` | 觀測：儲存、看板 | **AGPL-3.0** | 原封不動自己用，沒改程式、沒提供給別人當服務，不觸發 AGPL。要改它們的程式碼、或開放給外部使用者時，要公開改過的原始碼 |
 | `aquasec/trivy` | CI 掃描 | Apache-2.0 | |
+
+## 其他程式與工具
+
+Java、JavaScript 套件以外，還有這些會被執行或跟著 repo 走的東西。都是「拿來用、沒有散布」或寬鬆授權，所以不放進 CI 的檢查，記在這裡：
+
+| 對象 | 授權 | 我們怎麼用 | 結論 |
+|---|---|---|---|
+| 映像檔裡的作業系統套件（apt、apk 裝的 curl、libgomp1、busybox…） | 大多是 GPL、LGPL | 跑在自己的機器上 | 不散布就沒有義務（見上一節）。目前沒有逐一列出的清單 |
+| llama.cpp 內附的 C／C++ 函式庫（`vendor/`：cpp-httplib、nlohmann/json、miniaudio、stb、subprocess.h、xxhash…） | MIT、BSD、Public Domain、Unlicense | 跟 llama.cpp 一起編進 llama-server | 都是寬鬆授權；映像檔要公開時跟 llama.cpp 的 LICENSE 一起附上 |
+| CUDA 函式庫 | NVIDIA EULA | llama-server 的 runtime | NVIDIA 允許隨應用程式散布 runtime 函式庫 |
+| Terraform CLI（2026-10-30 本機 v1.15.8） | **BUSL-1.1**（1.6 起從 MPL-2.0 改過來） | 管理自己的 AWS | 可以。BUSL 限制的是拿它做跟 HashiCorp 競爭的產品；不想受這個限制的替代品是 OpenTofu（MPL-2.0） |
+| Terraform provider（`hashicorp/aws`、`hashicorp/random`） | MPL-2.0 | 同上 | 可以 |
+| k6（`perf/` 壓測） | **AGPL-3.0** | 本機原封不動執行 | 可以。沒有修改、也沒有提供給別人當服務 |
+| squawk（`ci/migrations.sh`） | Apache-2.0 | CI 工具 | 可以 |
+| gitleaks（`ci/secrets.sh`） | MIT | CI 工具 | 可以 |
+| GitHub Actions（`actions/*`、`gradle/actions`） | MIT | CI | 可以 |
+| Docker Engine、AWS CLI（EC2 的 user data 安裝） | Apache-2.0 | EC2 上執行 | 可以 |
+| Google Fonts：Manrope、Noto Sans TC（`web/index.html`） | SIL OFL 1.1 | 從 Google 的 CDN 載入，沒有放進 repo | 可以。授權之外要注意的是隱私：使用者的 IP 會送到 Google（#52 的範圍） |
+| `backend/gradle/wrapper/gradle-wrapper.jar`（在 git 裡） | Apache-2.0 | 跟著 repo 散布 | 可以，Gradle 官方就是這樣發的 |
+
+## 授權會變：什麼時候要重新確認
+
+授權不是查一次就永遠成立，近年改過的不少，而且常常是從寬鬆改成有限制：
+
+- Terraform：2023 年 MPL-2.0 → BUSL-1.1（上表就是）
+- Grafana、Loki、Tempo：2021 年 Apache-2.0 → AGPL-3.0
+- Elasticsearch：2021 年 Apache-2.0 → SSPL／Elastic License，2024 年再加回 AGPL 選項
+- Redis：2024 年 BSD → RSAL／SSPL，2025 年再加回 AGPL 選項
+- 模型：同一家的不同版本、不同尺寸授權就可能不同（見 [Qwen3-8B](#qwen3-8b本機llamacpp)）
+
+要抓的是兩件事：**我們升到的新版本換了授權**，和**現在用的服務條款被改了**。
+
+| 對象 | 授權綁在哪裡 | 怎麼發現它變了 |
+|---|---|---|
+| Java、npm 套件 | 每一個版本各自宣告 | **自動**。升版一定會改 `build.gradle` 或 lockfile，CI 的 `checkLicense`、`ci/licenses.sh` 就會用新版本宣告的授權重新判斷；Dependabot 開的升版 PR 也一樣 |
+| 模型權重（Qwen3-8B） | 下載的那一份檔案 | 換模型、換尺寸、換量化來源時，照[模型](#模型)一節重看。原本那份檔案的授權不會因為上游改了而失效 |
+| Bedrock 上的模型 | AWS 的服務條款、model card 的 EULA 連結 | AWS 可以改條款，我們不會收到 PR。換模型時、以及每次核對（見下面）時重看 model card |
+| Docker 基底映像檔 | 版本 tag | 升大版本（換 tag）時重看上面的表；同一個 tag 重新 build 拿到的是修補，授權不會換 |
+| 工具（Terraform、k6、squawk、gitleaks…） | 安裝的那一版 | 升大版本時重看；改了授權通常會寫在 release note、專案公告 |
+
+### 如果哪一天 Spring 開始收費
+
+分成兩種情況，影響差很多：
+
+1. **新版本換成收費授權**：已經發布的版本收不回去。Apache-2.0 第 2 條給的授權是 “perpetual, worldwide, … irrevocable”，Spring Boot 4.1.1 拿到的授權永遠有效。新版本換授權的話，升版那個 PR 的 `checkLicense` 會紅燈（新的授權不在允許清單上），不會不知不覺換過去。
+2. **免費的維護期結束**：這個比較可能，而且**已經發生了**。[Spring 的支援政策](https://spring.io/support-policy)：每個小版本（例如 4.1.x）開源的免費修補至少 13 個月；之後的修補、以及「Day 0」安全修補，要買 Broadcom 的 Tanzu Spring 訂閱才拿得到。授權沒變，但停在舊版本就收不到漏洞修補了。
+
+對策：
+
+- **跟著升版，不要停在舊的小版本**：#48 的依賴升級負責這件事。停太久 `ci/vulns.sh` 會開始報修不了的漏洞，那就是提醒
+- **選有社群接手的東西**：前例都是社群 fork 出免費版本，例如 Oracle JDK 2019 年起商用要付費 → 我們用的是 Eclipse Temurin（OpenJDK，GPL-2.0+CE，免費）；Terraform 改 BUSL → OpenTofu；Redis 改授權 → Valkey
+- 真的發生時，選項依序是：升到還在免費維護期的版本 → 換社群版本 → 評估付費
+
+所以每一列都附了「看的時候是哪一版」，重看時才知道要比對什麼。沒有自動通知的那幾類，在升級時順手看，並把開頭的「最後核對」日期往前推；很久沒升級的話，**至少每半年**整份看一次（2027-04 前）。
 
 ## talkcal 本身的授權：MIT
 
