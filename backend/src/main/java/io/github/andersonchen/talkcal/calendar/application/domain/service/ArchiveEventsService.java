@@ -30,6 +30,8 @@ import java.util.stream.Collectors;
  *
  * 一次讀 batchSize 筆、搬完再讀下一批，直到沒有舊的了：資料再多記憶體也只放一批。
  * 有某包失敗就停：再讀一次只會又讀到同一批（它們還在資料庫裡），變成無窮迴圈。
+ * 對話那邊（app.job.AssistantMemoryArchive）是同一個迴圈、同一組停止條件，改一邊要對照另一邊：
+ * 兩邊在不同層（這裡是 core，對話不在 core），共用一個 helper 要讓 core 認識 app.job，所以各寫一份。
  */
 public final class ArchiveEventsService implements ArchiveEventsUseCase {
 

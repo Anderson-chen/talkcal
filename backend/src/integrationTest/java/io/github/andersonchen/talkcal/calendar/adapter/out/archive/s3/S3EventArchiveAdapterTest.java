@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.MonthRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 
@@ -77,7 +78,7 @@ class S3EventArchiveAdapterTest {
 
         archive.store(ALICE, MARCH, List.of(full, bare));
 
-        assertEquals(List.of(full, bare), archive.load(ALICE, MARCH, MARCH));
+        assertEquals(List.of(full, bare), archive.load(ALICE, new MonthRange(MARCH, MARCH)));
     }
 
     @Test
@@ -86,7 +87,7 @@ class S3EventArchiveAdapterTest {
         archive.store(ALICE, MARCH, List.of(event("開會", LocalDateTime.of(2024, 3, 20, 14, 0)),
                 event("晚餐", LocalDateTime.of(2024, 3, 21, 19, 0))));
 
-        List<String> keys = bucket.list(S3EventArchiveAdapter.ownerPrefix(ALICE));
+        List<String> keys = bucket.list(ArchiveBucket.ownerPrefix(S3EventArchiveAdapter.ROOT, ALICE));
         assertEquals(1, keys.size());
         assertTrue(keys.getFirst().startsWith("calendar-event/owner=" + ALICE + "/month=2024-03/"), keys.getFirst());
         assertTrue(keys.getFirst().endsWith(".jsonl.gz"), keys.getFirst());
@@ -110,12 +111,12 @@ class S3EventArchiveAdapterTest {
         archive.store(ALICE, MARCH, List.of(alices));
         archive.store(BOB, MARCH, List.of(bobs));
 
-        assertEquals(List.of(alices), archive.load(ALICE, MARCH, MARCH));
-        assertEquals(List.of(bobs), archive.load(BOB, MARCH, MARCH));
+        assertEquals(List.of(alices), archive.load(ALICE, new MonthRange(MARCH, MARCH)));
+        assertEquals(List.of(bobs), archive.load(BOB, new MonthRange(MARCH, MARCH)));
 
         assertEquals(1, archive.deleteAll(ALICE));
-        assertTrue(archive.load(ALICE, MARCH, MARCH).isEmpty());
-        assertEquals(List.of(bobs), archive.load(BOB, MARCH, MARCH));
+        assertTrue(archive.load(ALICE, new MonthRange(MARCH, MARCH)).isEmpty());
+        assertEquals(List.of(bobs), archive.load(BOB, new MonthRange(MARCH, MARCH)));
     }
 
     @Test
@@ -128,8 +129,8 @@ class S3EventArchiveAdapterTest {
         archive.store(ALICE, MARCH, List.of(mar));
         archive.store(ALICE, YearMonth.of(2024, 4), List.of(apr));
 
-        assertEquals(List.of(mar), archive.load(ALICE, MARCH, MARCH));
-        assertEquals(List.of(feb, mar), archive.load(ALICE, YearMonth.of(2024, 2), MARCH));
+        assertEquals(List.of(mar), archive.load(ALICE, new MonthRange(MARCH, MARCH)));
+        assertEquals(List.of(feb, mar), archive.load(ALICE, new MonthRange(YearMonth.of(2024, 2), MARCH)));
     }
 
     @Test
@@ -142,7 +143,7 @@ class S3EventArchiveAdapterTest {
         new S3EventArchiveAdapter(bucket, Clock.fixed(Instant.parse("2026-01-02T00:00:00Z"), ZoneOffset.UTC))
                 .store(ALICE, MARCH, List.of(edited));
 
-        assertEquals(List.of(edited), archive.load(ALICE, MARCH, MARCH));
+        assertEquals(List.of(edited), archive.load(ALICE, new MonthRange(MARCH, MARCH)));
     }
 
     @Test
@@ -160,15 +161,15 @@ class S3EventArchiveAdapterTest {
     @Test
     @DisplayName("歸檔壞掉（不是 gzip、或內容不合行程的規則）：讀的時候丟例外，不會把壞資料放回行事曆")
     void corruptArchiveIsRejected() throws IOException {
-        String prefix = S3EventArchiveAdapter.ownerPrefix(ALICE) + "month=2024-03/";
+        String prefix = ArchiveBucket.ownerPrefix(S3EventArchiveAdapter.ROOT, ALICE) + "month=2024-03/";
         bucket.put(prefix + "broken.jsonl.gz", "not gzip".getBytes(StandardCharsets.UTF_8));
-        assertThrows(IllegalStateException.class, () -> archive.load(ALICE, MARCH, MARCH));
+        assertThrows(IllegalStateException.class, () -> archive.load(ALICE, new MonthRange(MARCH, MARCH)));
 
         bucket.deleteAll(prefix);
         String endBeforeStart = "{\"v\":1,\"id\":\"" + UUID.randomUUID() + "\",\"title\":\"倒著走\","
                 + "\"start\":\"2024-03-01T10:00:00\",\"end\":\"2024-03-01T09:00:00\",\"category\":\"WORK\"}";
         bucket.put(prefix + "invalid.jsonl.gz", gzip(endBeforeStart));
-        assertThrows(IllegalStateException.class, () -> archive.load(ALICE, MARCH, MARCH));
+        assertThrows(IllegalStateException.class, () -> archive.load(ALICE, new MonthRange(MARCH, MARCH)));
     }
 
     private static byte[] gzip(String text) throws IOException {

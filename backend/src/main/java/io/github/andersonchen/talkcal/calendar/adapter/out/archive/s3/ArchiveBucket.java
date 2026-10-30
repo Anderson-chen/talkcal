@@ -1,5 +1,8 @@
 package io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3;
 
+import io.github.andersonchen.talkcal.calendar.application.domain.model.MonthRange;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
+
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
@@ -13,6 +16,8 @@ import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
 import java.net.URI;
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Objects;
 
@@ -24,6 +29,11 @@ import java.util.Objects;
  *
  * 不叫 Adapter：它不實作 core 的 port，是這一包的零件 —— 行程（S3EventArchiveAdapter）和
  * AI 助理的對話（app.job.AssistantMemoryArchive）共用同一個 bucket、同一套讀寫。
+ *
+ * key 的排法也只在這裡：&lt;root&gt;owner=&lt;擁有者&gt;/month=&lt;yyyy-MM&gt;/&lt;檔名&gt;（root 是 calendar-event/、assistant-conversation/）。
+ * - 擁有者在最前面：一個人的全部歸檔就是一個前綴，還原只列自己的前綴、刪帳號（#52）整個前綴刪掉，列不到、也刪不到別人的
+ * - owner=、month= 是 Hive 的分區慣例：哪天要用 Athena 直接查歸檔，不必搬資料就能依人、依月份過濾
+ * 行程和對話共用這一套，刪帳號時兩邊的前綴長一樣，不會有一邊漏刪。
  *
  * 上傳成功的意思：PutObject 回 200 才算數，而 SDK v2 預設每次上傳都帶 CRC32 checksum、由服務端驗過才收，
  * 傳到一半斷掉、內容傳壞了都會是例外，不會是「看起來成功」。呼叫端只在 put 正常回傳之後才刪資料庫。
@@ -86,6 +96,39 @@ public final class ArchiveBucket {
                     .toList();
         } catch (SdkException e) {
             throw new IllegalStateException("歸檔列出失敗：s3://" + bucket + "/" + prefix, e);
+        }
+    }
+
+    public static String ownerPrefix(String root, OwnerId owner) {
+        return root + "owner=" + owner.value() + "/";
+    }
+
+    public static String monthPrefix(String root, OwnerId owner, YearMonth month) {
+        return ownerPrefix(root, owner) + "month=" + month + "/";
+    }
+
+    /**
+     * owner 在 months 這幾個月的全部 key，依字典順序（= 月份、再依檔名）。
+     * 列一次這個人的前綴、再依 key 裡的月份挑，不是一個月列一次：24 個月就是 1 次而不是 24 次 LIST。
+     * 一個人一個月通常只有一兩包，整個前綴列出來也不多。
+     */
+    public List<String> keys(String root, OwnerId owner, MonthRange months) {
+        String prefix = ownerPrefix(root, owner);
+        return list(prefix).stream()
+                .filter(key -> months.contains(monthOf(key, prefix)))
+                .toList();
+    }
+
+    // key 裡 month= 那一段；不是這個排法的 key（例如有人手動放了別的檔案）當成範圍外，不讀
+    private static YearMonth monthOf(String key, String ownerPrefix) {
+        String rest = key.substring(ownerPrefix.length());
+        if (!rest.startsWith("month=") || rest.indexOf('/') < 0) {
+            return YearMonth.of(0, 1);
+        }
+        try {
+            return YearMonth.parse(rest.substring("month=".length(), rest.indexOf('/')));
+        } catch (DateTimeParseException e) {
+            return YearMonth.of(0, 1);
         }
     }
 

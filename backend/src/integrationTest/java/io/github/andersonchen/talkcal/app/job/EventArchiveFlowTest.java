@@ -11,6 +11,7 @@ import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.MonthRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ArchiveEventsService;
@@ -117,7 +118,7 @@ class EventArchiveFlowTest {
 
         assertEquals(new ArchiveEventsUseCase.Report(1, 0), report);
         assertEquals(List.of(onTheLine, yesterday), online(ALICE));
-        assertEquals(List.of(old), archive.load(ALICE, YearMonth.of(2023, 5), YearMonth.of(2023, 5)));
+        assertEquals(List.of(old), archive.load(ALICE, new MonthRange(YearMonth.of(2023, 5), YearMonth.of(2023, 5))));
     }
 
     @Test
@@ -151,8 +152,8 @@ class EventArchiveFlowTest {
             }
 
             @Override
-            public List<ScheduledEvent> load(OwnerId owner, YearMonth from, YearMonth to) {
-                return archive.load(owner, from, to);
+            public List<ScheduledEvent> load(OwnerId owner, MonthRange months) {
+                return archive.load(owner, months);
             }
 
             @Override
@@ -166,7 +167,7 @@ class EventArchiveFlowTest {
         assertEquals(new ArchiveEventsUseCase.Report(1, 1), report);
         assertTrue(online(ALICE).isEmpty());
         assertEquals(List.of(bobs), online(BOB));
-        assertTrue(archive.load(BOB, YearMonth.of(2023, 5), YearMonth.of(2023, 5)).isEmpty());
+        assertTrue(archive.load(BOB, new MonthRange(YearMonth.of(2023, 5), YearMonth.of(2023, 5))).isEmpty());
     }
 
     @Test
@@ -182,10 +183,10 @@ class EventArchiveFlowTest {
         assertTrue(online(ALICE).isEmpty());
 
         RestoreEventsService restore = new RestoreEventsService(archive, events);
-        assertEquals(2, restore.restore(ALICE, YearMonth.of(2023, 5), YearMonth.of(2023, 6)));
+        assertEquals(2, restore.restore(ALICE, new MonthRange(YearMonth.of(2023, 5), YearMonth.of(2023, 6))));
         assertEquals(before, online(ALICE));
 
-        assertEquals(0, restore.restore(ALICE, YearMonth.of(2023, 5), YearMonth.of(2023, 6)));
+        assertEquals(0, restore.restore(ALICE, new MonthRange(YearMonth.of(2023, 5), YearMonth.of(2023, 6))));
         assertEquals(before, online(ALICE));
     }
 
@@ -199,11 +200,11 @@ class EventArchiveFlowTest {
         archiving(archive).archiveEndedBefore(CUTOFF);
         RestoreEventsService restore = new RestoreEventsService(archive, events);
 
-        assertEquals(1, restore.restore(BOB, YearMonth.of(2023, 5), YearMonth.of(2023, 5)));
+        assertEquals(1, restore.restore(BOB, new MonthRange(YearMonth.of(2023, 5), YearMonth.of(2023, 5))));
         assertEquals(List.of(bobs), online(BOB));
         assertTrue(online(ALICE).isEmpty());
 
-        assertEquals(1, restore.restore(ALICE, YearMonth.of(2023, 5), YearMonth.of(2023, 5)));
+        assertEquals(1, restore.restore(ALICE, new MonthRange(YearMonth.of(2023, 5), YearMonth.of(2023, 5))));
         assertEquals(List.of(alices), online(ALICE));
         assertEquals(List.of(bobs), online(BOB));
     }
@@ -220,7 +221,7 @@ class EventArchiveFlowTest {
 
         assertEquals(new ArchiveEventsUseCase.Report(7, 0), report);
         assertTrue(online(ALICE).isEmpty());
-        assertEquals(many, archive.load(ALICE, YearMonth.of(2023, 1), YearMonth.of(2023, 7)));
+        assertEquals(many, archive.load(ALICE, new MonthRange(YearMonth.of(2023, 1), YearMonth.of(2023, 7))));
     }
 
     @Test
@@ -237,12 +238,13 @@ class EventArchiveFlowTest {
     }
 
     @Test
-    @DisplayName("還原的範圍：from 晚於 to、超過 24 個月都不收")
-    void restoreRangeIsValidated() {
+    @DisplayName("還原沒給擁有者或月份範圍：不收（範圍本身的規則在 MonthRangeTest）")
+    void restoreArgumentsAreRequired() {
         RestoreEventsService restore = new RestoreEventsService(archive, events);
+        MonthRange march = new MonthRange(YearMonth.of(2024, 3), YearMonth.of(2024, 3));
 
-        assertThrows(IllegalArgumentException.class, () -> restore.restore(ALICE, YearMonth.of(2024, 2), YearMonth.of(2024, 1)));
-        assertThrows(IllegalArgumentException.class, () -> restore.restore(ALICE, YearMonth.of(2022, 1), YearMonth.of(2024, 1)));
-        assertEquals(0, restore.restore(ALICE, YearMonth.of(2022, 2), YearMonth.of(2024, 1)));
+        assertThrows(IllegalArgumentException.class, () -> restore.restore(null, march));
+        assertThrows(IllegalArgumentException.class, () -> restore.restore(ALICE, null));
+        assertEquals(0, restore.restore(ALICE, march));
     }
 }

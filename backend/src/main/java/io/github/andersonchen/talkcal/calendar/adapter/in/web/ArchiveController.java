@@ -1,5 +1,6 @@
 package io.github.andersonchen.talkcal.calendar.adapter.in.web;
 
+import io.github.andersonchen.talkcal.calendar.application.domain.model.MonthRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.port.in.RestoreEventsUseCase;
 
@@ -64,18 +65,19 @@ public final class ArchiveController {
             @Parameter(description = "結束月份（含）", example = "2024-06")
             @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth to) {
         OwnerId owner = SignedIn.owner(signedIn);
-        // 行程先：範圍的檢查（from 不晚於 to、最多幾個月）在 RestoreEventsService，不合規在這裡就 400，對話不會先被放回去
-        int events = restoreEvents.restore(owner, from, to);
-        int conversations = restoreConversations.restore(owner, from, to);
+        // 範圍不合規（from 晚於 to、超過 24 個月）在這一行就是 IllegalArgumentException → 400，兩邊都還沒動
+        MonthRange months = new MonthRange(from, to);
+        int events = restoreEvents.restore(owner, months);
+        int conversations = restoreConversations.restore(owner, months);
         log.info("從歸檔還原 {} ~ {}：行程 {} 筆、對話 {} 段", from, to, events, conversations);
         return new Restored(events, conversations);
     }
 
-    /** 把 owner 某幾個月（含兩端）的 AI 助理對話放回來，回傳放回幾段。組裝根接上實作。 */
+    /** 把 owner 某幾個月（兩端都含）的 AI 助理對話放回來，回傳放回幾段。組裝根接上實作。 */
     @FunctionalInterface
     public interface RestoreConversations {
 
-        int restore(OwnerId owner, YearMonth from, YearMonth to);
+        int restore(OwnerId owner, MonthRange months);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

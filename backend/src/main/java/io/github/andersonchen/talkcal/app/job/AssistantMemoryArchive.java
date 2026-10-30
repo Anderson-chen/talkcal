@@ -6,6 +6,7 @@ import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository.StoredConversation;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository.StoredMessage;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantProposalAdapter;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.MonthRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 
 import org.slf4j.Logger;
@@ -16,10 +17,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.YearMonth;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -108,7 +106,8 @@ public final class AssistantMemoryArchive {
                 }
             }
             archived += deletedThisBatch;
-            // 不滿一批 = 舊的讀完了；有失敗、或一段都沒刪到 = 再讀一次也是同一批，停下來免得繞不完
+            // 不滿一批 = 舊的讀完了；有失敗、或一段都沒刪到 = 再讀一次也是同一批，停下來免得繞不完。
+            // 跟行程的 ArchiveEventsService 同一組停止條件，改一邊要對照另一邊
             if (batch.size() < BATCH || failed > 0 || deletedThisBatch == 0) {
                 return new Report(archived, failed);
             }
@@ -116,20 +115,17 @@ public final class AssistantMemoryArchive {
     }
 
     /**
-     * 把 owner 最後說話在 from 到 to（含兩端）這幾個月的對話放回資料庫，回傳放回幾段。
+     * 把 owner 最後說話在 months 這幾個月（兩端都含）的對話放回資料庫，回傳放回幾段。
      * 已經在資料庫裡的同一段跳過（不拿舊的蓋掉新的）。放回去的對話時間還是舊的，下次排程會再歸檔一次。
-     * 範圍的檢查（from 不晚於 to、最多幾個月）在 inbound 那一側跟行程的還原一起做。
+     * 範圍合不合規由 MonthRange 建構時檢查。
      */
-    public int restore(OwnerId owner, YearMonth from, YearMonth to) {
+    public int restore(OwnerId owner, MonthRange months) {
         int restored = 0;
-        for (YearMonth month = from; !month.isAfter(to); month = month.plusMonths(1)) {
-            for (String key : bucket.list(monthPrefix(owner, month))) {
-                List<MessageLine> lines = JsonLinesGzip.decode(bucket.get(key), MessageLine.class);
-                for (StoredConversation conversation : MessageLine.toConversations(owner, lines, key)) {
-                    if (memory.restore(conversation)) {
-                        restored++;
-                    }
-                }
+        for (String key : bucket.keys(ROOT, owner, months)) {
+            StoredConversation conversation =
+                    MessageLine.toConversation(owner, JsonLinesGzip.decode(bucket.get(key), MessageLine.class), key);
+            if (memory.restore(conversation)) {
+                restored++;
             }
         }
         return restored;
@@ -137,25 +133,17 @@ public final class AssistantMemoryArchive {
 
     /** 刪掉 owner 在歸檔裡的全部對話，回傳刪了幾包。給刪除帳號（#52）用，歸檔不能變成刪不掉的備份。 */
     public int deleteAll(OwnerId owner) {
-        return bucket.deleteAll(ownerPrefix(owner));
+        return bucket.deleteAll(ArchiveBucket.ownerPrefix(ROOT, owner));
     }
 
     /**
      * key：assistant-conversation/owner=&lt;擁有者&gt;/month=&lt;最後說話的月份&gt;/&lt;conversation_id&gt;.jsonl.gz
      * 一段對話一包、key 固定：重傳只會蓋成同樣的內容，不會多出重複的。月份用 calendar.zone 的時區算（使用者看到的那個月）。
-     * 跟行程（S3EventArchiveAdapter）同一套排法：擁有者在最前面，一個人的歸檔就是一個前綴。
+     * 前面的排法跟行程（S3EventArchiveAdapter）共用，在 ArchiveBucket。
      */
     private String key(StoredConversation conversation) {
         YearMonth month = YearMonth.from(conversation.lastActive().atZone(clock.getZone()));
-        return monthPrefix(conversation.owner(), month) + conversation.conversationId() + ".jsonl.gz";
-    }
-
-    private static String ownerPrefix(OwnerId owner) {
-        return ROOT + "owner=" + owner.value() + "/";
-    }
-
-    private static String monthPrefix(OwnerId owner, YearMonth month) {
-        return ownerPrefix(owner) + "month=" + month + "/";
+        return ArchiveBucket.monthPrefix(ROOT, conversation.owner(), month) + conversation.conversationId() + ".jsonl.gz";
     }
 
     /**
@@ -181,19 +169,20 @@ public final class AssistantMemoryArchive {
                     .toList();
         }
 
-        static List<StoredConversation> toConversations(OwnerId owner, List<MessageLine> lines, String key) {
-            Map<UUID, List<MessageLine>> byConversation = new LinkedHashMap<>();
+        // 一包就是一段對話（key 是 conversation_id），所以直接組回一段，不必再分組
+        static StoredConversation toConversation(OwnerId owner, List<MessageLine> lines, String key) {
+            if (lines.isEmpty()) {
+                throw new IllegalStateException("歸檔是空的：" + key);
+            }
             for (MessageLine line : lines) {
                 if (line.v() != VERSION) {
                     throw new IllegalStateException("不認得的歸檔格式版本 " + line.v() + "：" + key);
                 }
-                byConversation.computeIfAbsent(line.conversationId(), id -> new ArrayList<>()).add(line);
             }
-            return byConversation.values().stream()
-                    .map(ls -> new StoredConversation(owner, ls.getFirst().conversationId(), ls.getFirst().lastActive(),
-                            ls.stream().map(l -> new StoredMessage(l.position(), l.type(), l.content(),
-                                    l.toolCalls(), l.toolResponses(), l.createdAt())).toList()))
-                    .toList();
+            MessageLine first = lines.getFirst();
+            return new StoredConversation(owner, first.conversationId(), first.lastActive(),
+                    lines.stream().map(l -> new StoredMessage(l.position(), l.type(), l.content(),
+                            l.toolCalls(), l.toolResponses(), l.createdAt())).toList());
         }
     }
 }

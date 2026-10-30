@@ -1,13 +1,12 @@
 package io.github.andersonchen.talkcal.calendar.application.domain.service;
 
+import io.github.andersonchen.talkcal.calendar.application.domain.model.MonthRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.RestoreEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.out.EventArchivePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.RestoreEventsPort;
 
-import java.time.YearMonth;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Objects;
 
@@ -28,20 +27,14 @@ public final class RestoreEventsService implements RestoreEventsUseCase {
     }
 
     @Override
-    public int restore(OwnerId owner, YearMonth from, YearMonth to) {
+    public int restore(OwnerId owner, MonthRange months) {
         if (owner == null) {
             throw new IllegalArgumentException("擁有者不可為 null");
         }
-        if (from == null || to == null) {
-            throw new IllegalArgumentException("還原的起訖月份不可為 null");
+        if (months == null) {
+            throw new IllegalArgumentException("還原的月份範圍不可為 null");
         }
-        if (from.isAfter(to)) {
-            throw new IllegalArgumentException("還原的起始月份（" + from + "）不可晚於結束月份（" + to + "）");
-        }
-        if (ChronoUnit.MONTHS.between(from, to) + 1 > MAX_MONTHS) {
-            throw new IllegalArgumentException("一次最多還原 " + MAX_MONTHS + " 個月：" + from + " ~ " + to);
-        }
-        List<ScheduledEvent> events = archive.load(owner, from, to);
+        List<ScheduledEvent> events = archive.load(owner, months);
         return events.isEmpty() ? 0 : restoreEvents.restore(owner, events);
     }
 }

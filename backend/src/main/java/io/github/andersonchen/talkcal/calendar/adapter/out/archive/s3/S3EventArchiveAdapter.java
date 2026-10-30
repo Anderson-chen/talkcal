@@ -3,6 +3,7 @@ package io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.MonthRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.out.EventArchivePort;
@@ -23,9 +24,7 @@ import java.util.UUID;
  * 行程的歸檔放在 S3 相容的物件儲存（#54）。
  *
  * key 長這樣：calendar-event/owner=&lt;擁有者&gt;/month=&lt;結束的月份&gt;/&lt;存的時間&gt;-&lt;亂數&gt;.jsonl.gz
- * - 擁有者在最前面：一個人的全部歸檔就是一個前綴，還原只列自己的前綴、刪帳號（#52）整個前綴刪掉，
- *   列不到、也刪不到別人的
- * - owner=、month= 的寫法是 Hive 的分區慣例：哪天要用 Athena 直接查歸檔，不必搬資料就能依人、依月份過濾
+ * （前面的排法和理由在 ArchiveBucket，跟對話共用）
  * - 檔名帶存的時間：同一個月每天的排程各一包，不會互相蓋掉；照字典順序列出來就是時間順序，
  *   同一筆行程出現好幾次時，後存的那份（比較新）蓋掉先存的
  * - 再加亂數：多台機器同一秒都在跑排程，也不會撞到同一個 key 互相蓋掉
@@ -46,21 +45,19 @@ public final class S3EventArchiveAdapter implements EventArchivePort {
 
     @Override
     public void store(OwnerId owner, YearMonth month, List<ScheduledEvent> events) {
-        String key = monthPrefix(owner, month)
+        String key = ArchiveBucket.monthPrefix(ROOT, owner, month)
                 + LocalDateTime.now(clock.withZone(ZoneOffset.UTC)).format(STORED_AT)
                 + "-" + UUID.randomUUID().toString().substring(0, 8) + ".jsonl.gz";
         bucket.put(key, JsonLinesGzip.encode(events.stream().map(EventLine::of).toList()));
     }
 
     @Override
-    public List<ScheduledEvent> load(OwnerId owner, YearMonth from, YearMonth to) {
-        // 依 id 收：同一筆出現好幾次只留一筆（key 依時間排，後讀到的比較新）
+    public List<ScheduledEvent> load(OwnerId owner, MonthRange months) {
+        // 依 id 收：同一筆出現好幾次只留一筆（同一個月的 key 依存的時間排，後讀到的比較新）
         Map<UUID, ScheduledEvent> events = new LinkedHashMap<>();
-        for (YearMonth month = from; !month.isAfter(to); month = month.plusMonths(1)) {
-            for (String key : bucket.list(monthPrefix(owner, month))) {
-                for (EventLine line : JsonLinesGzip.decode(bucket.get(key), EventLine.class)) {
-                    events.put(line.id(), line.toScheduledEvent(key));
-                }
+        for (String key : bucket.keys(ROOT, owner, months)) {
+            for (EventLine line : JsonLinesGzip.decode(bucket.get(key), EventLine.class)) {
+                events.put(line.id(), line.toScheduledEvent(key));
             }
         }
         return List.copyOf(events.values());
@@ -68,15 +65,7 @@ public final class S3EventArchiveAdapter implements EventArchivePort {
 
     @Override
     public int deleteAll(OwnerId owner) {
-        return bucket.deleteAll(ownerPrefix(owner));
-    }
-
-    static String ownerPrefix(OwnerId owner) {
-        return ROOT + "owner=" + owner.value() + "/";
-    }
-
-    private static String monthPrefix(OwnerId owner, YearMonth month) {
-        return ownerPrefix(owner) + "month=" + month + "/";
+        return bucket.deleteAll(ArchiveBucket.ownerPrefix(ROOT, owner));
     }
 
     /**

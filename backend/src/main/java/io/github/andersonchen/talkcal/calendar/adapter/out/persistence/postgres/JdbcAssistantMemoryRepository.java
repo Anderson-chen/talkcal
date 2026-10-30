@@ -23,9 +23,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -105,18 +103,19 @@ public final class JdbcAssistantMemoryRepository {
         } catch (DataAccessException e) {
             throw new IllegalStateException("讀取要歸檔的對話失敗", e);
         }
-        // 一列一則訊息 → 一段對話一個物件。SQL 已經依對話排好，同一段的訊息是連在一起的
-        Map<List<Object>, List<StoredMessage>> messages = new LinkedHashMap<>();
-        Map<List<Object>, StoredRow> firstRow = new LinkedHashMap<>();
-        for (StoredRow row : rows) {
-            List<Object> key = List.of(row.owner(), row.conversationId());
-            firstRow.putIfAbsent(key, row);
-            messages.computeIfAbsent(key, k -> new ArrayList<>()).add(row.message());
+        // 一列一則訊息 → 一段對話一個物件。SQL 已經依對話排好，同一段的訊息連在一起：換了對話就收起前一段
+        List<StoredConversation> conversations = new ArrayList<>();
+        List<StoredMessage> messages = new ArrayList<>();
+        for (int i = 0; i < rows.size(); i++) {
+            StoredRow row = rows.get(i);
+            messages.add(row.message());
+            boolean last = i == rows.size() - 1 || !rows.get(i + 1).sameConversation(row);
+            if (last) {
+                conversations.add(new StoredConversation(row.owner(), row.conversationId(), row.lastActive(), List.copyOf(messages)));
+                messages.clear();
+            }
         }
-        return firstRow.entrySet().stream()
-                .map(e -> new StoredConversation(e.getValue().owner(), e.getValue().conversationId(),
-                        e.getValue().lastActive(), List.copyOf(messages.get(e.getKey()))))
-                .toList();
+        return conversations;
     }
 
     /**
@@ -197,6 +196,10 @@ public final class JdbcAssistantMemoryRepository {
     }
 
     private record StoredRow(OwnerId owner, UUID conversationId, Instant lastActive, StoredMessage message) {
+
+        boolean sameConversation(StoredRow other) {
+            return owner.equals(other.owner) && conversationId.equals(other.conversationId);
+        }
     }
 
     private final class OwnedMemory implements ChatMemoryRepository {

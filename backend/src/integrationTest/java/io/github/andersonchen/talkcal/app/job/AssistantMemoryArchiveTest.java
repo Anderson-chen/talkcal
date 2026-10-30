@@ -7,6 +7,7 @@ import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.ArchiveBuc
 import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.RustFsContainer;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantProposalAdapter;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.MonthRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 
 import java.time.Clock;
@@ -129,10 +130,10 @@ class AssistantMemoryArchiveTest {
         assertEquals(List.of("assistant-conversation/owner=" + ALICE + "/month=2026-03/" + id + ".jsonl.gz"),
                 bucket.list("assistant-conversation/owner=" + ALICE + "/"));
 
-        assertEquals(1, archive.restore(ALICE, YearMonth.of(2026, 3), YearMonth.of(2026, 3)));
+        assertEquals(1, archive.restore(ALICE, new MonthRange(YearMonth.of(2026, 3), YearMonth.of(2026, 3))));
         assertEquals(before.toString(), alices.findByConversationId(id).toString());
         // 再還原一次：已經在了，跳過
-        assertEquals(0, archive.restore(ALICE, YearMonth.of(2026, 3), YearMonth.of(2026, 3)));
+        assertEquals(0, archive.restore(ALICE, new MonthRange(YearMonth.of(2026, 3), YearMonth.of(2026, 3))));
         assertEquals(4, alices.findByConversationId(id).size());
     }
 
@@ -157,7 +158,7 @@ class AssistantMemoryArchiveTest {
         lastSpokeAt(BOB, id, MARCH_2026);
         assertEquals(new AssistantMemoryArchive.Report(2, 0), archive.archiveInactiveSince(cutoff()));
 
-        assertEquals(1, archive.restore(BOB, YearMonth.of(2026, 3), YearMonth.of(2026, 3)));
+        assertEquals(1, archive.restore(BOB, new MonthRange(YearMonth.of(2026, 3), YearMonth.of(2026, 3))));
         assertEquals("Bob 的", memory.of(BOB).findByConversationId(id).getFirst().getText());
         assertTrue(memory.of(ALICE).findByConversationId(id).isEmpty());
     }
@@ -173,8 +174,8 @@ class AssistantMemoryArchiveTest {
 
         assertEquals(1, archive.deleteAll(ALICE));
 
-        assertEquals(0, archive.restore(ALICE, YearMonth.of(2026, 3), YearMonth.of(2026, 3)));
-        assertEquals(1, archive.restore(BOB, YearMonth.of(2026, 3), YearMonth.of(2026, 3)));
+        assertEquals(0, archive.restore(ALICE, new MonthRange(YearMonth.of(2026, 3), YearMonth.of(2026, 3))));
+        assertEquals(1, archive.restore(BOB, new MonthRange(YearMonth.of(2026, 3), YearMonth.of(2026, 3))));
     }
 
     @Test
