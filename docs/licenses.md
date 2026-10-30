@@ -12,7 +12,7 @@
 | Qwen3-8B（本機 llama.cpp 用的 GGUF） | Apache-2.0 | 可 | 可，要附授權全文、保留聲明、標出改了什麼 | 沒有：模型檔不進 git，只在自己的機器和私有 S3 |
 | Qwen3 32B（雲端 Bedrock，`qwen.qwen3-32b`） | Apache-2.0＋AWS 的服務條款 | 可 | 不適用：我們只呼叫 API，拿不到權重 | 沒有 |
 | llama.cpp（`b10964`） | MIT | 可 | 可，附授權聲明 | 沒有：映像檔自己 build、不推到任何 registry |
-| 後端 Java 依賴（runtimeClasspath 204 個） | Apache-2.0 183 個，其餘 MIT、BSD、EPL、Public Domain | 可 | 可 | 沒有：jar 只跑在自己的機器上 |
+| 後端 Java 依賴（runtimeClasspath 222 個，2026-10-30） | Apache-2.0 203 個，其餘 MIT、BSD、EPL、Public Domain（CC0） | 可 | 可 | 沒有：jar 只跑在自己的機器上 |
 | 前端打包進去的套件（vue 和它的依賴） | MIT、BSD、ISC | 可 | 可，要附版權和授權聲明 | **有**：js 送到每個使用者的瀏覽器，所以 build 會附上 `licenses.txt` |
 | Docker 基底映像檔 | 見[映像檔](#docker-映像檔) | 可 | — | 沒有 |
 
@@ -80,7 +80,7 @@ CI 的規則因此是：**前端、後端會打包的依賴都不能是 GPL、AG
 - 什麼時候跑：`ci/checks.sh`（CI 映像檔裡有 Trivy 的執行檔）
 - 散布時附聲明：`vite build` 的 `build.license` 產出 `dist/licenses.txt`，列出實際打包進去的套件（tree-shaking 之後只剩 4 個 `@vue/*`）的授權全文，跟網站一起送出去，網址 `/licenses.txt`
 
-為什麼不直接掃 lockfile：npm 的 `package-lock.json` 有記每個套件的授權，Trivy 讀得到；但 pnpm 的 `pnpm-lock.yaml` 沒有記。2026-10-19 拿 #157（換成 pnpm）的 lockfile 實測，Trivy 找到 24 個套件、授權一個都沒有，**檢查會靜靜地通過**。讀裝好的 node_modules 兩種都行，所以 `ci/licenses.sh` 看 `web/` 裡是哪一種 lockfile 決定用 `npm ci --omit=dev` 還是 `pnpm install --prod`，#157 合併前後都能跑。
+為什麼不直接掃 lockfile：npm 的 `package-lock.json` 有記每個套件的授權，Trivy 讀得到；但前端換成 pnpm（#157）之後的 `pnpm-lock.yaml` 沒有記。2026-10-19 實測，Trivy 找到 24 個套件、授權一個都沒有，**檢查會靜靜地通過**。所以 `ci/licenses.sh` 用 `pnpm install --prod` 另外裝一份，讀 node_modules 裡每個套件自己的 package.json。套件從 pnpm store 拿（CI 前一步已經下載過），不會再連網下載。
 
 ### 為什麼後端不也用 Trivy
 
@@ -136,7 +136,7 @@ Java、JavaScript 套件以外，還有這些會被執行或跟著 repo 走的�
 
 | 對象 | 授權綁在哪裡 | 怎麼發現它變了 |
 |---|---|---|
-| Java、npm 套件 | 每一個版本各自宣告 | **自動**。升版一定會改 `build.gradle` 或 lockfile，CI 的 `checkLicense`、`ci/licenses.sh` 就會用新版本宣告的授權重新判斷；Dependabot 開的升版 PR 也一樣 |
+| Java、npm 套件 | 每一個版本各自宣告 | **自動**。升版一定會改 `build.gradle` 或 lockfile，CI 的 `checkLicense`、`ci/licenses.sh` 就會用新版本宣告的授權重新判斷；Renovate 開的升版 PR 也一樣（docs/dependency-updates.md） |
 | 模型權重（Qwen3-8B） | 下載的那一份檔案 | 換模型、換尺寸、換量化來源時，照[模型](#模型)一節重看。原本那份檔案的授權不會因為上游改了而失效 |
 | Bedrock 上的模型 | AWS 的服務條款、model card 的 EULA 連結 | AWS 可以改條款，我們不會收到 PR。換模型時、以及每次核對（見下面）時重看 model card |
 | Docker 基底映像檔 | 版本 tag | 升大版本（換 tag）時重看上面的表；同一個 tag 重新 build 拿到的是修補，授權不會換 |
@@ -184,12 +184,12 @@ CI 紅在授權時，依序考慮：
 
 | 情況 | 期待 | 結果 |
 |---|---|---|
-| 後端現況（204 個套件） | 過 | 過（`dependenciesWithoutAllowedLicenses` 是空的） |
+| 後端現況（2026-10-19：204 個；合併 master 之後 2026-10-30：222 個） | 過 | 兩次都過（`dependenciesWithoutAllowedLicenses` 是空的） |
 | 後端加 `com.itextpdf:itextpdf:5.5.13.4`（AGPL-3.0） | 擋 | **修正前：過**（被 jar 裡的 Apache 授權檔帶過）。加了 `DeclaredLicensesOnly` 之後：擋，`[GNU Affero General Public License v3]` |
 | 後端加 `com.mysql:mysql-connector-j`（GPL-2.0 + Universal FOSS Exception） | 擋 | 修正前：過（同上）；修正後：擋 |
 | 後端加 `org.mariadb.jdbc:mariadb-java-client`（只有 LGPL-2.1），不帶 `--rerun` | 擋 | 擋，`[LGPL-2.1-or-later]`（確認 UP-TO-DATE 的坑修好了） |
 | 後端雙授權：logback（EPL／LGPL）、jakarta.annotation-api（EPL／GPL+CE） | 過 | 過（靠 EPL） |
-| 前端現況（npm，`dependencies` 24 個，含 vue 的 peer dependency typescript） | 過 | 過：MIT ×20、BSD-2-Clause、BSD-3-Clause、ISC、Apache-2.0 |
+| 前端現況（還是 npm 時，`dependencies` 24 個，含 vue 的 peer dependency typescript） | 過 | 過：MIT ×20、BSD-2-Clause、BSD-3-Clause、ISC、Apache-2.0 |
 | 前端加 `chessground`（GPL-3.0-or-later）到 `dependencies` | 擋 | 擋：`chessground：GPL-3.0-or-later（restricted，HIGH）` |
 | 同一個套件加到 `devDependencies` | 過（不會打包） | 過 |
 | 前端加 `elkjs`（`EPL-2.0 OR GPL-3.0-or-later`） | 過（雙授權，跟後端同一個規則） | 過 |

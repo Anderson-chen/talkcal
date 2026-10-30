@@ -190,7 +190,7 @@ eslint-plugin-playwright（MIT，397★ 但每週 300 萬下載，E2E 用 Playwr
 | 範圍 | 怎麼查 | 規則 |
 |---|---|---|
 | 後端 `runtimeClasspath` | Gradle 的 `checkLicense`（`./gradlew check` 也會跑） | 允許清單 `backend/allowed-licenses.json` |
-| 前端 `dependencies` | `ci/licenses.sh`：另外裝一份只有 `dependencies` 的 node_modules，用 Trivy 讀（npm、pnpm 都可以） | Trivy 的分類，擋 CRITICAL、HIGH、UNKNOWN，外加「沒寫授權」「一個都沒掃到」 |
+| 前端 `dependencies` | `ci/licenses.sh`：另外裝一份只有 `dependencies` 的 node_modules，用 Trivy 讀 | Trivy 的分類，擋 CRITICAL、HIGH、UNKNOWN，外加「沒寫授權」「一個都沒掃到」 |
 
 為什麼兩邊工具不一樣（Trivy 讀不到 jar 的授權、讀不到 pnpm-lock.yaml 的授權，都會靜靜地通過）、
 被擋了怎麼辦、反例驗證，都在 [docs/licenses.md](../docs/licenses.md)。
