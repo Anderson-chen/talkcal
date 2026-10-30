@@ -359,7 +359,7 @@ registerDeploy('deployApp', 'app', '跑測試、build app 映像檔、換掉 dep
 tasks.named('deployApp') { dependsOn tasks.named('test') }
 
 // ./gradlew deployWeb
-// 不必 dependsOn 什麼：前端的型別檢查寫在 web/Dockerfile 的 npm run build 裡，型別錯映像檔就 build 不出來。
+// 不必 dependsOn 什麼：前端的型別檢查寫在 web/Dockerfile 的 pnpm run build 裡，型別錯映像檔就 build 不出來。
 registerDeploy('deployWeb', 'web', 'build 前端映像檔（含型別檢查）、換掉 deploy/ 的 web 容器，等它 healthy')
 
 // ./gradlew deployModels：升級 llama.cpp、調 compose 裡的模型參數（-np、--temp…）之後用。

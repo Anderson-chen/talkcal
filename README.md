@@ -36,7 +36,7 @@ AI 助理是自己寫的 agent loop：每一輪把對話歷史和三個工具交
 
 ```
 backend/   Spring Boot app：程式碼、Gradle、Dockerfile
-web/       Vue 3 前端：程式碼、npm、Dockerfile、nginx 設定
+web/       Vue 3 前端：程式碼、pnpm、Dockerfile、nginx 設定
 deploy/    把 app、前端、模型、資料庫跑起來的 Docker Compose
 ops/       觀測：Alloy → Mimir / Loki / Tempo → Grafana
 perf/      k6 壓測
@@ -102,7 +102,7 @@ cd backend && ./gradlew deploy                                  # 跑測試、bu
 
 ```bash
 cd backend && ./gradlew bootRun  # app 在 8090，連 deploy/ 的 PostgreSQL 和模型
-npm --prefix web run dev         # 前端在 5173，/api 轉給 8090（在 repo 根目錄跑）
+pnpm --dir web run dev           # 前端在 5173，/api 轉給 8090（在 repo 根目錄跑）
 ```
 
 ## 測試

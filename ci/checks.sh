@@ -28,12 +28,12 @@ if [ "${RUN_EVAL:-0}" = 1 ]; then
 fi
 
 echo "── 前端：lint、單元測試、型別檢查、打包、E2E ──"
-# npm ci：照 package-lock.json 原樣裝，lock 跟 package.json 對不上就直接失敗
-# npm run lint：ESLint，抓會出錯的寫法（忘了 await、v-for 沒 key…）。幾秒就有結果，放在測試前面
-# npm test：Vitest，只測純函式（秒回）
-# npm run e2e：Playwright 開真的 Chromium（桌面、手機兩種版面），API 用假的，不需要後端。
+# pnpm install --frozen-lockfile：照 pnpm-lock.yaml 原樣裝，lock 跟 package.json 對不上就直接失敗
+# pnpm run lint：ESLint，抓會出錯的寫法（忘了 await、v-for 沒 key…）。幾秒就有結果，放在測試前面
+# pnpm test：Vitest，只測純函式（秒回）
+# pnpm run e2e：Playwright 開真的 Chromium（桌面、手機兩種版面），API 用假的，不需要後端。
 #   它會自己 build 再起 vite preview；放在 build 之後，型別錯的話先在 build 那一步就停
-(cd web && npm ci --no-audit --no-fund && npm run lint && npm test && npm run build && npm run e2e) || status=1
+(cd web && pnpm install --frozen-lockfile && pnpm run lint && pnpm test && pnpm run build && pnpm run e2e) || status=1
 
 # ── 測試摘要 ─────────────────────────────────────────────────────
 # 為什麼要特別列出「跳過」：綠燈只代表「跑了的都過了」。

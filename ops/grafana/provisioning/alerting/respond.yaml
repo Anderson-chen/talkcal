@@ -54,6 +54,8 @@ groups:
         labels:
           severity: critical
         annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/talkcal-db-down.md
           summary: talkcal 資料庫連續 1 分鐘連不上（或 postgres_exporter 抓不到）
           description: >-
             pg_up 為 0：exporter 連不上 PostgreSQL；或 up{job="postgres"} 為 0：exporter 本身抓不到。
@@ -92,6 +94,8 @@ groups:
         labels:
           severity: warning
         annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/talkcal-db-pool-timeout.md
           summary: 'talkcal 近 5 分鐘有 {{ printf "%.0f" $values.A.Value }} 個請求等不到資料庫連線'
           description: >-
             每一個都是使用者等滿 30 秒才拿到錯誤。看 talkcal-app dashboard 的「資料庫連線池」那一排：
@@ -139,6 +143,8 @@ groups:
         labels:
           severity: warning
         annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/talkcal-model-circuit-open.md
           summary: 'talkcal 模型熔斷 5 分鐘沒關回來，擋下 {{ printf "%.0f" $values.A.Value }} 個 AI 助理請求（行程功能照常）'
           description: >-
             最近 10 次叫模型有一半以上失敗或超過 30 秒，熔斷打開、助理不再叫模型、直接回 503。
@@ -185,6 +191,8 @@ groups:
         labels:
           severity: warning
         annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/talkcal-backup-stale.md
           # 沒資料（本機、剛開機）時 Grafana 也會展開這段，Value 是 nil，直接丟給 humanizeDuration 會每次評估都記一筆錯誤
           summary: 'talkcal 已經 {{ if $values.A.Value }}{{ humanizeDuration $values.A.Value }}{{ else }}一段時間{{ end }} 沒有成功備份資料庫'
           description: >-

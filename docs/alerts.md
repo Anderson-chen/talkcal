@@ -5,6 +5,7 @@
 
 規則都用 provisioning 管（`ops/grafana/provisioning/alerting/`），Grafana 一啟動就建好、UI 上唯讀。
 每條門檻的完整理由寫在規則檔的註解，這裡只寫一句話。
+**告警響了怎麼處理**：每一條都有一份 runbook，檔名就是 uid（[docs/runbooks/](runbooks/README.md)），告警信裡的 **View runbook** 直接連過去。
 
 ## 怎麼分工
 
