@@ -17,8 +17,14 @@ cd "$(git rev-parse --show-toplevel)"
 export MSYS_NO_PATHCONV=1  # 同 run.sh：別讓 Git Bash 改寫 /var/run/docker.sock
 
 # 版本和 digest 都釘死。Trivy 在 2026-03 被入侵過（v0.69.4 和 trivy-action 的 tag 被換成會偷 secret 的版本），
-# 所以不用 trivy-action、不用會移動的 tag，用的是事件之後發的版本
-image=aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+# 所以不用 trivy-action、不用會移動的 tag，用的是事件之後發的版本。
+# 版本寫在 ci/Dockerfile（CI 映像檔掃授權用同一版），這裡讀過來，不再寫一次 —— 跟 ci.yml 從 compose 讀 postgres 版本同一個做法
+# 只認 COPY --from 那一行，註解裡寫到同一個名字也不會多抓一筆
+image=$(sed -nE 's|^COPY --from=(aquasec/trivy:[^ ]+) .*|\1|p' ci/Dockerfile)
+if [ -z "$image" ] || [ "$(printf '%s\n' "$image" | wc -l)" -ne 1 ]; then
+    echo "ci/Dockerfile 裡找不到唯一一行 COPY --from=aquasec/trivy:…" >&2
+    exit 1
+fi
 
 # Windows 上 docker 要 C:/... 形式的路徑（pwd -W），Linux、macOS 沒有 -W 就用 pwd
 repo=$(pwd -W 2>/dev/null || pwd)
