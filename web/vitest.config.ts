@@ -15,7 +15,7 @@ export default mergeConfig(
       // 會把 Playwright 的測試（e2e/*.spec.ts）也拿來跑
       include: ['src/**/*.test.ts'],
       environment: 'node',
-      // 測試覆蓋率（#23），用法見 docs/test-coverage.md。由 npm test 的 --coverage 打開，
+      // 測試覆蓋率（#23），用法見 docs/test-coverage.md。由 pnpm test 的 --coverage 打開，
       // 不寫 enabled: true：那樣 test:watch 每存一次檔都會重產報告、洗版終端機，watch 時用不到
       coverage: {
         // v8：用 Node 內建的覆蓋率，不必先插樁（istanbul 要），Vitest 4 起靠 AST 重新對映，準確度跟 istanbul 一樣

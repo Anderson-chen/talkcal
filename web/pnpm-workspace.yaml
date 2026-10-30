@@ -1,0 +1,10 @@
+# pnpm 自己的設定（pnpm 11 從這裡讀）。寫在這裡，打 pnpm add、pnpm update 時自動套用，不靠人記得帶參數
+
+# 只裝發布超過兩週（分鐘）的版本，連間接依賴也算：新版被植入惡意程式碼通常幾天內就會被發現
+minimumReleaseAge: 20160
+# 例外只給修 HIGH、CRITICAL 漏洞的版本，寫成「套件@版本」並註明漏洞編號，滿兩週後刪掉（見 README.md）
+# minimumReleaseAgeExclude:
+#   - vite@8.3.5  # CVE-XXXX-XXXXX
+
+# pnpm add 寫進 package.json 的是確切版本（7.0.0），不是範圍（^7.0.0）
+saveExact: true
