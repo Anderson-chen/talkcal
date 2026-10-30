@@ -13,6 +13,7 @@ import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -181,6 +182,10 @@ public final class JdbcAssistantMemoryRepository {
                 return true;
             });
             return Boolean.TRUE.equals(restored);
+        } catch (DuplicateKeyException e) {
+            // 查完「沒有」到插進去之間，同一段被別人放進去了（兩個還原請求同時跑、或使用者剛好用這個 id 說話）：
+            // 交易整個 rollback，結果跟「已經在了」一樣，跳過，不當成錯誤
+            return false;
         } catch (DataAccessException | TransactionException e) {
             throw new IllegalStateException("還原 AI 助理的對話失敗：" + conversation.conversationId(), e);
         }
