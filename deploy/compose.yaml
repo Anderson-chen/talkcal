@@ -246,7 +246,7 @@ services:
     container_name: talkcal-archive-init
     entrypoint: ["sh", "-c"]
     command:
-      - curl -fsS -X PUT --aws-sigv4 "aws:amz:us-east-1:s3" --user "$$ARCHIVE_ACCESS_KEY:$$ARCHIVE_SECRET_KEY" http://archive:9000/talkcal-archive && echo "bucket talkcal-archive 準備好了"
+      - curl -fsS -X PUT --aws-sigv4 "aws:amz:us-east-1:s3" --user "$$ARCHIVE_ACCESS_KEY:$$ARCHIVE_SECRET_KEY" http://archive:9000/talkcal-archive && echo "bucket talkcal-archive 準備好了"  # gitleaks:allow 帳密是容器的環境變數，不是寫死的值
     environment:
       ARCHIVE_ACCESS_KEY: ${ARCHIVE_ACCESS_KEY:?缺 ARCHIVE_ACCESS_KEY：見 deploy/.env.example}
       ARCHIVE_SECRET_KEY: ${ARCHIVE_SECRET_KEY:?缺 ARCHIVE_SECRET_KEY：見 deploy/.env.example}
