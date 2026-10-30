@@ -95,8 +95,12 @@ services:
         ls -la /models
     volumes:
       # 來源：唯讀，播種絕不會動到你原本的模型檔。路徑在 deploy/.env（範本 .env.example）。
-      # 沒設就拒絕啟動：不設的話 Docker 會在主機上建一個空資料夾掛進來，看起來起得來、其實沒有模型
-      - ${MODELS_DIR:?缺 MODELS_DIR：在 deploy/.env 填放模型檔的資料夾（見 deploy/models/README.md）}:/seed:ro
+      # 沒設就拒絕啟動：不設的話 Docker 會在主機上建一個空資料夾掛進來，看起來起得來、其實沒有模型。
+      # 用長的寫法：短的 "來源:/seed:ro" 是用冒號切欄位，ci/compose-images.sh 不代換 ${} 時，錯誤訊息裡的冒號會把它切壞
+      - type: bind
+        source: ${MODELS_DIR:?缺 MODELS_DIR：在 deploy/.env 填放模型檔的資料夾（見 deploy/models/README.md）}
+        target: /seed
+        read_only: true
       - models:/models
     restart: "no"                   # 跑完就結束是正常的，不要重啟它
 

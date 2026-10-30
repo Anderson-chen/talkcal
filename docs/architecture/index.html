@@ -320,7 +320,7 @@ const F={
 "infra/envs/1-ec2/compose.gpu.yaml":[["8","空的：模型來源已經由 deploy/compose.yaml 的 MODELS_DIR 決定","seed"]],
 "infra/envs/1-ec2/Caddyfile":[["3–10","網域、encode、reverse_proxy","caddy"]],
 "infra/envs/1-ec2/compose.ops.yaml":[["11","TRACE_SAMPLING_PERCENT（一般請求留 10%）","obs"],["13","TRACE_SAMPLING_DECISION_WAIT（125s）","obs"],["14–17","備份寫的 .prom（/opt/talkcal/metrics）掛給 Alloy（#39）","obs"]],
-"deploy/compose.yaml":[["22–25","x-llama-server","llm"],["29","x-gpu","llm"],["44–46","x-version-args（app、web 共用的版本參數）","app"],["57–102","model-seed","seed"],["104–169","llm-chat","llm"],["172–193","postgres","postgres"],["195–222","postgres-exporter（#32）","postgres"],["225–278","app","app"],["231–234","app 映像檔 tag、build args 帶版本號","app"],["280–307","web","web"],["309–315","volumes","postgres"]],
+"deploy/compose.yaml":[["22–25","x-llama-server","llm"],["29","x-gpu","llm"],["44–46","x-version-args（app、web 共用的版本參數）","app"],["57–106","model-seed","seed"],["108–173","llm-chat","llm"],["176–197","postgres","postgres"],["199–226","postgres-exporter（#32）","postgres"],["229–282","app","app"],["235–238","app 映像檔 tag、build args 帶版本號","app"],["284–311","web","web"],["313–319","volumes","postgres"]],
 "deploy/backup/pg-backup.sh":[["12–21","容器、目錄、保留規則","postgres"],["26","umask 077：備份只給擁有者讀","postgres"],["29","檔名（同一秒已有就等下一秒）","postgres"],["41","pg_dump -Fc","postgres"],["45–49","完整性檢查一：目錄","postgres"],["53","完整性檢查二：雜湊","postgres"],["58–66","過期刪除（最新幾份一定留）","postgres"]],
 "deploy/backup/pg-restore.sh":[["48–51","1. 雜湊","postgres"],["53–55","2. 目錄","postgres"],["57–66","3. 還原到暫存庫","postgres"],["79–108","4. 停 app、兩次改名換上","postgres"]],
 "deploy/backup/pg-diff.sh":[["26–31","要比的表：兩邊合起來","postgres"],["35–38","一張表倒成「主鍵、md5、整列」","postgres"],["40–44","主鍵欄位","postgres"],["51–76","依主鍵分成新增、刪除、改過","postgres"]],
@@ -355,11 +355,11 @@ buser:{"CallWithBearerToken":E+"bedrock.tf:31","CreateInference":E+"bedrock.tf:4
 bkey:{"service_name":E+"bedrock.tf:56","credential_age_days":E+"bedrock.tf:58"},
 budget:{"limit_amount":B+"variables.tf:19","80% ACTUAL / 100% FORECASTED":B+"main.tf:76"},
 caddy:{"image":E+"compose.ec2.yaml:37","ports":E+"compose.ec2.yaml:39","caddy-data:/data":E+"compose.ec2.yaml:48","reverse_proxy":E+"Caddyfile:9"},
-web:{"ports":D+":292","limit_req":"web/nginx.conf:27","set_real_ip_from":"web/nginx.conf:52","resolver":"web/nginx.conf:89","X-Forwarded-Proto":"web/nginx.conf:97","proxy_read_timeout":"web/nginx.conf:115","otel_trace":"web/nginx.conf:104","image":"web/Dockerfile:25"},
-app:{"image":D+":231","mem_limit":E+"compose.ec2.yaml:30","SESSION_COOKIE_SECURE":E+"compose.ec2.yaml:26","SPRING_AI_OPENAI_*":{bedrock:E+"compose.bedrock.yaml:18",gpu:"backend/src/main/resources/application-docker.properties:8"},"TALKCAL_AI_BACKEND":{bedrock:E+"compose.bedrock.yaml:22",gpu:"backend/src/main/resources/application.properties:20"},"depends_on":{bedrock:E+"compose.bedrock.yaml:25",gpu:D+":254"},"management 埠":"backend/src/main/resources/application.properties:110","healthcheck":D+":266","stop_grace_period":D+":276"},
-postgres:{"image":D+":173","POSTGRES_PASSWORD":E+"compose.ec2.yaml:20","密碼同步":E+"deploy.sh:93","部署前備份":E+"deploy.sh:99","備份排程":E+"deploy.sh:110","postgres-exporter":D+":203","--no-collector.stat_user_tables":D+":211"},
-llm:{"-ngl":D+":119","-c / -np":D+":121","--kv-unified":D+":128"},
-seed:{"sha256sum -c":D+":90","MODELS_DIR":D+":99"},
+web:{"ports":D+":296","limit_req":"web/nginx.conf:27","set_real_ip_from":"web/nginx.conf:52","resolver":"web/nginx.conf:89","X-Forwarded-Proto":"web/nginx.conf:97","proxy_read_timeout":"web/nginx.conf:115","otel_trace":"web/nginx.conf:104","image":"web/Dockerfile:25"},
+app:{"image":D+":235","mem_limit":E+"compose.ec2.yaml:30","SESSION_COOKIE_SECURE":E+"compose.ec2.yaml:26","SPRING_AI_OPENAI_*":{bedrock:E+"compose.bedrock.yaml:18",gpu:"backend/src/main/resources/application-docker.properties:8"},"TALKCAL_AI_BACKEND":{bedrock:E+"compose.bedrock.yaml:22",gpu:"backend/src/main/resources/application.properties:20"},"depends_on":{bedrock:E+"compose.bedrock.yaml:25",gpu:D+":258"},"management 埠":"backend/src/main/resources/application.properties:110","healthcheck":D+":270","stop_grace_period":D+":280"},
+postgres:{"image":D+":177","POSTGRES_PASSWORD":E+"compose.ec2.yaml:20","密碼同步":E+"deploy.sh:93","部署前備份":E+"deploy.sh:99","備份排程":E+"deploy.sh:110","postgres-exporter":D+":207","--no-collector.stat_user_tables":D+":215"},
+llm:{"-ngl":D+":123","-c / -np":D+":125","--kv-unified":D+":132"},
+seed:{"sha256sum -c":D+":90","MODELS_DIR":D+":101"},
 obs:{"Alloy":O+":118","Mimir":O+":23","Loki":O+":43","Tempo":O+":57","Grafana":O+":70","Grafana 埠":O+":76","告警":O+":93","HEARTBEAT_URL":O+":81","備份告警的指標":E+"compose.ops.yaml:17","Trace 取樣":E+"compose.ops.yaml:11","Alloy 抓指標":"ops/alloy/config.alloy:59","metrics-generator":"ops/tempo/tempo.yaml:46","OTLP 入口":"ops/alloy/config.alloy:241","SLO":"ops/mimir/rules/anonymous/slo.yaml:38","冒煙測試":E+"smoke.sh:200"}
 };
 // t：步驟標題（短）；d：說明。依 model_backend 不同的寫成 {bedrock, gpu}
