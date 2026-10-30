@@ -25,7 +25,8 @@ trap 'rm -rf "$work"' EXIT
 
 # pnpm-workspace.yaml 一起帶：pnpm 11 的設定（例如只裝滿兩週的版本）寫在那裡，少了它裝出來的跟 CI 的不一樣
 cp web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml "$work/"
-(cd "$work" && pnpm install --prod --frozen-lockfile --ignore-scripts >/dev/null)
+# 輸出不丟掉：裝不起來時 pnpm 把原因（ERR_PNPM_…）印在 stdout
+(cd "$work" && pnpm install --prod --frozen-lockfile --ignore-scripts)
 
 trivy rootfs --quiet --skip-db-update --scanners license --list-all-pkgs --format json \
     --output "$work/report.json" "$work"

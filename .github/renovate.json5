@@ -195,7 +195,8 @@
       versioningTemplate: 'gradle',
     },
     {
-      // ci/secrets.sh、ci/vulns.sh 用 docker run 跑 gitleaks、Trivy，版本和 digest 寫在變數裡。
+      // ci/secrets.sh 用 docker run 跑 gitleaks，版本和 digest 寫在變數裡。
+      // Trivy 的版本寫在 ci/Dockerfile 的 COPY --from（ci/vulns.sh 從那裡讀），由 dockerfile 管理器追，不經過這條。
       // 掃描工具舊了會漏抓新的祕密格式、新的漏洞，所以也要追
       customType: 'regex',
       description: 'ci/*.sh 裡 image=名稱:版本@digest 的掃描工具',
