@@ -60,6 +60,7 @@ CI 的規則因此是：**前端、後端會打包的依賴都不能是 GPL、AG
 - 工具：[Gradle License Report](https://github.com/jk1/Gradle-License-Report)（`com.github.jk1.dependency-license-report` 3.1.4）
 - 範圍：`runtimeClasspath`，也就是 `bootJar` 會打包進去的那些。測試、eval 用的依賴不會上線，不檢查
 - 規則：**允許清單** [`backend/allowed-licenses.json`](../backend/allowed-licenses.json)：Apache-2.0、MIT、MIT-0、BSD（2-Clause、3-Clause）、Public Domain、EPL 1.0／2.0。不在清單上的（GPL、AGPL、LGPL、認不出來的）就失敗
+  - 只寫「BSD」、沒寫幾條款的（POM 裡的 `The BSD License`、`BSD licence`）不整類放行：可能是有廣告條款的 4-Clause。看過內容的套件（目前是 antlr 的兩個）才用 `moduleName` 個別放行
   - 用允許清單而不是禁止清單：新冒出一個沒看過的授權字串時，預設是擋下來讓人看，而不是預設放行
   - EPL 放行：它的 copyleft 只限檔案本身，原封不動拿來用沒有義務。Tomcat、logback、jakarta.* 都有用
 - 雙授權：一個套件列了好幾個授權，**只要其中一個在清單上就過**（外掛的規則）。所以 logback（EPL-2.0 或 LGPL-2.1）、jakarta.annotation-api（EPL-2.0 或 GPL-2.0+CE）是靠 EPL 過的，不是因為放行了 LGPL、GPL
@@ -172,7 +173,7 @@ Java、JavaScript 套件以外，還有這些會被執行或跟著 repo 走的�
 CI 紅在授權時，依序考慮：
 
 1. **換一個套件**：通常有同功能、授權寬鬆的替代品
-2. **看有沒有雙授權**：很多套件「GPL 或商業授權」「LGPL 或 EPL」，名字沒被認出來時，在 `backend/build.gradle` 的 `LicenseBundleNormalizer` 加對照規則，讓它認得
+2. **看有沒有雙授權、是不是寫法不同**：很多套件「GPL 或商業授權」「LGPL 或 EPL」；也常見同一個授權換個寫法（「BSD licence」）。確認內容之後，在 `backend/allowed-licenses.json` 加一條寫明 `moduleName` 的規則（例如 antlr 的兩條 BSD）
 3. **真的要用**：確認在我們的用法下沒有義務（例如只在後端、不散布的 GPL），才放行，而且只放行那一個套件 ——
    - 後端：在 `backend/allowed-licenses.json` 加一條同時寫 `moduleName` 和 `moduleLicense` 的規則，不要只寫 `moduleLicense`（那等於整個授權類別都開了）
    - 前端：前端的套件都會散布，GPL、AGPL 不放行
