@@ -427,7 +427,7 @@ Better Stack 也夠用，但它是整套觀測平台，只為一個 heartbeat �
 3. `cd ops && docker compose --env-file ../deploy/.env up -d`
 
 這串網址本身就是祕密：拿到的人可以一直替我們打 heartbeat，讓「Grafana 掛了」永遠不會被發現，所以跟密碼一樣不進 git。
-沒設時 compose 給 `.invalid` 的位址，Grafana 照常啟動，只是 heartbeat 打不出去（Grafana log 裡會一直有送不出去的 error）。
+沒設時 compose 給 `.invalid` 的位址，Grafana 照常啟動，只是 heartbeat 打不出去。（現在 Watchdog 拿掉了，這個變數沒人讀，#40 做完之前留空。）
 
 **排程關機**（雲端平常關機）：用 `infra/envs/1-ec2/power.sh stop` 關機，它會先呼叫 Healthchecks 的 API 暫停 check，
 不然 6 分鐘後會收到「掛了」的信。開機後 Grafana 的第一個 heartbeat 會讓 check 自動恢復監控（本機實測過）；
@@ -534,6 +534,6 @@ ops/
 ├── tempo/tempo.yaml                          # 追蹤：單機最小設定
 └── grafana/provisioning/
     ├── datasources/datasources.yaml          # 自動接好 Mimir + Loki + Tempo，以及三者之間的跳轉
-    ├── alerting/                             # 告警：rules（基本告警）、slo-burn-rate（SLO 的 burn-rate 告警）、respond（資料庫、連線池、模型熔斷、備份）、meta-monitoring（監控本身掛掉＋Watchdog heartbeat）；總表 docs/alerts.md；contact-points（寄給誰）、policies（多久寄一次）
+    ├── alerting/                             # 告警：rules（基本告警）、slo-burn-rate（SLO 的 burn-rate 告警）、respond（資料庫、連線池、模型熔斷、備份）、meta-monitoring（監控本身掛掉；Watchdog heartbeat 等 #40）；總表 docs/alerts.md；contact-points（寄給誰）、policies（多久寄一次）
     └── dashboards/                           # talkcal-app、llama-cpp（指標）、talkcal-traces、talkcal-request（trace）、talkcal-k6（壓測）、talkcal-cost（成本）、talkcal-product（產品指標）、talkcal-slo
 ```

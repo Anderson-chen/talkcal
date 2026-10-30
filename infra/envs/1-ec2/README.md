@@ -183,6 +183,9 @@ export HEALTHCHECKS_API_KEY=...   # 有設 heartbeat_url 才需要，見下面
 暫停中的 check 收到 Grafana 的第一個 heartbeat 就自己回到監控（本機實測過）。但 Grafana 開機後沒起來的話，
 它會一直停在暫停、不會寄信，所以 `power.sh start` 開機後會等到 check 回到 up；10 分鐘還沒恢復就報錯，要自己連進去看。
 
+**現在不要設 `heartbeat_url`**：Watchdog 先拿掉了（#243），沒有東西會打 heartbeat，設了的話 `power.sh start` 會等滿 10 分鐘報錯、
+Healthchecks 也會寄 DOWN 的信。#40 做完再設。已經設過的，部署 #243 之前先到 Healthchecks.io 把 check 按 Pause。
+
 `HEALTHCHECKS_API_KEY` 在 Healthchecks.io 的 Project Settings → API Access 產生，要能寫的那種（read-only 不能暫停）。
 只有這支腳本用得到、機器上不需要，所以不放 SSM、不進 git，用環境變數給。沒給的話照樣關機，只是會收到那封信。
 
