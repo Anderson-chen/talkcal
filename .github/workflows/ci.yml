@@ -115,7 +115,7 @@ jobs:
       - uses: actions/checkout@v7
       - run: ci/rules.sh
 
-  # 漏洞掃描：build 出會上線的映像檔再掃，有 HIGH、CRITICAL 就紅燈（必過檢查）。
+  # 漏洞掃描：前端的 lockfile，和 build 出來會上線的映像檔，有 HIGH、CRITICAL 就紅燈（必過檢查）。
   # --pull：每次都拉最新的基底映像檔，掃到的才是重新部署時真的會拿到的版本
   vulns:
     runs-on: ubuntu-latest

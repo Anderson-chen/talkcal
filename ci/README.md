@@ -104,7 +104,12 @@ gitleaks 補的是邊界：
 
 ## 漏洞掃描
 
-`ci/vulns.sh` 用 Trivy 掃 build 好的映像檔：基底映像檔的作業系統套件、jar 裡的 Java 函式庫一次掃到。
+`ci/vulns.sh` 用 Trivy 掃兩種東西：
+
+- **前端的 lockfile**（`web/pnpm-lock.yaml`，`trivy fs`）：前端映像檔裡只剩 nginx 和打包好的靜態檔，看不出用了哪個套件哪一版，掃映像檔抓不到（#235）。
+  包含 devDependencies（`--include-dev-deps`）：前端套件幾乎都是 dev（vite、vitest…），它們不上線，但在開發者的電腦和 CI 上執行。
+- **build 好的映像檔**（`trivy image`）：基底映像檔的作業系統套件、jar 裡的 Java 函式庫一次掃到。後端不另外掃 `build.gradle`，jar 裡就是解析完的確切版本。
+
 有 HIGH、CRITICAL 而且已經有修補版本的，就 exit 1 —— 上游還沒修的，我們也沒得升，擋了也沒事可做。
 
 ```bash
@@ -123,6 +128,24 @@ ci/vulns.sh talkcal/app:local talkcal/web:local postgres:18.6-alpine
 
 **為什麼不用 trivy-action**：Trivy 在 2026-03 被入侵過，v0.69.4 和 trivy-action 幾乎所有 tag 都被換成會偷 CI secret 的版本。
 這裡跟 gitleaks 一樣直接跑映像檔，版本和 digest 都釘死，用的是事件之後的版本。
+
+### 前端套件的選型（2026-10 查的）
+
+**用 `trivy fs`，不加 `pnpm audit` 或 OSV-Scanner**
+
+| | 授權 | 為什麼（不）選 |
+|---|---|---|
+| `trivy fs` | Apache-2.0 | 映像檔已經釘了版本＋digest、漏洞資料庫已經有快取，多掃一個檔案幾秒；例外跟映像檔共用 `ci/trivyignore.yaml`（一樣要理由和到期日）；每天的排程一起掃到。認得 pnpm、npm、yarn 的 lockfile |
+| `pnpm audit --audit-level high` | （pnpm 內建） | 不用多裝東西，但只問 npm registry 的 advisory、例外要另外寫在 `pnpm-workspace.yaml`，跟 Trivy 的例外分兩處維護；也只認 pnpm |
+| OSV-Scanner | Apache-2.0 | Google 維護、資料來源是 OSV（GitHub advisory 也匯進去了），能力跟 `trivy fs` 重疊，多一個要釘版本的工具、多一份例外清單 |
+
+**反例**（2026-10-30）：
+
+| lockfile | 結果 |
+|---|---|
+| master 原本的 vite 8.3.2 | 紅：`CVE-2026-112942`（就是 GHSA-587h-7wmj-h5pm，HIGH）；後面的映像檔照樣掃完 |
+| 同上，拿掉 `--include-dev-deps` | 綠（漏掉）：vite 是 devDependency，所以這個旗標不能拿掉 |
+| vite 8.3.4（這次升上去的） | 通過 |
 
 ## lint
 
