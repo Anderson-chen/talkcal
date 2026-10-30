@@ -13,23 +13,33 @@
 # ci/Dockerfile、backend/gradlew、backend/gradle/wrapper/ —— 跟程式碼一樣，不讀工作目錄裡沒 commit 的東西。
 #
 # 版本對齊：
-#   JDK 25  —— build.gradle 的 toolchain，以及 app 映像檔（backend/Dockerfile）的 temurin:25
-#   Node 22 —— web/Dockerfile 的 node:22
+#   JDK 25  —— build.gradle 的 toolchain，以及 app 映像檔（backend/Dockerfile）的 temurin:25、ci/sast/Dockerfile
+#   Node 22 —— web/Dockerfile 的 node:22、ci/sast/Dockerfile
 #   Gradle  —— backend/gradle/wrapper/gradle-wrapper.properties（由 wrapper 自己下載，不另外寫版本）
 
 # Node 從官方映像檔整包搬過來，不在 Ubuntu 上另外裝：
 # 官方映像檔裡的 node、corepack 就是 web/Dockerfile 打包時用的那一組，不必再信任第三方的套件來源
 FROM node:22-bookworm-slim AS node
 
+# ShellCheck（checks.sh 檢查 repo 裡的 shell 腳本）：官方映像檔裡只有一支靜態連結的執行檔，直接搬過來。
+# 不用 apt 裝：Ubuntu 24.04 的是 0.9.0（2022），官方映像檔的版本＋digest 釘死，跟 ci/vulns.sh 的 Trivy 同一個做法
+FROM koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d AS shellcheck
+
 # 底用 JDK（不是 JRE）：CI 要編譯、跑測試。noble 是 Ubuntu 24.04，跟 app 映像檔同一個發行版
 FROM eclipse-temurin:25-jdk-noble
 
+COPY --from=shellcheck /bin/shellcheck /usr/local/bin/shellcheck
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 # 只接 corepack，不接 npm、npx：容器裡的前端指令都走 pnpm（為什麼見 web/README.md 的「用 pnpm 不用 npm」）。
 # corepack enable 建出 pnpm 這個指令，實際用哪一版等下面讀到 package.json 才決定
 RUN ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
     && corepack enable --install-directory /usr/local/bin
+
+# Trivy：前端套件的授權檢查（ci/licenses.sh）。為什麼釘 digest 寫在 ci/vulns.sh。
+# 版本只寫在這一行：ci/vulns.sh 從這裡讀，Renovate 升這一行時兩邊一起換，掃授權和掃漏洞不會用到不同版本。
+# 只搬執行檔：授權分類內建在裡面，掃授權不必下載漏洞資料庫
+COPY --from=aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 /usr/local/bin/trivy /usr/local/bin/trivy
 
 # Gradle 的家目錄分兩半：
 #   wrapper/ —— Gradle 本體（約 140MB）。烤在映像檔裡

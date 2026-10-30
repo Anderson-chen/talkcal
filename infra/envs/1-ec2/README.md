@@ -173,7 +173,7 @@ terraform output -raw grafana_tunnel
 關機時還在收費的只有 EBS（bedrock 30GB、gpu 150GB 的 gp3）和沒掛在執行中機器上的 Elastic IP。Bedrock 按 token 計費，不叫就不收。
 
 ```bash
-export HEALTHCHECKS_API_KEY=...   # 有設 heartbeat_url 才需要，見下面
+export HEALTHCHECKS_API_KEY=...   # 有設 heartbeat_url 才需要；#40 做完之前不要設，見下面
 ./power.sh stop                   # 先暫停 Healthchecks 的 check，再關機
 ./power.sh start                  # 開機，等到 Healthchecks 收到 heartbeat、恢復監控
 ```
@@ -182,6 +182,9 @@ export HEALTHCHECKS_API_KEY=...   # 有設 heartbeat_url 才需要，見下面
 會寄一封「掛了」的信，關一次響一次。`power.sh stop` 先用 Healthchecks 的 API 暫停，再關機；
 暫停中的 check 收到 Grafana 的第一個 heartbeat 就自己回到監控（本機實測過）。但 Grafana 開機後沒起來的話，
 它會一直停在暫停、不會寄信，所以 `power.sh start` 開機後會等到 check 回到 up；10 分鐘還沒恢復就報錯，要自己連進去看。
+
+**現在不要設 `heartbeat_url`**：Watchdog 先拿掉了（#243），沒有東西會打 heartbeat，設了的話 `power.sh start` 會等滿 10 分鐘報錯、
+Healthchecks 也會寄 DOWN 的信。#40 做完再設。已經設過的，部署 #243 之前先到 Healthchecks.io 把 check 按 Pause。
 
 `HEALTHCHECKS_API_KEY` 在 Healthchecks.io 的 Project Settings → API Access 產生，要能寫的那種（read-only 不能暫停）。
 只有這支腳本用得到、機器上不需要，所以不放 SSM、不進 git，用環境變數給。沒給的話照樣關機，只是會收到那封信。

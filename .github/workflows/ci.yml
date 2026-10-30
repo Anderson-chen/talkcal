@@ -115,7 +115,22 @@ jobs:
       - uses: actions/checkout@v7
       - run: ci/rules.sh
 
-  # 漏洞掃描：build 出會上線的映像檔再掃，有 HIGH、CRITICAL 就紅燈（必過檢查）。
+  # 原始碼安全分析（CodeQL，#235）：SQL 拼字串、XSS、workflow 注入這類自己寫出來的漏洞，HIGH、CRITICAL 就紅燈。
+  # 不放進 checks：CodeQL 映像檔約 2 GB、分析要幾分鐘；跟 checks 並行跑。
+  # 排程那次不跑：CodeQL 版本釘死，程式碼沒變結果就不會變（不像 CVE 每天有新的）
+  sast:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - run: ci/sast.sh
+
+      - name: 分析結果貼到結果頁
+        if: always()
+        run: cat ci/build/sast/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+
+  # 漏洞掃描：前端的 lockfile，和 build 出來會上線的映像檔，有 HIGH、CRITICAL 就紅燈（必過檢查）。
   # --pull：每次都拉最新的基底映像檔，掃到的才是重新部署時真的會拿到的版本
   vulns:
     runs-on: ubuntu-latest
@@ -127,10 +142,42 @@ jobs:
       - run: docker build --quiet --pull --tag talkcal/app:local backend
       - run: docker build --quiet --pull --tag talkcal/web:local web
 
-      # postgres 的版本從 compose 讀，不在這裡再寫一次：compose 升版時掃的就跟著換
-      # 寫成 | 區塊：指令裡的「image: 」在 YAML 一行的寫法會被當成鍵值，整份 workflow 解析失敗
-      - run: |
-          ci/vulns.sh talkcal/app:local talkcal/web:local "$(grep -oE 'image: postgres:[^ ]+' deploy/compose.yaml | cut -d' ' -f2)"
+      # --repo：先掃設定（Dockerfile、compose、Terraform）和前端 lockfile，再掃映像檔。
+      # postgres 從 compose 讀（ci/compose-images.sh），不在這裡再寫一次：compose 升版時掃的就跟著換。
+      # 其他第三方映像檔在下面的 third-party-images
+      - run: ci/vulns.sh --repo talkcal/app:local talkcal/web:local "$(ci/compose-images.sh | grep '^postgres:')"
+
+      - name: 掃描結果貼到結果頁
+        if: always()
+        run: cat ci/build/vulns.md >> "$GITHUB_STEP_SUMMARY" || true
+
+  # EC2 上的其他第三方映像檔（caddy、grafana、loki…，清單從 compose 讀，見 ci/compose-images.sh）。
+  # 先掃、不擋（#235）：第一次掃有約 400 筆 HIGH、CRITICAL，全部要靠升版解決（#239）；
+  # 現在就擋的話 master 和所有 PR 都會紅到升完為止。升乾淨之後拿掉 continue-on-error，併進上面的 vulns。
+  # PR 上不跑：不擋合併，結果只看 compose 的版本和新公布的 CVE —— 每天的排程和 push 到 master 就看得到，
+  # 不必每個 PR 都多拉 1.5 GB 的映像檔
+  third-party-images:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # 先列清單、自己一步，不跟掃描放在一起：compose 解析失敗或清單是空的要真的紅，
+      # 不然下一步的 continue-on-error 會把它吃掉，什麼都沒掃卻是綠的
+      - id: list
+        run: |
+          set -o pipefail
+          images=$(ci/compose-images.sh | grep -v '^postgres:' | paste -sd' ')
+          test -n "$images"
+          echo "images=$images" >> "$GITHUB_OUTPUT"
+
+      # continue-on-error：有漏洞時這一步標紅，但 job 綠。結果看結果頁
+      # $IMAGES 刻意不加引號：映像檔之間用空白隔開，要拆成多個參數
+      - run: ci/vulns.sh $IMAGES
+        continue-on-error: true
+        env:
+          IMAGES: ${{ steps.list.outputs.images }}
 
       - name: 掃描結果貼到結果頁
         if: always()

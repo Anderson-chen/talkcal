@@ -1,0 +1,11 @@
+# 補 CodeQL 沒建模的 API（Models as Data），讓它知道資料流到這裡算危險。ci/sast/analyze.sh 用 --model-packs 載入。
+#
+# 為什麼要補：CodeQL 2.27 認得 JdbcTemplate，不認得 Spring 6.1 的 JdbcClient —— 而這個專案的 SQL 全部走 JdbcClient。
+# 不補的話，@RequestParam 直接拼進 jdbc.sql(...) 也是綠燈（#235 實測過）。
+name: talkcal/java-models
+version: 0.0.1
+library: true
+extensionTargets:
+  codeql/java-all: "*"
+dataExtensions:
+  - "*.model.yml"

@@ -30,7 +30,7 @@ summary=ci/build/alerting.md
 # 不然呼叫的 shell 裡剛好有（例如測過 Gmail 的帳密）就會被帶進來，對 Mailpit 做 AUTH 失敗，也等於把真密碼交給測試容器
 export ALERT_SMTP_HOST=mailpit:1025
 export ALERT_EMAIL_TO=oncall@example.test
-export ALERT_SMTP_USER= ALERT_SMTP_PASSWORD= ALERT_SMTP_FROM=
+export ALERT_SMTP_USER='' ALERT_SMTP_PASSWORD='' ALERT_SMTP_FROM=''
 
 dc() {
   docker compose -p "$project" --profile mailtest -f ops/compose.yaml -f ci/alerting/compose.yaml "$@"

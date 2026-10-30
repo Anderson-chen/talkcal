@@ -1,8 +1,8 @@
-# 0016. 套件升級交給 Renovate（Mend 的 GitHub App），不用 Dependabot
+# 0011. 套件升級交給 Renovate（Mend 的 GitHub App），不用 Dependabot
 
 - 狀態：已採用
 - 日期：2026-10-19
-- 相關：issue [#48](https://github.com/Anderson-chen/talkcal/issues/48)、epic [#46](https://github.com/Anderson-chen/talkcal/issues/46)、[#107](https://github.com/Anderson-chen/talkcal/issues/107)（前端換 pnpm）、[0013](0013-ci-same-script-in-container.md)
+- 相關：issue [#48](https://github.com/Anderson-chen/talkcal/issues/48)、epic [#46](https://github.com/Anderson-chen/talkcal/issues/46)、[#107](https://github.com/Anderson-chen/talkcal/issues/107)（前端換 pnpm）、[0008](0008-ci-same-script-in-container.md)
 
 ## 背景
 

@@ -1,3 +1,7 @@
+import com.github.jk1.license.ProjectData
+import com.github.jk1.license.filter.DependencyFilter
+import com.github.jk1.license.filter.LicenseBundleNormalizer
+import com.github.jk1.license.render.InventoryHtmlReportRenderer
 import org.springframework.boot.gradle.plugin.SpringBootPlugin
 
 plugins {
@@ -11,6 +15,8 @@ plugins {
     id 'org.springframework.boot' version '4.1.1'
     // 靜態分析（#22）：Error Prone 掛在 javac 上，編譯時就抓常見的 bug（忘了用回傳值、equals 比錯型別…）
     id 'net.ltgt.errorprone' version '5.1.1'
+    // 依賴的授權清單和檢查（#53）：會打包進 jar 的依賴不能是 GPL、AGPL 這類授權。設定在檔案最後
+    id 'com.github.jk1.dependency-license-report' version '3.1.4'
 }
 
 repositories {
@@ -383,3 +389,38 @@ tasks.register('deploy') {
     dependsOn 'deployApp', 'deployWeb'
 }
 tasks.named('deployWeb') { mustRunAfter 'deployApp' }
+
+// ── 授權（#53）：規則、理由、反例驗證都在 docs/licenses.md ──
+// ./gradlew checkLicense：runtimeClasspath 裡有授權不在 allowed-licenses.json 的依賴就失敗
+// ./gradlew generateLicenseReport：只產清單，build/reports/dependency-license/index.html（依授權分組）
+
+// 只認套件自己宣告的授權（POM、jar 的 manifest），不認 jar 裡附帶的授權檔。
+// 外掛預設兩種都算，加上「宣告了好幾個授權時，其中一個允許就過」的規則，會漏掉真正該擋的：
+// itextpdf 是 AGPL，但 jar 裡附了一份給內嵌元件用的 Apache 授權檔，預設設定下它就過了（2026-10-19 實測）
+class DeclaredLicensesOnly implements DependencyFilter {
+    ProjectData filter(ProjectData data) {
+        data.allDependencies.each { it.licenseFiles.clear() }
+        data
+    }
+}
+
+licenseReport {
+    // 只看會打包進 bootJar 的。測試、eval 用的依賴不會上線，不散布也不對外提供服務
+    configurations = ['runtimeClasspath']
+    // BOM 只是一張版本表，不是程式
+    excludeBoms = true
+    // LicenseBundleNormalizer：同一個授權在各家 POM 裡寫法不一（「Apache 2」「The Apache Software License, Version 2.0」…），
+    // 先統一名稱，允許清單才不必把每種寫法都列一次
+    filters = [new DeclaredLicensesOnly(), new LicenseBundleNormalizer()]
+    // 允許清單，不是禁止清單：沒看過的授權字串預設擋下來讓人看，而不是預設放行
+    allowedLicensesFile = layout.projectDirectory.file('allowed-licenses.json').asFile
+    renderers = [new InventoryHtmlReportRenderer('index.html', 'talkcal 後端依賴的授權')]
+}
+
+// 每次都重新跑（幾秒）：外掛的 up-to-date 判斷不可靠 —— 加了 GPL 的依賴，報告重新產生了，
+// checkLicense 卻顯示 UP-TO-DATE、沿用上一次「通過」的結果（2026-10-19 實測）
+['generateLicenseReport', 'checkLicense'].each { name ->
+    tasks.named(name) { outputs.upToDateWhen { false } }
+}
+// ./gradlew build 就會檢查，不必另外記得跑
+tasks.named('check') { dependsOn tasks.named('checkLicense') }

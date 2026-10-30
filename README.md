@@ -105,6 +105,16 @@ cd backend && ./gradlew bootRun  # app 在 8090，連 deploy/ 的 PostgreSQL 和
 pnpm --dir web run dev           # 前端在 5173，/api 轉給 8090（在 repo 根目錄跑）
 ```
 
+常用腳本（CI、部署、退版、備份還原、EC2 開關機、壓測）都收在根目錄的 [justfile](justfile)，不用記它們放在哪、要帶什麼參數：
+
+```bash
+just                       # 列出全部指令和說明
+just deploy local web      # 等於 cd/apply.sh local web
+```
+
+要裝什麼、Windows 上的 PATH 怎麼設，見 justfile 開頭。VS Code 裡用「Tasks: Run Task」：
+要選參數的幾個（部署、退版、還原、壓測）有自己的 task，其餘用「just: 任意指令」（[.vscode/tasks.json](.vscode/tasks.json)）。
+
 ## 測試
 
 Gradle 指令都在 `backend/` 裡跑：
@@ -238,6 +248,7 @@ ITIL 4 已經把 v3 的五段改成不分先後的價值鏈，這裡對照 v3，
 
 | 想知道 | 看哪裡 |
 |---|---|
+| 為什麼選 Spring AI、llama.cpp、JdbcClient、Alloy…：每個重大決定的選項和代價 | [docs/adr/](docs/adr/README.md) |
 | 整體架構圖：本機兩組 compose 怎麼接 | [docs/architecture.md](docs/architecture.md) |
 | AWS 階段一互動架構圖：每個元件由哪個檔案哪幾行決定、為什麼這樣選、業界怎麼做 | [https://anderson-chen.github.io/talkcal/](https://anderson-chen.github.io/talkcal/)（原始檔 [docs/architecture/index.html](docs/architecture/index.html)） |
 | 搬上 AWS 的兩個階段（EC2、EKS） | [infra/README.md](infra/README.md) |
@@ -246,6 +257,7 @@ ITIL 4 已經把 v3 的五段改成不分先後的價值鏈，這裡對照 v3，
 | 怎麼壓測、怎麼讀結果 | [perf/README.md](perf/README.md) |
 | 每個請求花多少錢、自架 GPU 和 Bedrock 在哪裡交叉 | [docs/cost.md](docs/cost.md) |
 | CI 怎麼跑、為什麼在容器裡跑 | [ci/README.md](ci/README.md) |
+| 用到的模型、套件、映像檔能不能這樣用，CI 怎麼擋 GPL／AGPL；本專案為什麼是 MIT | [docs/licenses.md](docs/licenses.md) |
 | 套件怎麼自動升級、升級 PR 怎麼審 | [docs/dependency-updates.md](docs/dependency-updates.md) |
 | 測試覆蓋率怎麼看、為什麼不設門檻 | [docs/test-coverage.md](docs/test-coverage.md) |
 | 前端怎麼組成 | [web/README.md](web/README.md) |
