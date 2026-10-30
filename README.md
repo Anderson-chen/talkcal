@@ -98,7 +98,7 @@ Windows、macOS、Linux 都照同一套步驟（Windows 的 shell 指令在 Git 
 `.tool-versions` 給 [mise](https://mise.jdx.dev) / asdf 用、`.nvmrc` 給 nvm 用：裝了這些工具，進 repo 就自動切到對的版本。
 
 ```bash
-cp deploy/.env.example deploy/.env                              # 填 DB_PASSWORD、MODELS_DIR（放模型檔的資料夾）
+cp deploy/.env.example deploy/.env                              # 填 DB_PASSWORD、ARCHIVE_*、MODELS_DIR（放模型檔的資料夾）
 bash deploy/models/download.sh                                  # 下載模型到 MODELS_DIR、驗 SHA256（約 5GB，已經有就只驗證）
 docker compose -f deploy/compose.yaml up -d postgres llm-chat   # 資料庫和模型（第一次要等模型複製、載入）
 cd backend && ./gradlew deploy                                  # 跑測試、build 並部署 app 和前端
