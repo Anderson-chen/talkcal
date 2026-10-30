@@ -80,6 +80,14 @@ main() {
     return 0
   fi
 
+  # 被 cd/rollback.sh 釘住（退回舊版、還在修）就不部署：不然下一個綠燈的 commit 一出現，
+  # 還沒修好的問題又被部署回來。跟 Argo CD rollback 前要關掉 auto-sync 是同一件事（理由見 docs/rollback.md）
+  local pin="$git_dir/cd-$env_name.pin"
+  if [ -f "$pin" ]; then
+    echo "釘在 $(cat "$pin")，不自動部署。解除：cd/rollback.sh $env_name --unpin"
+    return 0
+  fi
+
   # 1. master 上最新一個 CI 綠燈的 commit。只看 push 事件：PR 的 run 跑的是合併前的版本
   local sha
   sha="$(gh run list --workflow "$workflow" --branch "$branch" --event push --status success \

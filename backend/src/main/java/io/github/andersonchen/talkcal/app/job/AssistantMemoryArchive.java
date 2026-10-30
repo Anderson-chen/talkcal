@@ -5,6 +5,7 @@ import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.JsonLinesG
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository.StoredConversation;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository.StoredMessage;
+import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantProposalAdapter;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 
 import org.slf4j.Logger;
@@ -33,6 +34,9 @@ import java.util.UUID;
  *
  * 順序是重點：先上傳 → 上傳成功 → 才刪。上傳失敗的那段一列都不刪，留在資料庫等明天再試。
  *
+ * 助理發出的提議卡片（#223，只用在產品指標）也在這裡清，保留期限跟對話一樣，但直接刪、不歸檔：
+ * 它是統計用的紀錄，不是使用者的資料；超過期限的卡片，對話本身都搬走了，使用者也不會再回頭按它。
+ *
  * 為什麼放在 app.job、不放在 calendar 的 adapter.in：計時器也算是「從外面推進來」的入口，
  * 但它要直接用 JdbcAssistantMemoryRepository（不是 port，是這張表自己的維護工作）和歸檔的 bucket，
  * 而 ArchitectureTest 只准組裝根裡的 app.config、app.job 認識 adapter.out。
@@ -51,12 +55,15 @@ public final class AssistantMemoryArchive {
     private static final int BATCH = 100;
 
     private final JdbcAssistantMemoryRepository memory;
+    private final JdbcAssistantProposalAdapter proposals;
     private final ArchiveBucket bucket;
     private final Duration retention;
     private final Clock clock;
 
-    public AssistantMemoryArchive(JdbcAssistantMemoryRepository memory, ArchiveBucket bucket, Duration retention, Clock clock) {
+    public AssistantMemoryArchive(JdbcAssistantMemoryRepository memory, JdbcAssistantProposalAdapter proposals,
+                                  ArchiveBucket bucket, Duration retention, Clock clock) {
         this.memory = Objects.requireNonNull(memory, "memory 不可為 null");
+        this.proposals = Objects.requireNonNull(proposals, "proposals 不可為 null");
         this.bucket = Objects.requireNonNull(bucket, "bucket 不可為 null");
         this.retention = Objects.requireNonNull(retention, "retention 不可為 null");
         this.clock = Objects.requireNonNull(clock, "clock 不可為 null");
@@ -69,7 +76,11 @@ public final class AssistantMemoryArchive {
     // 每天凌晨四點（台北時間）：沒人在用的時候。多台一起跑也沒關係：同一段對話的 key 是固定的，重傳只是蓋成同樣的內容
     @Scheduled(cron = "0 0 4 * * *", zone = "${calendar.zone}")
     void run() {
-        Report report = archiveInactiveSince(clock.instant().minus(retention));
+        Instant cutoff = clock.instant().minus(retention);
+        Report report = archiveInactiveSince(cutoff);
+        // 卡片跟歸檔無關，上傳失敗也照清：它不是使用者的資料，留著只是佔表
+        int deletedProposals = proposals.deleteCreatedBefore(cutoff);
+        log.info("清掉舊提議卡片 {} 張", deletedProposals);
         if (report.failed() > 0) {
             log.warn("AI 助理的舊對話有 {} 段沒存進歸檔，留在資料庫明天再試；已歸檔 {} 段", report.failed(), report.archived());
         } else {

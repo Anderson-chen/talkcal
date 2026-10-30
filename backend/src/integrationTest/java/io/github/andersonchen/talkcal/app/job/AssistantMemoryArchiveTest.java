@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.ArchiveBucket;
 import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.RustFsContainer;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository;
+import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantProposalAdapter;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 
 import java.time.Clock;
@@ -77,7 +78,7 @@ class AssistantMemoryArchiveTest {
         memory = new JdbcAssistantMemoryRepository(jdbc, new TransactionTemplate(new DataSourceTransactionManager(dataSource)));
         RUSTFS.createBucket("talkcal-archive");
         bucket = RUSTFS.bucket("talkcal-archive");
-        archive = new AssistantMemoryArchive(memory, bucket, Duration.ofDays(30), Clock.system(TAIPEI));
+        archive = new AssistantMemoryArchive(memory, new JdbcAssistantProposalAdapter(jdbc), bucket, Duration.ofDays(30), Clock.system(TAIPEI));
     }
 
     @BeforeEach
@@ -140,7 +141,7 @@ class AssistantMemoryArchiveTest {
     void uploadFailureDeletesNothing() {
         memory.of(ALICE).saveAll(id, oneTurnWithTool());
         lastSpokeAt(ALICE, id, MARCH_2026);
-        AssistantMemoryArchive broken = new AssistantMemoryArchive(memory, RUSTFS.bucket("no-such-bucket"),
+        AssistantMemoryArchive broken = new AssistantMemoryArchive(memory, new JdbcAssistantProposalAdapter(jdbc), RUSTFS.bucket("no-such-bucket"),
                 Duration.ofDays(30), Clock.system(TAIPEI));
 
         assertEquals(new AssistantMemoryArchive.Report(0, 1), broken.archiveInactiveSince(cutoff()));
