@@ -203,7 +203,7 @@ footer{margin-top:28px;font-size:12px;color:var(--text-muted)}
 <span><i class="sw" style="background:var(--surface-1);border:0.5px solid var(--border-strong);opacity:.3"></i>目前 model_backend 不建</span>
 </div>
 <div id="panel"></div>
-<footer><p id="checked">最後核對：2026-10-29（行號以 master 為準；業界說法於同日查證，來源附在每個元件下）</p></footer>
+<footer><p id="checked">最後核對：2026-10-30（行號以 master 為準；業界說法於同日查證，來源附在每個元件下）</p></footer>
 <dialog id="code" aria-labelledby="code-title">
 <div class="dlg">
 <div class="dlg-h">
@@ -288,7 +288,7 @@ const FP={
 "deploy/backup/pg-restore.sh":"還原：雜湊 → 目錄 → 整份還原到暫存庫 → 停 app、兩次改名換上。前三步失敗線上不動。",
 "deploy/backup/pg-diff.sh":"比兩個資料庫差在哪：每張表依主鍵分成新增、刪除、改過，印筆數和前幾筆。只讀（runbook 情境 C）。",
 "web/nginx.conf":"前端的 nginx：送靜態檔、/api 轉給 app、AI 發問和登入註冊限流。",
-"ops/compose.yaml":"觀測堆疊：Alloy 收集，Mimir / Loki / Tempo 存，Grafana 畫圖、出事寄告警信、打 heartbeat。",
+"ops/compose.yaml":"觀測堆疊：Alloy 收集，Mimir / Loki / Tempo 存，Grafana 畫圖、出事寄告警信（打 heartbeat 等 #40）。",
 "web/Dockerfile":"前端映像檔：Node build → nginx（-otel 版，載入 OpenTelemetry 模組）。",
 "ops/tempo/tempo.yaml":"Tempo：存 trace，metrics-generator 從 span 算出 service map 的指標寫進 Mimir。",
 "ops/alloy/config.alloy":"Alloy：抓指標、讀 log、收 trace（OTLP HTTP / gRPC），改屬性、取樣後送進 Mimir / Loki / Tempo。"

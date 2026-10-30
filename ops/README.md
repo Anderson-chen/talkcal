@@ -379,27 +379,31 @@ Mimir 的 ruler 也能發告警，但那樣要再架一個 Alertmanager，通知
 ## 監控本身掛掉：誰來發現
 
 Alloy 或 Mimir 停了，dashboard 只會一片空白，看起來跟「半夜沒流量」一樣（Google SRE 說的 monitoring the monitoring）。
-所以 ops/ 自己的每個元件也被抓指標，再加四條告警（`grafana/provisioning/alerting/meta-monitoring.yaml`）：
+所以 ops/ 自己的每個元件也被抓指標，再加三條告警（`grafana/provisioning/alerting/meta-monitoring.yaml`）：
 
 | 停掉的 | 怎麼看出來 | 誰通知 | 多久 |
 |--------|-----------|--------|------|
 | Loki、Tempo | Alloy 還在，`up{job="loki"}` = 0 | Grafana 寄信（warning） | 約 3 分鐘 |
 | Alloy | 最後一筆 `up{job="alloy"}` 離現在超過 60 秒 | Grafana 寄信（critical） | 約 3～4 分鐘 |
 | Mimir | Grafana 的查詢直接失敗（規則的 `execErrState: Alerting`） | Grafana 寄信（critical） | 約 3 分鐘 |
-| **Grafana 自己**、整台機器 | Watchdog 每分鐘打的 heartbeat 停了 | **外部服務**寄信 | 約 6 分鐘 |
+| **Grafana 自己**、整台機器 | 還沒做（#40），設計見下面 | — | — |
 
 Alloy 不能用 `up < 1`：它死掉時不會再寫 up，Mimir 查詢往回找 5 分鐘、一直拿到最後那個 1。改看「最後一個點有多舊」，停掉一分鐘就看得出來。
 Alloy 只重啟一下（幾秒）不會響：要連續 60 秒沒資料、再持續 2 分鐘才寄。
 
-### 為什麼需要監控系統外面的東西
+### 為什麼需要監控系統外面的東西（設計，還沒啟用）
+
+**狀態**：這一段到「為什麼不是別的做法」是 #40 的設計，**現在沒有在跑**。Watchdog 曾經跟著 #177 提前進了 master，
+但它會寄 email（全新的 Grafana 起 3 次有 2 次在約 52 秒寄出，通知政策已經套用了，子路由還是沒擋住），
+讓告警 CI 的「正常流量 0 封」不穩定，所以先拿掉（#243），等 #40 把這個 bug 一起解掉再加回來。
+heartbeat 的基礎設施（`HEARTBEAT_URL`、terraform 的 `heartbeat_url`、`power.sh` 暫停 check）留著，沒設時不做任何事。
 
 負責寄信的是 Grafana。Grafana 掛了、機器整台斷線，就沒有人寄信 —— 監控系統沒辦法回報「我自己死了」。
 做法是反過來（dead man's switch）：一條**永遠在響**的 Watchdog 告警，每分鐘打一次外部服務的網址；
 外部服務超過寬限時間沒收到，就自己寄信。它不靠我們這台機器上的任何東西，所以 Grafana 怎麼死都會被發現。
 
-Watchdog 由 `policies.yaml` 的一條子路由（比對 `alert_type=watchdog`）送給 `heartbeat` 這個 contact point，比對到就不往下傳，
-不會混進 email。一開始寫在規則的 `notification_settings`，但規則剛建立、第一次評估時會繞到預設的 email
-（#41 的演練和告警 CI 都收到一封），所以改成明寫在 policy 樹裡，不靠 Grafana 自動產生的路由。Mimir 掛掉時 Watchdog 照樣響（它不查任何資料源，只算一個常數 1），
+PR #175 試過兩種讓 Watchdog 只送 heartbeat、不混進 email 的做法：規則的 `notification_settings`，和 `policies.yaml` 裡比對
+`alert_type=watchdog` 的子路由。兩種都還是會寄出 email（#41 的演練、告警 CI、#243 的重現都收到），#40 要先查出原因。Mimir 掛掉時 Watchdog 照樣響（它不查任何資料源，只算一個常數 1），
 因為那個情況上面那條已經寄信了，heartbeat 只負責「Grafana 和它的通知管線還活著」，不重複吵同一件事。
 
 ### 外部服務選 Healthchecks.io
