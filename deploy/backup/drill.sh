@@ -54,9 +54,11 @@ wait_pg
 sleep 2   # 官方映像檔初始化時會重啟一次伺服器，等它真的穩定
 migrations="$repo/backend/src/main/resources/db/migration"
 # 照 Flyway 的版本順序跑（V2 在 V10 前面：sort -V 才排得對）
+# shellcheck disable=SC2012  # 檔名是自己的 V<n>__*.sql，要的是 sort -V 的版本順序；find 一樣得接 sort
 for f in $(ls "$migrations" | sort -V); do
   sql -q -1 < "$migrations/$f"   # -1：一個檔一個交易，跟 Flyway 一樣
 done
+# shellcheck disable=SC2012  # 同上
 echo "migration：$(ls "$migrations" | sort -V | paste -sd' ')"
 # 假 app：跟真的 app 一樣一直握著連線、斷了就重連。還原那一步要能把它停掉、踢掉它的連線。
 # 收到 SIGTERM 馬上結束（真的 app 也會處理 SIGTERM，只是要等手上的請求做完）：不處理的話 docker stop 要白等 10 秒才 SIGKILL
@@ -80,7 +82,7 @@ SELECT md5('acct' || (i % 50 + 1))::uuid, md5('conv' || (i % 50))::uuid, i / 50,
        CASE WHEN (i / 50) % 2 = 0 THEN 'USER' ELSE 'ASSISTANT' END, '對話內容 ' || i
 FROM generate_series(0, 4999) i;
 SQL
-echo "$(counts)"
+counts
 before=$(fingerprint)
 echo "指紋：$before"
 
@@ -105,7 +107,7 @@ sql -q -c "CREATE TABLE drill_after_backup (v int); INSERT INTO drill_after_back
 step "事故：誤刪 —— DELETE 忘了加 WHERE"
 incident=$(date +%s)
 sql -c "DELETE FROM calendar_event" | sed 's/^/刪掉 /'
-echo "$(counts)"
+counts
 
 step "還原（pg-restore.sh，真的換掉線上）"
 r0=$(date +%s)
@@ -114,7 +116,7 @@ r1=$(date +%s)
 echo "還原指令花了 $(( r1 - r0 )) 秒；從誤刪到資料回來共 $(( r1 - incident )) 秒"
 
 step "驗證：資料一筆不差地回來、假 app 又連上了、被換下來的庫還在"
-echo "$(counts)"
+counts
 after=$(fingerprint)
 echo "指紋：$after"
 check "指紋跟備份當下一樣" [ "$before" = "$after" ]
@@ -138,7 +140,7 @@ check "沒動的表不誤報" grep -q 'account_identity .*一樣' <<< "$diff_out
 
 step "情境 C（runbook）：從被換下來的庫只撈回備份之後才寫的那則，線上已有的不重複"
 docker exec "$pg" sh -c "pg_dump -U talkcal -d $old --data-only --inserts --on-conflict-do-nothing -t calendar_assistant_message | psql -U talkcal -d talkcal -q -v ON_ERROR_STOP=1" > /dev/null
-echo "$(counts)"
+counts
 check "撈回來了，其他 5000 則沒有重複" [ "$(late)" = 1 ] 
 before=$(fingerprint)   # 之後的反例拿這個當基準：線上資料不能再變
 
@@ -165,9 +167,11 @@ echo "SELECT 1;" > "$BACKUP_DIR/wrong.dump"; sum wrong.dump
 expect_fail bash "$here/pg-restore.sh" "$BACKUP_DIR/wrong.dump"
 
 step "反例 5：資料庫沒在跑時備份 → 失敗，而且不留下半成品"
+# shellcheck disable=SC2012  # 只比對前後有沒有多出檔案，檔名是 pg-backup.sh 自己產生的，沒有空白、換行
 ls_before=$(ls -A "$BACKUP_DIR" | sort)
 docker stop "$pg" > /dev/null
 expect_fail bash "$here/pg-backup.sh"
+# shellcheck disable=SC2012  # 同上
 check "備份資料夾沒有多出任何檔案" [ "$ls_before" = "$(ls -A "$BACKUP_DIR" | sort)" ]
 docker start "$pg" > /dev/null
 wait_pg
@@ -190,7 +194,7 @@ ALTER DATABASE $old RENAME TO talkcal;
 COMMIT;
 SQL
 docker start "$app" > /dev/null
-echo "$(counts)"
+counts
 check "回到還原之前（誤刪後）的樣子：退回的步驟可行" [ "$(sql -c "SELECT count(*) FROM calendar_event")" = 0 ]
 
 step "全部通過，清掉演練容器"

@@ -207,6 +207,20 @@
       datasourceTemplate: 'docker',
     },
     {
+      // ci/sast/Dockerfile 用 ADD 下載 CodeQL bundle（#235），版本寫在網址裡，dockerfile manager 看不到。
+      // Renovate 只會改網址，不會改旁邊的 --checksum：升版 PR 的 sast job 會因為 checksum 對不上而紅，
+      // 要人到 release 頁抄新的 sha256 —— 刻意的，下載的東西要有人看過 digest 才進得來
+      customType: 'regex',
+      description: 'CodeQL bundle 的版本',
+      managerFilePatterns: ['/^ci/sast/Dockerfile$/'],
+      matchStrings: [
+        'releases/download/codeql-bundle-v(?<currentValue>\\d+\\.\\d+\\.\\d+)/',
+      ],
+      depNameTemplate: 'github/codeql-action',
+      datasourceTemplate: 'github-releases',
+      extractVersionTemplate: '^codeql-bundle-v(?<version>.+)$',
+    },
+    {
       // llama.cpp 的版本同時寫在 Dockerfile 的 ARG 和 compose 的 image tag，兩處要一起改
       customType: 'regex',
       description: 'llama.cpp 的 build 號（b10964 這種）',
