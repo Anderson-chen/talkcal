@@ -150,3 +150,22 @@ jobs:
       - name: 掃描結果貼到結果頁
         if: always()
         run: cat ci/build/vulns.md >> "$GITHUB_STEP_SUMMARY" || true
+
+  # 跟著部署上線的第三方映像檔（caddy、grafana、loki…，清單從 compose 讀，見 ci/compose-images.sh）。
+  # 先掃、不擋（#235）：第一次掃有約 400 筆 HIGH、CRITICAL，全部要靠升版解決，在另一張 issue 做；
+  # 現在就擋的話 master 和所有 PR 都會紅到升完為止。升乾淨之後拿掉 continue-on-error，併進上面的 vulns。
+  # 排程也跑：每天看得到還剩多少
+  third-party-images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # continue-on-error：有漏洞時這一步標紅，但 job 綠、不擋合併。結果看結果頁
+      # $(...) 刻意不加引號：一行一個映像檔、沒有空白，要拆成多個參數
+      - run: ci/vulns.sh --images-only $(ci/compose-images.sh)
+        continue-on-error: true
+
+      - name: 掃描結果貼到結果頁
+        if: always()
+        run: cat ci/build/vulns.md >> "$GITHUB_STEP_SUMMARY" || true

@@ -123,6 +123,26 @@ ci/vulns.sh talkcal/app:local talkcal/web:local postgres:18.6-alpine
 | 每天台灣 09:00（排程，只跑這個 job） | 程式碼沒變，但新的 CVE 公布了。失敗時 GitHub 寄信 |
 | 手動（Actions 頁面的 Run workflow） | 大漏洞剛公布，想馬上知道有沒有中 |
 
+**掃哪些映像檔**：
+
+| | 映像檔 | 擋不擋 |
+|---|---|---|
+| 自己 build 的 | `talkcal/app`、`talkcal/web` | 擋（`vulns` job） |
+| 資料庫 | `postgres`（版本從 compose 讀） | 擋（`vulns` job） |
+| 跟著部署上線的第三方 | `ci/compose-images.sh` 從 compose 讀：caddy、grafana、loki、mimir、tempo、alloy、mailpit、postgres-exporter（和 postgres） | **先不擋**（`third-party-images` job，結果貼結果頁） |
+
+第三方的第一次掃（2026-10-30）有約 400 筆 HIGH、CRITICAL，全部要靠升版解決（Grafana 11.4、Loki 3.3 這類都落後好幾版），
+升版另外做；升乾淨後拿掉 `continue-on-error`、併進 `vulns`。跟 #85「先掃、修完再擋」同一個做法。
+
+不掃的，和理由：
+
+| 映像檔 | 理由 |
+|---|---|
+| `talkcal/llama-server` | 只有 `model_backend = gpu` 才用（預設是 Bedrock）；要用 CUDA devel 映像檔編 llama.cpp，成品 4 GB 多，每個 PR 在 GitHub 的機器上 build 不划算。切回 gpu 時要補 |
+| `toxiproxy`（`deploy/compose.chaos.yaml`） | 只在本機故障演練時疊上去，不上線 |
+| `python`（`ci/alerting/compose.yaml`） | 只在 CI 的告警測試裡跑假 app，已經釘 digest |
+| Trivy、gitleaks、ShellCheck、CodeQL、promtool 這類工具 | 只在 CI 跑完就丟，不處理外部輸入；版本＋digest 釘死，升級交給 Renovate |
+
 **掃到了怎麼辦**：有修補版本就升（基底映像檔重新 build、函式庫在 build.gradle 拉高版本）；
 真的修不了、評估過碰不到的，寫進 `ci/trivyignore.yaml`，**一定要附理由和到期日** —— 到期後會重新報出來，逼人再看一次。
 
