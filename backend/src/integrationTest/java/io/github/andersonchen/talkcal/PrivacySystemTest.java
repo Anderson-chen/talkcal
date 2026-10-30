@@ -19,6 +19,8 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.core.env.Environment;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -26,10 +28,14 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import tools.jackson.databind.ObjectMapper;
 
+import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.ArchiveBucket;
+import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.RustFsContainer;
+
 /**
  * 隱私（#52）接起來的樣子：使用者的話不進 log，要求刪除時刪得乾淨、刪不到別人。
  *
- * 真的 SecurityFilterChain、真的 session、真的 PostgreSQL（Flyway 跑完所有 migration）。
+ * 真的 SecurityFilterChain、真的 session、真的 PostgreSQL（Flyway 跑完所有 migration）、
+ * 真的 S3 相容儲存（RustFS，#54 把舊行程和對話歸檔到這裡，刪帳號也要刪到）。
  * 每一題都有反例：刪 amy 時 bob 的東西都還在；log 裡沒有個資，但路徑、狀態碼照樣在。
  *
  * 不需要模型：對話直接寫進資料庫（跟 AuthorizationSystemTest 一樣），只測刪除和 log。
@@ -43,6 +49,20 @@ class PrivacySystemTest {
     @Container
     @ServiceConnection
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.6-alpine");
+
+    @Container
+    static final RustFsContainer RUSTFS = new RustFsContainer();
+
+    private static final String BUCKET = "talkcal-archive";
+
+    @DynamicPropertySource
+    static void archive(DynamicPropertyRegistry registry) {
+        registry.add("talkcal.archive.endpoint", RUSTFS::endpoint);
+        registry.add("talkcal.archive.region", () -> RustFsContainer.REGION);
+        registry.add("talkcal.archive.bucket", () -> BUCKET);
+        registry.add("talkcal.archive.access-key", () -> RustFsContainer.ACCESS_KEY);
+        registry.add("talkcal.archive.secret-key", () -> RustFsContainer.SECRET_KEY);
+    }
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String PASSWORD = "correct-horse";
@@ -62,12 +82,15 @@ class PrivacySystemTest {
 
     private BrowserSession amy;
     private BrowserSession bob;
+    private ArchiveBucket archive;
 
     @BeforeEach
     void twoPeopleWithData() throws Exception {
         jdbc.sql("DELETE FROM calendar_event").update();
         jdbc.sql("DELETE FROM calendar_assistant_message").update();
         jdbc.sql("DELETE FROM account").update();
+        archive = archiveBucket();
+        archive.deleteAll("");
         amy = new BrowserSession(port).signUpAndLogIn("amy", PASSWORD);
         bob = new BrowserSession(port).signUpAndLogIn("bob", PASSWORD);
         for (BrowserSession who : List.of(amy, bob)) {
@@ -82,6 +105,21 @@ class PrivacySystemTest {
                     .param("id", UUID.randomUUID())
                     .param("said", "明天" + SECRET_TITLE)
                     .update();
+            // 冪等 key（#51）、助理提議的採納紀錄（#36）：直接寫進去，形狀照 V12、V13
+            jdbc.sql("""
+                            INSERT INTO calendar_add_request (owner_id, idempotency_key, request_hash, event_ids)
+                            VALUES (:owner, 'key-1', repeat('a', 64), ARRAY[]::uuid[])
+                            """)
+                    .param("owner", owner)
+                    .update();
+            jdbc.sql("INSERT INTO assistant_proposal (id, owner_id) VALUES (:id, :owner)")
+                    .param("id", UUID.randomUUID())
+                    .param("owner", owner)
+                    .update();
+            // 歸檔：行程和對話各一包（內容不重要，刪除只看 key 屬於誰）。key 的排法照 ArchiveBucket：<種類>/owner=<id>/month=…/
+            for (String root : List.of("calendar-event/", "assistant-conversation/")) {
+                archive.put(root + "owner=" + owner + "/month=2025-01/old.jsonl.gz", new byte[] {1});
+            }
             // 綁一個 Google 登入（跟第一次用 Google 登入時存的一樣）
             jdbc.sql("INSERT INTO account_identity (provider, subject, account_id) VALUES ('google', :subject, :owner)")
                     .param("subject", "google-" + owner)
@@ -101,13 +139,27 @@ class PrivacySystemTest {
         return UUID.fromString(JSON.readTree(who.get("/api/auth/me").body()).at("/id").asString());
     }
 
-    /** 資料庫裡這個人還剩幾列：帳號、登入方式，加上每一張帶 owner_id 欄位的表。 */
+    private static ArchiveBucket archiveBucket() {
+        // bucket 只建一次：@BeforeEach 每題都會來
+        try {
+            RUSTFS.createBucket(BUCKET);
+        } catch (RuntimeException alreadyThere) {
+            // 第二題之後已經有了
+        }
+        return RUSTFS.bucket(BUCKET);
+    }
+
+    /**
+     * 這個人還剩幾樣東西：資料庫裡的帳號、登入方式、每一張帶 owner_id 欄位的表，加上物件儲存裡歸檔的檔案。
+     * 歸檔也不是手寫清單：整個 bucket 裡 key 帶著 owner=<這個人> 的都算，之後多一種歸檔也掃得到。
+     */
     private int rowsOf(UUID person) {
         int rows = jdbc.sql("SELECT count(*) FROM account WHERE id = :id").param("id", person).query(Integer.class).single()
                 + jdbc.sql("SELECT count(*) FROM account_identity WHERE account_id = :id").param("id", person).query(Integer.class).single();
         for (String table : tablesWithOwner()) {
             rows += jdbc.sql("SELECT count(*) FROM " + table + " WHERE owner_id = :id").param("id", person).query(Integer.class).single();
         }
+        rows += (int) archive.list("").stream().filter(key -> key.contains("/owner=" + person + "/")).count();
         return rows;
     }
 
@@ -125,14 +177,20 @@ class PrivacySystemTest {
     }
 
     @Test
-    @DisplayName("刪除帳號：amy 的帳號、Google 登入、行程、對話、每一張帶 owner_id 的表都清空；反例：bob 的一筆都沒少")
+    @DisplayName("刪除帳號：amy 的帳號、Google 登入、每一張帶 owner_id 的表、物件儲存裡的歸檔都清空；反例：bob 的一筆都沒少")
     void deletingAccountErasesEverythingOfThatPersonOnly() throws Exception {
         UUID amyId = idOf(amy);
         UUID bobId = idOf(bob);
         int bobBefore = rowsOf(bobId);
         assertTrue(tablesWithOwner().containsAll(List.of("calendar_event", "calendar_assistant_message")), tablesWithOwner().toString());
         assertEquals(bobBefore, rowsOf(amyId), "前提：兩個人的資料一樣多");
-        assertTrue(bobBefore >= 5, "前提：帳號、登入方式、行程、兩則對話都在：" + bobBefore);
+        // 前提：每一張帶 owner_id 的表裡都有 amy 的資料 —— 不然漏刪那張表也測不出來。
+        // 之後新增的表在這裡紅燈：在 @BeforeEach 替它放一列，下面的「刪乾淨」才守得住它
+        for (String table : tablesWithOwner()) {
+            int amys = jdbc.sql("SELECT count(*) FROM " + table + " WHERE owner_id = :id").param("id", amyId).query(Integer.class).single();
+            assertTrue(amys > 0, "前提：" + table + " 裡要先有 amy 的資料");
+        }
+        assertTrue(bobBefore >= 9, "前提：帳號、登入方式、行程、兩則對話、冪等 key、提議、兩包歸檔都在：" + bobBefore);
 
         HttpResponse<String> deleted = amy.delete("/api/auth/me");
 

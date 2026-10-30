@@ -278,9 +278,18 @@ class CalendarConfiguration {
         return assistantMemoryArchive::restore;
     }
 
-    // 使用者要求刪除帳號時，calendar 這邊的資料（行程、對話）一次刪完（#52）。auth 那頭怎麼接過來，見 AuthConfiguration
+    /**
+     * 使用者要求刪除帳號時，calendar 這邊的資料全部刪掉（#52）：資料庫裡的行程、對話、冪等 key、提議紀錄，
+     * 加上物件儲存裡歸檔的行程和對話。auth 那頭怎麼接過來，見 AuthConfiguration。
+     *
+     * 對話的歸檔不走 port（AssistantMemoryArchive 在 app.job，原因寫在它的註解），所以在這裡接在 use case 後面：
+     * 一樣是資料庫先、歸檔後。
+     */
     @Bean
-    ForgetOwnerUseCase forgetOwner(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
-        return new ForgetOwnerService(new JdbcOwnerDataAdapter(jdbcClient, new TransactionTemplate(transactionManager)));
+    ForgetOwnerUseCase forgetOwner(JdbcClient jdbcClient, PlatformTransactionManager transactionManager,
+                                   EventArchivePort eventArchive, AssistantMemoryArchive assistantMemoryArchive) {
+        ForgetOwnerService calendar = new ForgetOwnerService(
+                new JdbcOwnerDataAdapter(jdbcClient, new TransactionTemplate(transactionManager)), eventArchive);
+        return owner -> calendar.forget(owner) + assistantMemoryArchive.deleteAll(owner);
     }
 }

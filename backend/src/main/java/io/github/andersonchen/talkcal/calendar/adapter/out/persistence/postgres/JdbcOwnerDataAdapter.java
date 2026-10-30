@@ -12,18 +12,20 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 刪掉一個擁有者在 calendar 裡的所有資料（#52）：行程（V2、V11）和 AI 助理的對話記憶（V7、V11）。
+ * 刪掉一個擁有者在 calendar 資料庫裡的所有資料（#52）：行程（V2、V11）、AI 助理的對話記憶（V7、V11）、
+ * 助理提議的採納紀錄（V12）、新增行程的冪等 key（V13）。物件儲存裡的歸檔不在這裡，見 ForgetOwnerService。
  *
- * 為什麼另開一個類別，不加在 JdbcCalendarEventAdapter、JdbcAssistantMemoryRepository 裡：
- * 「這個人的資料散在哪幾張表」是一份清單，放在一個地方才看得出有沒有漏。之後新增帶 owner_id 的表
- * （例如冪等 key、歸檔），加在 TABLES 這一行；漏了 PrivacySystemTest 會抓到。
+ * 為什麼另開一個類別，不加在各張表自己的 adapter 裡：
+ * 「這個人的資料散在哪幾張表」是一份清單，放在一個地方才看得出有沒有漏。之後新增帶 owner_id 的表，
+ * 加在 TABLES 這一行；漏了 PrivacySystemTest 會抓到。
  *
  * 一個交易刪完：刪到一半斷線，不會留下「行程刪了、對話還在」的狀態。
  */
 public final class JdbcOwnerDataAdapter implements EraseOwnerDataPort {
 
     // 表名寫死在這裡，不是外面傳進來的：拼進 SQL 的字串只有這幾個常數
-    static final List<String> TABLES = List.of("calendar_event", "calendar_assistant_message");
+    static final List<String> TABLES = List.of(
+            "calendar_event", "calendar_assistant_message", "calendar_add_request", "assistant_proposal");
 
     private final JdbcClient jdbc;
     private final TransactionTemplate transaction;
