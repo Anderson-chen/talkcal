@@ -419,7 +419,7 @@ const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"
 const range=l=>{const m=String(l).match(/^(\d+)(?:–(\d+))?$/);return m?[+m[1],+(m[2]||m[1])]:null};
 const gh=(f,l)=>{const r=range(l);return REPO+f+(r?`#L${r[0]}${r[1]!==r[0]?`-L${r[1]}`:""}`:"")};
 // 行號連結：一般點擊在頁內開原始碼視窗；Ctrl / 中鍵照樣開到 GitHub
-const ln=(f,l,label)=>`<a class="ln" href="${gh(f,l)}" data-f="${esc(f)}" data-l="${esc(l)}"><code>${esc(label??l)}</code></a>`;
+const ln=(f,l,label)=>`<a class="ln" href="${esc(gh(f,l))}" data-f="${esc(f)}" data-l="${esc(l)}"><code>${esc(label??l)}</code></a>`;
 const steps=()=>ROUTES[route].steps;
 const stepK=s=>val(s.k);
 const narrow=matchMedia("(max-width:760px)");
