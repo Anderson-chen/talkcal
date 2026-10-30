@@ -1,7 +1,7 @@
 # 套件升級
 
 套件由 [Renovate](https://docs.renovatebot.com/) 自動開 PR 升級，設定在 [`.github/renovate.json5`](../.github/renovate.json5)，
-為什麼選 Renovate 不選 Dependabot 見 [ADR 0016](adr/0016-renovate-for-dependency-updates.md)。
+為什麼選 Renovate 不選 Dependabot 見 [ADR 0011](adr/0011-renovate-for-dependency-updates.md)。
 目的（[#48](https://github.com/Anderson-chen/talkcal/issues/48)）：套件不會舊到升不動，安全修補跟得上。
 
 ## 涵蓋哪些地方
