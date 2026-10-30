@@ -23,8 +23,9 @@ deny contains res if {
 	res := result.new(sprintf("服務 %s 的 %s 是寫死的值", [name, key]), {})
 }
 
-# environment 有 map（KEY: 值）和 list（- KEY=值）兩種寫法，都轉成 map
-env(svc) := {k: sprintf("%v", [v]) | some k, v in svc.environment} if is_object(svc.environment)
+# environment 有 map（KEY: 值）和 list（- KEY=值）兩種寫法，都轉成 map。
+# 沒寫值的（map 的 KEY: 、list 的 - KEY）是從主機的環境變數帶進來，不是寫死，略過
+env(svc) := {k: sprintf("%v", [v]) | some k, v in svc.environment; v != null} if is_object(svc.environment)
 
 env(svc) := {kv[0]: concat("=", array.slice(kv, 1, count(kv))) |
 	some item in svc.environment

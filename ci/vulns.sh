@@ -31,16 +31,18 @@ mkdir -p ci/build
 echo "## Trivy 掃描（HIGH、CRITICAL；漏洞只算有修補版本的）" > "$out"
 
 scan() { # scan <標題> <trivy 子指令和參數…>：跑一次 Trivy，結果印出來也寫進報告
-    local title=$1 code=0 report
+    local title=$1 code=0 report sock=()
     shift
     echo "── $title ──"
-    # 每次掛的都一樣：repo 唯讀掛在 /src（設定、lockfile、例外檔、自己的規則都從這裡讀）；
-    #   docker.sock 讓 Trivy 直接讀本機 Docker 裡的映像檔，不必先推到 registry
+    # repo 唯讀掛在 /src：設定、lockfile、例外檔、自己的規則都從這裡讀。
+    # docker.sock 只給掃映像檔的：讓 Trivy 直接讀本機 Docker 裡的映像檔，不必先推到 registry。
+    #   它等同主機 root（見 ci/config-checks/compose_docker_socket.rego），只讀檔案的掃描不給
+    if [ "$1" = image ]; then sock=(--volume /var/run/docker.sock:/var/run/docker.sock); fi
     # talkcal-trivy-cache：漏洞資料庫（幾十 MB），本機跨次保留；GitHub 每次都是新機器，會重新下載
     # 一個有問題不提早結束：每個都掃完，一次看到全部（跟 checks.sh 同一個理由）
     report=$(docker run --rm \
         --volume talkcal-trivy-cache:/root/.cache/trivy \
-        --volume /var/run/docker.sock:/var/run/docker.sock \
+        "${sock[@]}" \
         --volume "$repo:/src:ro" \
         "$image" "$@" --quiet --severity HIGH,CRITICAL \
         --ignorefile /src/ci/trivyignore.yaml --exit-code 1 --format table) || code=$?
@@ -59,7 +61,10 @@ if [ "${1:-}" = --repo ]; then
     # 跳過不是自己寫的、或 build 出來的資料夾（本機才有，git archive 出來的 CI 上沒有）。
     # --misconfig-scanners 加 yaml：Trivy 沒有 compose 的掃描器，所有 yaml 都交給 ci/config-checks/ 的規則，
     #   規則只看有頂層 services 的（也就是 compose 檔）；--check-namespaces user 是那些自己寫的 package 的前綴
+    # --skip-check-update：只用 Trivy 映像檔內建的規則（跟著上面釘的版本＋digest），不在執行時另外下載最新的規則包 ——
+    #   不然 Aqua 發新規則那天，程式碼沒變、所有 PR 都會突然紅，本機和 CI 也可能拿到不同版本。規則跟著 Renovate 升 Trivy 一起升
     scan "設定：Dockerfile、compose、Terraform" config \
+        --skip-check-update \
         --misconfig-scanners dockerfile,terraform,yaml \
         --config-check /src/ci/config-checks --check-namespaces user \
         --skip-dirs '**/node_modules' --skip-dirs '**/build' --skip-dirs '**/.terraform' \

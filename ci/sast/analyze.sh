@@ -46,7 +46,7 @@ jq -r '
     | [($sev[.ruleId] // "0" | tonumber),
        .ruleId,
        (.locations[0].physicalLocation | "\(.artifactLocation.uri):\(.region.startLine)"),
-       (.message.text | gsub("\n"; " ") | gsub("\|"; "\|"))]  # | 會切斷下面摘要的 markdown 表格
+       (.message.text | gsub("\n"; " ") | gsub("\\|"; "\\|"))]  # | 會切斷下面摘要的 markdown 表格
     | @tsv
 ' "$out"/*.sarif | sort -rn > "$out/results.tsv"
 

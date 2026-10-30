@@ -163,10 +163,21 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # 先列清單、自己一步，不跟掃描放在一起：compose 解析失敗或清單是空的要真的紅，
+      # 不然下一步的 continue-on-error 會把它吃掉，什麼都沒掃卻是綠的
+      - id: list
+        run: |
+          set -o pipefail
+          images=$(ci/compose-images.sh | grep -v '^postgres:' | paste -sd' ')
+          test -n "$images"
+          echo "images=$images" >> "$GITHUB_OUTPUT"
+
       # continue-on-error：有漏洞時這一步標紅，但 job 綠。結果看結果頁
-      # $(...) 刻意不加引號：一行一個映像檔、沒有空白，要拆成多個參數
-      - run: ci/vulns.sh $(ci/compose-images.sh | grep -v '^postgres:')
+      # $IMAGES 刻意不加引號：映像檔之間用空白隔開，要拆成多個參數
+      - run: ci/vulns.sh $IMAGES
         continue-on-error: true
+        env:
+          IMAGES: ${{ steps.list.outputs.images }}
 
       - name: 掃描結果貼到結果頁
         if: always()
