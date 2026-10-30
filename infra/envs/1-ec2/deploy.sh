@@ -110,7 +110,7 @@ docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/co
 echo "── 6. 備份排程（#45）：每小時一次、關機前一次"
 # 寫在這裡、不寫在 user_data：user_data 只在第一次開機跑，已經在跑的機器重跑 deploy.sh 才裝得上。
 # 每次部署都覆寫一次：腳本路徑或排程改了，下次部署就生效
-cat > /etc/systemd/system/$PROJECT-backup.service <<UNIT
+cat > "/etc/systemd/system/$PROJECT-backup.service" <<UNIT
 [Unit]
 Description=$PROJECT: back up PostgreSQL to S3
 After=docker.service network-online.target
@@ -120,7 +120,7 @@ Wants=network-online.target
 Type=oneshot
 ExecStart=/bin/bash $REPO/infra/envs/1-ec2/backup-to-s3.sh hourly
 UNIT
-cat > /etc/systemd/system/$PROJECT-backup.timer <<UNIT
+cat > "/etc/systemd/system/$PROJECT-backup.timer" <<UNIT
 [Unit]
 Description=$PROJECT: hourly PostgreSQL backup
 
@@ -134,7 +134,7 @@ WantedBy=timers.target
 UNIT
 # 關機時的備份：開機時「啟動」什麼都不做，關機時 systemd 停它，ExecStop 才是備份。
 # After=docker.service：關機的順序跟開機相反，所以它會在 Docker（和裡面的 postgres）停掉之前跑
-cat > /etc/systemd/system/$PROJECT-backup-on-shutdown.service <<UNIT
+cat > "/etc/systemd/system/$PROJECT-backup-on-shutdown.service" <<UNIT
 [Unit]
 Description=$PROJECT: back up PostgreSQL to S3 before shutdown
 After=docker.service containerd.service network-online.target

@@ -28,7 +28,7 @@ base=${1:-origin/master}
 dir=backend/src/main/resources/db/migration
 # 版本釘死。npm 上同一個版本號發布後不能被換掉；squawk 的執行檔也是 npm 套件（@squawk-cli/<平台>），
 # 安裝時不另外下載東西。升級時看 changelog：新版常常會多規則，舊的 migration 不受影響（只掃新增的）
-squawk=squawk-cli@2.66.0
+squawk='squawk-cli@2.66.0'
 
 if ! git rev-parse --verify --quiet "$base^{commit}" >/dev/null; then
     echo "找不到要比對的 commit：$base（PR 上要 checkout 時 fetch-depth: 0）" >&2
@@ -42,6 +42,7 @@ echo "── 已經跑過的 migration 不能改 ──"
 changed=$(git diff --no-renames --name-only --diff-filter=MD "$base"...HEAD -- "$dir")
 if [ -n "$changed" ]; then
     echo "這些 migration 在 $base 裡就有了，不能改也不能刪（要改資料庫，加一支新的 V 檔）："
+    # shellcheck disable=SC2001  # 每一行前面加縮排；改用 ${//} 得在替換字串裡寫換行，反而難讀
     echo "$changed" | sed 's/^/  /'
     status=1
 else
@@ -53,6 +54,7 @@ added=$(git diff --name-only --diff-filter=A "$base"...HEAD -- "$dir" | grep '\.
 if [ -z "$added" ]; then
     echo "沒有新增 migration。"
 else
+    # shellcheck disable=SC2001  # 同上
     echo "$added" | sed 's/^/  /'
     # 規則、PostgreSQL 版本、「每支 migration 都在交易裡跑」（Flyway 的預設）寫在 ci/squawk.toml
     # shellcheck disable=SC2086 # 檔名一行一個、沒有空白（Flyway 的命名規則），要拆成多個參數

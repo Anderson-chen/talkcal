@@ -17,17 +17,3 @@ policies:
     group_interval: 5m
     # 一直沒修好就每 4 小時提醒一次。太短會變成噪音被設成垃圾信，太長會忘記
     repeat_interval: 4h
-    routes:
-      # Watchdog（meta-monitoring.yaml 第 4 條）：永遠在響，只送外部 heartbeat，不寄 email（#40）。
-      # 原本寫在規則的 notification_settings，但規則剛建立、第一次評估時會繞到上面的 email（#41 演練和告警 CI 都看到一封）；
-      # 明寫成子路由、不往下傳（continue 預設 false），不靠 Grafana 自動產生的路由，比對到就只送 heartbeat。
-      # 節奏：每 group_interval 檢查一次，離上次送出已滿 repeat_interval 就重送。
-      # 不設成 1m／1m：實測每 2 分鐘才送一次（第 60 秒那次檢查時離上次送出差幾毫秒不滿 1 分鐘）。
-      # 30s 檢查一次、滿 50 秒就送：第 30 秒的檢查不夠、第 60 秒的一定夠，穩定每分鐘一次
-      - receiver: heartbeat       # meta-monitoring.yaml 裡的 contact point
-        object_matchers:
-          - ['alert_type', '=', 'watchdog']
-        group_by: ['alertname']
-        group_wait: 0s
-        group_interval: 30s
-        repeat_interval: 50s

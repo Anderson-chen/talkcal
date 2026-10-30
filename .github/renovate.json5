@@ -1,0 +1,258 @@
+// Renovate 的設定：套件自動升級（#48）。為什麼選 Renovate 不選 Dependabot 見 docs/adr/0016-renovate-for-dependency-updates.md，
+// 升級 PR 怎麼審、怎麼合見 docs/dependency-updates.md。
+//
+// 改這份檔案之後先在本機驗證（在 repo 根目錄跑，不給路徑它會自己找到這份）：
+//   npx --yes --package renovate@44.167.5 -- renovate-config-validator --strict
+// 它擋得住拼錯的欄位、型別不對的值，但擋不住 regex 少了捕捉群組、列舉值打錯 ——
+// 那些要用本機 dry-run 看實際抓到哪些套件（指令和實測結果見 docs/dependency-updates.md）
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    // 官方建議的基本組合：開 Dependency Dashboard、monorepo 的套件綁在一起升（例如 vue 的各個子套件）、
+    // Node 映像檔只升 LTS（workarounds:nodeDockerVersioning）
+    'config:recommended',
+  ],
+
+  // ── 什麼時候開 PR ────────────────────────────────────────────────
+  // 一週一次、週一早上台灣時間 9 點前，跟 CI 每天掃漏洞的時間（ci.yml 的 schedule）同一個早上：上班第一件事看
+  timezone: 'Asia/Taipei',
+  schedule: ['* 0-8 * * 1'],
+  // 一次最多開 5 個 PR、每小時最多 2 個：一個人審得完的量，超過的排在 Dependency Dashboard 上
+  prConcurrentLimit: 5,
+  prHourlyLimit: 2,
+  // 新版發佈滿 14 天才開 PR，跟 repo 選套件的兩週規則一致（ci/README.md 的選型段落）：被植入惡意程式碼的版本
+  // 通常幾天內就被發現下架（2025 年 npm 的 Shai-Hulud、2026-03 的 Trivy）。#107 合併後前端還有第二道：web/pnpm-workspace.yaml 的
+  // minimumReleaseAge，CI 的 pnpm install --frozen-lockfile 遇到不滿兩週的版本直接失敗 —— 這裡比它短的話，PR 只會紅燈
+  minimumReleaseAge: '14 days',
+
+  // ── PR 長什麼樣 ──────────────────────────────────────────────────
+  // commit 標題照 repo 的慣例 `類型(範圍): …`（.claude/rules/commit.md）：依賴升級是 chore(deps)
+  semanticCommits: 'enabled',
+  semanticCommitType: 'chore',
+  semanticCommitScope: 'deps',
+  labels: ['dependencies'],
+  // 一律不自動合併：要等使用者看過、CI 綠燈才合（流程見 docs/dependency-updates.md）
+  automerge: false,
+  // 鎖檔裡沒直接寫在 package.json 的間接依賴，一個月整理一次（只動鎖檔，例如 pnpm-lock.yaml）。
+  // 間接依賴的發佈日期 Renovate 管不到，靠套件管理器：pnpm 會照 pnpm-workspace.yaml 跳過不滿兩週的版本；
+  // 換 pnpm（#107）之前的 npm 沒有這種設定（docs/dependency-updates.md）
+  lockFileMaintenance: {
+    enabled: true,
+    schedule: ['* 0-8 1 * *'],
+  },
+
+  // ── 安全修補：不等週一的排程，滿兩週就開 ─────────────────────────
+  // repo 沒開 GitHub 的 Dependabot alerts（Renovate 預設讀那裡），所以另外讓 Renovate 自己查 OSV 漏洞資料庫。
+  // 修漏洞的 PR 不等週一、不受 PR 數量上限限制，但一樣等 14 天：Renovate 預設讓它不等（minimumReleaseAge: null），
+  // 這裡要明寫蓋掉。不能「HIGH、CRITICAL 不等，其他等」：漏洞的設定是 Renovate 最後用 force 蓋上去的，
+  // packageRules 依嚴重度（matchJsonata 的 vulnerabilitySeverity）改不動它（四種寫法實測，見 docs/dependency-updates.md）。
+  // HIGH、CRITICAL 要提早的話由人在 Dependency Dashboard 勾選，流程也在那份文件
+  osvVulnerabilityAlerts: true,
+  vulnerabilityAlerts: {
+    labels: ['dependencies', 'security'],
+    schedule: ['at any time'],
+    minimumReleaseAge: '14 days',
+    prCreation: 'immediate',
+  },
+
+  packageRules: [
+    {
+      description: 'Docker Hub 不登入只給翻前 10 頁 tag（本機 dry-run 第 11 頁回 403），拿不到發佈時間的版本不要因此永遠卡在等待',
+      matchDatasources: ['docker'],
+      minimumReleaseAgeBehaviour: 'timestamp-optional',
+    },
+
+    // ── 分組：minor、patch 依生態系各合成一個 PR ───────────────────
+    // 為什麼不全部合成一個：後端紅燈不該擋住前端的修補；分生態系，紅了一眼就知道是哪一邊。
+    // 每組都要寫 groupSlug（分支名）：沒寫的話 Renovate 用 groupName 產生分支名，中文會被拿掉，
+    // 「後端套件（minor、patch）」「前端套件（minor、patch）」都變成 renovate/minorpatch，全部擠進同一個 PR
+    // （本機 dry-run 實測，見 docs/dependency-updates.md）
+    {
+      description: '後端（Gradle）的 minor、patch 合成一個 PR',
+      matchManagers: ['gradle'],
+      matchUpdateTypes: ['minor', 'patch'],
+      groupName: '後端套件（minor、patch）',
+      groupSlug: 'backend-minor-patch',
+    },
+    {
+      description: '前端（package.json）的 minor、patch 合成一個 PR；pnpm 本身（packageManager 欄位）也在裡面',
+      matchManagers: ['npm'],
+      matchUpdateTypes: ['minor', 'patch'],
+      groupName: '前端套件（minor、patch）',
+      groupSlug: 'web-minor-patch',
+    },
+    {
+      description: '容器映像檔（Dockerfile、compose、ci/*.sh 的掃描工具）的 minor、patch、digest 合成一個 PR',
+      matchManagers: ['dockerfile', 'docker-compose', 'custom.regex'],
+      matchDatasources: ['docker'],
+      matchUpdateTypes: ['minor', 'patch', 'digest'],
+      groupName: '映像檔（minor、patch）',
+      groupSlug: 'images-minor-patch',
+    },
+    {
+      description: 'GitHub Actions 全部合成一個 PR（含 major：Actions 的 major 多半只是換 Node 執行環境）',
+      matchManagers: ['github-actions'],
+      groupName: 'GitHub Actions',
+      groupSlug: 'github-actions',
+    },
+    {
+      description: 'Terraform provider 合成一個 PR',
+      matchManagers: ['terraform'],
+      matchUpdateTypes: ['minor', 'patch'],
+      groupName: 'Terraform provider（minor、patch）',
+      groupSlug: 'terraform-minor-patch',
+    },
+
+    // ── 要一起升的：分在不同檔案，但版本必須對齊 ────────────────────
+    {
+      description: 'Gradle 本體：wrapper 和 backend/Dockerfile 的 gradle 映像檔要同一版（ci/Dockerfile 的註解）',
+      matchPackageNames: ['gradle'],
+      groupName: 'Gradle 本體',
+      groupSlug: 'gradle',
+    },
+    {
+      // 映像檔那一處改由下面的 customManagers 用 wrapper 的資料來源追，這裡關掉 Dockerfile 管理器抓到的那一份。
+      // 不關的話兩邊查不同的地方：Docker Hub 拿不到發佈時間就不等，wrapper 會等滿 14 天，
+      // 同一個 PR 變成 wrapper 9.8.1、映像檔 9.8.2（2026-10-30 dry-run 實測）
+      description: 'backend/Dockerfile 的 gradle 映像檔不從 Docker Hub 追',
+      matchManagers: ['dockerfile'],
+      matchPackageNames: ['gradle'],
+      enabled: false,
+    },
+    {
+      description: 'JDK：backend/Dockerfile、ci/Dockerfile 的 temurin 要同一版；major 還要手動改 build.gradle 的 toolchain',
+      matchPackageNames: ['eclipse-temurin'],
+      groupName: 'JDK',
+      groupSlug: 'jdk',
+    },
+    {
+      description: 'Node：web/Dockerfile、ci/Dockerfile 的 node 要同一個大版本',
+      matchPackageNames: ['node'],
+      matchDatasources: ['docker'],
+      groupName: 'Node',
+      groupSlug: 'node',
+    },
+    {
+      description: '觀測堆疊：ops/compose.yaml 的五個映像檔常一起發版，一起升、一起驗 dashboard',
+      matchPackageNames: ['grafana/**'],
+      matchUpdateTypes: ['minor', 'patch'],
+      groupName: '觀測堆疊（minor、patch）',
+      groupSlug: 'observability-minor-patch',
+    },
+
+    // ── major：不自動開 PR，在 Dependency Dashboard 勾了才開 ────────
+    // major 常要改程式碼（API 改名、設定格式換掉），排程到了就丟 PR 只會積著沒人處理。
+    // 放在 Dashboard 上看得到「有哪些 major 可以升」，決定要做時勾一下，Renovate 才開 PR
+    // GitHub Actions 例外：major 多半只是換 Node 執行環境，跟著 Actions 的群組開
+    {
+      description: 'major 要在 Dependency Dashboard 勾選才開 PR（GitHub Actions 除外）',
+      matchManagers: ['!github-actions'],
+      matchUpdateTypes: ['major'],
+      dependencyDashboardApproval: true,
+      addLabels: ['major'],
+    },
+
+    // ── 刻意釘住的：理由寫在原本的檔案，這裡只防 Renovate 一直來敲門 ──
+    {
+      description: 'TypeScript 釘在 5.x：TS 7 是 Go 重寫的，vue-tsc 3 還接不上（web/README.md）。等 vue-tsc 支援再拿掉這條',
+      matchPackageNames: ['typescript'],
+      allowedVersions: '<6',
+    },
+    {
+      description: 'Caddy 換 minor 要先在機器上驗過一次 HTTPS 憑證流程（docs/architecture 的 caddy 元件），minor 也要勾選才開',
+      matchPackageNames: ['caddy'],
+      matchUpdateTypes: ['minor'],
+      dependencyDashboardApproval: true,
+    },
+    {
+      description: 'nginx 只走 stable 線（偶數小版本，web/Dockerfile 的註解）：奇數是 mainline，Renovate 不分會把 1.31 當成 minor 開',
+      matchPackageNames: ['nginx'],
+      allowedVersions: '/^\\d+\\.\\d*[02468](\\.|-|$)/',
+    },
+    {
+      description: 'CUDA 跟主機的 GPU 驅動綁在一起（CUDA 13 要驅動 >= 580，deploy/llama-server/Dockerfile 的註解），不能只看有沒有新版就升',
+      matchPackageNames: ['nvidia/cuda'],
+      enabled: false,
+    },
+    {
+      description: 'llama.cpp 幾乎每天發版，只在本機 GPU 用；換版要重 build 映像檔、重跑模型測試，所以要勾選才開',
+      matchPackageNames: ['ggml-org/llama.cpp'],
+      dependencyDashboardApproval: true,
+    },
+  ],
+
+  // ── 標準管理器看不到的版本 ───────────────────────────────────────
+  customManagers: [
+    {
+      customType: 'regex',
+      description: 'backend/Dockerfile 的 gradle 映像檔版本，跟 wrapper 一樣查 Gradle 官方的版本清單',
+      managerFilePatterns: ['/^backend/Dockerfile$/'],
+      matchStrings: [
+        'FROM gradle:(?<currentValue>\\d+\\.\\d+(?:\\.\\d+)?)-jdk',
+      ],
+      depNameTemplate: 'gradle',
+      datasourceTemplate: 'gradle-version',
+      versioningTemplate: 'gradle',
+    },
+    {
+      // ci/secrets.sh 用 docker run 跑 gitleaks，版本和 digest 寫在變數裡。
+      // Trivy 的版本寫在 ci/Dockerfile 的 COPY --from（ci/vulns.sh 從那裡讀），由 dockerfile 管理器追，不經過這條。
+      // 掃描工具舊了會漏抓新的祕密格式、新的漏洞，所以也要追
+      customType: 'regex',
+      description: 'ci/*.sh 裡 image=名稱:版本@digest 的掃描工具',
+      managerFilePatterns: ['/^ci/[^/]+\\.sh$/'],
+      matchStrings: [
+        'image=(?<depName>[a-z0-9./-]+):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})',
+      ],
+      datasourceTemplate: 'docker',
+    },
+    {
+      // ci/sast/Dockerfile 用 ADD 下載 CodeQL bundle（#235），版本寫在網址裡，dockerfile manager 看不到。
+      // Renovate 只會改網址，不會改旁邊的 --checksum：升版 PR 的 sast job 會因為 checksum 對不上而紅，
+      // 要人到 release 頁抄新的 sha256 —— 刻意的，下載的東西要有人看過 digest 才進得來
+      customType: 'regex',
+      description: 'CodeQL bundle 的版本',
+      managerFilePatterns: ['/^ci/sast/Dockerfile$/'],
+      matchStrings: [
+        'releases/download/codeql-bundle-v(?<currentValue>\\d+\\.\\d+\\.\\d+)/',
+      ],
+      depNameTemplate: 'github/codeql-action',
+      datasourceTemplate: 'github-releases',
+      extractVersionTemplate: '^codeql-bundle-v(?<version>.+)$',
+    },
+    {
+      // llama.cpp 的版本同時寫在 Dockerfile 的 ARG 和 compose 的 image tag，兩處要一起改
+      customType: 'regex',
+      description: 'llama.cpp 的 build 號（b10964 這種）',
+      managerFilePatterns: ['/^deploy/llama-server/Dockerfile$/', '/^deploy/compose\\.yaml$/'],
+      matchStrings: [
+        'ARG LLAMA_BUILD=(?<currentValue>b\\d+)',
+        'image: talkcal/llama-server:(?<currentValue>b\\d+)-cuda',
+      ],
+      depNameTemplate: 'ggml-org/llama.cpp',
+      datasourceTemplate: 'github-releases',
+      versioningTemplate: 'regex:^b(?<major>\\d+)$',
+    },
+    {
+      // 架構頁（docs/architecture/index.html）把映像檔版本抄了一份。升級 PR 一起改它，頁面才不會跟 compose 對不上；
+      // 頁尾的「最後核對」日期和其他說明文字還是要人看過再改（CLAUDE.md 的規則）
+      customType: 'regex',
+      description: '架構頁的 image 欄位（caddy、postgres）',
+      managerFilePatterns: ['/^docs/architecture/index\\.html$/'],
+      matchStrings: [
+        '\\["image","(?<depName>[a-z0-9./-]+):(?<currentValue>[^"]+)"',
+      ],
+      datasourceTemplate: 'docker',
+    },
+    {
+      customType: 'regex',
+      description: '架構頁的觀測堆疊版本（["Mimir","3.2.1" 這種）',
+      managerFilePatterns: ['/^docs/architecture/index\\.html$/'],
+      matchStrings: [
+        '\\["(?<depName>Alloy|Mimir|Loki|Tempo|Grafana)","(?<currentValue>v?\\d+\\.\\d+\\.\\d+)"',
+      ],
+      depNameTemplate: 'grafana/{{{lowercase depName}}}',
+      datasourceTemplate: 'docker',
+    },
+  ],
+}
