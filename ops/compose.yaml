@@ -75,9 +75,9 @@ services:
       # 雲端機器上要看，用 SSM 的 port forwarding 接回本機（見 infra/envs/1-ec2/README.md）。
       - "127.0.0.1:3000:3000"
     environment:
-      # 監控本身掛掉（#40）：Watchdog 告警每分鐘打一次的外部 heartbeat 網址（provisioning/alerting/meta-monitoring.yaml）。
-      # 值在不進 git 的 deploy/.env，起這組要帶 --env-file ../deploy/.env。
-      # 沒設就給 .invalid（保留的網域，永遠解析不到）：空字串的話 webhook contact point 驗證不過，Grafana 起不來
+      # 監控本身掛掉（#40）的外部 heartbeat 網址。現在沒人讀：Watchdog 會寄 email，先拿掉了（#243），#40 會加回來。
+      # 值在不進 git 的 deploy/.env，起這組要帶 --env-file ../deploy/.env；#40 做完之前留空。
+      # 沒設就給 .invalid（保留的網域，永遠解析不到）：#40 的 webhook contact point 收到空字串會驗證不過、Grafana 起不來
       - HEARTBEAT_URL=${HEARTBEAT_URL:-http://heartbeat-not-configured.invalid/}
       # 學習用、只在 localhost 跑，關掉登入省事：一開網頁就是 Admin，不必記帳密。
       # 要練權限管理再把這三行拿掉，改用預設帳密 admin / admin 登入。

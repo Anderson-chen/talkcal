@@ -15,7 +15,6 @@
 | Alloy 停了，指標不再進來（#40） | critical | [meta-alloy-down](meta-alloy-down.md) |
 | Mimir 查不到（#40） | critical | [meta-mimir-down](meta-mimir-down.md) |
 | Loki 或 Tempo 抓不到（#40） | warning | [meta-backend-down](meta-backend-down.md) |
-| 外部 heartbeat 斷了（#40 的 Watchdog） | — | [meta-watchdog](meta-watchdog.md) |
 
 不是告警觸發、而是要主動做的：[備份與還原](backup-restore.md)。
 

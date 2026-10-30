@@ -182,7 +182,7 @@ variable "alert_email_to" {
 }
 
 # ── 監控本身掛掉（#40）──────────────────────────────────────────────────
-# Healthchecks.io 那類外部服務的 ping 網址（https://hc-ping.com/<uuid>），Grafana 的 Watchdog 每分鐘打一次。
+# Healthchecks.io 那類外部服務的 ping 網址（https://hc-ping.com/<uuid>）。#40 做完之前不要給：Watchdog 先拿掉了（#243）。
 # 網址本身就是祕密：拿到就能假裝我們還活著。跟 OAuth 一樣用 *.auto.tfvars 或 TF_VAR_heartbeat_url 給，不進 git。
 # 沒給 → 雲端不送 heartbeat，Grafana 自己掛掉時沒有人知道（其他告警不受影響）。
 variable "heartbeat_url" {

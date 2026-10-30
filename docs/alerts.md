@@ -32,7 +32,6 @@ Google SRE 的原則是**對症狀告警、不對原因告警**：原因有一�
 |----------|------|-----------|
 | `critical` | 現在就要處理（Workbook 說的 page） | email（`policies.yaml`） |
 | `warning` | 上班時間處理（Workbook 說的 ticket） | email（`policies.yaml`） |
-| （無） | Watchdog，不是事件 | heartbeat → 外部服務（#40） |
 
 **兩種 severity 現在都寄同一個信箱**：只有一個人、一個管道，分流沒有意義。
 規則都已經帶好 `severity`，之後要讓 `critical` 打電話（PagerDuty、Grafana OnCall）時，只要在 `policies.yaml` 加一條比對 `severity=critical` 的子 policy，規則不必動。
@@ -41,7 +40,7 @@ Google SRE 的原則是**對症狀告警、不對原因告警**：原因有一�
 ## 總表
 
 「沒資料時」是查詢查不到任何序列時當成什麼：「出事」= `noDataState: Alerting`，「正常」= `OK`。
-**通知誰**：除了 Watchdog（送外部 heartbeat），每一條都走 `policies.yaml` 寄到 `ALERT_EMAIL_TO`，所以表裡不另列。
+**通知誰**：每一條都走 `policies.yaml` 寄到 `ALERT_EMAIL_TO`，所以表裡不另列。
 
 | 告警（uid） | 檔案（PR） | 式子（摘要） | 門檻 | 持續 | 沒資料時 | severity | 為什麼要有 |
 |---|---|---|---|---|---|---|---|
@@ -55,9 +54,8 @@ Google SRE 的原則是**對症狀告警、不對原因告警**：原因有一�
 | `meta-alloy-down` Alloy 停了 | `meta-monitoring.yaml`（#175） | `time() − max(timestamp(up{job="alloy"}))` | > 60s | 2m | **出事** | critical | 三種訊號都經過 Alloy，它停了 dashboard 一片空白，看起來像「沒事」 |
 | `meta-mimir-down` Mimir 查不到 | `meta-monitoring.yaml`（#175） | `vector(1)`，查詢失敗就算出事 | 查詢失敗 | 2m | **出事** | critical | 所有指標類告警都靠 Mimir，它查不到時上面每一條都不會響 |
 | `meta-backend-down` Loki 或 Tempo 抓不到 | `meta-monitoring.yaml`（#175） | `min by (job) (up{job=~"loki\|tempo"})` | < 1 | 2m | 正常 | warning | 少一種訊號，告警本身還在，不必半夜叫人 |
-| `meta-watchdog` Watchdog | `meta-monitoring.yaml`（#175） | `vector(1)`，永遠在響 | — | 0s | **出事** | （無） | dead man's switch：Grafana 或整台機器停了，heartbeat 斷掉，由外部服務寄信 |
 
-> #40（監控本身掛掉）的四條在 PR #175（分支 `claude/40-meta-monitoring-4a7832`），還沒合併；合併時以它的檔案為準。
+> #40（監控本身掛掉）的前三條已經跟著 #177 進了 master；第四條 Watchdog 會寄 email，先拿掉（#243），等 #40 再加回來。
 
 ## 新加的四條怎麼接的（#39）
 
