@@ -24,10 +24,22 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?缺 DB_PASSWORD}
       # 登入的 session cookie 只走 HTTPS（#103）。雲端前面有 Caddy 做 HTTPS 才能開；本機是 http，開了瀏覽器就不送回來
       SERVER_SERVLET_SESSION_COOKIE_SECURE: "true"
+      # 歸檔（#54）改放 S3：endpoint 空白 = AWS S3 本身（不是 compose 裡的 RustFS）。
+      # bucket、區域、專用 user 的 key 都在 .env（archive.tf 建、secrets.tf 寫進去）；key 本身由 deploy/compose.yaml 交給 app
+      TALKCAL_ARCHIVE_ENDPOINT: ""
+      TALKCAL_ARCHIVE_BUCKET: ${ARCHIVE_BUCKET:?缺 ARCHIVE_BUCKET}
+      TALKCAL_ARCHIVE_REGION: ${ARCHIVE_REGION:?缺 ARCHIVE_REGION}
     # 本機沒設記憶體上限，JVM 的 MaxRAMPercentage=75 是「整台主機的 75%」。
     # 本機記憶體大不覺得，這台只有 8GB（gpu 是 16GB），還要給 Postgres 和整組觀測，不設的話 app 一吃就是大半台。
     # 設了上限之後，75% 改成以 2GB 算（約 1.5GB heap）。
     mem_limit: 2g
+
+  # 本機扮演 S3 的 RustFS 不起：放進一個不會被打開的 profile（跟 compose.bedrock.yaml 關掉模型的做法一樣）。
+  # app 本來就不 depends_on 它（物件儲存掛了不該讓 app 起不來），所以不必改 app 的 depends_on
+  archive:
+    profiles: [local-archive]
+  archive-init:
+    profiles: [local-archive]
 
   # ── HTTPS 入口：本機沒有這一層 ─────────────────────────────────────────────
   # Caddy 自動跟 Let's Encrypt 拿憑證、自動續期，再轉給 web（nginx）。

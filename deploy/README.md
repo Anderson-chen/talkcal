@@ -238,7 +238,7 @@ docker exec -it talkcal-postgres psql -U talkcal -d talkcal
 ```
 
 ```sql
--- 最近的對話和它們的訊息（30 天沒再說話的整段會被 AssistantMemoryCleanup 清掉）
+-- 最近的對話和它們的訊息（30 天沒再說話的整段會被 AssistantMemoryArchive 搬到歸檔）
 SELECT conversation_id, position, type, left(content, 40), tool_calls IS NOT NULL AS called_tool
 FROM calendar_assistant_message
 ORDER BY created_at DESC, position;

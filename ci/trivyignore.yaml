@@ -171,7 +171,7 @@ misconfigurations:
   # S3 用 SSE-S3（AES256）而不是自己的 KMS key：一把 key 每月 1 美元加 API 費用，
   # 換到的是 key 的輪替、存取政策自己管 —— 單人專案、bucket 本來就鎖在自己的帳號，用不到
   - id: AWS-0132
-    paths: [infra/bootstrap/main.tf, infra/envs/1-ec2/backups.tf]
+    paths: [infra/bootstrap/main.tf, infra/envs/1-ec2/backups.tf, infra/envs/1-ec2/archive.tf]
     statement: SSE-S3 已加密；自管 KMS key 的好處這個規模用不到
     expired_at: 2027-10-30
   # 出網全開：要拉映像檔、模型、套件、Let's Encrypt，目的地太多。只開 443 這條規則一樣會報（它看的是 0.0.0.0/0）

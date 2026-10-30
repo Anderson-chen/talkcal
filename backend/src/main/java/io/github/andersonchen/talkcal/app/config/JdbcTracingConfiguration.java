@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Configuration;
  * 一小時幾百個只有一個「connection」span 的 trace，真正的請求在 Tempo 上就被淹掉了；
  * service map 上 talkcal → postgresql 那條邊的流量也會被灌水，看不出請求實際打了資料庫幾次。
  *
- * 排程（AssistantMemoryCleanup）不受影響：Spring 替 @Scheduled 開了 Observation，它的 SQL 有上層。
+ * 排程（AssistantMemoryArchive、EventArchiveJob）不受影響：Spring 替 @Scheduled 開了 Observation，它的 SQL 有上層。
  */
 @Configuration(proxyBeanMethods = false)
 class JdbcTracingConfiguration {

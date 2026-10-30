@@ -52,5 +52,10 @@ resource "aws_ssm_parameter" "dotenv" {
     ALERT_EMAIL_TO=${var.alert_email_to}
     # Grafana 的 heartbeat（#40）：deploy.sh 起 ops/ 時用 --env-file 讀同一份
     HEARTBEAT_URL=${var.heartbeat_url}
+    # 舊資料的歸檔（#54）：app 讀寫 S3 用的 bucket、區域、專用 user 的 key（archive.tf）
+    ARCHIVE_BUCKET=${aws_s3_bucket.archive.bucket}
+    ARCHIVE_REGION=${var.region}
+    ARCHIVE_ACCESS_KEY=${aws_iam_access_key.archive.id}
+    ARCHIVE_SECRET_KEY=${aws_iam_access_key.archive.secret}
   ENV
 }
