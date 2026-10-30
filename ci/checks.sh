@@ -8,9 +8,16 @@
 # 一次看到全部的問題，比修一個、推一次、再看下一個快。
 
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 status=0
+
+echo "── shell 腳本：ShellCheck ──"
+# 沒加引號被拆成好幾個參數、cd 失敗還繼續往下跑、trap 的變數展開時機不對…這類只有執行到那一行才會發現的錯。
+# 幾秒就有結果，放最前面。容器裡沒有 .git（run.sh 用 git archive），所以用 find 找，不用 git ls-files；
+# 這時還沒 pnpm install，node_modules 裡別人的腳本不會被找到。
+# 刻意的寫法在那一行上面加 # shellcheck disable=SCxxxx 並寫理由（例子見 cd/triggers/watch.sh 的 trap）
+find . \( -name '*.sh' -o -path './.githooks/*' \) -type f -print0 | xargs -0 shellcheck || status=1
 
 echo "── 後端：單元測試、架構規則、整合測試（編譯時 Error Prone 一起跑）──"
 # 整合測試裡要 PostgreSQL 的那幾支用 Testcontainers 開在旁邊（run.sh 把主機的 Docker 接進來了）；
@@ -75,6 +82,7 @@ backend_coverage() { # 後端的「行 | 分支」兩欄：把 JaCoCo CSV 每個
 web_coverage() { # 前端的「行 | 分支」兩欄：讀 Vitest 的 json-summary
     local json=web/coverage/coverage-summary.json
     [ -f "$json" ] || { echo "（沒有報告） | （沒有報告）"; return; }
+    # shellcheck disable=SC2016  # 單引號裡是 JavaScript，${} 是 JS 的模板字串，本來就不該給 shell 展開
     node -e 'const t = require(process.argv[1]).total
         const pct = (k) => `${t[k].pct}% (${t[k].covered}/${t[k].total})`
         console.log(`${pct("lines")} | ${pct("branches")}`)' "$PWD/$json"

@@ -251,6 +251,25 @@ Gradle 外掛用 [net.ltgt.errorprone](https://github.com/tbroyer/gradle-errorpr
 外掛：eslint-plugin-vue（MIT，Vue 官方，370 萬）、@vue/eslint-config-typescript（MIT，Vue 官方，90 萬）、
 eslint-plugin-playwright（MIT，397★ 但每週 300 萬下載，E2E 用 Playwright 的專案幾乎都裝）。
 
+### shell 腳本：ShellCheck
+
+`checks.sh` 的第一步，掃 repo 裡所有 `.sh` 和 `.githooks/`（#235）。這個 repo 的 CI、部署、備份都是 shell 腳本，
+沒加引號被拆成好幾個參數、`cd` 失敗還繼續往下跑這類錯，要等執行到那一行才會發現 —— 常常是在 EC2 上部署到一半。
+
+ShellCheck（GPL-3.0）是例外：只在 CI 容器裡執行、不打包進任何產物，而 shell 腳本的靜態檢查沒有其他像樣的選擇（2026 年仍是事實標準）。
+執行檔從官方映像檔 `koalaman/shellcheck:v0.11.0` 搬進 `ci/Dockerfile`，版本＋digest 釘死；不用 apt，Ubuntu 24.04 的是 2022 年的 0.9.0。
+全部等級都擋（包括 style）：第一次加進來時 22 個結果，改得了的改（`cd` 沒檢查、`$PROJECT` 沒加引號、`echo "$(cmd)"`、用不到的變數），
+刻意的寫法在那一行上面寫 `# shellcheck disable=SCxxxx` 並附理由（`trap` 要立刻展開、`node -e` 單引號裡的 JS 模板字串…）。
+
+不掃 `infra/envs/1-ec2/user-data.sh.tftpl`：那是 Terraform 的樣板，`${}` 有一半是 Terraform 先代換的，ShellCheck 看不懂。
+
+**反例**：
+
+| 造出來的腳本 | 結果 |
+|---|---|
+| 現在的 24 支 | 通過 |
+| `cd "$dir"` 沒檢查、`rm -rf $dir/build` 沒加引號 | 紅：`SC2164`、`SC2086` |
+
 ### 格式化為什麼還沒做
 
 格式化（Spotless + google-java-format、Prettier）另外在 [#179](https://github.com/Anderson-chen/talkcal/issues/179)：

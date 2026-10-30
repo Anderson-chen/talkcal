@@ -65,6 +65,7 @@ main() {
     return 0
   fi
   # 路徑當下就展開：trap 在 main 結束後才觸發，那時 local 變數已經不在了
+  # shellcheck disable=SC2064  # 刻意現在展開，理由見上一行
   trap "rmdir '$lock'" EXIT
 
   # 有沒 commit 的改動代表這多半是開發用的 clone，checkout 會把人家的工作蓋掉
