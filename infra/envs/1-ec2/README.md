@@ -173,7 +173,7 @@ terraform output -raw grafana_tunnel
 關機時還在收費的只有 EBS（bedrock 30GB、gpu 150GB 的 gp3）和沒掛在執行中機器上的 Elastic IP。Bedrock 按 token 計費，不叫就不收。
 
 ```bash
-export HEALTHCHECKS_API_KEY=...   # 有設 heartbeat_url 才需要，見下面
+export HEALTHCHECKS_API_KEY=...   # 有設 heartbeat_url 才需要；#40 做完之前不要設，見下面
 ./power.sh stop                   # 先暫停 Healthchecks 的 check，再關機
 ./power.sh start                  # 開機，等到 Healthchecks 收到 heartbeat、恢復監控
 ```
