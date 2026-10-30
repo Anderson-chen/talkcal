@@ -25,7 +25,7 @@ import java.util.stream.IntStream;
  * port 的約定是「記錄失敗不丟例外」：卡片照樣顯示、行程照樣存好，只是那幾張的採納、拒絕不算進指標。
  * 所以這裡把資料庫的例外吞掉、留一筆 warn，不往外丟。
  *
- * 舊卡片由 AssistantMemoryCleanup 每天清（deleteCreatedBefore），保留期限跟對話一樣。
+ * 舊卡片由 AssistantMemoryArchive 每天清（deleteCreatedBefore，不歸檔：只用在產品指標），保留期限跟對話一樣。
  */
 public final class JdbcAssistantProposalAdapter implements ProposalStorePort {
 

@@ -1,7 +1,7 @@
 # 這個 stack 是「在本機模擬雲端部署」：把原本用 .bat 跑在 Windows 上的服務，一個一個搬進容器。
 # 跟 ops/ 分開：ops/ 是觀測（看別人），這裡是被部署的服務本身（被看的那些）。
 #
-# 都在容器裡：Qwen3-8B 生成、PostgreSQL、talkcal app，以及前面擋一層的 nginx（web）。
+# 都在容器裡：Qwen3-8B 生成、PostgreSQL、舊資料的歸檔（RustFS）、talkcal app，以及前面擋一層的 nginx（web）。
 # 要退回去就 `docker compose down`，再點原本的 .bat、./gradlew bootRun。
 #
 # 容器之間怎麼溝通：同一個 compose 的服務自動在同一個網路（talkcal-deploy_default）上，
@@ -13,6 +13,7 @@
 #                  代價：跟原生 .bat 搶同樣的埠，起這個之前要先關掉那個視窗。
 #   18090       —— 容器裡的 app。刻意不用 8090：8090 留給本機開發的 bootRun，兩個可以同時開著比對。
 #   18080       —— 容器裡的前端（nginx）。瀏覽器開這個，/api 由 nginx 轉給 app。
+#   9100 / 9101 —— 歸檔用的 RustFS（S3 API / 管理頁面）。本機 bootRun 的 app 打 9100；不用 9000 是因為太多工具預設佔它。
 
 name: talkcal-deploy
 
@@ -209,6 +210,51 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # ── 舊資料的歸檔：S3 相容的物件儲存（#54）──────────────────────────
+  # app 每天凌晨把舊行程、舊的 AI 助理對話壓成 JSON Lines + gzip 放進來，存好了才從 postgres 刪。
+  # 對照雲端：S3（infra/envs/1-ec2/archive.tf）。app 用同一套 S3 API，只差 endpoint，所以本機驗得到雲端的行為。
+  #
+  # 為什麼是 RustFS 不是 MinIO：MinIO 已經不發社群版的映像檔（Docker Hub 上的 minio/minio 拉不到，2026-10 實測），
+  # RustFS 是 Apache-2.0、講同一套 S3 API 的替代品，整合測試（RustFsContainer）也用同一個映像檔。
+  archive:
+    image: rustfs/rustfs:1.0.3
+    container_name: talkcal-archive
+    environment:
+      # 帳密從 deploy/.env 來；app 用同一組連進來。沒設就拒絕啟動，不退回寫死的預設值
+      RUSTFS_ACCESS_KEY: ${ARCHIVE_ACCESS_KEY:?缺 ARCHIVE_ACCESS_KEY：見 deploy/.env.example}
+      RUSTFS_SECRET_KEY: ${ARCHIVE_SECRET_KEY:?缺 ARCHIVE_SECRET_KEY：見 deploy/.env.example}
+    ports:
+      # 只綁 127.0.0.1：給本機 bootRun 的 app 和你自己用 aws cli 看歸檔；9101 是 RustFS 的管理頁面
+      - "127.0.0.1:9100:9000"
+      - "127.0.0.1:9101:9001"
+    volumes:
+      # 歸檔就是要留很久的東西：具名 volume，down 不刪、down -v 才清
+      - archive-data:/data
+    healthcheck:
+      # /health/ready：儲存和權限都準備好才回 200（/health 只代表程序活著）
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # 建 bucket（只跑一次就結束）。雲端的 bucket 由 Terraform 建，app 的權限刻意不含建 bucket，所以本機也在外面建。
+  # 用 RustFS 映像檔裡的 curl 自己簽 S3 的請求（--aws-sigv4），不必為了這一行多拉一個 aws-cli 映像檔。
+  # 已經有了再 PUT 一次也是回 200，所以每次 up 都跑沒關係
+  archive-init:
+    image: rustfs/rustfs:1.0.3
+    container_name: talkcal-archive-init
+    entrypoint: ["sh", "-c"]
+    command:
+      - curl -fsS -X PUT --aws-sigv4 "aws:amz:us-east-1:s3" --user "$$ARCHIVE_ACCESS_KEY:$$ARCHIVE_SECRET_KEY" http://archive:9000/talkcal-archive && echo "bucket talkcal-archive 準備好了"  # gitleaks:allow 帳密是容器的環境變數，不是寫死的值
+    environment:
+      ARCHIVE_ACCESS_KEY: ${ARCHIVE_ACCESS_KEY:?缺 ARCHIVE_ACCESS_KEY：見 deploy/.env.example}
+      ARCHIVE_SECRET_KEY: ${ARCHIVE_SECRET_KEY:?缺 ARCHIVE_SECRET_KEY：見 deploy/.env.example}
+    depends_on:
+      archive:
+        condition: service_healthy
+    restart: "no"
+
   # ── talkcal app ────────────────────────────────────────────────────
   app:
     # Dockerfile 在 backend/（要看得到 src/ 和 build.gradle），後端自己的東西放一起
@@ -233,6 +279,9 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      # 歸檔（#54）：連 archive 那個 RustFS 的帳密，位址在 application-docker.properties
+      ARCHIVE_ACCESS_KEY: ${ARCHIVE_ACCESS_KEY:?缺 ARCHIVE_ACCESS_KEY：見 deploy/.env.example}
+      ARCHIVE_SECRET_KEY: ${ARCHIVE_SECRET_KEY:?缺 ARCHIVE_SECRET_KEY：見 deploy/.env.example}
 
     ports:
       # 主機的 18090 → 容器的 8090。只綁 127.0.0.1，跟模型一樣不對區網開放。
@@ -301,3 +350,5 @@ volumes:
   models:
   # 對話紀錄。跟模型那個 volume 一樣，down 不刪、down -v 才清
   postgres-data:
+  # 歸檔（#54）。一樣 down 不刪、down -v 才清
+  archive-data:
