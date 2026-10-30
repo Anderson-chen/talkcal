@@ -104,17 +104,19 @@ gitleaks 補的是邊界：
 
 ## 漏洞掃描
 
-`ci/vulns.sh` 用 Trivy 掃兩種東西：
+`ci/vulns.sh` 用 Trivy 掃三種東西：
 
-- **前端的 lockfile**（`web/pnpm-lock.yaml`，`trivy fs`）：前端映像檔裡只剩 nginx 和打包好的靜態檔，看不出用了哪個套件哪一版，掃映像檔抓不到（#235）。
+- **設定**（`--repo`，`trivy config`）：見下面的「設定檢查」。
+- **前端的 lockfile**（`--repo`）：`web/pnpm-lock.yaml`，`trivy fs`。前端映像檔裡只剩 nginx 和打包好的靜態檔，看不出用了哪個套件哪一版，掃映像檔抓不到（#235）。
   包含 devDependencies（`--include-dev-deps`）：前端套件幾乎都是 dev（vite、vitest…），它們不上線，但在開發者的電腦和 CI 上執行。
-- **build 好的映像檔**（`trivy image`）：基底映像檔的作業系統套件、jar 裡的 Java 函式庫一次掃到。後端不另外掃 `build.gradle`，jar 裡就是解析完的確切版本。
+- **映像檔**（其餘參數，`trivy image`）：基底映像檔的作業系統套件、jar 裡的 Java 函式庫一次掃到。後端不另外掃 `build.gradle`，jar 裡就是解析完的確切版本。
 
 有 HIGH、CRITICAL 而且已經有修補版本的，就 exit 1 —— 上游還沒修的，我們也沒得升，擋了也沒事可做。
 
 ```bash
 docker compose -f deploy/compose.yaml build app web
-ci/vulns.sh talkcal/app:local talkcal/web:local postgres:18.6-alpine
+ci/vulns.sh --repo talkcal/app:local talkcal/web:local postgres:18.6-alpine
+ci/vulns.sh $(ci/compose-images.sh)    # EC2 上的第三方映像檔
 ```
 
 | 時機 | 為什麼 |
@@ -128,17 +130,21 @@ ci/vulns.sh talkcal/app:local talkcal/web:local postgres:18.6-alpine
 | | 映像檔 | 擋不擋 |
 |---|---|---|
 | 自己 build 的 | `talkcal/app`、`talkcal/web` | 擋（`vulns` job） |
-| 資料庫 | `postgres`（版本從 compose 讀） | 擋（`vulns` job） |
-| 跟著部署上線的第三方 | `ci/compose-images.sh` 從 compose 讀：caddy、grafana、loki、mimir、tempo、alloy、mailpit、postgres-exporter（和 postgres） | **先不擋**（`third-party-images` job，結果貼結果頁） |
+| 資料庫 | `postgres` | 擋（`vulns` job） |
+| EC2 上的其他第三方 | caddy、grafana、loki、mimir、tempo、alloy、postgres-exporter | **先不擋**（`third-party-images` job，結果貼結果頁；PR 上不跑，push 到 master 和每天排程跑） |
+
+第三方的清單由 `ci/compose-images.sh` 問 compose（`docker compose config --images`，疊的檔案跟 `deploy.sh` 一樣），不在 ci.yml 另外抄。
+用 compose 自己解析，不 grep：疊上去的檔案會蓋掉 image，有 profiles 的服務（mailpit）雲端不會起，grep 都看不出來。
 
 第三方的第一次掃（2026-10-30）有約 400 筆 HIGH、CRITICAL，全部要靠升版解決（Grafana 11.4、Loki 3.3 這類都落後好幾版），
-升版另外做；升乾淨後拿掉 `continue-on-error`、併進 `vulns`。跟 #85「先掃、修完再擋」同一個做法。
+升版在 #239 做；升乾淨後拿掉 `continue-on-error`、併進 `vulns`。跟 #85「先掃、修完再擋」同一個做法。
 
 不掃的，和理由：
 
 | 映像檔 | 理由 |
 |---|---|
 | `talkcal/llama-server` | 只有 `model_backend = gpu` 才用（預設是 Bedrock）；要用 CUDA devel 映像檔編 llama.cpp，成品 4 GB 多，每個 PR 在 GitHub 的機器上 build 不划算。切回 gpu 時要補 |
+| `mailpit`（`ops/compose.yaml`） | `profiles: ["mailtest"]`，只在本機測試寄信時起 |
 | `toxiproxy`（`deploy/compose.chaos.yaml`） | 只在本機故障演練時疊上去，不上線 |
 | `python`（`ci/alerting/compose.yaml`） | 只在 CI 的告警測試裡跑假 app，已經釘 digest |
 | Trivy、gitleaks、ShellCheck、CodeQL、promtool 這類工具 | 只在 CI 跑完就丟，不處理外部輸入；版本＋digest 釘死，升級交給 Renovate |
@@ -151,7 +157,7 @@ ci/vulns.sh talkcal/app:local talkcal/web:local postgres:18.6-alpine
 
 ### 設定檢查：Dockerfile、compose、Terraform
 
-`ci/vulns.sh` 的第一步是 `trivy config`（#235）：Dockerfile 用 root 跑、Terraform 的 S3 沒加密、security group 全開這類寫法，用 Trivy 內建的規則。
+`ci/vulns.sh --repo` 的第一步是 `trivy config`（#235）：Dockerfile 用 root 跑、Terraform 的 S3 沒加密、security group 全開這類寫法，用 Trivy 內建的規則。
 compose Trivy 沒有規則（官方支援表上是「-」），自己寫在 [`ci/config-checks/`](config-checks/)（Rego，一條規則一個檔）：
 
 | 規則 | 擋什麼 |

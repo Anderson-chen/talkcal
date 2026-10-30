@@ -13,7 +13,13 @@ FROM ubuntu:24.04 AS fetch
 ADD --checksum=sha256:f002864be6dd8d5d7bdb123aaf7291ec8e291012bd9f70b6d2362f730db52aeb \
     https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.2/codeql-bundle-linux64.tar.gz \
     /tmp/codeql.tar.gz
-RUN tar -xzf /tmp/codeql.tar.gz -C /opt
+# bundle 有所有語言，只留用得到的（java、javascript、actions，和它們解析設定檔要的 html、xml、yaml、properties）：
+# 其他語言的 extractor 和查詢包刪掉，映像檔小一半，GitHub 上每次 build 少寫幾百 MB
+RUN tar -xzf /tmp/codeql.tar.gz -C /opt \
+    && cd /opt/codeql \
+    && rm -rf cpp csharp go python ruby rust swift \
+              qlpacks/codeql/cpp-* qlpacks/codeql/csharp-* qlpacks/codeql/go-* qlpacks/codeql/python-* \
+              qlpacks/codeql/ruby-* qlpacks/codeql/rust-* qlpacks/codeql/swift-* qlpacks/codeql/*-examples
 
 # CodeQL 解析 TypeScript（含 .vue 的 <script lang="ts">）要呼叫 node。同 ci/Dockerfile：從官方映像檔搬，版本跟 web/Dockerfile 一樣
 FROM node:22-bookworm-slim AS node

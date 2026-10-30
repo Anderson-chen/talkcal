@@ -13,8 +13,8 @@
 # ci/Dockerfile、backend/gradlew、backend/gradle/wrapper/ —— 跟程式碼一樣，不讀工作目錄裡沒 commit 的東西。
 #
 # 版本對齊：
-#   JDK 25  —— build.gradle 的 toolchain，以及 app 映像檔（backend/Dockerfile）的 temurin:25
-#   Node 22 —— web/Dockerfile 的 node:22
+#   JDK 25  —— build.gradle 的 toolchain，以及 app 映像檔（backend/Dockerfile）的 temurin:25、ci/sast/Dockerfile
+#   Node 22 —— web/Dockerfile 的 node:22、ci/sast/Dockerfile
 #   Gradle  —— backend/gradle/wrapper/gradle-wrapper.properties（由 wrapper 自己下載，不另外寫版本）
 
 # Node 從官方映像檔整包搬過來，不在 Ubuntu 上另外裝：

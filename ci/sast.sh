@@ -24,6 +24,11 @@ if [ "${1:-HEAD}" = HEAD ] && [ -n "$(git status --porcelain)" ]; then
     echo "注意：有還沒 commit 的改動，它們不會被掃到（只掃 $(git rev-parse --short HEAD)）。" >&2
 fi
 
+if ! docker info >/dev/null 2>&1; then
+    echo "連不到 Docker。先把 Docker Desktop 打開再跑。" >&2
+    exit 1
+fi
+
 echo "── 準備 CodeQL 映像檔 ──"
 # 同 run.sh：build context 從那個 commit 取。Dockerfile 沒變時整個映像檔用快取；第一次要下載約 700 MB
 git archive "$commit" ci/sast/Dockerfile \
