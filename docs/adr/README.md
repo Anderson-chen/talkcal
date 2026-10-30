@@ -18,6 +18,7 @@
 | [0008](0008-ci-same-script-in-container.md) | CI 的檢查只寫在 `ci/checks.sh`、在容器裡跑，本機和 GitHub 共用 | 已採用 |
 | [0009](0009-local-cd-pull-watcher.md) | 本機 CD 用 pull：watcher 看 master 的 CI，綠燈才部署 | 已採用 |
 | [0010](0010-aws-stage-one-ec2-compose-bedrock.md) | 上 AWS 分兩階段；階段一一台 EC2 跑同一份 compose，模型先走 Bedrock | 已採用 |
+| [0011](0011-renovate-for-dependency-updates.md) | 套件升級交給 Renovate，不用 Dependabot | 已採用 |
 
 ## 什麼時候寫一份
 
