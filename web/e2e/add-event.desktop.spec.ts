@@ -69,3 +69,64 @@ test('存檔失敗：顯示後端回的錯誤，表單不關、填的東西還�
   await expect(form).toBeHidden()
   expect(api.saved).toHaveLength(2)
 })
+
+test('#51 存檔失敗再按：帶同一把 Idempotency-Key（上次其實存好的話後端不會多存）；改了內容就換一把', async ({ page }) => {
+  const api = await fakeApi(page)
+  api.failNextSave = '伺服器暫時沒有回應'
+  await page.goto('/')
+  await page.getByRole('button', { name: '新增行程', exact: true }).click()
+  const form = page.getByRole('dialog', { name: '新增行程' })
+  await form.getByLabel('標題').fill('產品週會')
+  const save = form.getByRole('button', { name: '儲存行程' })
+
+  await save.click()
+  await expect(form.getByRole('alert')).toHaveText('伺服器暫時沒有回應')
+  api.failNextSave = '還是沒有回應'
+  await save.click()
+  await expect(form.getByRole('alert')).toHaveText('還是沒有回應')
+
+  // 改了標題再送：是另一批內容，不能沿用（後端會回 422）
+  await form.getByLabel('標題').fill('產品週會（改到下午）')
+  await save.click()
+  await expect(form).toBeHidden()
+
+  const [first, retry, edited] = api.saveKeys
+  expect(first).toMatch(/^[0-9a-f-]{36}$/)
+  expect(retry).toBe(first)
+  expect(edited).not.toBe(first)
+})
+
+// 連點按鈕的第二下會被 disabled 擋掉（拿掉 oneAtATime 這題照樣綠），所以只證明了按鈕有停用。
+test('#51 連點兩下「儲存行程」：只送出一次', async ({ page }) => {
+  const api = await fakeApi(page)
+  await page.goto('/')
+  await page.getByRole('button', { name: '新增行程', exact: true }).click()
+  const form = page.getByRole('dialog', { name: '新增行程' })
+  await form.getByLabel('標題').fill('產品週會')
+
+  await form.getByRole('button', { name: '儲存行程' }).dblclick()
+
+  await expect(form).toBeHidden()
+  expect(api.saved).toHaveLength(1)
+})
+
+// 在欄位裡按 Enter 是表單送出，不經過那顆被停用的按鈕：擋住第二下的只剩 oneAtATime（拿掉它這題會紅，送出兩次）
+test('#51 在標題欄連按兩下 Enter：只送出一次', async ({ page }) => {
+  const api = await fakeApi(page)
+  await page.goto('/')
+  await page.getByRole('button', { name: '新增行程', exact: true }).click()
+  const form = page.getByRole('dialog', { name: '新增行程' })
+  await form.getByLabel('標題').fill('產品週會')
+  // 存檔慢一點（300ms）：假後端瞬間就回，第二下 Enter 到的時候第一筆早就存完、表單也關了，測不到「第一下還在送」。
+  // 後註冊的 route 先跑；等完交回 fakeApi 那個處理
+  await page.route('**/api/calendar/events', async (route) => {
+    if (route.request().method() === 'POST') await new Promise((resolve) => setTimeout(resolve, 300))
+    await route.fallback()
+  })
+
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Enter')
+
+  await expect(form).toBeHidden()
+  expect(api.saved).toHaveLength(1)
+})
