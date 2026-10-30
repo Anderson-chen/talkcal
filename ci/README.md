@@ -344,6 +344,18 @@ ShellCheck（GPL-3.0）是例外：只在 CI 容器裡執行、不打包進任�
 [gradle-errorprone-plugin](https://github.com/tbroyer/gradle-errorprone-plugin)。
 星數、下載量是 2026-10-20 的數字。
 
+## 授權檢查
+
+會打包出去的依賴不能是 GPL、AGPL、LGPL，也不能是認不出來的授權，在 `checks.sh` 裡跑（本機 pre-push 也會跑到）：
+
+| 範圍 | 怎麼查 | 規則 |
+|---|---|---|
+| 後端 `runtimeClasspath` | Gradle 的 `checkLicense`（`./gradlew check` 也會跑） | 允許清單 `backend/allowed-licenses.json` |
+| 前端 `dependencies` | `ci/licenses.sh`：另外裝一份只有 `dependencies` 的 node_modules，用 Trivy 讀 | Trivy 的分類，擋 CRITICAL、HIGH、UNKNOWN，外加「沒寫授權」「一個都沒掃到」 |
+
+為什麼兩邊工具不一樣（Trivy 讀不到 jar 的授權、讀不到 pnpm-lock.yaml 的授權，都會靜靜地通過）、
+被擋了怎麼辦、反例驗證，都在 [docs/licenses.md](../docs/licenses.md)。
+
 ## DB migration 檢查
 
 `ci/migrations.sh` 跟目標分支比，看這次動了哪些 migration（#18）：
