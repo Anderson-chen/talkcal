@@ -10,7 +10,8 @@ locals {
   # 代價是 IP 一換網址就換，所以配了 Elastic IP。
   site_address = "${var.project}.${replace(aws_eip.main.public_ip, ".", "-")}.sslip.io"
 
-  # 模型檔在機器上的位置（gpu）：deploy.sh 從 S3 sync 到這裡，compose.gpu.yaml 把它掛給 model-seed
+  # 模型檔在機器上的位置（gpu）：deploy.sh 從 S3 sync 到這裡，deploy/compose.yaml 的 model-seed 用 MODELS_DIR 掛進去。
+  # deploy.sh 自己也 export 同一個值（bedrock 也要有，理由在那裡），這行跟它一致就好
   models_dir = "/opt/${var.project}/models"
 
   # .env 裡依 model_backend 不同的那幾行

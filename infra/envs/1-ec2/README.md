@@ -86,7 +86,7 @@ flowchart LR
 |---|---|---|---|
 | 模型 | 本機 GPU 跑 llama-server（Qwen3-8B） | bedrock：Bedrock 的 Qwen3 32B；gpu：g6.xlarge 的 L4 跑同一份 llama-server（也是 Ada，sm_89，映像檔編的是 `CUDA_ARCH=89`；g4dn 的 T4 是 sm_75，要重編） | `variables.tf`、`compose.bedrock.yaml` |
 | 驅動 | Docker Desktop 處理 | gpu：Deep Learning Base AMI 裝好了，開機時印 `nvidia-smi`，CUDA 13 要驅動 580 以上 | `ec2.tf`、`user-data.sh.tftpl` |
-| 模型檔 | `C:/llm/models` | gpu：S3 → `/opt/talkcal/models` → model-seed 照舊驗 SHA256、複製進 volume；bedrock：沒有 | `s3.tf`、`deploy.sh`、`compose.gpu.yaml` |
+| 模型檔 | `deploy/.env` 的 `MODELS_DIR`（`deploy/models/download.sh` 下載） | gpu：S3 → `/opt/talkcal/models`（deploy.sh 設成 `MODELS_DIR`）→ model-seed 照舊驗 SHA256、複製進 volume；bedrock：沒有 | `s3.tf`、`deploy.sh` |
 | HTTPS | 沒有 | Caddy + sslip.io：用 IP 推出網域，不必買網域也有 Let's Encrypt 憑證 | `compose.ec2.yaml`、`Caddyfile` |
 | 對外的埠 | 全部綁 `127.0.0.1` | 只有 Caddy 開 80/443；Grafana、Loki 原本沒綁位址，已改成 `127.0.0.1`（本機也一起改了） | `ops/compose.yaml`、`security-groups.tf` |
 | 登入機器 | 本機 | SSM Session Manager，不開 22 | `iam.tf` |
@@ -119,8 +119,9 @@ terraform init -backend-config=backend.hcl
 terraform apply
 
 # 2.（只有 gpu）上傳模型檔（只要一次；SHA256SUMS 一起傳，model-seed 會驗）
-aws s3 cp C:/llm/models/Qwen3-8B-Q4_K_M.gguf "s3://$(terraform output -raw models_bucket)/" --profile DEV
-aws s3 cp C:/llm/models/SHA256SUMS            "s3://$(terraform output -raw models_bucket)/" --profile DEV
+# $MODELS_DIR 是本機 deploy/.env 裡那個資料夾；還沒有模型就先 bash deploy/models/download.sh（會一起寫 SHA256SUMS）
+aws s3 cp "$MODELS_DIR/Qwen3-8B-Q4_K_M.gguf" "s3://$(terraform output -raw models_bucket)/" --profile DEV
+aws s3 cp "$MODELS_DIR/SHA256SUMS"            "s3://$(terraform output -raw models_bucket)/" --profile DEV
 ```
 
 機器開機後 user_data 會自動跑第一次部署。gpu 時如果模型檔是在機器開機**之後**才傳上去，第一次部署會停在「S3 裡沒有 .gguf」，傳好之後手動重跑一次：

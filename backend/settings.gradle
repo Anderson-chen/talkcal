@@ -1,1 +1,7 @@
+plugins {
+    // 機器上沒有 build.gradle 指定的 JDK 25 時，Gradle 自己從 foojay（Adoptium 等發行版的目錄）下載一份，
+    // 不必先手動裝對版本的 JDK——新電腦 clone 下來 ./gradlew 就能編（#49）。已經裝了 25 就直接用、不會下載
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
 rootProject.name = 'talkcal'

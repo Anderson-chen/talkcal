@@ -84,15 +84,32 @@ io.github.andersonchen.talkcal
 
 ## 怎麼跑
 
-需要：Docker（含 NVIDIA GPU 支援）、JDK 25。
+Windows、macOS、Linux 都照同一套步驟（Windows 的 shell 指令在 Git Bash 裡跑）。需要的工具和版本：
 
-> **已知限制**：模型檔目前從寫死的 `C:\llm\models` 複製進容器（`deploy/compose.yaml`），所以只能在 Windows 上照原樣跑。
-> 要先把 `Qwen3-8B-Q4_K_M.gguf` 放進那個資料夾。改成可設定的路徑是待辦事項。
+| 工具 | 版本 | 釘在哪 | 備註 |
+|---|---|---|---|
+| Docker Engine + Compose | Compose **2.24.4 以上** | — | compose 檔用了 `!override`、`!reset`，舊版解析不了。作者電腦是 Docker Desktop（Engine 27.5、Compose 2.32） |
+| NVIDIA GPU + 驅動 | 驅動 580 以上（CUDA 13） | `deploy/llama-server/Dockerfile` | 模型要跑在 GPU 上。macOS 沒有 NVIDIA GPU，模型要另外找地方跑（見下方「沒有 GPU」） |
+| JDK | 25 | `backend/build.gradle` 的 toolchain、`.tool-versions` | 只有 `./gradlew` 要用。沒裝 25 時 Gradle 會自己下載（`settings.gradle` 的 foojay） |
+| Gradle | 9.2.1 | `backend/gradle/wrapper/` | 用 `./gradlew`，不必另外裝 |
+| Node | 22 | `.nvmrc`、`.tool-versions`、`web/Dockerfile` | 只有前端本機開發（`npm run dev`、測試）要用；部署時在容器裡 build |
+| bash、curl、git | 任何版本 | — | Windows 裝 Git 就有 Git Bash |
+
+`.tool-versions` 給 [mise](https://mise.jdx.dev) / asdf 用、`.nvmrc` 給 nvm 用：裝了這些工具，進 repo 就自動切到對的版本。
 
 ```bash
+cp deploy/.env.example deploy/.env                              # 填 DB_PASSWORD、ARCHIVE_*、MODELS_DIR（放模型檔的資料夾）
+bash deploy/models/download.sh                                  # 下載模型到 MODELS_DIR、驗 SHA256（約 5GB，已經有就只驗證）
 docker compose -f deploy/compose.yaml up -d postgres llm-chat   # 資料庫和模型（第一次要等模型複製、載入）
 cd backend && ./gradlew deploy                                  # 跑測試、build 並部署 app 和前端
 ```
+
+`MODELS_DIR` 沒填，compose 會直接拒絕啟動並說缺什麼；資料夾裡沒有模型，模型服務不會起來（不會默默起一個沒有模型的服務）。
+模型從哪下載、怎麼驗證見 [deploy/models/README.md](deploy/models/README.md)。
+
+沒有 GPU（例如 macOS、一般的雲端 VM）：整套照樣起得來，只是模型換成假的、回答跟問題無關 ——
+[deploy/verify/](deploy/README.md#換一台電腦在乾淨的-linux-上從-0-起起來) 用這個方式在乾淨的 Linux 容器裡從 0 驗證過整套。
+要真的用模型，雲端那套可以改走 Bedrock（[infra/envs/1-ec2/](infra/envs/1-ec2/README.md)）。
 
 瀏覽器開 <http://localhost:18080>。API 文件（Swagger UI）在 <http://localhost:18090/swagger-ui.html>。
 
