@@ -23,10 +23,12 @@ docker version --format 'Docker Engine {{.Server.Version}}'
 docker compose version
 git log -1 --format='commit %h %s'
 
-step "1. cp deploy/.env.example deploy/.env，只填 DB_PASSWORD"
+step "1. cp deploy/.env.example deploy/.env，填 DB_PASSWORD 和歸檔的帳密，先不填 MODELS_DIR"
 [ ! -f deploy/.env ] || fail "deploy/.env 已經存在：這支要從乾淨的 clone 開始"
 cp deploy/.env.example deploy/.env
 sed -i.bak "s|^DB_PASSWORD=.*|DB_PASSWORD=verify-$(date +%s)|" deploy/.env && rm deploy/.env.bak
+# 歸檔（#54）的 RustFS 帳密也是必填：不填的話第 2 步會先報缺它，看不出 MODELS_DIR 有沒有被擋
+sed -i.bak -e "s|^ARCHIVE_ACCESS_KEY=.*|ARCHIVE_ACCESS_KEY=verify|" -e "s|^ARCHIVE_SECRET_KEY=.*|ARCHIVE_SECRET_KEY=verify-$(date +%s)|" deploy/.env && rm deploy/.env.bak
 
 step "2. 反例：MODELS_DIR 沒填 → compose 拒絕啟動，而且說得出缺什麼"
 if out="$("${compose[@]}" up -d 2>&1)"; then
