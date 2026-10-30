@@ -147,6 +147,64 @@ ci/vulns.sh talkcal/app:local talkcal/web:local postgres:18.6-alpine
 | 同上，拿掉 `--include-dev-deps` | 綠（漏掉）：vite 是 devDependency，所以這個旗標不能拿掉 |
 | vite 8.3.4（這次升上去的） | 通過 |
 
+## 原始碼安全分析（SAST）
+
+`ci/vulns.sh` 找的是**別人的套件**已公布的漏洞；`ci/sast.sh` 找**自己寫的程式碼**裡的安全問題（#235）：
+使用者輸入一路流到 SQL、HTML、shell 指令這類地方（taint analysis），還有 workflow 裡 `${{ }}` 直接貼進 `run` 的注入。
+用 CodeQL，在容器裡跑（`ci/sast/Dockerfile`），本機和 GitHub 跑同一支。
+
+```bash
+ci/sast.sh             # 掃 HEAD，約 2～4 分鐘；第一次要下載 CodeQL bundle（約 700 MB）
+```
+
+| 掃什麼 | 怎麼掃 |
+|---|---|
+| 後端 Java | `build-mode none`：不編譯，但 CodeQL 會跑 `./gradlew` 拿依賴清單（所以映像檔的底是 JDK 25），外部函式庫的型別才認得出來 |
+| 前端 TS、`.vue` | `<script>` 的資料流；模板裡的 `v-html` CodeQL 追不到，由 ESLint 的 `vue/no-v-html` 擋（見下面反例） |
+| `.github/workflows/` | 注入、權限給太大 |
+
+查詢用各語言的預設組（code-scanning，跟 GitHub default setup 同一組，只收誤判少的）。
+結果全部列在 `ci/build/sast/summary.md`（GitHub 貼到結果頁），**security-severity 7.0 以上**（HIGH、CRITICAL）才紅燈 —— 跟 `vulns.sh` 同一條線。
+
+**CodeQL 不認得的 API 自己補**：[`ci/sast/models/`](sast/models/) 用 Models as Data 告訴它 `JdbcClient.sql(String)` 是 SQL 的 sink。
+CodeQL 2.27 只認得 `JdbcTemplate`，而這個專案的 SQL 全部走 Spring 6.1 的 `JdbcClient`，不補的話拼字串也是綠燈。
+新增別的資料庫、HTTP client、模板引擎時，先造一個反例確認 CodeQL 認得，不認得就在這裡補。
+
+**排除**寫在 [`ci/sast/codeql-config.yml`](sast/codeql-config.yml)，每條附理由。誤判時優先改寫法讓它看得懂（例如補跳脫），真的不行再排除。
+
+### 選型（2026-10 查的）
+
+**用 CodeQL CLI（在 `ci/` 裡跑），不用 CodeQL default setup、Semgrep／Opengrep、eslint-plugin-security**
+
+| | 授權 | 為什麼（不）選 |
+|---|---|---|
+| CodeQL CLI 2.27.2 | CLI：GitHub CodeQL Terms（OSI 授權的開源專案免費）；查詢：MIT | 跨檔案、跨函式的 taint analysis，Java、JS/TS、Actions 一支工具涵蓋；跟 GitHub default setup 同一個引擎、同一組查詢，但寫在 `ci/`，本機跑得到 |
+| CodeQL default setup | 同上 | 不用寫任何設定，但只在 GitHub 上跑，本機重現不了；開關和設定在 repo 的 Settings 裡，不在程式碼裡，PR 看不出改了什麼 |
+| Semgrep CE | 引擎 LGPL-2.1；官方規則 Semgrep Rules License（非 OSI，限制商用） | 規則好寫、快；但 2024-12 起跨檔案的 taint 只在付費版，CE 只看單一函式 |
+| Opengrep | LGPL-2.1 | Semgrep CE 的社群分支（2025），補回跨檔案分析；還年輕，規則要從 Semgrep 的拿，授權不清楚 |
+| eslint-plugin-security | Apache-2.0 | 規則幾乎都是給 Node.js 伺服器的（`child_process`、`fs` 路徑），這是瀏覽器裡的 Vue；只比對語法、誤判多（`detect-object-injection`） |
+
+**授權的例外**：上面 lint 的選型只收 MIT、Apache-2.0，CodeQL CLI 不是。收它是因為它不會打包進任何產物，
+而且 GitHub 的條款明寫 OSI 授權的開源專案可以免費用在 CI —— 所以這道檢查要等專案採用 MIT（#53）才成立。
+專案若改成不開源，要換掉它（或改用 GitHub Advanced Security 的付費授權）。
+
+前端另外開 eslint-plugin-vue 的 `vue/no-v-html`（已經裝了，Vue 官方）：CodeQL 追不到模板裡的 `v-html`，
+而 `v-html` 一律擋比追資料從哪來更保險 —— 這個專案的內容幾乎都來自使用者或 AI（行程標題、助理的回答）。
+
+**反例**（2026-10-30，在暫時的 commit 上做、沒有推上去）：
+
+| 造出來的程式碼 | 結果 |
+|---|---|
+| 現在的程式碼 | 綠，0 個結果（`docs/design/` 的原型排除後；架構頁的一個連結補了跳脫，見下） |
+| `@RequestParam` 直接拼進 `jdbc.sql(...)`（`JdbcClient`） | 紅：`java/sql-injection` 8.8 |
+| 同上，但沒有 `ci/sast/models/` 或映像檔沒有 JDK（拿不到依賴） | **綠（漏掉）**：所以這兩樣都不能拿掉 |
+| `@RequestParam` 拼進 `JdbcTemplate.queryForList(...)` | 紅：`java/sql-injection` 8.8 |
+| `location.search` 的值設給 `innerHTML`（`.ts`） | 紅：`js/xss` 7.8 |
+| `location.search` 的值放進 `v-html`（`.vue`） | CodeQL 綠（漏掉）；ESLint 紅：`vue/no-v-html` |
+
+第一次跑時，CodeQL 在會發佈到 GitHub Pages 的 `docs/architecture/index.html` 報了 `js/xss-through-dom`（7.8）：
+檔案連結的 `href` 沒跳脫。實際上值只來自頁面自己的下拉選單、打不進來，但補一個 `esc()` 比寫例外乾淨，就補了。
+
 ## lint
 
 常見的錯在測試之前就紅燈（#22）。只抓「會出錯的寫法」，不管格式。

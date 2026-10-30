@@ -26,6 +26,10 @@ export default defineConfigWithVueTs(
     rules: {
       // 元件名要兩個字以上，免得跟 HTML 原生標籤撞名。Icon 不會撞（沒有 <icon>），改名只是製造 diff
       'vue/multi-word-component-names': ['error', { ignores: ['Icon'] }],
+      // v-html 把字串當 HTML 插進頁面，內容只要有一點來自使用者（行程標題、AI 的回答）就是 XSS。
+      // CodeQL（ci/sast.sh）追不到 .vue 模板裡的 v-html（#235 實測），所以在這裡一律擋，不管內容從哪來。
+      // 真的要用時（例如 sanitize 過的 markdown），在那一行上面寫 eslint-disable-next-line 並附理由
+      'vue/no-v-html': 'error',
     },
   },
 

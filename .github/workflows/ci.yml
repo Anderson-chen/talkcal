@@ -115,6 +115,21 @@ jobs:
       - uses: actions/checkout@v7
       - run: ci/rules.sh
 
+  # 原始碼安全分析（CodeQL，#235）：SQL 拼字串、XSS、workflow 注入這類自己寫出來的漏洞，HIGH、CRITICAL 就紅燈。
+  # 不放進 checks：CodeQL 映像檔約 2 GB、分析要幾分鐘；跟 checks 並行跑。
+  # 排程那次不跑：CodeQL 版本釘死，程式碼沒變結果就不會變（不像 CVE 每天有新的）
+  sast:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - run: ci/sast.sh
+
+      - name: 分析結果貼到結果頁
+        if: always()
+        run: cat ci/build/sast/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+
   # 漏洞掃描：前端的 lockfile，和 build 出來會上線的映像檔，有 HIGH、CRITICAL 就紅燈（必過檢查）。
   # --pull：每次都拉最新的基底映像檔，掃到的才是重新部署時真的會拿到的版本
   vulns:
