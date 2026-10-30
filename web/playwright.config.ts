@@ -10,7 +10,7 @@ export default defineConfig({
   testDir: 'e2e',
   // 一個測試失敗時，CI 上重試一次也還是失敗才算數；本機不重試，失敗要馬上看得到
   retries: process.env.CI ? 1 : 0,
-  // 失敗時的報告：HTML 報告裡有每一步的截圖和 trace（時間軸、DOM 快照、網路請求），本機用 npx playwright show-report 打開
+  // 失敗時的報告：HTML 報告裡有每一步的截圖和 trace（時間軸、DOM 快照、網路請求），本機用 pnpm exec playwright show-report 打開
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: 'http://localhost:4173',
@@ -22,7 +22,7 @@ export default defineConfig({
   },
   // 測的是打包後的成品（跟 nginx 送出去的是同一份 dist/），不是開發用的 dev server
   webServer: {
-    command: 'npm run build && npx vite preview --port 4173 --strictPort',
+    command: 'pnpm run build && pnpm exec vite preview --port 4173 --strictPort',
     url: 'http://localhost:4173',
     // 本機已經開著就直接用，不重開；CI 每次都從頭建
     reuseExistingServer: !process.env.CI,

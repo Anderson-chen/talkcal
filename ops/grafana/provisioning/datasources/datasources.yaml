@@ -6,6 +6,7 @@
 #   Mimir 圖上的慢點（exemplar）──點──▶ Tempo 看那個請求的 trace
 #   Loki 的一行 log（含 trace id）──點──▶ Tempo 看那個請求的 trace
 #   Tempo 的 trace ──點──▶ Loki 看那個請求印了哪些 log
+#   Tempo 的 span  ──點──▶ Mimir 看那段時間的延遲、錯誤率、連線池（#31）
 #
 # 每個資料源都釘死 uid：沒指定的話 Grafana 會隨機產一個，
 # 那 dashboard JSON 和上面那些互相跳轉的設定就對不到它。
@@ -54,6 +55,12 @@ datasources:
           datasourceUid: tempo
           url: '$${__value.raw}'
           urlDisplayLabel: 到 Tempo 看這個請求
+        # 同一個 trace id 再做一顆按鈕，打開「單一請求」dashboard（#31）：trace、log、當時的指標放在同一個畫面。
+        # 沒有 datasourceUid 就是一般網址；時間範圍沿用目前畫面的
+        - name: TraceID
+          matcherRegex: '"traceId":"(\w+)"'
+          url: '/d/talkcal-request/?var-traceId=$${__value.raw}&$${__url_time_range}'
+          urlDisplayLabel: 用「單一請求」dashboard 看
 
   # 追蹤：指到 tempo 容器的查詢埠。
   - name: Tempo
@@ -72,3 +79,30 @@ datasources:
         spanEndTimeShift: 1m
         customQuery: true
         query: '{service="app"} |= "$${__trace.traceId}"'
+      # trace → 指標（#31）：看到一個慢的 span，一鍵看「那時候整個系統是什麼狀態」——
+      # 是只有這個請求慢，還是當時大家都慢、連線池都在排隊。時間範圍是 span 前後各 5 分鐘。
+      # 只對 talkcal 的 span 有意義：這些查詢都是 app 吐的指標（job="talkcal-app"），不帶 span 的標籤去過濾，
+      # 因為 trace 上的服務叫 talkcal、指標上的 job 叫 talkcal-app，跟上面 log 那段是同一個對不起來的問題
+      tracesToMetrics:
+        datasourceUid: mimir
+        spanStartTimeShift: -5m
+        spanEndTimeShift: 5m
+        # span 的 service.name 換成 span metrics 上的 service 標籤，下面查詢裡的 $$__tags 會展開成 service="talkcal"
+        tags:
+          - key: service.name
+            value: service
+        queries:
+          - name: app 延遲 p95
+            query: 'histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{job="talkcal-app", uri!~"/actuator.*"}[1m])))'
+          - name: app 5xx 比例
+            query: 'sum(rate(http_server_requests_seconds_count{job="talkcal-app", status=~"5.."}[1m])) / sum(rate(http_server_requests_seconds_count{job="talkcal-app"}[1m]))'
+          - name: 連線池：使用中 / 排隊等連線
+            query: 'sum by (__name__) ({__name__=~"hikaricp_connections_(active|pending)", job="talkcal-app"})'
+          # 這個 span 自己這一種（同服務、同名稱）的延遲：span metrics 由 Tempo 的 metrics-generator 算（tempo.yaml）
+          - name: 同一種 span 的延遲 p95
+            query: 'histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_latency_bucket{$$__tags, span_name="$${__span.name}"}[1m])))'
+      # service map：用 metrics-generator 寫進 Mimir 的 traces_service_graph_* 畫服務之間的關係圖
+      serviceMap:
+        datasourceUid: mimir
+      nodeGraph:
+        enabled: true

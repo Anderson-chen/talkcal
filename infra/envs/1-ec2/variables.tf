@@ -78,6 +78,15 @@ variable "bedrock_key_days" {
   default     = 90
 }
 
+variable "backup_retention_days" {
+  description = <<-DESC
+    資料庫備份在 S3 留幾天（#45）。30：誤刪、資料被程式寫壞，通常幾天內就會發現；
+    留一個月是給「過了一陣子才有人說我的行程不見了」的情況。dump 只有幾百 KB，一個月的每小時備份也不到 1 GB。
+  DESC
+  type        = number
+  default     = 30
+}
+
 variable "repo_url" {
   description = "機器開機時 git clone 的來源。repo 是公開的，不需要憑證"
   type        = string
@@ -132,4 +141,53 @@ variable "github_client_secret" {
   type      = string
   default   = ""
   sensitive = true
+}
+
+# ── Grafana 告警寄信（#121）──────────────────────────────────────────────
+# 跟上面的 OAuth 一樣：值填在 alerting.auto.tfvars（範本 alerting.auto.tfvars.example），apply 時寫進 SSM 的 .env。
+# alert_smtp_host 沒給 → 雲端不寄信，告警只在 Grafana 上看得到。
+variable "alert_smtp_host" {
+  description = "寄告警信的 SMTP 伺服器 host:port，例如 smtp.gmail.com:587、email-smtp.ap-northeast-1.amazonaws.com:587"
+  type        = string
+  default     = ""
+}
+
+variable "alert_smtp_user" {
+  type    = string
+  default = ""
+}
+
+variable "alert_smtp_password" {
+  description = "寫進 .env 時包在單引號裡（compose 才不會把 $ 當變數展開），所以密碼本身不能有單引號"
+  type        = string
+  default     = ""
+  sensitive   = true
+
+  validation {
+    condition     = !strcontains(var.alert_smtp_password, "'")
+    error_message = "alert_smtp_password 不能有單引號：寫進 .env 時用單引號包住。"
+  }
+}
+
+variable "alert_smtp_from" {
+  description = "寄件人位址；有些 SMTP（Gmail、SES）只准用驗證過的位址"
+  type        = string
+  default     = ""
+}
+
+variable "alert_email_to" {
+  description = "收件人，多個用分號分開"
+  type        = string
+  default     = ""
+}
+
+# ── 監控本身掛掉（#40）──────────────────────────────────────────────────
+# Healthchecks.io 那類外部服務的 ping 網址（https://hc-ping.com/<uuid>），Grafana 的 Watchdog 每分鐘打一次。
+# 網址本身就是祕密：拿到就能假裝我們還活著。跟 OAuth 一樣用 *.auto.tfvars 或 TF_VAR_heartbeat_url 給，不進 git。
+# 沒給 → 雲端不送 heartbeat，Grafana 自己掛掉時沒有人知道（其他告警不受影響）。
+variable "heartbeat_url" {
+  description = "外部 dead man's switch 的 ping 網址，例如 https://hc-ping.com/<uuid>"
+  type        = string
+  default     = ""
+  sensitive   = true
 }

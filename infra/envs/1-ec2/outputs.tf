@@ -21,6 +21,11 @@ output "models_bucket" {
   value       = local.gpu ? aws_s3_bucket.models[0].bucket : null
 }
 
+output "backups_bucket" {
+  description = "資料庫備份（pg_dump）放在這裡的 postgres/ 底下。還原步驟：docs/runbooks/backup-restore.md"
+  value       = aws_s3_bucket.backups.bucket
+}
+
 output "availability_zone" {
   description = "機器開在哪個可用區（自動挑有這個機型的）"
   value       = local.availability_zone
@@ -37,4 +42,10 @@ output "oauth_callback_urls" {
     google = "https://${local.site_address}/api/auth/oauth2/callback/google"
     github = "https://${local.site_address}/api/auth/oauth2/callback/github"
   }
+}
+
+output "heartbeat_url" {
+  description = "Grafana 打的 heartbeat 網址（#40）。power.sh stop 從這裡取 check 的 UUID 去暫停"
+  value       = var.heartbeat_url
+  sensitive   = true
 }

@@ -82,6 +82,7 @@ Gradle 只多做一件事 —— `deployApp` 先跑測試。
 |---|---|---|
 | 怎麼跑 | `./gradlew bootRun` | `docker compose up -d` |
 | app 埠 | 8090 | 主機 18090 → 容器內 8090 |
+| actuator 埠（健康檢查、指標） | 8091 | 容器內 8091，不發佈到主機 |
 | 模型位址 | `127.0.0.1:8080` | `llm-chat:8080` |
 | 資料庫位址 | `127.0.0.1:5432`（用 deploy/ 這個 postgres） | `postgres:5432` |
 | log 格式 | 給人看的彩色文字 | 一行一個 JSON（ECS），方便 Loki 拆欄位 |
@@ -175,6 +176,7 @@ build 並起 app、web → 從 nginx 的入口註冊、登入、跟助理說一�
 | `image: talkcal/llama-server:b10964-cuda13.0.1` 釘版本 | Deployment 的 image tag，同樣要釘；image 推到同區的 registry |
 | `deploy.resources...driver: nvidia` | `resources.limits: nvidia.com/gpu: 1` |
 | `healthcheck` 打 `/health` | readinessProbe（載模型期間不導流量進來） |
+| app 的 `healthcheck` 打 `:8091/actuator/health/readiness` | readinessProbe 打同一個路徑；livenessProbe 打 `/actuator/health/liveness`（不看資料庫，見 `application.properties`） |
 | `start_period: 120s` | startupProbe / `initialDelaySeconds` |
 | log 寫 stdout、不寫檔 | 平台的 log 收集器負責收 |
 | `model-seed` 跑完才啟動模型服務 | initContainer（從 S3/GCS 拉模型） |
@@ -196,6 +198,33 @@ build 並起 app、web → 從 nginx 的入口註冊、登入、跟助理說一�
 
 5、7 的規劃見 [infra/](../infra/README.md)。
 
+## 故障演練（Toxiproxy）
+
+想看「模型或資料庫壞了，app 會怎樣」時，疊上 `compose.chaos.yaml` 起：
+
+```bash
+docker compose -f compose.yaml -f compose.chaos.yaml up -d
+```
+
+app 跟模型、跟資料庫之間各插一段 [Toxiproxy](https://github.com/Shopify/toxiproxy)（`toxiproxy.json` 裡的 `llm`、`postgres`），
+平常原樣轉發；要弄壞哪一段就對它下指令，其他段照常。比 `docker stop`、`docker pause` 整個容器多了「變慢」「時好時壞」可以模擬，
+而且只壞 app 這一條連線，其他也連著模型的東西（例如 Alloy 抓模型的指標）不受影響。
+
+| 想模擬 | 指令 |
+|---|---|
+| 斷線 | `docker exec talkcal-toxiproxy /toxiproxy-cli toggle llm`（再下一次接回） |
+| 很慢 | `docker exec talkcal-toxiproxy /toxiproxy-cli toxic add -t latency -a latency=40000 -n slow llm` |
+| 卡住（連得上、永遠不回） | `docker exec talkcal-toxiproxy /toxiproxy-cli toxic add -t latency -a latency=600000 -n hang llm`（回應晚 10 分鐘才到） |
+| 拿掉某個毒 | `docker exec talkcal-toxiproxy /toxiproxy-cli toxic remove -n slow llm` |
+| 現在的狀態 | `docker exec talkcal-toxiproxy /toxiproxy-cli list` |
+
+「卡住」用超長的延遲，不用 Toxiproxy 的 timeout 毒：timeout 毒擋得住資料、擋不住「關連線」——
+擋回來的方向，模型回完就關連線；擋送出去的方向，llama-server 對閒置 5 秒的連線也會關掉。
+兩種 app 都會在幾秒內收到連線中斷，等於斷線而不是卡住。延遲會把回應連同關連線一起延後，app 才是真的一直等。
+
+按時弄壞、恢復、同時量 app 的反應，用 `perf/outage.js`（見 [perf/README.md](../perf/README.md)）。
+演練完不疊這份再 `up -d` 一次，app 就直接連回模型和資料庫。正式環境（EC2 的 `deploy.sh`）不疊它。
+
 ## 行程與對話記憶（PostgreSQL）
 
 app 把行程（`calendar_event`）和 AI 助理的對話記憶（`calendar_assistant_message`，一則訊息一列、連工具呼叫一起存）
@@ -216,3 +245,16 @@ ORDER BY created_at DESC, position;
 ```
 
 `docker compose down` 不會刪資料；`down -v` 會連 `postgres-data` 一起清掉（模型的 volume 也會清，下次要重新播種）。
+
+### 備份與還原
+
+`down -v` 之前、或要動資料之前，先備份一份（[#45](https://github.com/Anderson-chen/talkcal/issues/45)）：
+
+```bash
+bash deploy/backup/pg-backup.sh                                             # 寫到 ~/talkcal-backups（repo 外、volume 外）
+bash deploy/backup/pg-restore.sh ~/talkcal-backups/<檔>.dump --verify-only   # 演練：還原到暫存庫，線上不動
+bash deploy/backup/pg-restore.sh ~/talkcal-backups/<檔>.dump                 # 真的還原（自己停、起 talkcal-app）
+bash deploy/backup/drill.sh                                                 # 在獨立容器上演練整輪（含反例）
+```
+
+雲端每小時、關機前、部署前會自動備份到 S3。完整步驟、RPO／RTO 和選型理由：[docs/runbooks/backup-restore.md](../docs/runbooks/backup-restore.md)。

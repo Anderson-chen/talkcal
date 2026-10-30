@@ -69,7 +69,7 @@ VPC 跨兩個可用區，每一層的子網兩區各一個。
 | `127.0.0.1` 綁定 | 私有子網，只有 ALB 在公有子網 | 對外只開一個入口 |
 | （沒有） | WAF 的 rate-based rule | 濫用防護（[#12](https://github.com/Anderson-chen/talkcal/issues/12)），一次問答要叫模型，被刷很貴 |
 | 服務名稱 `app`、`llm-chat` | k8s Service 的 DNS | 同一套「用名字找」的規則 |
-| `depends_on` + `healthcheck` | readinessProbe / startupProbe | 載模型期間不導流量；要分成 liveness 和 readiness（[#30 的「健康檢查」段落](https://github.com/Anderson-chen/talkcal/issues/30)） |
+| `depends_on` + `healthcheck` | readinessProbe / startupProbe | 載模型期間不導流量；app 已經有分開的 `/actuator/health/liveness`、`/readiness`（management 埠 8091，[#33](https://github.com/Anderson-chen/talkcal/issues/33)），probe 直接打 |
 | `stop_grace_period: 2m30s` | `terminationGracePeriodSeconds: 150` | 沿用 graceful shutdown 的實驗結果（[postmortem](../../../docs/postmortems/)） |
 | `deploy.resources: nvidia` | GPU 節點群組 + `nvidia.com/gpu: 1` | k8s 是一個 Pod 獨佔一張卡，不像 Docker Desktop 大家共用 |
 | `model-seed` + `models` volume | initContainer 從 S3 拉到 EBS（PVC） | 同一個設計：慢的來源只讀一次，模型服務只讀本機磁碟 |
