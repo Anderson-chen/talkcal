@@ -49,5 +49,7 @@ resource "aws_ssm_parameter" "dotenv" {
     ALERT_SMTP_PASSWORD='${var.alert_smtp_password}'
     ALERT_SMTP_FROM=${var.alert_smtp_from}
     ALERT_EMAIL_TO=${var.alert_email_to}
+    # Grafana 的 heartbeat（#40）：deploy.sh 起 ops/ 時用 --env-file 讀同一份
+    HEARTBEAT_URL=${var.heartbeat_url}
   ENV
 }

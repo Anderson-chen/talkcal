@@ -63,6 +63,89 @@ prometheus.scrape "postgres" {
   forward_to      = [prometheus.remote_write.mimir.receiver]
 }
 
+// (4) 資料庫備份 —— 不是一個服務，是每小時跑一次就結束的批次工作（#45 的 backup-to-s3.sh），沒有 /metrics 可以抓。
+//     做法照 node_exporter 的 textfile collector：工作成功時把「最後成功時間」寫成一個 .prom 檔，這裡定時讀。
+//     為什麼不用 Pushgateway：還要多養一個服務，而且它會一直保留最後一次推上來的值 —— 跟 textfile 一樣，沒有比較好。
+//     看得到的指標：talkcal_backup_last_success_timestamp_seconds（備份腳本寫的）、
+//     node_boot_time_seconds（stat collector；容器跟主機共用同一個核心，讀到的是主機開機時間）。告警兩個一起用（#39）。
+//     只開這兩個 collector：其他的（CPU、磁碟…）在容器裡讀到的不完全是主機的，要看主機的話另外裝 node_exporter。
+//     資料夾由 compose.yaml 掛進來；本機沒有備份排程，資料夾是空的，就只有開機時間。
+prometheus.exporter.unix "backup" {
+  set_collectors = ["textfile", "stat"]
+  textfile {
+    directory = "/var/lib/alloy/textfile"
+  }
+}
+
+// exporter 給的 target 自己帶 job="integrations/unix"，會蓋掉下面的 job_name（實測過），所以先改掉。
+// instance 也換成固定的名字：預設是容器的 hostname，Alloy 容器重建一次就換一個，序列會斷成兩條
+discovery.relabel "backup" {
+  targets = prometheus.exporter.unix.backup.targets
+  rule {
+    target_label = "job"
+    replacement  = "talkcal-backup"
+  }
+  rule {
+    target_label = "instance"
+    replacement  = "alloy"
+  }
+}
+
+prometheus.scrape "backup" {
+  job_name        = "talkcal-backup"
+  targets         = discovery.relabel.backup.output
+  // 一小時才變一次的值，不必 15 秒讀一次；但告警的查詢只往回找 5 分鐘內的點，間隔要比 5 分鐘短
+  scrape_interval = "1m"
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+}
+
+// (5) 監控自己（#40）：Alloy、Mimir、Loki、Tempo、Grafana 也是會掛的服務。
+//     沒抓它們的話，誰停了 dashboard 只會一片空白，看起來跟「沒流量」一模一樣。
+//     抓了之後每個元件都有一條 up：Loki、Tempo 掛了 → up = 0（Alloy 還活著，照樣記下「抓不到」）；
+//     Alloy 自己掛了 → 連 up 都不再進來，告警看的是「最後一個點多久以前」（見 grafana/provisioning/alerting/meta-monitoring.yaml）。
+//     附帶好處：Alloy 自己的指標裡有 remote_write、loki.write 送失敗的計數，之後要查「送不出去」看得到。
+prometheus.exporter.self "alloy" { }
+
+// exporter.self 給的 target 自己帶了 job="integrations/self"，target 上的 job 會蓋過 job_name，
+// 所以這裡改名成 alloy，跟其他元件一樣用自己的名字查
+discovery.relabel "alloy" {
+  targets = prometheus.exporter.self.alloy.targets
+  rule {
+    target_label = "job"
+    replacement  = "alloy"
+  }
+}
+
+prometheus.scrape "alloy" {
+  targets         = discovery.relabel.alloy.output
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+}
+
+// 四個都在 ops/ 自己的網路上，用服務名找。路徑都是 /metrics（Prometheus 的預設），埠是各自服務的 HTTP 埠。
+// job 用服務名：告警、查詢都寫 up{job="loki"} 這樣，不必記 target 位址
+prometheus.scrape "observability" {
+  targets = [
+    {"__address__" = "mimir:9009",   "job" = "mimir"},
+    {"__address__" = "loki:3100",    "job" = "loki"},
+    {"__address__" = "tempo:3200",   "job" = "tempo"},
+    {"__address__" = "grafana:3000", "job" = "grafana"},
+  ]
+  scrape_interval = "15s"
+  forward_to      = [prometheus.relabel.observability_up_only.receiver]
+}
+
+// 只留 up：告警只看它。四個元件自己吐的指標合起來有好幾千條，全收的話小機器上的 Mimir 白白多存一份；
+// 要查某個元件的內部狀況時，把這段拿掉就全收了
+prometheus.relabel "observability_up_only" {
+  rule {
+    source_labels = ["__name__"]
+    regex         = "up"
+    action        = "keep"
+  }
+  forward_to = [prometheus.remote_write.mimir.receiver]
+}
+
 // 抓到的指標推進 Mimir。remote_write 是 Prometheus 生態「把指標送去別處存」的標準協定，
 // 送 Mimir、送雲端服務都是同一個元件，只差 url。
 // 附帶的 exemplar（某個指標點上掛的 trace id）也會一起送，Grafana 圖上才點得進那次請求的 trace。

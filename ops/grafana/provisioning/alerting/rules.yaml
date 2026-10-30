@@ -62,6 +62,8 @@ groups:
         labels:
           severity: critical
         annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/talkcal-app-down.md
           summary: talkcal app 連續 1 分鐘抓不到指標
           description: >-
             Alloy 抓 job="talkcal-app" 的 /actuator/prometheus 失敗（up 為 0 或整條沒資料）。

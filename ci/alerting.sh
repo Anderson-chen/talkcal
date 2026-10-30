@@ -5,7 +5,7 @@
 #   KEEP=1 ci/alerting.sh     # 跑完不收容器，留著到 http://localhost:13000、http://localhost:18025 看
 #
 # 起 ops/compose.yaml 的整組觀測（疊 ci/alerting/compose.yaml，跟正在跑的那組分開）、Mailpit（假信箱）、
-# 一支假 app（ci/alerting/fake-app.py，只吐指標），然後依序：
+# 一支假 app 和一支假 postgres_exporter（ci/alerting/fake-app.py，只吐指標），然後依序：
 #   1. 正常流量 3 分鐘：一封都不能有          → 擋「規則太敏感、正常也寄信」
 #   2. 假 app 全部回 5xx：要收到 SLO 快燒      → 擋 burn rate 的錄製規則、門檻、SMTP 任何一段斷掉
 #   3. 停掉假 app：要收到 app 掛了             → 擋 rules.yaml 的門檻、for、noDataState 寫錯
@@ -105,8 +105,8 @@ dc pull --quiet
 
 # 先讓指標流起來，再起 Grafana：一起起的話，Grafana 第一次評估時 Mimir 可能還沒有 up，
 # app-down（noDataState: Alerting）會照規則當成「抓不到」。真的環境也是 app 先起、觀測後到
-log "起 mimir、alloy、假 app"
-dc up -d mimir alloy fake-app
+log "起 mimir、alloy、假 app、假 postgres_exporter"
+dc up -d mimir alloy fake-app fake-postgres-exporter
 wait_until "Mimir 收到假 app 的 up = 1" 180 mimir_has_up
 
 log "起 grafana、mailpit"
