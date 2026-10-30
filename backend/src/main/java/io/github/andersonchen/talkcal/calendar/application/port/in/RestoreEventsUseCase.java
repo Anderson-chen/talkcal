@@ -15,10 +15,9 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
  * 失敗時：
  * - owner、months 是 null → IllegalArgumentException
  * - 歸檔或資料庫出事 → IllegalStateException
- *
- * @return 實際放回去幾筆
  */
 public interface RestoreEventsUseCase {
 
+    /** 放回 owner 在 months 這幾個月的行程，回傳實際放回去幾筆。 */
     int restore(OwnerId owner, MonthRange months);
 }
