@@ -246,6 +246,7 @@ ITIL 4 已經把 v3 的五段改成不分先後的價值鏈，這裡對照 v3，
 | 怎麼壓測、怎麼讀結果 | [perf/README.md](perf/README.md) |
 | 每個請求花多少錢、自架 GPU 和 Bedrock 在哪裡交叉 | [docs/cost.md](docs/cost.md) |
 | CI 怎麼跑、為什麼在容器裡跑 | [ci/README.md](ci/README.md) |
+| 套件怎麼自動升級、升級 PR 怎麼審 | [docs/dependency-updates.md](docs/dependency-updates.md) |
 | 測試覆蓋率怎麼看、為什麼不設門檻 | [docs/test-coverage.md](docs/test-coverage.md) |
 | 前端怎麼組成 | [web/README.md](web/README.md) |
 | 畫面設計稿和實作的差異 | [docs/design/calendar/README.md](docs/design/calendar/README.md) |
