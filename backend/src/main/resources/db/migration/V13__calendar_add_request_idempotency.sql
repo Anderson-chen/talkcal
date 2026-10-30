@@ -24,12 +24,19 @@
 -- 保留多久：created_at 超過 calendar.idempotency.retention（預設 1 天）的，由 IdempotencyKeyCleanup 每天清掉。
 -- 重送是幾秒到幾分鐘內的事（使用者看到失敗再按一次），一天綽綽有餘；
 -- 代價是同一個鍵隔了超過一天才重送，會被當成新的一次再存一份 —— 前端的鍵只活在那一次操作裡，不會隔天才重送。
+
+-- 等鎖、跑太久就放棄，不讓 migration 卡住線上的請求（ci/migrations.sh 的 squawk 規則，同 V12）。
+-- 這張表是這支 migration 才建的、裡面沒有資料，實際上不會等；寫上是讓每支 migration 都守同一條規矩
+SET LOCAL lock_timeout = '1s';
+SET LOCAL statement_timeout = '5s';
+
+-- 長度用 TEXT + CHECK，不用 VARCHAR(n)、CHAR(n)：之後要放寬長度只要換 CHECK，不必改欄位型別（改型別要鎖整張表）
 CREATE TABLE calendar_add_request (
-    owner_id        UUID         NOT NULL,
-    idempotency_key VARCHAR(100) NOT NULL,
-    request_hash    CHAR(64)     NOT NULL,
-    event_ids       UUID[]       NOT NULL,
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    owner_id        UUID        NOT NULL,
+    idempotency_key TEXT        NOT NULL CHECK (char_length(idempotency_key) BETWEEN 1 AND 100),
+    request_hash    TEXT        NOT NULL CHECK (char_length(request_hash) = 64),
+    event_ids       UUID[]      NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (owner_id, idempotency_key)
 );
 
