@@ -89,10 +89,12 @@ export interface SendOptions {
  * 連請求都送不出去（網路斷了）也丟 ApiError（status 是 null），呼叫端不必另外接 fetch 自己的 TypeError。
  */
 export async function send(url: string, init: RequestInit, options: SendOptions = {}): Promise<Response> {
-  const headers: Record<string, string> = { 'Content-Type': options.contentType ?? 'application/json' }
+  // 呼叫端自己的 header（例如新增行程的 Idempotency-Key）照帶，再補上每個請求都要的
+  const headers = new Headers(init.headers)
+  headers.set('Content-Type', options.contentType ?? 'application/json')
   if (needsCsrf(init.method)) {
     const token = await csrfToken()
-    if (token) headers['X-XSRF-TOKEN'] = token
+    if (token) headers.set('X-XSRF-TOKEN', token)
   }
   let res: Response
   try {

@@ -20,6 +20,7 @@ import { me } from '../auth'
 import { assistantHistory, dismissProposals, talkToAssistant, type EventFields } from '../calendar'
 import { UnauthorizedError } from '../http'
 import { describeAssistantFailure, type FailureKind } from './assistantFailure'
+import { oneAtATime, retryKey, type RetryKey } from './submitOnce'
 import { message, type CalendarState } from './useCalendar'
 
 export type ProposalStatus = 'pending' | 'added' | 'removed'
@@ -124,6 +125,9 @@ export function useAssistant(calendar: CalendarState) {
   const blocked = computed(() => typing.value || waitSeconds.value > 0)
   /** 這一句已經等了幾秒（沒在等就是 0） */
   const waitedSeconds = computed(() => (typing.value ? Math.max(0, Math.floor((now.value - typingSince) / 1000)) : 0))
+
+  // 每則訊息的「加入行事曆」各有自己的冪等鍵（#51）：A 訊息失敗、先去加 B，再回來重按 A，帶的還是 A 當時那把
+  const addKeys = new Map<number, RetryKey>()
   // 後端那段對話的身分：第一句之後才有，之後每句都帶著；重新整理後從 localStorage 拿回來
   let conversationId = loadConversationId()
 
@@ -217,22 +221,27 @@ export function useAssistant(calendar: CalendarState) {
   /** 這則說明的「再試一次」要不要出現：要可以重送，而且是最後一則 */
   const canRetry = (msg: ChatMessage) => !!msg.failure?.canRetry && messages.value[messages.value.length - 1] === msg
 
-  /** 把這則訊息裡還沒處理的草稿一次存起來（後端是全部存或全部不存）。 */
-  async function confirm(msg: ChatMessage) {
+  /**
+   * 把這則訊息裡還沒處理的草稿一次存起來（後端是全部存或全部不存）。
+   * 防重複（#51）：送出中再按不會送第二次（oneAtATime）；失敗後再按帶同一把冪等鍵，上次其實存好了也不會多一份。
+   */
+  const confirm = oneAtATime(saving, async (msg: ChatMessage) => {
     const pending = msg.proposals.filter((p) => p.status === 'pending')
-    if (pending.length === 0 || saving.value) return
-    saving.value = true
+    if (pending.length === 0) return
     msg.error = null
+    const drafts = pending.map((p) => p.draft)
+    const keys = addKeys.get(msg.id) ?? retryKey()
+    addKeys.set(msg.id, keys)
     try {
       // 草稿裡帶著卡片的 proposalId，後端核對過才算採納
-      await calendar.add(pending.map((p) => p.draft))
+      await calendar.add(drafts, keys.for(drafts))
       for (const p of pending) p.status = 'added'
+      // 存好了：這則訊息不會再送同一批，鍵也不必留著
+      addKeys.delete(msg.id)
     } catch (e) {
       msg.error = message(e)
-    } finally {
-      saving.value = false
     }
-  }
+  })
 
   function cancel(msg: ChatMessage) {
     const pending = msg.proposals.filter((p) => p.status === 'pending')
