@@ -11,6 +11,7 @@
 //   - 讓下一次存檔失敗（failNextSave）：模擬後端掛了
 //   - 讓登入在下一個請求失效（expireSession）：模擬 session 過期
 //   - 事後檢查前端送了什麼（saved）
+//   - AI 助理（#223）：不打模型，每句話都回一張固定的提議卡片（帶著假後端發的 proposalId）；事後檢查按掉了哪幾張（dismissed）
 import type { Page, Route } from '@playwright/test'
 
 export interface FakeEvent {
@@ -33,6 +34,9 @@ interface Options {
   externalName?: string
 }
 
+// 助理每句話都提議這一筆（明天下午三點開會），proposalId 依序是 card-1、card-2…
+const PROPOSAL = { title: '開會', start: '2026-10-07T15:00:00', end: '2026-10-07T16:00:00', category: 'WORK', location: null, note: null }
+
 const CSRF_TOKEN = 'fake-csrf-token'
 
 export async function fakeApi(page: Page, options: Options = {}) {
@@ -40,6 +44,8 @@ export async function fakeApi(page: Page, options: Options = {}) {
     events: [...(options.events ?? [])],
     // 每次 POST /events 收到的 body.events（前端送了什麼）
     saved: [] as Omit<FakeEvent, 'id'>[][],
+    // 每次 POST /events 帶的 Idempotency-Key（#51），沒帶就是 null；跟 saved 一一對應
+    saveKeys: [] as (string | null)[],
     failNextSave: null as string | null,
     // 註冊過的帳號：名稱 → 密碼
     accounts: new Map<string, string>([['amy', 'correct-horse']]),
@@ -47,6 +53,9 @@ export async function fakeApi(page: Page, options: Options = {}) {
     // 被 403 擋下的請求（沒帶或帶錯 CSRF token）：測試可以檢查它是空的
     csrfRejected: [] as string[],
     providers: [...(options.providers ?? [])],
+    // 發過幾張助理卡片；每次 POST /assistant/dismissals 收到的 proposalIds
+    cards: 0,
+    dismissed: [] as string[][],
   }
 
   const json = (route: Route, status: number, body: unknown) => route.fulfill({ status, json: body })
@@ -110,6 +119,7 @@ export async function fakeApi(page: Page, options: Options = {}) {
     if (url.pathname === '/api/calendar/events' && method === 'POST') {
       const body = request.postDataJSON() as { events: Omit<FakeEvent, 'id'>[] }
       state.saved.push(body.events)
+      state.saveKeys.push(request.headers()['idempotency-key'] ?? null)
       if (state.failNextSave) {
         const error = state.failNextSave
         state.failNextSave = null
@@ -120,13 +130,27 @@ export async function fakeApi(page: Page, options: Options = {}) {
       state.events.push(...created)
       return json(route, 201, { events: created })
     }
+    if (url.pathname === '/api/calendar/assistant' && method === 'POST') {
+      state.cards++
+      return json(route, 200, {
+        conversationId: '00000000-0000-4000-8000-000000000036',
+        reply: '請確認卡片。',
+        proposals: [{ ...PROPOSAL, proposalId: `card-${state.cards}` }],
+      })
+    }
+    if (url.pathname === '/api/calendar/assistant/dismissals' && method === 'POST') {
+      state.dismissed.push((request.postDataJSON() as { proposalIds: string[] }).proposalIds)
+      return route.fulfill({ status: 204 })
+    }
     return route.fallback()
   })
 
   return {
     ...state,
     get saved() { return state.saved },
+    get saveKeys() { return state.saveKeys },
     get csrfRejected() { return state.csrfRejected },
+    get dismissed() { return state.dismissed },
     set failNextSave(error: string | null) { state.failNextSave = error },
     /** 模擬 session 過期：之後的請求都當成沒登入 */
     expireSession() { state.me = null },

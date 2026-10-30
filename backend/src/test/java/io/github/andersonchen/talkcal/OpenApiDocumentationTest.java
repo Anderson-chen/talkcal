@@ -41,16 +41,17 @@ class OpenApiDocumentationTest {
     }
 
     @Test
-    @DisplayName("助理列出成功、呼叫端送錯、上游出事三種回應，成功和失敗的 body 形狀不同")
+    @DisplayName("助理列出成功、呼叫端送錯、上游出事、模型暫時不能用四種回應，成功和失敗的 body 形狀不同")
     void documentsEveryAssistantOutcome() throws Exception {
-        // 這三個碼就是助理的契約：200 正常、400 呼叫端送錯、502 模型或資料庫那頭出事。
-        // 少列一個，看文件的人就會以為那種情況不會發生
+        // 這四個碼就是助理的契約：200 正常、400 呼叫端送錯、502 這一次模型或資料庫那頭出事、
+        // 503 模型暫時不能用、這次沒叫它（#44）。少列一個，看文件的人就會以為那種情況不會發生
         String responses = "$.paths['/api/calendar/assistant'].post.responses";
         String schema = ".content['*/*'].schema['$ref']";
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(jsonPath(responses + "['200']" + schema).value("#/components/schemas/AssistantResponse"))
-                .andExpect(jsonPath(responses + "['400']" + schema).value("#/components/schemas/CalendarFailure"))
-                .andExpect(jsonPath(responses + "['502']" + schema).value("#/components/schemas/CalendarFailure"));
+                .andExpect(jsonPath(responses + "['400']" + schema).value("#/components/schemas/AssistantFailure"))
+                .andExpect(jsonPath(responses + "['502']" + schema).value("#/components/schemas/AssistantFailure"))
+                .andExpect(jsonPath(responses + "['503']" + schema).value("#/components/schemas/AssistantFailure"));
     }
 
     @Test
@@ -71,7 +72,12 @@ class OpenApiDocumentationTest {
                 .andExpect(jsonPath("$.paths['/api/calendar/events'].get.parameters.length()").value(2))
                 .andExpect(jsonPath("$.paths['/api/calendar/events/{id}'].delete.parameters.length()").value(1))
                 .andExpect(jsonPath("$.paths['/api/calendar/assistant/{conversationId}'].get.parameters.length()").value(1))
-                .andExpect(jsonPath("$.paths['/api/calendar/events'].post.parameters").doesNotExist())
+                // POST /events 唯一的參數是 #51 的 Idempotency-Key（選填的 header），一樣沒有擁有者
+                .andExpect(jsonPath("$.paths['/api/calendar/events'].post.parameters.length()").value(1))
+                .andExpect(jsonPath("$.paths['/api/calendar/events'].post.parameters[0].name").value("Idempotency-Key"))
+                .andExpect(jsonPath("$.paths['/api/calendar/events'].post.parameters[0].in").value("header"))
+                .andExpect(jsonPath("$.paths['/api/calendar/events'].post.parameters[0].required").value(false))
+                .andExpect(jsonPath("$.paths['/api/calendar/events'].post.responses['422']").exists())
                 .andExpect(jsonPath("$.paths['/api/calendar/assistant'].post.parameters").doesNotExist());
     }
 }

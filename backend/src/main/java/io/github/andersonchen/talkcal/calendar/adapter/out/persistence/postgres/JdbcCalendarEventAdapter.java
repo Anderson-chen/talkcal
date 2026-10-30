@@ -4,10 +4,15 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Calendar
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.DateRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.IdempotencyKey;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
+import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteArchivedEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteEventPort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEndedEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventsPort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.RestoreEventsPort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsOncePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPort;
 
 import org.springframework.dao.DataAccessException;
@@ -15,26 +20,42 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 把行程存進 PostgreSQL、讀出來（表的定義在 db/migration/V2__create_calendar_events.sql，
- * 讀取用的索引在 V3__index_calendar_event_period.sql，分類、地點、備註是 V5 加的，擁有者是 V11 加的）。
+ * 讀取用的索引在 V3__index_calendar_event_period.sql，分類、地點、備註是 V5 加的，擁有者是 V11 加的，
+ * 冪等鍵的表 calendar_add_request 是 V13 加的）。
  *
  * 每一句 SQL 都帶著 owner_id 條件（#104）：授權不是另外一道「先查再比對」的檢查，而是查詢本身就只碰得到這個人的資料。
  *
  * 寫法跟 conversation 的 JdbcConversationAdapter 一致：JdbcClient 手寫 SQL、
  * 交易用 TransactionTemplate（類別是 final，@Transactional 的代理包不了）。
  *
- * 一個類別實作讀、存、刪三個 port：碰的是同一張表，「這張表長什麼樣」的知識只該在一個地方。
+ * 一個類別實作讀、存、刪幾個 port：碰的是同一張表，「這張表長什麼樣」的知識只該在一個地方。
+ * 冪等鍵的表也在這裡：記下的是「哪一批行程」，要跟 calendar_event 在同一個交易裡一起寫。
+ * 歸檔（#54）要的三個 port 也在這裡：找出舊的、歸檔好之後刪掉、從歸檔還原回來 —— 一樣是這張表。
  */
-public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEventsPort, DeleteEventPort {
+public final class JdbcCalendarEventAdapter implements SaveEventsPort, SaveEventsOncePort, LoadEventsPort, DeleteEventPort,
+        LoadEndedEventsPort, DeleteArchivedEventsPort, RestoreEventsPort {
 
     private final JdbcClient jdbc;
     private final TransactionTemplate transaction;
@@ -52,6 +73,105 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEvent
         } catch (DataAccessException | TransactionException e) {
             // 連不上資料庫時，失敗發生在開交易那一步，丟的是 TransactionException，不是 DataAccessException
             throw new IllegalStateException("儲存行程失敗（" + events.size() + " 筆）", e);
+        }
+    }
+
+    /**
+     * 先搶下這個鍵、搶到了才存行程，兩件事在同一個交易裡（#51，表和理由見 V13）。
+     *
+     * 搶不到（之前有人用這個鍵存過）就不存，改看當時存的內容一不一樣：一樣就回當時那幾筆，不一樣就是 KeyUsedForOtherContent。
+     * 兩個請求同時帶著同一個鍵進來時，後到的 INSERT ... ON CONFLICT 會停在那裡等先到的交易結束：
+     * 先到的 commit 了，後到的就搶不到、讀得到先到存的那幾筆；先到的 rollback 了，後到的就搶到、自己存。
+     */
+    @Override
+    public SaveOnceResult saveOnce(OwnerId owner, IdempotencyKey key, List<ScheduledEvent> events) {
+        String hash = fingerprint(events);
+        try {
+            return transaction.execute(status -> {
+                int claimed = jdbc.sql("""
+                                INSERT INTO calendar_add_request (owner_id, idempotency_key, request_hash, event_ids)
+                                VALUES (:owner, :key, :hash, CAST(:ids AS uuid[]))
+                                ON CONFLICT (owner_id, idempotency_key) DO NOTHING
+                                """)
+                        .param("owner", owner.value())
+                        .param("key", key.value())
+                        .param("hash", hash)
+                        // 陣列用 PostgreSQL 的文字寫法（{a,b}）傳進去再 CAST：UUID 裡沒有要跳脫的字元，不必動到 JDBC 的 Array
+                        .param("ids", events.stream().map(e -> e.id().toString()).collect(Collectors.joining(",", "{", "}")))
+                        .update();
+                if (claimed == 1) {
+                    events.forEach(event -> insert(owner, event));
+                    return new Saved();
+                }
+                String earlierHash = jdbc.sql("""
+                                SELECT request_hash FROM calendar_add_request
+                                WHERE owner_id = :owner AND idempotency_key = :key
+                                """)
+                        .param("owner", owner.value())
+                        .param("key", key.value())
+                        .query(String.class)
+                        .single();
+                if (!earlierHash.equals(hash)) {
+                    return new KeyUsedForOtherContent();
+                }
+                return new AlreadySaved(addedBy(owner, key));
+            });
+        } catch (DataAccessException | TransactionException e) {
+            throw new IllegalStateException("儲存行程失敗（" + events.size() + " 筆，Idempotency-Key " + key + "）", e);
+        }
+    }
+
+    // 這個鍵當時存的那幾筆，照當時的順序；後來刪掉的就不在了（JOIN 不到）
+    private List<ScheduledEvent> addedBy(OwnerId owner, IdempotencyKey key) {
+        return jdbc.sql("""
+                        SELECT e.id, e.title, e.start_at, e.end_at, e.category, e.location, e.note
+                        FROM calendar_add_request r
+                        CROSS JOIN LATERAL unnest(r.event_ids) WITH ORDINALITY AS added(id, position)
+                        JOIN calendar_event e ON e.id = added.id AND e.owner_id = r.owner_id
+                        WHERE r.owner_id = :owner AND r.idempotency_key = :key
+                        ORDER BY added.position
+                        """)
+                .param("owner", owner.value())
+                .param("key", key.value())
+                .query(JdbcCalendarEventAdapter::row)
+                .list()
+                .stream().map(JdbcCalendarEventAdapter::restore).toList();
+    }
+
+    /**
+     * 清掉 before 之前記下的冪等鍵，回傳清了幾個（給 IdempotencyKeyCleanup 用）。
+     * 不是 port：這是這張表自己的維護工作，跟 JdbcAssistantMemoryRepository.deleteInactiveSince 一樣由 app.job 直接呼叫。
+     */
+    public int deleteIdempotencyKeysCreatedBefore(Instant before) {
+        try {
+            return jdbc.sql("DELETE FROM calendar_add_request WHERE created_at < :before")
+                    // TIMESTAMPTZ 對 OffsetDateTime：Instant 直接傳 PostgreSQL 的 driver 不認得（同 JdbcAssistantMemoryRepository）
+                    .param("before", OffsetDateTime.ofInstant(before, ZoneOffset.UTC))
+                    .update();
+        } catch (DataAccessException e) {
+            throw new IllegalStateException("清除舊的冪等鍵失敗", e);
+        }
+    }
+
+    /**
+     * 一批行程的內容指紋（SHA-256，十六進位 64 字）：存進去的每個欄位都算，順序也算；id 不算（每次送都會重發）。
+     *
+     * 每個欄位寫成「長度:內容」、沒有值寫「-」再串起來：不靠分隔字元，標題裡有什麼字都不會讓兩批不同的內容串出一樣的字串。
+     */
+    static String fingerprint(List<ScheduledEvent> events) {
+        StringBuilder text = new StringBuilder();
+        for (ScheduledEvent scheduled : events) {
+            CalendarEvent event = scheduled.event();
+            for (String field : new String[]{event.title(), event.start().toString(), event.end().toString(),
+                    event.category().name(), event.location().orElse(null), event.note().orElse(null)}) {
+                text.append(field == null ? "-" : field.length() + ":" + field).append(';');
+            }
+        }
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.toString().getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            // 每個 JVM 都一定要有 SHA-256（Java SE 規格），走不到這裡
+            throw new IllegalStateException(e);
         }
     }
 
@@ -94,6 +214,77 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEvent
     }
 
     /**
+     * 不帶 owner_id 條件：這是排程的維護工作，要看全部的人（LoadEndedEventsPort 的約定）。
+     * 照 end_at、id 排：每一輪先搬最舊的，limit 截在哪裡也是固定的。
+     * end_at 沒有自己的索引：一天跑一次，掃一次表比每次寫入都多維護一個索引便宜。表大到掃不動時再用一個 migration 加上
+     */
+    @Override
+    public Map<OwnerId, List<ScheduledEvent>> loadEndedBefore(LocalDateTime cutoff, int limit) {
+        List<OwnedRow> rows;
+        try {
+            rows = jdbc.sql("""
+                            SELECT owner_id, id, title, start_at, end_at, category, location, note
+                            FROM calendar_event
+                            WHERE end_at < :cutoff
+                            ORDER BY end_at, id
+                            LIMIT :limit
+                            """)
+                    .param("cutoff", cutoff)
+                    .param("limit", limit)
+                    .query((rs, rowNum) -> new OwnedRow(new OwnerId(rs.getObject("owner_id", UUID.class)), row(rs, rowNum)))
+                    .list();
+        } catch (DataAccessException e) {
+            throw new IllegalStateException("讀取要歸檔的行程失敗：" + cutoff, e);
+        }
+        Map<OwnerId, List<ScheduledEvent>> byOwner = new LinkedHashMap<>();
+        rows.forEach(r -> byOwner.computeIfAbsent(r.owner(), o -> new ArrayList<>()).add(restore(r.row())));
+        return byOwner;
+    }
+
+    @Override
+    public int deleteArchived(OwnerId owner, List<ScheduledEvent> archived) {
+        try {
+            // 每一欄都要跟歸檔那份一樣才刪（DeleteArchivedEventsPort 的約定）：讀出來到現在之間被改過的那筆，
+            // 歸檔裡存的不是它現在的樣子，刪了就丟掉這次修改。一筆一句：一天一次、一包幾十筆，不值得為它組一句大 SQL。
+            // location、note 可以是 NULL，用 IS NOT DISTINCT FROM（NULL = NULL 在 SQL 裡不成立）
+            return archived.stream().mapToInt(event -> jdbc.sql("""
+                            DELETE FROM calendar_event
+                            WHERE owner_id = :owner AND id = :id
+                              AND title = :title AND start_at = :start AND end_at = :end AND category = :category
+                              AND location IS NOT DISTINCT FROM :location AND note IS NOT DISTINCT FROM :note
+                            """)
+                    .param("owner", owner.value())
+                    .param("id", event.id().value())
+                    .param("title", event.event().title())
+                    .param("start", event.event().start())
+                    .param("end", event.event().end())
+                    .param("category", event.event().category().name())
+                    .param("location", event.event().location().orElse(null), Types.VARCHAR)
+                    .param("note", event.event().note().orElse(null), Types.VARCHAR)
+                    .update()).sum();
+        } catch (DataAccessException e) {
+            throw new IllegalStateException("刪除已歸檔的行程失敗（" + archived.size() + " 筆）", e);
+        }
+    }
+
+    @Override
+    public int restore(OwnerId owner, List<ScheduledEvent> events) {
+        try {
+            // ON CONFLICT (id) DO NOTHING：已經在行事曆上的那筆不蓋掉、也不算錯（RestoreEventsPort 的約定）。
+            // 同一個 id 在別人名下（UUID 撞號，實際上不會發生）一樣跳過，不會變成搶走別人的行程
+            Integer restored = transaction.execute(status -> events.stream()
+                    .mapToInt(event -> insertSql(owner, event, "ON CONFLICT (id) DO NOTHING").update())
+                    .sum());
+            return restored == null ? 0 : restored;
+        } catch (DataAccessException | TransactionException e) {
+            throw new IllegalStateException("還原行程失敗（" + events.size() + " 筆）", e);
+        }
+    }
+
+    private record OwnedRow(OwnerId owner, Row row) {
+    }
+
+    /**
      * 讀出來的每一筆重新走一次 CalendarEvent 的規則，資料庫裡的壞資料在這裡就被擋下（跟 Conversation.restore 同一個想法）。
      * 擋下時丟 IllegalStateException 而不是讓 IllegalArgumentException 往外跑：
      * 壞的是資料庫裡的資料，不是呼叫端送錯東西，不該變成 400。
@@ -123,10 +314,15 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEvent
     }
 
     private void insert(OwnerId owner, ScheduledEvent scheduled) {
-        jdbc.sql("""
+        insertSql(owner, scheduled, "").update();
+    }
+
+    // 新增和還原只差在最後那一句（還原遇到已經有的 id 就跳過），欄位的對應只寫一份
+    private JdbcClient.StatementSpec insertSql(OwnerId owner, ScheduledEvent scheduled, String onConflict) {
+        return jdbc.sql("""
                         INSERT INTO calendar_event (id, owner_id, title, start_at, end_at, category, location, note)
                         VALUES (:id, :owner, :title, :start, :end, :category, :location, :note)
-                        """)
+                        """ + onConflict)
                 .param("id", scheduled.id().value())
                 .param("owner", owner.value())
                 .param("title", scheduled.event().title())
@@ -136,7 +332,6 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEvent
                 // 分類存 enum 的名稱，跟 V5 的 CHECK 一致；沒有地點、備註就存 NULL（V5 的 CHECK 不收空白字串）
                 .param("category", scheduled.event().category().name())
                 .param("location", scheduled.event().location().orElse(null))
-                .param("note", scheduled.event().note().orElse(null))
-                .update();
+                .param("note", scheduled.event().note().orElse(null));
     }
 }

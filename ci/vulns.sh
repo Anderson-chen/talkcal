@@ -1,24 +1,32 @@
 #!/usr/bin/env bash
-# 掃映像檔裡有沒有已知漏洞（CVE）。用 Trivy，在容器裡跑。
+# 用 Trivy 掃已知漏洞（CVE）和危險的設定，在容器裡跑。HIGH、CRITICAL 就 exit 1，CI 紅燈。
 #
-#   ci/vulns.sh talkcal/app:local talkcal/web:local postgres:18.6-alpine
+#   ci/vulns.sh --repo talkcal/app:local talkcal/web:local postgres:18.6-alpine
+#   ci/vulns.sh $(ci/compose-images.sh)        EC2 上的第三方映像檔
 #
-# 掃的是 build 好的映像檔，不是 build.gradle、package.json：映像檔才是真的會上線的東西，
-# 一次看得到兩種 —— 基底映像檔的作業系統套件（openssl、curl…），和 jar 裡打包的 Java 函式庫（Tomcat、Jackson…）。
+# --repo：先掃 repo 本身（#235）——
+#   - 設定（trivy config）：Dockerfile、compose、Terraform 裡用 root 跑、privileged、密碼寫死、S3 沒加密這類寫法。
+#     compose 的規則 Trivy 沒有，自己寫在 ci/config-checks/
+#   - 前端的 lockfile：前端映像檔裡只剩 nginx 和打包好的靜態檔，看不出用了哪個套件哪一版，掃映像檔抓不到
+# 其餘參數是映像檔：基底映像檔的作業系統套件（openssl、curl…）和 jar 裡的 Java 函式庫（Tomcat、Jackson…）一次掃到。
+# 後端不另外掃 build.gradle：jar 裡就是 Gradle 解析完的確切版本。
 #
-# 有漏洞就 exit 1，CI 紅燈、合併不了。
-# 評估過決定接受的（例如修不了、也碰不到的），寫進 ci/trivyignore.yaml，要附理由和到期日。
-#
-# 只看 HIGH、CRITICAL，而且只看已經有修補版本的（--ignore-unfixed）：
-# 上游還沒修的我們也沒得升，擋下來只會讓每個 PR 都紅、卻沒有任何事可做。
+# 評估過決定接受的，寫進 ci/trivyignore.yaml，要附理由和到期日。
+# 漏洞只看已經有修補版本的（--ignore-unfixed）：上游還沒修的我們也沒得升，擋下來只會讓每個 PR 都紅、卻沒有任何事可做。
 
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 export MSYS_NO_PATHCONV=1  # 同 run.sh：別讓 Git Bash 改寫 /var/run/docker.sock
 
 # 版本和 digest 都釘死。Trivy 在 2026-03 被入侵過（v0.69.4 和 trivy-action 的 tag 被換成會偷 secret 的版本），
-# 所以不用 trivy-action、不用會移動的 tag，用的是事件之後發的版本
-image=aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+# 所以不用 trivy-action、不用會移動的 tag，用的是事件之後發的版本。
+# 版本寫在 ci/Dockerfile（CI 映像檔掃授權用同一版），這裡讀過來，不再寫一次 —— 跟 ci.yml 從 compose 讀 postgres 版本同一個做法
+# 只認 COPY --from 那一行，註解裡寫到同一個名字也不會多抓一筆
+image=$(sed -nE 's|^COPY --from=(aquasec/trivy:[^ ]+) .*|\1|p' ci/Dockerfile)
+if [ -z "$image" ] || [ "$(printf '%s\n' "$image" | wc -l)" -ne 1 ]; then
+    echo "ci/Dockerfile 裡找不到唯一一行 COPY --from=aquasec/trivy:…" >&2
+    exit 1
+fi
 
 # Windows 上 docker 要 C:/... 形式的路徑（pwd -W），Linux、macOS 沒有 -W 就用 pwd
 repo=$(pwd -W 2>/dev/null || pwd)
@@ -26,25 +34,58 @@ repo=$(pwd -W 2>/dev/null || pwd)
 status=0
 out=ci/build/vulns.md
 mkdir -p ci/build
-echo "## 漏洞掃描（HIGH、CRITICAL，有修補版本的）" > "$out"
+echo "## Trivy 掃描（HIGH、CRITICAL；漏洞只算有修補版本的）" > "$out"
+
+scan() { # scan <標題> <trivy 子指令和參數…>：跑一次 Trivy，結果印出來也寫進報告
+    local title=$1 code=0 report sock=()
+    shift
+    echo "── $title ──"
+    # repo 唯讀掛在 /src：設定、lockfile、例外檔、自己的規則都從這裡讀。
+    # docker.sock 只給掃映像檔的：讓 Trivy 直接讀本機 Docker 裡的映像檔，不必先推到 registry。
+    #   它等同主機 root（見 ci/config-checks/compose_docker_socket.rego），只讀檔案的掃描不給
+    if [ "$1" = image ]; then sock=(--volume /var/run/docker.sock:/var/run/docker.sock); fi
+    # talkcal-trivy-cache：漏洞資料庫（幾十 MB），本機跨次保留；GitHub 每次都是新機器，會重新下載
+    # 一個有問題不提早結束：每個都掃完，一次看到全部（跟 checks.sh 同一個理由）
+    report=$(docker run --rm \
+        --volume talkcal-trivy-cache:/root/.cache/trivy \
+        "${sock[@]}" \
+        --volume "$repo:/src:ro" \
+        "$image" "$@" --quiet --severity HIGH,CRITICAL \
+        --ignorefile /src/ci/trivyignore.yaml --exit-code 1 --format table) || code=$?
+    echo "$report"
+    { echo; echo "### $title"; echo; echo '```'; echo "$report"; echo '```'; } >> "$out"
+    # 1 是「有問題」；其他非 0 是 Trivy 自己出錯（例如映像檔不存在）—— 兩種都算失敗，不能當成「沒問題」。
+    # 寫成 if 而不是 [ ] && ...：函式最後一行是 false 的話函式回傳 1，set -e 會讓整支在這裡結束
+    if [ "$code" -ne 0 ]; then status=1; fi
+}
+
+# 漏洞掃描共用的參數（設定掃描沒有這兩個）
+vuln=(--scanners vuln --ignore-unfixed)
+
+if [ "${1:-}" = --repo ]; then
+    shift
+    # 跳過不是自己寫的、或 build 出來的資料夾（本機才有，git archive 出來的 CI 上沒有）。
+    # --misconfig-scanners 加 yaml：Trivy 沒有 compose 的掃描器，所有 yaml 都交給 ci/config-checks/ 的規則，
+    #   規則只看有頂層 services 的（也就是 compose 檔）；--check-namespaces user 是那些自己寫的 package 的前綴
+    # --skip-check-update：只用 Trivy 映像檔內建的規則（跟著上面釘的版本＋digest），不在執行時另外下載最新的規則包 ——
+    #   不然 Aqua 發新規則那天，程式碼沒變、所有 PR 都會突然紅，本機和 CI 也可能拿到不同版本。規則跟著 Renovate 升 Trivy 一起升
+    scan "設定：Dockerfile、compose、Terraform" config \
+        --skip-check-update \
+        --misconfig-scanners dockerfile,terraform,yaml \
+        --config-check /src/ci/config-checks --check-namespaces user \
+        --skip-dirs '**/node_modules' --skip-dirs '**/build' --skip-dirs '**/.terraform' \
+        --skip-dirs .git --skip-dirs .claude \
+        /src
+
+    # 只給 lockfile 一個檔案，不給整個 web/：本機的 node_modules 有幾萬個檔案，Windows 掛進容器的讀取很慢，也用不到
+    # --include-dev-deps：Trivy 預設跳過 devDependencies，而前端的套件幾乎都是（vite、vitest…），不加等於沒掃。
+    #   它們不會上線，但在開發者的電腦和 CI 上執行，開發伺服器的漏洞（例如 vite 的 CVE-2026-112942）照樣打得到
+    # Trivy 也認得 package-lock.json、yarn.lock，換套件管理工具時改這裡的檔名就好
+    scan "web/pnpm-lock.yaml" fs "${vuln[@]}" --include-dev-deps /src/web/pnpm-lock.yaml
+fi
 
 for target in "$@"; do
-    echo "── $target ──"
-    # docker.sock：讓 Trivy 直接讀本機 Docker 裡的映像檔，不必先推到 registry
-    # talkcal-trivy-cache：漏洞資料庫（幾十 MB），本機跨次保留；GitHub 每次都是新機器，會重新下載
-    # 一個映像檔有漏洞不提早結束：每個都掃完，一次看到全部（跟 checks.sh 同一個理由）
-    code=0
-    report=$(docker run --rm \
-        --volume /var/run/docker.sock:/var/run/docker.sock \
-        --volume talkcal-trivy-cache:/root/.cache/trivy \
-        --volume "$repo/ci/trivyignore.yaml:/trivyignore.yaml:ro" \
-        "$image" image --quiet --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
-        --ignorefile /trivyignore.yaml --exit-code 1 \
-        --format table "$target") || code=$?
-    echo "$report"
-    { echo; echo "### $target"; echo; echo '```'; echo "$report"; echo '```'; } >> "$out"
-    # 1 是「有漏洞」；其他非 0 是 Trivy 自己出錯（例如映像檔不存在）—— 兩種都算失敗，不能當成「沒漏洞」
-    [ "$code" -ne 0 ] && status=1
+    scan "$target" image "${vuln[@]}" "$target"
 done
 
 exit $status

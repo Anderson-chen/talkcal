@@ -34,5 +34,49 @@ backend_worker:
   compaction:
     block_retention: 72h
 
+# ── metrics-generator（#31）────────────────────────────────────────
+# 從收到的 span 算出指標、寫進 Mimir。trace 一次只看得到一個請求；把所有 span 加總成指標，才看得出
+# 「哪兩個服務之間有流量、那條邊多慢、錯多少」。Grafana 的 service map 就是拿這些指標畫的。
+#   service-graphs：一對 client span ↔ server span 是一條邊（nginx → app），算出
+#                   traces_service_graph_request_total / _failed_total / _server_seconds 等
+#   span-metrics：每種 span（服務 + span 名稱 + 種類 + 狀態）一組 traces_spanmetrics_calls_total、_latency
+#
+# 為什麼在 Tempo 算、不在 app 算：app 已經有 http_server_requests 這類指標，但它只看得到自己；
+# 「nginx 叫 app」「app 叫資料庫」這種邊要兩頭的 span 放在一起才算得出來，只有收齊 span 的這一端做得到。
+metrics_generator:
+  # 指標上多一個標籤，分得出是 Tempo 算的，不是 Alloy 抓來的
+  registry:
+    external_labels:
+      source: tempo
+  storage:
+    path: /var/tempo/generator/wal
+    remote_write:
+      # 直接寫 Mimir，不經過 Alloy：這是 Tempo 自己產生的指標，不是要「收集」的東西，
+      # 跟 Mimir 收 Alloy 的 remote_write 是同一個入口
+      - url: http://mimir:9009/api/v1/push
+        send_exemplars: true    # 指標點上帶 trace id，service map 和 span metrics 的圖點得回 trace
+  processor:
+    service_graphs:
+      # 資料庫、模型不會送自己的 span，只有 app 那頭的 client span。照這些屬性的值造一個「虛擬節點」，
+      # 圖上才有 talkcal → postgresql、talkcal → llm-chat 這兩條邊（依序找，用第一個有值的）：
+      #   peer.service —— SQL span 上是 postgresql（Alloy 送進來前改的，原因見 alloy/config.alloy 的 transform）
+      #   target.host  —— Spring AI 叫模型的 HTTP client span 打的主機（Micrometer 的命名，值是 llm-chat）
+      peer_attributes:
+        - peer.service
+        - db.system.name
+        - target.host
+        - server.address
+    span_metrics:
+      # 預設的維度（service、span_name、span_kind、status_code）之外不加：每多一個維度，序列數就乘上它的種類數
+      dimensions: []
+
+# 上面是「怎麼算」，這裡是「對哪些租戶開」。單機沒有多租戶，所有 trace 都在預設租戶，開在 defaults 就好
+overrides:
+  defaults:
+    metrics_generator:
+      processors:
+        - service-graphs
+        - span-metrics
+
 usage_report:
   reporting_enabled: false

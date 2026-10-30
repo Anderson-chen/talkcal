@@ -65,6 +65,7 @@ main() {
     return 0
   fi
   # 路徑當下就展開：trap 在 main 結束後才觸發，那時 local 變數已經不在了
+  # shellcheck disable=SC2064  # 刻意現在展開，理由見上一行
   trap "rmdir '$lock'" EXIT
 
   # 有沒 commit 的改動代表這多半是開發用的 clone，checkout 會把人家的工作蓋掉
@@ -77,6 +78,14 @@ main() {
   # 這時候部署一定失敗，但那是環境還沒好，不是這個版本壞了，不該記成「試過了」
   if ! docker info >/dev/null 2>&1; then
     echo "Docker 沒在跑，這輪跳過"
+    return 0
+  fi
+
+  # 被 cd/rollback.sh 釘住（退回舊版、還在修）就不部署：不然下一個綠燈的 commit 一出現，
+  # 還沒修好的問題又被部署回來。跟 Argo CD rollback 前要關掉 auto-sync 是同一件事（理由見 docs/rollback.md）
+  local pin="$git_dir/cd-$env_name.pin"
+  if [ -f "$pin" ]; then
+    echo "釘在 $(cat "$pin")，不自動部署。解除：cd/rollback.sh $env_name --unpin"
     return 0
   fi
 

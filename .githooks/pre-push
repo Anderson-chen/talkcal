@@ -17,7 +17,7 @@ zero=0000000000000000000000000000000000000000
 # 改到這些就要跑 AI eval：助理和工具（system prompt 在這裡）、抽取（它也有 prompt）、eval 自己的題目和評分、
 # application.properties（用哪個模型、溫度、max-tokens）
 EVAL_PATHS='^backend/src/main/java/io/github/andersonchen/talkcal/calendar/adapter/(in/assistant|out/extraction)/|^backend/src/eval/|^backend/src/main/resources/application[^/]*\.properties$'
-while read -r local_ref local_sha remote_ref remote_sha; do
+while read -r local_ref local_sha _ _; do  # 後兩個是遠端的 ref、sha，用不到
     # 刪除遠端分支時本機 sha 是全 0，沒有東西要測
     [ "$local_sha" = "$zero" ] && continue
     echo "pre-push：檢查 ${local_ref#refs/heads/} ($(git rev-parse --short "$local_sha"))"

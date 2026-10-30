@@ -1,0 +1,65 @@
+# #43 失敗畫面演練用的一組容器。跟共用的 talkcal-*（deploy/）分開：名稱、埠、網路都不一樣，停哪個都不影響別人。
+#
+#   瀏覽器 → web（這個分支的 nginx.conf＋dist，18443）→ app（這個分支，18843）→ llm-proxy（假模型，fake-model.conf）
+#
+# 模型是假的：llm-proxy 自己回一句固定的 OpenAI 格式回覆。要看的是失敗時前端長怎樣，失敗都打在這一跳，
+# 回覆內容不重要；而且共用的 talkcal-llm-chat 演練當時是停著的，這組不去開它。
+#
+# 故障打在這幾處，真正的模型完全不動：
+#   docker stop  talkcal43-llm-proxy   模型斷線（502 ASSISTANT_FAILED，連 5 次後熔斷 503 MODEL_UNAVAILABLE）
+#   docker pause talkcal43-llm-proxy   模型卡住（bulkhead 縮成 1：第二個人 503 MODEL_BUSY）
+#   docker stop  talkcal43-app         app 停掉（nginx 自己回 502/504，沒有 JSON、沒有 code）
+#
+# 起：docker compose -f docs/drills/2026-10-19-failure-ux/compose.yaml up -d --build
+# 收：docker compose -f docs/drills/2026-10-19-failure-ux/compose.yaml down -v
+name: talkcal43
+
+services:
+  postgres:
+    image: postgres:18.6-alpine
+    container_name: talkcal43-postgres
+    environment:
+      POSTGRES_DB: talkcal
+      POSTGRES_USER: talkcal
+      POSTGRES_PASSWORD: talkcal43-local-only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U talkcal -d talkcal"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # 假模型，故障打在這裡（跟 #44 的演練同一招：stop = 斷線、pause = 卡住）
+  llm-proxy:
+    image: nginx:1.30-alpine
+    container_name: talkcal43-llm-proxy
+    volumes:
+      - ./fake-model.conf:/etc/nginx/conf.d/default.conf:ro
+
+  app:
+    image: talkcal43/app:local
+    build:
+      context: ../../../backend
+    container_name: talkcal43-app
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_PASSWORD: talkcal43-local-only
+      SPRING_AI_OPENAI_CHAT_BASEURL: http://llm-proxy:8080/v1
+      # 縮成 1：一個人卡在模型上，第二個人就看得到「忙碌」
+      TALKCAL_MODEL_BULKHEAD_MAXCONCURRENTCALLS: "1"
+      # 沒有 Alloy：trace 送不出去只會記 log，不影響回應
+    ports:
+      - "127.0.0.1:18843:8090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: talkcal43/web:local
+    build:
+      context: ../../../web
+    container_name: talkcal43-web
+    ports:
+      - "127.0.0.1:18443:80"
+    depends_on:
+      - app
+

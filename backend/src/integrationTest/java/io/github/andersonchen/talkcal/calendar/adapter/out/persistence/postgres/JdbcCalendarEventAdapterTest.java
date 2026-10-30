@@ -2,6 +2,8 @@ package io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -9,13 +11,32 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Calendar
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.DateRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.EventOrigin;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.IdempotencyKey;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalOutcome;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.AddEventsService;
+import io.github.andersonchen.talkcal.calendar.application.port.in.AddedEvents;
+import io.github.andersonchen.talkcal.calendar.application.port.in.IdempotencyKeyReusedException;
+import io.github.andersonchen.talkcal.calendar.application.port.out.ProposalStorePort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsagePort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsOncePort.AlreadySaved;
+import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsOncePort.KeyUsedForOtherContent;
+import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsOncePort.Saved;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -77,7 +98,33 @@ class JdbcCalendarEventAdapterTest {
     @BeforeEach
     void clean() {
         jdbc.sql("DELETE FROM calendar_event").update();
+        jdbc.sql("DELETE FROM calendar_add_request").update();
     }
+
+    private static final ProposalStorePort NO_PROPOSALS = new ProposalStorePort() {
+        @Override
+        public void saveProposals(OwnerId owner, List<ProposalId> proposals) {
+        }
+
+        @Override
+        public int decide(OwnerId owner, Set<ProposalId> proposals, ProposalOutcome outcome) {
+            return 0;
+        }
+    };
+
+    private static final RecordUsagePort NO_USAGE = new RecordUsagePort() {
+        @Override
+        public void proposalsShown(int count) {
+        }
+
+        @Override
+        public void proposalsDismissed(int count) {
+        }
+
+        @Override
+        public void eventsAdded(EventOrigin origin, int count) {
+        }
+    };
 
     private static int count() {
         return jdbc.sql("SELECT count(*) FROM calendar_event").query(Integer.class).single();
@@ -416,6 +463,171 @@ class JdbcCalendarEventAdapterTest {
         assertThrows(IllegalStateException.class, () -> broken.save(OWNER, List.of(ScheduledEvent.schedule(DINNER))));
         assertThrows(IllegalStateException.class, () -> broken.load(OWNER, OCT_06));
         assertThrows(IllegalStateException.class, () -> broken.delete(OWNER, EventId.newId()));
+    }
+
+    /**
+     * 冪等寫入（#51，表和理由見 V13）。前幾題經過 AddEventsService 打真的資料庫：測的是使用者實際遇到的「按兩次加入」，
+     * 不只是 adapter 的某個方法。
+     *
+     * 怎麼證明這些題目真的抓得到重複：withoutKeyDuplicates 示範同樣的操作不帶鍵就是兩筆（偵測方法是對的）；
+     * 把 saveOnce 搶鍵的那句拿掉（每次都當成第一次），sameKeyTwiceSavesOnce、concurrentRetriesSaveOnce 等題會紅（PR 描述有實際跑的結果）。
+     */
+    @Nested
+    @DisplayName("#51 冪等鍵：同一個鍵只存一次")
+    class Idempotency {
+
+        // 卡片和用量指標不是這裡要測的（AddEventsServiceTest 測）：給兩個什麼都不做的
+        private final AddEventsService service = new AddEventsService(adapter, adapter, NO_PROPOSALS, NO_USAGE);
+        private final IdempotencyKey key = new IdempotencyKey("3f1c8a2e-6b0d-4d7e-9a51-2c4e8f7b9d10");
+        private final CalendarEvent dentist = CalendarEvent.startingAt("看牙醫", LocalDateTime.of(2026, 10, 6, 9, 0));
+
+        @Test
+        @DisplayName("同一個鍵送兩次（回應弄丟、使用者再按一次）：資料庫裡只有一筆，第二次回的是第一次那筆的 id")
+        void sameKeyTwiceSavesOnce() {
+            AddedEvents first = service.addEvents(OWNER, key, List.of(DINNER), List.of());
+            AddedEvents retry = service.addEvents(OWNER, key, List.of(DINNER), List.of());
+
+            assertEquals(1, count());
+            assertFalse(first.replayed());
+            assertTrue(retry.replayed());
+            assertEquals(first.events(), retry.events());
+        }
+
+        @Test
+        @DisplayName("反例：同樣的操作不帶鍵就是兩筆 —— 上一題的「只有一筆」是鍵擋下來的，不是偵測方法有問題")
+        void withoutKeyDuplicates() {
+            service.addEvents(OWNER, List.of(DINNER), List.of());
+            service.addEvents(OWNER, List.of(DINNER), List.of());
+
+            assertEquals(2, count());
+        }
+
+        @Test
+        @DisplayName("一批好幾筆：重送回的是同樣幾筆、同樣順序")
+        void batchReplaysInOrder() {
+            AddedEvents first = service.addEvents(OWNER, key, List.of(DINNER, dentist), List.of());
+            AddedEvents retry = service.addEvents(OWNER, key, List.of(DINNER, dentist), List.of());
+
+            assertEquals(2, count());
+            assertEquals(first.events(), retry.events());
+        }
+
+        @Test
+        @DisplayName("不同的鍵、一樣的內容：正常新增，不被擋（使用者真的想加兩筆一樣的）")
+        void differentKeysAreNotBlocked() {
+            service.addEvents(OWNER, key, List.of(DINNER), List.of());
+            AddedEvents second = service.addEvents(OWNER, new IdempotencyKey("another-key"), List.of(DINNER), List.of());
+
+            assertEquals(2, count());
+            assertFalse(second.replayed());
+        }
+
+        @Test
+        @DisplayName("#104 不同使用者用同一個鍵：互不影響，各存各的，也讀不到對方那筆")
+        void keysAreScopedByOwner() {
+            AddedEvents mine = service.addEvents(OWNER, key, List.of(DINNER), List.of());
+            AddedEvents theirs = service.addEvents(OTHER, key, List.of(DINNER), List.of());
+
+            assertEquals(2, count());
+            assertFalse(theirs.replayed());
+            assertNotEquals(mine.events(), theirs.events());
+            assertEquals(mine.events(), adapter.load(OWNER, OCT_06));
+            assertEquals(theirs.events(), adapter.load(OTHER, OCT_06));
+        }
+
+        @Test
+        @DisplayName("同一個鍵、不同內容：IdempotencyKeyReusedException（422），什麼都不存，第一次那筆不受影響")
+        void sameKeyOtherContentIsRejected() {
+            AddedEvents first = service.addEvents(OWNER, key, List.of(DINNER), List.of());
+
+            assertThrows(IdempotencyKeyReusedException.class, () -> service.addEvents(OWNER, key, List.of(dentist), List.of()));
+            // 內容只差一點也算不同：使用者在卡片上改了結束時間，就是另一批
+            CalendarEvent longer = new CalendarEvent(DINNER.title(), DINNER.start(), DINNER.end().plusMinutes(30));
+            assertInstanceOf(KeyUsedForOtherContent.class, adapter.saveOnce(OWNER, key, List.of(ScheduledEvent.schedule(longer))));
+            assertEquals(first.events(), adapter.load(OWNER, OCT_06));
+        }
+
+        @Test
+        @DisplayName("幾乎同時到的兩個重送（連點、兩個分頁）：唯一約束仲裁，只存一筆，兩邊拿到同一個 id")
+        void concurrentRetriesSaveOnce() throws Exception {
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try {
+                // 跑 20 輪，每輪換一個鍵：兩條執行緒等同一個起跑信號，盡量讓兩個 INSERT 撞在一起
+                for (int round = 0; round < 20; round++) {
+                    IdempotencyKey roundKey = new IdempotencyKey("race-" + round);
+                    CountDownLatch start = new CountDownLatch(1);
+                    CompletableFuture<AddedEvents> one = CompletableFuture.supplyAsync(() -> awaitThenAdd(start, roundKey), pool);
+                    CompletableFuture<AddedEvents> two = CompletableFuture.supplyAsync(() -> awaitThenAdd(start, roundKey), pool);
+                    start.countDown();
+                    AddedEvents a = one.get();
+                    AddedEvents b = two.get();
+
+                    assertEquals(round + 1, count(), "第 " + round + " 輪多存了");
+                    assertEquals(a.events(), b.events());
+                    assertTrue(a.replayed() ^ b.replayed(), "剛好一邊是真的存、一邊是重送");
+                }
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+
+        private AddedEvents awaitThenAdd(CountDownLatch start, IdempotencyKey roundKey) {
+            try {
+                start.await();
+            } catch (InterruptedException e) {
+                throw new IllegalStateException(e);
+            }
+            return service.addEvents(OWNER, roundKey, List.of(DINNER), List.of());
+        }
+
+        @Test
+        @DisplayName("存了之後被刪掉：重送不會把它變回來，回的是現在還在的那幾筆")
+        void replayAfterDeleteDoesNotResurrect() {
+            AddedEvents first = service.addEvents(OWNER, key, List.of(DINNER, dentist), List.of());
+            adapter.delete(OWNER, first.events().getFirst().id());
+
+            AlreadySaved retry = assertInstanceOf(AlreadySaved.class,
+                    adapter.saveOnce(OWNER, key, List.of(ScheduledEvent.schedule(DINNER), ScheduledEvent.schedule(dentist))));
+
+            assertEquals(1, count());
+            assertEquals(List.of(first.events().get(1)), retry.events());
+        }
+
+        @Test
+        @DisplayName("一批裡有一筆存不進去：整批 rollback，鍵也沒記下 —— 用同一個鍵再送，照樣存得進去")
+        void failedBatchDoesNotBurnTheKey() {
+            ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);
+            // 同一個 id 兩次：第二筆撞 calendar_event 的主鍵
+            assertThrows(IllegalStateException.class, () -> adapter.saveOnce(OWNER, key, List.of(dinner, dinner)));
+            assertEquals(0, count());
+
+            assertInstanceOf(Saved.class, adapter.saveOnce(OWNER, key, List.of(dinner, ScheduledEvent.schedule(dentist))));
+            assertEquals(2, count());
+        }
+
+        @Test
+        @DisplayName("清掉保留期限以前的鍵：清了之後同一個鍵再送就是新的一次（V13 寫的代價）")
+        void cleanup() {
+            service.addEvents(OWNER, key, List.of(DINNER), List.of());
+
+            assertEquals(0, adapter.deleteIdempotencyKeysCreatedBefore(Instant.now().minus(1, ChronoUnit.HOURS)));
+            assertEquals(1, adapter.deleteIdempotencyKeysCreatedBefore(Instant.now().plus(1, ChronoUnit.MINUTES)));
+
+            assertFalse(service.addEvents(OWNER, key, List.of(DINNER), List.of()).replayed());
+            assertEquals(2, count());
+        }
+
+        @Test
+        @DisplayName("內容指紋：一樣的內容算出一樣的；欄位的值換了位置（標題和地點對調）算出不一樣的")
+        void fingerprintIsUnambiguous() {
+            CalendarEvent a = DINNER.withDetails("拉麵店", null);
+            CalendarEvent b = new CalendarEvent("拉麵店", DINNER.start(), DINNER.end()).withDetails(DINNER.title(), null);
+
+            assertEquals(JdbcCalendarEventAdapter.fingerprint(List.of(ScheduledEvent.schedule(a))),
+                    JdbcCalendarEventAdapter.fingerprint(List.of(ScheduledEvent.schedule(a))));
+            assertNotEquals(JdbcCalendarEventAdapter.fingerprint(List.of(ScheduledEvent.schedule(a))),
+                    JdbcCalendarEventAdapter.fingerprint(List.of(ScheduledEvent.schedule(b))));
+        }
     }
 
     @Test

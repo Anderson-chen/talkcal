@@ -1,0 +1,17 @@
+# 疊在 ops/compose.yaml 上面的雲端差異（deploy.sh 第 5 步用）。跟 compose.ec2.yaml 疊 deploy/ 是同一個做法：
+# 本機那份一行都不動，只寫 EC2 跟本機不一樣的地方。
+#
+#   docker compose -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml up -d
+
+services:
+  alloy:
+    environment:
+      # Trace 取樣（#37，見 ops/README.md 的「Trace 取樣」、ops/alloy/config.alloy）。本機不設：一般請求 100%、等 5 秒。
+      # 雲端一般請求只留 10%；錯的（ERROR、5xx）和慢的（> 5 秒）不論比例一律留。
+      TRACE_SAMPLING_PERCENT: "10"
+      # 要比最慢的請求還久，慢請求的根 span 才趕得上：叫模型的逾時 2 分鐘（spring.ai.openai.chat.timeout）＋ 5 秒餘裕
+      TRACE_SAMPLING_DECISION_WAIT: 125s
+    volumes:
+      # backup-to-s3.sh 寫「最後一次成功備份」的 .prom 的地方（$ROOT/metrics），換掉本機那個空 volume（#39）。
+      # volumes 依容器裡的路徑合併，所以這行蓋掉 ops/compose.yaml 掛在同一個路徑的那個
+      - /opt/talkcal/metrics:/var/lib/alloy/textfile:ro

@@ -1,0 +1,8 @@
+# JdbcClient.sql(String)：傳進去的字串就是要執行的 SQL，等同 JdbcTemplate.query 的第一個參數。
+# 欄位：套件、類別、含子類別、方法、簽名、（不用）、哪個參數、種類、來源
+extensions:
+  - addsTo:
+      pack: codeql/java-all
+      extensible: sinkModel
+    data:
+      - ["org.springframework.jdbc.core.simple", "JdbcClient", True, "sql", "(String)", "", "Argument[0]", "sql-injection", "manual"]

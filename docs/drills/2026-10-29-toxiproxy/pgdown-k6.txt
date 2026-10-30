@@ -1,0 +1,93 @@
+14:32:39 assistant status=200 code=ok 5073ms
+14:32:39 assistant status=200 code=ok 2211ms
+14:32:44 assistant status=200 code=ok 3767ms
+14:32:44 assistant status=200 code=ok 1217ms
+14:32:49 assistant status=200 code=ok 2866ms
+14:32:51 assistant status=200 code=ok 1465ms
+14:32:53 assistant status=200 code=ok 896ms
+14:32:57 assistant status=200 code=ok 1651ms
+14:33:01 assistant status=200 code=ok 2809ms
+14:33:06 assistant status=200 code=ok 4686ms
+14:33:07 assistant status=200 code=ok 2642ms
+14:33:09 assistant status=200 code=ok 1535ms
+14:33:12 assistant status=200 code=ok 1575ms
+14:33:15 assistant status=200 code=ok 1635ms
+14:33:19 assistant status=200 code=ok 3013ms
+14:33:21 assistant status=200 code=ok 1409ms
+14:33:25 assistant status=200 code=ok 2678ms
+14:33:28 assistant status=200 code=ok 2686ms
+14:33:30 assistant status=200 code=ok 1417ms
+14:33:32 assistant status=200 code=ok 892ms
+14:33:34 ===== 弄壞 postgres（down） =====
+14:33:34 calendar status=502 142ms
+14:34:04 assistant status=502 code=ASSISTANT_FAILED 30037ms
+14:34:05 calendar status=502 30027ms
+14:34:06 calendar status=502 30014ms
+14:34:07 calendar status=502 30009ms
+14:34:07 assistant status=502 code=ASSISTANT_FAILED 30019ms
+14:34:08 calendar status=502 30005ms
+14:34:09 calendar status=502 30014ms
+14:34:10 assistant status=502 code=ASSISTANT_FAILED 30015ms
+14:34:11 calendar status=502 30010ms
+14:34:13 assistant status=502 code=ASSISTANT_FAILED 30025ms
+14:34:13 calendar status=502 30026ms
+14:34:15 calendar status=502 30018ms
+14:34:16 assistant status=502 code=ASSISTANT_FAILED 30007ms
+14:34:17 calendar status=502 30021ms
+14:34:19 calendar status=502 30017ms
+14:34:19 assistant status=502 code=ASSISTANT_FAILED 30017ms
+14:34:21 calendar status=502 30025ms
+14:34:22 assistant status=502 code=ASSISTANT_FAILED 30016ms
+14:34:23 calendar status=502 30021ms
+14:34:25 assistant status=502 code=ASSISTANT_FAILED 30015ms
+14:34:25 calendar status=502 30018ms
+14:34:27 calendar status=502 30016ms
+14:34:28 assistant status=502 code=ASSISTANT_FAILED 30005ms
+14:34:29 calendar status=502 30018ms
+14:34:31 calendar status=502 30022ms
+14:34:31 assistant status=502 code=ASSISTANT_FAILED 30020ms
+14:34:33 calendar status=502 30014ms
+14:34:34 ===== 恢復 postgres =====
+14:34:34 assistant status=502 code=ASSISTANT_FAILED 30022ms
+14:34:51 assistant status=200 code=ok 28671ms
+14:34:51 assistant status=200 code=ok 13741ms
+14:34:51 assistant status=200 code=ok 43848ms
+14:34:54 assistant status=200 code=ok 43907ms
+14:34:55 assistant status=200 code=ok 11706ms
+14:34:55 assistant status=200 code=ok 36082ms
+14:34:56 assistant status=200 code=ok 27216ms
+14:34:57 assistant status=200 code=ok 16954ms
+14:34:57 assistant status=200 code=ok 8085ms
+14:34:57 assistant status=200 code=ok 44101ms
+14:35:06 assistant status=200 code=ok 31229ms
+14:35:06 assistant status=200 code=ok 34225ms
+14:35:06 assistant status=200 code=ok 40312ms
+14:35:06 assistant status=200 code=ok 13357ms
+14:35:06 assistant status=200 code=ok 49668ms
+14:35:06 assistant status=200 code=ok 7843ms
+14:35:08 assistant status=200 code=ok 21222ms
+14:35:08 assistant status=200 code=ok 6723ms
+14:35:09 assistant status=200 code=ok 13933ms
+14:35:09 assistant status=200 code=ok 1980ms
+14:35:12 assistant status=200 code=ok 7711ms
+14:35:14 assistant status=200 code=ok 997ms
+14:35:15 assistant status=200 code=ok 5116ms
+14:35:18 assistant status=200 code=ok 1278ms
+14:35:20 assistant status=200 code=ok 863ms
+14:35:25 assistant status=200 code=ok 2882ms
+14:35:28 assistant status=200 code=ok 2726ms
+14:35:29 assistant status=200 code=ok 894ms
+14:35:34 assistant status=200 code=ok 2804ms
+14:35:37 assistant status=200 code=ok 2694ms
+
+助理（每分鐘 20 人，共 180 秒；第 60 秒弄壞 postgres（down）、第 120 秒恢復）
+    次數      中位數        最久  結果
+     50     2948ms    49668ms  200 正常回覆
+     11    30017ms    30037ms  502 ASSISTANT_FAILED（叫了、失敗）
+      0                        503 MODEL_UNAVAILABLE（熔斷，沒叫模型）
+      0                        503 MODEL_BUSY（滿載，沒叫模型）
+      0                        其他（含沒拿到回應）
+
+行程 API（每秒 1 人）：162 次，失敗 18 次，p95 30018ms，最久 30027ms
+k6 沒送出去（dropped_iterations）：19
+thresholds on metrics 'outage_calendar, outage_calendar_failed' have been crossed

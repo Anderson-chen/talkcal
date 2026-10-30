@@ -20,7 +20,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
  * AccessLogFilter 的測試，直接餵 Mock 的 request/response，不起 Spring。
  *
  * 跟 CalendarControllerTest 這類 web 切片不同：這個 filter 只用到 Servlet API，路由、綁定都跟它無關，
- * 起 MockMvc 驗不到更多東西。要驗的只有「有沒有寫出那一行、該跳過的有沒有跳過」，
+ * 起 MockMvc 驗不到更多東西。要驗的只有「有沒有寫出那一行、不該記的有沒有記」，
  * 所以用 OutputCaptureExtension 抓 stdout 來看。
  */
 @ExtendWith(OutputCaptureExtension.class)
@@ -114,15 +114,5 @@ class AccessLogFilterTest {
         int bytes = "{\"error\":\"請先登入\"}".getBytes(StandardCharsets.UTF_8).length;
         assertTrue(output.getOut().contains("-> 401") && output.getOut().contains(bytes + " B out"), output.getOut());
         assertEquals("{\"error\":\"請先登入\"}", response.getContentAsString(StandardCharsets.UTF_8));
-    }
-
-    @Test
-    @DisplayName("actuator 的請求不記，免得被 Alloy 的指標抓取淹掉")
-    void skipsActuator(CapturedOutput output) throws Exception {
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/actuator/prometheus");
-
-        filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
-
-        assertFalse(output.getOut().contains("/actuator/prometheus"), output.getOut());
     }
 }

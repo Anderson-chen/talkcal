@@ -9,10 +9,9 @@
 // 它們是一般的連結、不是 fetch：要整頁轉到 Google 去同意，再轉回首頁。失敗時後端轉回 /?login_error=oauth。
 import { computed, onMounted, ref } from 'vue'
 import { loadProviders, logIn, providerLoginUrl, signUp, type Provider } from './auth'
-import { loadThemeKey, THEMES, toCssVars } from './calendar/theme'
+import { savedThemeVars } from './calendar/theme'
 
-// 行事曆還沒建好主題狀態，這裡直接用上次選的主題：登入前後顏色一致
-const vars = toCssVars(THEMES[loadThemeKey()])
+const vars = savedThemeVars()
 
 const mode = ref<'login' | 'register'>('login')
 const username = ref('')

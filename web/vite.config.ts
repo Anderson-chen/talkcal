@@ -3,6 +3,12 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
   plugins: [vue()],
+  build: {
+    // 打包進來的套件（vue 和它的依賴）授權全文寫成 dist/licenses.txt，跟著網站一起送出去：
+    // MIT、BSD 都要求散布時附上版權和授權聲明，而前端的 js 正是送到每個使用者瀏覽器的「散布」（見 docs/licenses.md）。
+    // 用 .txt 不用 .md：nginx 不認得 .md，會當成下載檔
+    license: { fileName: 'licenses.txt' },
+  },
   server: {
     // 開發時把 /api 轉給本機 bootRun 的 app。瀏覽器只看到 5173 一個來源，
     // 所以後端不用開 CORS —— 後端根本不知道前端存在，跟 k6、curl 地位一樣。

@@ -26,6 +26,11 @@ source "$env_file"
 compose_args=()
 for f in $COMPOSE_FILES; do compose_args+=(-f "$f"); done
 
+# 版本號（#25）：compose 拿它當映像檔的 tag、傳進 build 貼成 label。規則在 cd/version.sh
+APP_VERSION="$(cd/version.sh)"
+GIT_COMMIT="$(git rev-parse HEAD)"
+export APP_VERSION GIT_COMMIT
+
 # 沒指定就部署 app 再 web：先換後端，前端換上去時打的就是新的 API
 services=("$@")
 [ ${#services[@]} -gt 0 ] || services=(app web)
@@ -42,10 +47,10 @@ default_timeout() {
 
 for svc in "${services[@]}"; do
   timeout="${WAIT_TIMEOUT:-$(default_timeout "$svc")}"
-  echo "── 部署 $svc（$env_name，最多等 ${timeout} 秒）"
+  echo "── 部署 $svc $APP_VERSION（$env_name，最多等 ${timeout} 秒）"
   # --build：映像檔有變才重 build；換了映像檔的容器才會被替換，沒變就什麼都不做。
   # --wait：等 compose 裡的 healthcheck 通過才結束。沒有它，Spring 啟動失敗也會顯示成功。
   docker compose "${compose_args[@]}" up -d --build --no-deps --wait --wait-timeout "$timeout" "$svc"
 done
 
-echo "── 完成（$env_name）：$(git log -1 --format='%h %s')"
+echo "── 完成（$env_name）：$APP_VERSION $(git log -1 --format='%s')"

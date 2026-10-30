@@ -18,6 +18,8 @@ services:
       SPRING_AI_OPENAI_CHAT_BASEURL: ${BEDROCK_BASE_URL:?缺 BEDROCK_BASE_URL}
       SPRING_AI_OPENAI_APIKEY: ${BEDROCK_API_KEY:?缺 BEDROCK_API_KEY}
       SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL: ${BEDROCK_MODEL:?缺 BEDROCK_MODEL}
+      # token 指標上的 model.backend 標籤（預設 llama-cpp）：成本 dashboard 靠它分出哪些 token 要照 Bedrock 單價算錢（#35）
+      TALKCAL_AI_BACKEND: bedrock
     # 原本的 depends_on 有 llm-chat，它不起的話 compose 會報錯。
     # !override 整個換掉 depends_on（不帶的話是合併，llm-chat 還在），只放回資料庫。compose 2.24.4 起支援
     depends_on: !override
