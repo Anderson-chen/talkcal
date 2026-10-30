@@ -1,6 +1,5 @@
 package io.github.andersonchen.talkcal.calendar.application.domain.service;
 
-import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ArchiveEventsUseCase;
@@ -71,8 +70,7 @@ public final class ArchiveEventsService implements ArchiveEventsUseCase {
                         failedGroups++;
                         continue;
                     }
-                    List<EventId> ids = month.getValue().stream().map(ScheduledEvent::id).toList();
-                    deletedThisBatch += deleteArchived.deleteArchived(owner.getKey(), ids, cutoff);
+                    deletedThisBatch += deleteArchived.deleteArchived(owner.getKey(), month.getValue());
                 }
             }
             archived += deletedThisBatch;

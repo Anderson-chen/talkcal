@@ -233,8 +233,23 @@ class EventArchiveFlowTest {
         jdbc.sql("UPDATE calendar_event SET start_at = '2026-11-01 09:00', end_at = '2026-11-01 10:00' WHERE id = :id")
                 .param("id", old.id().value()).update();
 
-        assertEquals(0, events.deleteArchived(ALICE, List.of(old.id()), CUTOFF));
+        assertEquals(0, events.deleteArchived(ALICE, List.of(old)));
         assertEquals(1, online(ALICE).size());
+    }
+
+    @Test
+    @DisplayName("反例：讀出來之後只被改了備註（還是舊的）也不刪 —— 歸檔裡存的是改之前的，刪了這次修改就不見了；沒改過的照刪")
+    void eventWithEditedDetailsIsNotDeleted() {
+        ScheduledEvent edited = at("三年前", LocalDateTime.of(2023, 5, 1, 9, 0));
+        ScheduledEvent untouched = at("沒動過", LocalDateTime.of(2023, 5, 2, 9, 0));
+        events.save(ALICE, List.of(edited, untouched));
+        // 模擬：排程讀出來之後、刪之前，使用者補上備註
+        jdbc.sql("UPDATE calendar_event SET note = '補上的備註' WHERE id = :id").param("id", edited.id().value()).update();
+
+        assertEquals(1, events.deleteArchived(ALICE, List.of(edited, untouched)));
+        List<ScheduledEvent> left = online(ALICE);
+        assertEquals(List.of(edited.id()), left.stream().map(ScheduledEvent::id).toList());
+        assertEquals(Optional.of("補上的備註"), left.getFirst().event().note());
     }
 
     @Test

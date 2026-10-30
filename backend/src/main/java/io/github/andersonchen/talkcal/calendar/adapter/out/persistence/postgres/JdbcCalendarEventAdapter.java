@@ -20,9 +20,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -131,19 +131,28 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, LoadEvent
     }
 
     @Override
-    public int deleteArchived(OwnerId owner, Collection<EventId> ids, LocalDateTime cutoff) {
-        if (ids.isEmpty()) {
-            return 0;
-        }
+    public int deleteArchived(OwnerId owner, List<ScheduledEvent> archived) {
         try {
-            // end_at < :cutoff 再檢查一次：讀出來到現在之間被改成未來的那筆，已經不舊了，不刪（它也沒必要留在歸檔，下次會再存新版）
-            return jdbc.sql("DELETE FROM calendar_event WHERE owner_id = :owner AND id IN (:ids) AND end_at < :cutoff")
+            // 每一欄都要跟歸檔那份一樣才刪（DeleteArchivedEventsPort 的約定）：讀出來到現在之間被改過的那筆，
+            // 歸檔裡存的不是它現在的樣子，刪了就丟掉這次修改。一筆一句：一天一次、一包幾十筆，不值得為它組一句大 SQL。
+            // location、note 可以是 NULL，用 IS NOT DISTINCT FROM（NULL = NULL 在 SQL 裡不成立）
+            return archived.stream().mapToInt(event -> jdbc.sql("""
+                            DELETE FROM calendar_event
+                            WHERE owner_id = :owner AND id = :id
+                              AND title = :title AND start_at = :start AND end_at = :end AND category = :category
+                              AND location IS NOT DISTINCT FROM :location AND note IS NOT DISTINCT FROM :note
+                            """)
                     .param("owner", owner.value())
-                    .param("ids", ids.stream().map(EventId::value).toList())
-                    .param("cutoff", cutoff)
-                    .update();
+                    .param("id", event.id().value())
+                    .param("title", event.event().title())
+                    .param("start", event.event().start())
+                    .param("end", event.event().end())
+                    .param("category", event.event().category().name())
+                    .param("location", event.event().location().orElse(null), Types.VARCHAR)
+                    .param("note", event.event().note().orElse(null), Types.VARCHAR)
+                    .update()).sum();
         } catch (DataAccessException e) {
-            throw new IllegalStateException("刪除已歸檔的行程失敗（" + ids.size() + " 筆）", e);
+            throw new IllegalStateException("刪除已歸檔的行程失敗（" + archived.size() + " 筆）", e);
         }
     }
 
