@@ -1,0 +1,56 @@
+// 從 VS Code 跑本機腳本（#238）：Ctrl+Shift+P →「Tasks: Run Task」→ 選一個，參數會跳出選單或文字框。
+// 每個 task 都只是呼叫 justfile 的指令，指令的說明、要什麼環境見 justfile 開頭。
+// 只有要填參數的幾個各自一個 task，其餘用「just: 任意指令」，不在這裡再抄一份 justfile 的清單。
+// 用 shell task 把整行交給終端機：沒填的參數（例如部署哪些服務）就是沒有，不會變成一個空字串傳給腳本。
+// 收路徑的參數加了引號，路徑有空白也不會被拆開。
+// 機器目前只有 local（cd/envs/），所以不另外問；多一台時再加選單。
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "just: 列出全部指令", "type": "shell", "command": "just --list --unsorted", "problemMatcher": [] },
+    { "label": "just: 任意指令", "type": "shell", "command": "just ${input:recipe}", "problemMatcher": [] },
+    { "label": "cd: 部署", "type": "shell", "command": "just deploy local ${input:services}", "problemMatcher": [] },
+    { "label": "cd: 打 release tag", "type": "shell", "command": "just release ${input:tag}", "problemMatcher": [] },
+    {
+      "label": "cd: 退版並釘住",
+      "type": "shell",
+      "command": "just rollback local ${input:rollbackTo}",
+      "presentation": { "focus": true },
+      "problemMatcher": []
+    },
+    { "label": "backup: 演練還原（不碰線上）", "type": "shell", "command": "just restore-verify \"${input:backupFile}\"", "problemMatcher": [] },
+    {
+      "label": "backup: 真的還原",
+      "type": "shell",
+      "command": "just restore \"${input:backupFile}\"",
+      "presentation": { "focus": true },
+      "problemMatcher": []
+    },
+    { "label": "perf: 壓測並送進 Grafana", "type": "shell", "command": "just perf \"${input:perfScript}\"", "problemMatcher": [] }
+  ],
+  "inputs": [
+    { "id": "recipe", "type": "promptString", "description": "just 後面要接的指令和參數，例如 versions、vulns talkcal/app:local" },
+    {
+      // 選項照 cd/apply.sh 開頭的用法；它能接的服務改了，這裡跟著改
+      "id": "services",
+      "type": "pickString",
+      "description": "部署哪些服務",
+      "options": [
+        { "label": "app、web（預設）", "value": "" },
+        { "label": "只有 app", "value": "app" },
+        { "label": "只有 web", "value": "web" },
+        { "label": "只換模型（llm-chat，很貴）", "value": "llm-chat" }
+      ],
+      "default": ""
+    },
+    { "id": "tag", "type": "promptString", "description": "release tag，例如 v0.2.0（只在本機建，不會推上去）" },
+    {
+      "id": "rollbackTo",
+      "type": "promptString",
+      "description": "退到哪個版本：版本號（例如 3f9c2ab；just versions 列得出來），或 --previous 退到上一個成功部署的版本",
+      "default": "--previous"
+    },
+    { "id": "backupFile", "type": "promptString", "description": "備份檔（.dump）的路徑" },
+    { "id": "perfScript", "type": "promptString", "description": "k6 腳本（perf/README.md 有每支在測什麼）", "default": "perf/smoke.js" }
+  ]
+}

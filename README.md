@@ -105,6 +105,16 @@ cd backend && ./gradlew bootRun  # app 在 8090，連 deploy/ 的 PostgreSQL 和
 pnpm --dir web run dev           # 前端在 5173，/api 轉給 8090（在 repo 根目錄跑）
 ```
 
+常用腳本（CI、部署、退版、備份還原、EC2 開關機、壓測）都收在根目錄的 [justfile](justfile)，不用記它們放在哪、要帶什麼參數：
+
+```bash
+just                       # 列出全部指令和說明
+just deploy local web      # 等於 cd/apply.sh local web
+```
+
+要裝什麼、Windows 上的 PATH 怎麼設，見 justfile 開頭。VS Code 裡用「Tasks: Run Task」：
+要選參數的幾個（部署、退版、還原、壓測）有自己的 task，其餘用「just: 任意指令」（[.vscode/tasks.json](.vscode/tasks.json)）。
+
 ## 測試
 
 Gradle 指令都在 `backend/` 裡跑：
