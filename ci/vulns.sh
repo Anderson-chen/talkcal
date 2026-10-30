@@ -20,9 +20,8 @@ export MSYS_NO_PATHCONV=1  # 同 run.sh：別讓 Git Bash 改寫 /var/run/docker
 # 所以不用 trivy-action、不用會移動的 tag，用的是事件之後發的版本。
 # 版本寫在 ci/Dockerfile（CI 映像檔掃授權用同一版），這裡讀過來，不再寫一次 —— 跟 ci.yml 從 compose 讀 postgres 版本同一個做法
 # 只認 COPY --from 那一行，註解裡寫到同一個名字也不會多抓一筆
-image=$(sed -nE 's|^COPY --from=(aquasec/trivy:[^ ]+) .*||p' ci/Dockerfile)
-if [ -z "$image" ] || [ "$(printf '%s
-' "$image" | wc -l)" -ne 1 ]; then
+image=$(sed -nE 's|^COPY --from=(aquasec/trivy:[^ ]+) .*|\1|p' ci/Dockerfile)
+if [ -z "$image" ] || [ "$(printf '%s\n' "$image" | wc -l)" -ne 1 ]; then
     echo "ci/Dockerfile 裡找不到唯一一行 COPY --from=aquasec/trivy:…" >&2
     exit 1
 fi
