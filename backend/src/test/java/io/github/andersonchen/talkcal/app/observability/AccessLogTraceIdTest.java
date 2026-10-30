@@ -33,7 +33,8 @@ import org.springframework.boot.test.web.server.LocalServerPort;
  * 為什麼起真的 server（RANDOM_PORT）而不用 MockMvc：要驗的正是 Servlet 容器裡 filter 的真實排序，
  * MockMvc 自己組 filter 鏈，驗到的可能不是正式環境那一條。
  * 不需要模型也不需要資料庫：送空白訊息，助理在讀記憶、叫模型之前就回 400。
- * 資料庫連線池要等第一次查詢才真的連，只有 Flyway 會在啟動時連，所以把它關掉。
+ * 資料庫連線池要等第一次查詢才真的連，只有 Flyway 會在啟動時連，所以把它關掉；資料庫位址指到連不到的地方，
+ * 證明真的不需要它，properties 也就跟 ActuatorPortTest 一字不差，兩個測試共用同一個 Spring context。
  *
  * 為什麼看 log 事件的 MDC，而不是把輸出開成 ECS JSON 再找 "traceId"：
  * ECS 的 traceId 欄位就是從 MDC 照抄的，看 MDC 等於看源頭。而改 log 格式會留在整個測試 JVM 裡，
@@ -42,7 +43,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
  * trace 不會真的往外送：spring-boot-micrometer-tracing-test 在測試裡把匯出關掉，但 trace id 照樣產生。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "spring.flyway.enabled=false")
+        properties = {"spring.flyway.enabled=false", "spring.datasource.url=jdbc:postgresql://localhost:1/talkcal"})
 @DisplayName("access log 帶著 traceId")
 class AccessLogTraceIdTest {
 

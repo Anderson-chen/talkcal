@@ -17,8 +17,9 @@ echo "── 後端：單元測試、架構規則、整合測試（編譯時 Err
 # 要真模型的那幾支，連不到 llama-server 就自動跳過（Assumptions），下面的摘要會列出來
 # evalClasses：AI eval（./gradlew eval）不在這裡跑（要真模型、跑一分多鐘），但至少要編得過，
 # 不然改了 CalendarAssistant 的方法簽名，eval 壞了沒人知道，直到下次有人想跑它
+# jacocoTestReport：單元＋整合測試合併的覆蓋率報告（#23），不會讓 CI 紅，總數貼在下面的摘要
 # checkLicense：runtimeClasspath（會打包進 jar 的）有沒有不允許的授權，規則在 backend/allowed-licenses.json（見 docs/licenses.md）
-(cd backend && ./gradlew --no-daemon test integrationTest evalClasses checkLicense) || status=1
+(cd backend && ./gradlew --no-daemon test integrationTest evalClasses jacocoTestReport checkLicense) || status=1
 
 # AI eval：只有 pre-push 發現這次改到 prompt 或模型相關的檔案時才跑（它設 RUN_EVAL=1，見 .githooks/pre-push）。
 # GitHub 上不跑：沒有模型。基準線裡的題目沒過才會紅；報告在 backend/build/eval/report.md（run.sh 會拿回 ci/build/eval/）
@@ -28,12 +29,12 @@ if [ "${RUN_EVAL:-0}" = 1 ]; then
 fi
 
 echo "── 前端：lint、單元測試、型別檢查、打包、E2E ──"
-# npm ci：照 package-lock.json 原樣裝，lock 跟 package.json 對不上就直接失敗
-# npm run lint：ESLint，抓會出錯的寫法（忘了 await、v-for 沒 key…）。幾秒就有結果，放在測試前面
-# npm test：Vitest，只測純函式（秒回）
-# npm run e2e：Playwright 開真的 Chromium（桌面、手機兩種版面），API 用假的，不需要後端。
+# pnpm install --frozen-lockfile：照 pnpm-lock.yaml 原樣裝，lock 跟 package.json 對不上就直接失敗
+# pnpm run lint：ESLint，抓會出錯的寫法（忘了 await、v-for 沒 key…）。幾秒就有結果，放在測試前面
+# pnpm test：Vitest，只測純函式（秒回）
+# pnpm run e2e：Playwright 開真的 Chromium（桌面、手機兩種版面），API 用假的，不需要後端。
 #   它會自己 build 再起 vite preview；放在 build 之後，型別錯的話先在 build 那一步就停
-(cd web && npm ci --no-audit --no-fund && npm run lint && npm test && npm run build && npm run e2e) || status=1
+(cd web && pnpm install --frozen-lockfile && pnpm run lint && pnpm test && pnpm run build && pnpm run e2e) || status=1
 
 echo "── 授權：前端會打包的套件 ──"
 # 後端的在上面 Gradle 那行（checkLicense）；前端的理由寫在 ci/licenses.sh
@@ -65,6 +66,25 @@ skipped_list() { # 列出被跳過的測試：類別 › 名稱
     done
 }
 
+backend_coverage() { # 後端的「行 | 分支」兩欄：把 JaCoCo CSV 每個類別的那一列加總
+    # 欄位：GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,…
+    local csv=backend/build/reports/jacoco/test/jacocoTestReport.csv
+    [ -f "$csv" ] || { echo "（沒有報告） | （沒有報告）"; return; }
+    awk -F, '
+        function pct(c, t) { return sprintf("%.1f%% (%d/%d)", t ? 100 * c / t : 0, c, t) }
+        NR > 1 { bm += $6; bc += $7; lm += $8; lc += $9 }
+        END { print pct(lc, lm + lc) " | " pct(bc, bm + bc) }
+    ' "$csv"
+}
+
+web_coverage() { # 前端的「行 | 分支」兩欄：讀 Vitest 的 json-summary
+    local json=web/coverage/coverage-summary.json
+    [ -f "$json" ] || { echo "（沒有報告） | （沒有報告）"; return; }
+    node -e 'const t = require(process.argv[1]).total
+        const pct = (k) => `${t[k].pct}% (${t[k].covered}/${t[k].total})`
+        console.log(`${pct("lines")} | ${pct("branches")}`)' "$PWD/$json"
+}
+
 {
     echo "## 測試結果"
     echo
@@ -87,6 +107,15 @@ skipped_list() { # 列出被跳過的測試：類別 › 名稱
     else
         echo "沒有跳過任何測試。"
     fi
+
+    # 覆蓋率（#23）：只列總數，不設門檻。要看哪一行沒跑到、報告在哪，見 docs/test-coverage.md
+    echo
+    echo "## 測試覆蓋率"
+    echo
+    echo "| | 行 | 分支 | 報告 |"
+    echo "|---|---|---|---|"
+    echo "| 後端（單元＋整合） | $(backend_coverage) | \`reports/jacoco/test/html/\` |"
+    echo "| 前端（Vitest，只算 .ts） | $(web_coverage) | \`web-coverage/\` |"
 } > "$summary"
 
 echo

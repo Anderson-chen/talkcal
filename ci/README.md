@@ -14,8 +14,8 @@ git push --no-verify                    # 確定要跳過檢查時
 ```
 
 要先開著 Docker Desktop。llama-server 有開的話，模型相關的測試會真的跑；沒開就跳過，摘要會列出來。
-第一次跑要 build 映像檔（含 Gradle 本體）、下載依賴，比較慢；之後映像檔有快取、依賴放在 volume `talkcal-ci-gradle`、`talkcal-ci-npm` 裡，就快了。
-結果：摘要在 `ci/build/summary.md`，失敗時的 HTML 報告在 `ci/build/reports/`。
+第一次跑要 build 映像檔（含 Gradle 本體）、下載依賴，比較慢；之後映像檔有快取、依賴放在 volume `talkcal-ci-gradle`、`talkcal-ci-pnpm`（pnpm store）裡，就快了。
+結果：摘要在 `ci/build/summary.md`，失敗時的 HTML 報告在 `ci/build/reports/`；覆蓋率報告在 `ci/build/reports/jacoco/`、`ci/build/web-coverage/`（GitHub 上是 `coverage` artifact，怎麼看見 [docs/test-coverage.md](../docs/test-coverage.md)）。
 
 ## 架構：檢查內容只寫一次，平台只是入口
 
@@ -50,7 +50,7 @@ git push --no-verify                    # 確定要跳過檢查時
 
 | 代價 | 處理 |
 |---|---|
-| 每次全新環境，東西要重新下載 | 很少變的（JDK、Node、Gradle 本體）烤進映像檔；常變的（Java 函式庫、npm 套件）放具名 volume，跨次保留；程式碼兩邊都不放 |
+| 每次全新環境，東西要重新下載 | 很少變的（JDK、Node、Gradle 本體）烤進映像檔；常變的（Java 函式庫、前端套件）放具名 volume，跨次保留；程式碼兩邊都不放 |
 | Windows 把資料夾掛進容器很慢（實測約 20 MB/s） | 不掛資料夾，用 `git archive` 複製 |
 | 整合測試要開 PostgreSQL（Testcontainers） | 把主機的 `docker.sock` 接進來，PostgreSQL 開在主機的 Docker 上、跟 CI 容器並排，不在容器裡再包一層 |
 | 模型測試要連 llama-server | 經 `host.docker.internal:8080` 連主機上的；要連別台就設 `SPRING_AI_OPENAI_CHAT_BASEURL` |
@@ -131,11 +131,11 @@ ci/vulns.sh talkcal/app:local talkcal/web:local postgres:18.6-alpine
 | | 工具 | 擋什麼 | 在哪跑 |
 |---|---|---|---|
 | 後端 | Error Prone | ERROR 等級的 bug 寫法（忘了用回傳值、`equals` 比錯型別、格式字串對不上…）讓編譯失敗；WARNING 只印出來 | 掛在 javac 上，每次編譯都跑（main、test、integrationTest、eval），`checks.sh` 自動涵蓋 |
-| 前端 | ESLint（eslint-plugin-vue、@vue/eslint-config-typescript、eslint-plugin-playwright） | 沒處理的 Promise、`v-for` 沒 key、E2E 的 `expect` 忘了 `await`… | `checks.sh`：`npm run lint` |
+| 前端 | ESLint（eslint-plugin-vue、@vue/eslint-config-typescript、eslint-plugin-playwright） | 沒處理的 Promise、`v-for` 沒 key、E2E 的 `expect` 忘了 `await`… | `checks.sh`：`pnpm run lint` |
 
 ```bash
-cd web && npm run lint              # 前端
-cd web && npm run lint -- --fix     # 能自動修的先修掉
+cd web && pnpm run lint              # 前端
+cd web && pnpm run lint --fix        # 能自動修的先修掉
 cd backend && ./gradlew classes     # 後端：編譯就是檢查
 ```
 
@@ -143,7 +143,7 @@ cd backend && ./gradlew classes     # 後端：編譯就是檢查
 
 挑工具時看三件事：**授權**（只用 MIT、Apache-2.0；這些都是開發工具，不會打包進 jar 或映像檔）、
 **社群熱門度**（維護者、星數、下載量，最後一次發版多久以前）、**版本發布滿兩週**（新版被植入惡意程式碼通常幾天內就會被發現；
-Trivy 2026-03 的事件見下面的「漏洞掃描」）。npm 套件用 `npm install --before=<兩週前>` 裝，連間接依賴也算進去。
+Trivy 2026-03 的事件見下面的「漏洞掃描」）。前端套件的兩週規則寫在 `web/pnpm-workspace.yaml`（`minimumReleaseAge`），`pnpm add` 自動套用，連間接依賴也算進去；`checks.sh` 的 `pnpm install --frozen-lockfile` 也照它檢查 lockfile，不滿兩週的版本進不了 master。
 
 **後端：Error Prone，不加 SpotBugs、Checkstyle、PMD**
 
@@ -233,6 +233,56 @@ ci/migrations.sh <commit>      # 跟指定的 commit 比
 | `DROP COLUMN IF EXISTS note`，上面有 `squawk-ignore ban-drop-column` 和理由 | 通過 |
 
 還沒做：加進 ruleset 的必過檢查（GitHub 的設定，要手動加 `migrations`）。
+
+## SLO 錄製規則檢查
+
+`ci/rules.sh` 用 promtool 檢查 [ops/mimir/rules/](../ops/mimir/rules/) 的錄製規則，再跑單元測試 [ops/mimir/slo.test.yaml](../ops/mimir/slo.test.yaml)：
+餵假的請求序列，比對錄出來的 SLI、burn rate。GitHub 上是自己一個 job（`rules`）。
+
+```bash
+ci/rules.sh
+```
+
+| 造出來的錯 | 結果 |
+|------------|------|
+| 比例的分母拿掉 `> 0` | 紅：沒流量的那段錄成 NaN，測試期望「沒資料」 |
+| 規則不變 | 通過 |
+
+還沒做：加進 ruleset 的必過檢查（要手動加 `rules`）；pre-push 也還沒接這支。
+
+## 告警端到端測試
+
+`ci/rules.sh` 只驗得到 Mimir 錄製規則的算式；Grafana 的告警規則（門檻、`for`、`noDataState`）、contact point、通知政策、SMTP
+要真的跑起來才知道對不對。`ci/alerting.sh` 起 [ops/compose.yaml](../ops/compose.yaml) 的整組觀測加 Mailpit（假信箱），
+疊上 [ci/alerting/compose.yaml](alerting/compose.yaml)：換專案名、拿掉固定的容器名稱和主機埠、Alloy 接一個只有假 app 的網路，
+所以本機正在跑的那組不受影響。假 app（[ci/alerting/fake-app.py](alerting/fake-app.py)）只吐 `/actuator/prometheus`，可以切成全部回 5xx 或停掉。
+真的 app 不搬進來：要 build 映像檔、AI 助理還要模型，而這裡要驗的是「指標 → Mimir → Grafana → 寄信」，不是 app。
+
+```bash
+ci/alerting.sh            # 約 15 分鐘
+KEEP=1 ci/alerting.sh     # 跑完留著容器，到 localhost:13000（Grafana）、localhost:18025（Mailpit）看
+```
+
+| 步驟 | 要看到 | 實測 |
+|------|--------|------|
+| 正常流量 3 分鐘 | Mailpit 0 封 | — |
+| 假 app 全部回 5xx | `[FIRING:n] SLO 快燒…` | 約 4 分鐘 |
+| 停掉假 app | `[FIRING:n] talkcal app 掛了…` | 約 2 分鐘 |
+| 假 app 起來 | `[RESOLVED] talkcal app 掛了…` | 約 5 分鐘（要等 `policies.yaml` 的 `group_interval`） |
+
+每一步的時限寫在 `ci/alerting.sh` 的 `wait_until`，比實測多抓一倍。
+
+GitHub 上是另一支 workflow（`.github/workflows/alerting.yml`），只在 PR 改到告警相關的路徑時跑，另外可以手動按。
+不放進 `ci.yml`：GitHub 的 `paths` 只能設在整支 workflow 上，而這支 15 分鐘，不值得每個 PR 都等。
+也因為不是每個 PR 都會出現，不能設成 ruleset 的必過檢查。
+
+| 造出來的錯 | 結果 |
+|------------|------|
+| `rules.yaml` 的 app-down 門檻 `lt 1` 改成 `lt 0` | 紅：停掉假 app 5 分鐘內沒收到「app 掛了」 |
+| 規則不變 | 通過 |
+| PR 只改了這些路徑以外的檔案 | 不跑 |
+
+刻意不驗：慢燒（視窗要好幾小時，算式靠 `ci/rules.sh`）、真的信箱收不收得到、會不會進垃圾郵件（CI 裡沒有）。
 
 ## 刻意不做的
 
