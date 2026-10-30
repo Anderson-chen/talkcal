@@ -31,7 +31,7 @@ repo=$(pwd -W 2>/dev/null || pwd)
 status=0
 out=ci/build/vulns.md
 mkdir -p ci/build
-echo "## 漏洞掃描（HIGH、CRITICAL，有修補版本的）" > "$out"
+echo "## 漏洞和設定掃描（HIGH、CRITICAL；漏洞只算有修補版本的）" > "$out"
 
 scan() { # scan <標題> <trivy 子指令和參數…>：跑一次 Trivy，結果印出來也寫進報告
     local title=$1 code=0 report
@@ -43,7 +43,7 @@ scan() { # scan <標題> <trivy 子指令和參數…>：跑一次 Trivy，結�
         --volume talkcal-trivy-cache:/root/.cache/trivy \
         --volume "$repo/ci/trivyignore.yaml:/trivyignore.yaml:ro" \
         "${mounts[@]}" \
-        "$image" "$@" --quiet --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+        "$image" "$@" --quiet --severity HIGH,CRITICAL \
         --ignorefile /trivyignore.yaml --exit-code 1 --format table) || code=$?
     echo "$report"
     { echo; echo "### $title"; echo; echo '```'; echo "$report"; echo '```'; } >> "$out"
@@ -52,17 +52,31 @@ scan() { # scan <標題> <trivy 子指令和參數…>：跑一次 Trivy，結�
     if [ "$code" -ne 0 ]; then status=1; fi
 }
 
+# 漏洞掃描共用的參數（設定掃描沒有這兩個）
+vuln=(--scanners vuln --ignore-unfixed)
+
+# 掛整個 repo（唯讀），跳過不是自己寫的、或 build 出來的資料夾（本機才有，git archive 出來的 CI 上沒有）。
+# --misconfig-scanners 加 yaml、--file-patterns：Trivy 沒有 compose 的掃描器，把 compose 檔當一般的 yaml，
+#   交給 ci/config-checks/ 的規則；--check-namespaces user 是那些自己寫的 package 的前綴
+mounts=(--volume "$repo:/src:ro" --volume "$repo/ci/config-checks:/checks:ro")
+scan "設定：Dockerfile、compose、Terraform" config \
+    --misconfig-scanners dockerfile,terraform,yaml --file-patterns 'yaml:compose[^/]*\.ya?ml$' \
+    --config-check /checks --check-namespaces user \
+    --skip-dirs '**/node_modules' --skip-dirs '**/build' --skip-dirs '**/.terraform' \
+    --skip-dirs .git --skip-dirs .claude \
+    /src
+
 # 只掛 lockfile 一個檔案，不掛整個 web/：本機的 node_modules 有幾萬個檔案，Windows 掛進容器很慢，也用不到
 # --include-dev-deps：Trivy 預設跳過 devDependencies，而前端的套件幾乎都是（vite、vitest…），不加等於沒掃。
 #   它們不會上線，但在開發者的電腦和 CI 上執行，開發伺服器的漏洞（例如 vite 的 CVE-2026-112942）照樣打得到
 # Trivy 也認得 package-lock.json、yarn.lock，換套件管理工具時改這裡的檔名就好
 mounts=(--volume "$repo/web/pnpm-lock.yaml:/src/web/pnpm-lock.yaml:ro")
-scan "web/pnpm-lock.yaml" fs --include-dev-deps /src/web
+scan "web/pnpm-lock.yaml" fs "${vuln[@]}" --include-dev-deps /src/web
 
 # docker.sock：讓 Trivy 直接讀本機 Docker 裡的映像檔，不必先推到 registry
 mounts=(--volume /var/run/docker.sock:/var/run/docker.sock)
 for target in "$@"; do
-    scan "$target" image "$target"
+    scan "$target" image "${vuln[@]}" "$target"
 done
 
 exit $status

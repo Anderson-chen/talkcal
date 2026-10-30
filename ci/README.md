@@ -129,6 +129,41 @@ ci/vulns.sh talkcal/app:local talkcal/web:local postgres:18.6-alpine
 **為什麼不用 trivy-action**：Trivy 在 2026-03 被入侵過，v0.69.4 和 trivy-action 幾乎所有 tag 都被換成會偷 CI secret 的版本。
 這裡跟 gitleaks 一樣直接跑映像檔，版本和 digest 都釘死，用的是事件之後的版本。
 
+### 設定檢查：Dockerfile、compose、Terraform
+
+`ci/vulns.sh` 的第一步是 `trivy config`（#235）：Dockerfile 用 root 跑、Terraform 的 S3 沒加密、security group 全開這類寫法，用 Trivy 內建的規則。
+compose Trivy 沒有規則（官方支援表上是「-」），自己寫在 [`ci/config-checks/`](config-checks/)（Rego，一條規則一個檔）：
+
+| 規則 | 擋什麼 |
+|---|---|
+| `TALKCAL-COMPOSE-001` | `privileged`、`network_mode`／`pid`／`ipc: host` |
+| `TALKCAL-COMPOSE-002` | 掛 `docker.sock`（`:ro` 也擋：只擋寫檔，擋不住 API 呼叫） |
+| `TALKCAL-COMPOSE-003` | `user: root`／`0` |
+| `TALKCAL-COMPOSE-004` | 映像檔沒寫 tag 或寫 `latest` |
+| `TALKCAL-COMPOSE-005` | `PASSWORD`、`SECRET`、`TOKEN` 這類變數直接寫值，不是 `${變數}` |
+
+第一次加進來時 10 筆，都是刻意的設計，寫進 `ci/trivyignore.yaml` 的 `misconfigurations`，限定檔案、附理由和到期日
+（CI 容器、model-seed 用 root，Alloy 掛 docker.sock，S3 用 SSE-S3 不用 KMS，EC2 不經 NAT 直接用公開 IP…）。
+`web/Dockerfile` 的 nginx 用 root 是唯一該改的，要換埠、牽動 Caddy 和 compose，另外做，到期日給短的。
+
+**選型：`trivy config`，不用 hadolint**
+
+| | 授權 | 為什麼（不）選 |
+|---|---|---|
+| `trivy config` | Apache-2.0 | 已經釘了版本＋digest、例外跟漏洞共用一份檔；Dockerfile 之外還掃 Terraform；能載入自己寫的 Rego 規則，compose 也收進同一支 |
+| hadolint | GPL-3.0 | 只管 Dockerfile，偏寫法（`apt-get` 沒清快取、`ADD` 換 `COPY`），不管用 root 跑；compose、Terraform 都不掃 |
+| KICS | Apache-2.0 | 內建 compose、Dockerfile、Terraform 的規則，最完整；但又是一支要釘版本的工具、另一份例外清單，映像檔 2026-10-21 才重 build（不滿兩週） |
+| compose-lint | MIT | 專門掃 compose 的安全問題，規則跟上面那張表很像；2026-04 才建立、63★，太新 |
+
+**反例**（2026-10-30）：
+
+| 造出來的設定 | 結果 |
+|---|---|
+| 現在的設定（10 筆都有例外） | 通過 |
+| 拿掉例外 | 紅：上面那 10 筆 |
+| 一份 compose 裡 `privileged`、`network_mode: host`、長寫的 docker.sock、`user: "0:0"`、`image: nginx`、`:latest`、map 和 list 兩種寫法的寫死密碼 | 紅：8 筆全抓到 |
+| 同一份裡 `registry.example.com:5000/app:1.2.3`、`${DB_PASSWORD}` | 不報 |
+
 ### 前端套件的選型（2026-10 查的）
 
 **用 `trivy fs`，不加 `pnpm audit` 或 OSV-Scanner**

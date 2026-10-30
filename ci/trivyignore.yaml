@@ -137,3 +137,50 @@ vulnerabilities:
     paths: [usr/local/bin/gosu]
     statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭（2026-10-22 公布，postgres:18.6-alpine 當天重 build 的 gosu 仍是 Go 1.24.6）
     expired_at: 2027-01-14
+
+# ── 設定檢查（trivy config，#235）──────────────────────────────────────────────
+# 規則：Trivy 內建的（DS-*：Dockerfile、AWS-*：Terraform）和 ci/config-checks/ 自己寫的（TALKCAL-COMPOSE-*：compose）。
+# 都限定 paths：同一條規則出現在新的檔案照樣會報。刻意的設計給一年，到期重看一次；等著修的給短的
+misconfigurations:
+  # CI 的容器要掛主機的 docker.sock（Testcontainers、Trivy 讀映像檔），拿到它就等同主機 root，容器內改用一般使用者擋不住什麼
+  - id: DS-0002
+    paths: [ci/Dockerfile, ci/sast/Dockerfile]
+    statement: CI 容器掛 docker.sock，等同主機 root；只在 CI 跑完就丟
+    expired_at: 2027-10-30
+  # nginx 的 master 是 root（只用來開 80 埠），處理請求的 worker 是 nginx 使用者。
+  # 改成整個非 root 要換成 8080 埠，Caddy、compose、架構頁都要跟著改，另外做；到期日給短的逼自己回來
+  - id: DS-0002
+    paths: [web/Dockerfile]
+    statement: nginx master 是 root、worker 不是；改成非 root 要換埠，另外做
+    expired_at: 2027-01-31
+  # model-seed：volume 剛建好時擁有者是 root，複製模型檔這一步要 root；跑完就結束，長駐的模型服務是一般使用者（見 compose 的註解）
+  - id: TALKCAL-COMPOSE-003
+    paths: [deploy/compose.yaml]
+    statement: model-seed 跑完就結束，只為了寫進 root 擁有的 volume
+    expired_at: 2027-10-30
+  # 演練紀錄（docs/drills/）用的 compose：只在本機起、跑完就刪，密碼是寫明 local-only 的假值
+  - id: TALKCAL-COMPOSE-005
+    paths: [docs/drills/**]
+    statement: 本機演練用的假密碼，不是任何環境的真密碼
+    expired_at: 2027-10-30
+  # Alloy 讀 docker.sock 才能收各容器的 log；風險和替代做法寫在 ops/compose.yaml 的註解
+  - id: TALKCAL-COMPOSE-002
+    paths: [ops/compose.yaml]
+    statement: Alloy 收容器 log 要用 Docker API，見 ops/compose.yaml
+    expired_at: 2027-10-30
+  # S3 用 SSE-S3（AES256）而不是自己的 KMS key：一把 key 每月 1 美元加 API 費用，
+  # 換到的是 key 的輪替、存取政策自己管 —— 單人專案、bucket 本來就鎖在自己的帳號，用不到
+  - id: AWS-0132
+    paths: [infra/bootstrap/main.tf, infra/envs/1-ec2/backups.tf]
+    statement: SSE-S3 已加密；自管 KMS key 的好處這個規模用不到
+    expired_at: 2027-10-30
+  # 出網全開：要拉映像檔、模型、套件、Let's Encrypt，目的地太多。只開 443 這條規則一樣會報（它看的是 0.0.0.0/0）
+  - id: AWS-0104
+    paths: [infra/envs/1-ec2/security-groups.tf]
+    statement: EC2 要對外拉映像檔、模型、憑證；入站才是要鎖的，只開 80/443（SSH 要明確開、限定來源 IP）
+    expired_at: 2027-10-30
+  # 公開子網配公開 IP：沒有 NAT Gateway（每月固定費用）是刻意的，見 infra/envs/1-ec2/vpc.tf 開頭
+  - id: AWS-0164
+    paths: [infra/envs/1-ec2/vpc.tf]
+    statement: 刻意不用 NAT Gateway 省錢，EC2 直接用公開 IP；入站由 security group 鎖
+    expired_at: 2027-10-30
