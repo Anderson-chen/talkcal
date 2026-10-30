@@ -8,3 +8,6 @@ minimumReleaseAge: 20160
 
 # pnpm add 寫進 package.json 的是確切版本（7.0.0），不是範圍（^7.0.0）
 saveExact: true
+minimumReleaseAgeExclude:
+  # Renovate security update: vite@8.3.3
+  - vite@8.3.3
