@@ -1,7 +1,6 @@
 import com.github.jk1.license.ProjectData
 import com.github.jk1.license.filter.DependencyFilter
 import com.github.jk1.license.filter.LicenseBundleNormalizer
-import com.github.jk1.license.render.CsvReportRenderer
 import com.github.jk1.license.render.InventoryHtmlReportRenderer
 import org.springframework.boot.gradle.plugin.SpringBootPlugin
 
@@ -406,7 +405,7 @@ licenseReport {
     filters = [new DeclaredLicensesOnly(), new LicenseBundleNormalizer()]
     // 允許清單，不是禁止清單：沒看過的授權字串預設擋下來讓人看，而不是預設放行
     allowedLicensesFile = layout.projectDirectory.file('allowed-licenses.json').asFile
-    renderers = [new InventoryHtmlReportRenderer('index.html', 'talkcal 後端依賴的授權'), new CsvReportRenderer()]
+    renderers = [new InventoryHtmlReportRenderer('index.html', 'talkcal 後端依賴的授權')]
 }
 
 // 每次都重新跑（幾秒）：外掛的 up-to-date 判斷不可靠 —— 加了 GPL 的依賴，報告重新產生了，

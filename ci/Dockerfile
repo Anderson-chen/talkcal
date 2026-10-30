@@ -31,9 +31,10 @@ COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
     && corepack enable --install-directory /usr/local/bin
 
-# Trivy：前端套件的授權檢查（ci/licenses.sh）。跟 ci/vulns.sh 同一版、同一個 digest，理由寫在那裡。
+# Trivy：前端套件的授權檢查（ci/licenses.sh）。為什麼釘 digest 寫在 ci/vulns.sh。
+# 版本只寫在這一行：ci/vulns.sh 從這裡讀，Renovate 升這一行時兩邊一起換，掃授權和掃漏洞不會用到不同版本。
 # 只搬執行檔：授權分類內建在裡面，掃授權不必下載漏洞資料庫
-COPY --from=aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969     /usr/local/bin/trivy /usr/local/bin/trivy
+COPY --from=aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 /usr/local/bin/trivy /usr/local/bin/trivy
 
 # Gradle 的家目錄分兩半：
 #   wrapper/ —— Gradle 本體（約 140MB）。烤在映像檔裡
