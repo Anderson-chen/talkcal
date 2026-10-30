@@ -44,6 +44,8 @@ export async function fakeApi(page: Page, options: Options = {}) {
     events: [...(options.events ?? [])],
     // 每次 POST /events 收到的 body.events（前端送了什麼）
     saved: [] as Omit<FakeEvent, 'id'>[][],
+    // 每次 POST /events 帶的 Idempotency-Key（#51），沒帶就是 null；跟 saved 一一對應
+    saveKeys: [] as (string | null)[],
     failNextSave: null as string | null,
     // 註冊過的帳號：名稱 → 密碼
     accounts: new Map<string, string>([['amy', 'correct-horse']]),
@@ -117,6 +119,7 @@ export async function fakeApi(page: Page, options: Options = {}) {
     if (url.pathname === '/api/calendar/events' && method === 'POST') {
       const body = request.postDataJSON() as { events: Omit<FakeEvent, 'id'>[] }
       state.saved.push(body.events)
+      state.saveKeys.push(request.headers()['idempotency-key'] ?? null)
       if (state.failNextSave) {
         const error = state.failNextSave
         state.failNextSave = null
@@ -145,6 +148,7 @@ export async function fakeApi(page: Page, options: Options = {}) {
   return {
     ...state,
     get saved() { return state.saved },
+    get saveKeys() { return state.saveKeys },
     get csrfRejected() { return state.csrfRejected },
     get dismissed() { return state.dismissed },
     set failNextSave(error: string | null) { state.failNextSave = error },
