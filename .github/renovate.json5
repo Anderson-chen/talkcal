@@ -1,4 +1,4 @@
-// Renovate 的設定：套件自動升級（#48）。為什麼選 Renovate 不選 Dependabot 見 docs/adr/0016-renovate-for-dependency-updates.md，
+// Renovate 的設定：套件自動升級（#48）。為什麼選 Renovate 不選 Dependabot 見 docs/adr/0011-renovate-for-dependency-updates.md，
 // 升級 PR 怎麼審、怎麼合見 docs/dependency-updates.md。
 //
 // 改這份檔案之後先在本機驗證（在 repo 根目錄跑，不給路徑它會自己找到這份）：
