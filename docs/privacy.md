@@ -21,7 +21,9 @@
 
 | 地方 | 修之前 | 修之後 | 怎麼確認 |
 |---|---|---|---|
-| PostgreSQL `calendar_event`、`calendar_assistant_message`、`account`、`account_identity` | 存著（本來就該存） | 存著，可以刪（§4） | `PrivacySystemTest` |
+| PostgreSQL `calendar_event`、`calendar_assistant_message`、`calendar_add_request`、`assistant_proposal`、`account`、`account_identity` | 存著（本來就該存） | 存著，可以刪（§4） | `PrivacySystemTest` |
+| 物件儲存的歸檔（#54：舊行程、舊對話，本機 RustFS、雲端 S3） | 存著 | 存著，可以刪（§4）；bucket 不開版本控制，刪了就真的沒了 | `PrivacySystemTest` |
+| 資料庫備份（#45：本機 `deploy/backup/`、雲端 S3） | 存著整個資料庫 | 同左，到期自動刪（§5） | 刪除不回頭改備份，見 §4 已知限制 |
 | **app 的 access log → Loki** | ❌ 請求、回應的 body 整包記下來：使用者的話、助理回覆、行程標題、email | ✅ 只記方法、路徑、狀態碼、耗時、大小、traceId | §2 實測、`AccessLogFilterTest` |
 | **app 的 AI 助理 log → Loki** | ❌ `AI 助理回覆：... reply=<全文>`、工具參數 | ✅ 只記 conversation id、步數、工具名稱、回覆字數 | §2 實測、`CalendarAssistantTest` |
 | 例外訊息 → log | 一處會把資料庫裡的工具訊息 JSON 整段放進訊息 | 只放長度 | 程式審查（`JdbcAssistantMemoryRepository.read`） |
@@ -146,6 +148,10 @@ loki_process_dropped_lines_total{component_id="loki.process.redact",reason="llm_
 |---|---|---|
 | 行程 | `calendar_event` | `JdbcOwnerDataAdapter`，一個交易 |
 | AI 助理的對話記憶（含工具呼叫、結果） | `calendar_assistant_message` | 同上 |
+| 新增行程的冪等 key（#51） | `calendar_add_request` | 同上 |
+| 助理提議卡片的採納紀錄（#36） | `assistant_proposal` | 同上 |
+| 歸檔的舊行程（#54） | 物件儲存 `calendar-event/owner=<id>/` | `EventArchivePort.deleteAll`，資料庫刪完之後 |
+| 歸檔的舊對話（#54） | 物件儲存 `assistant-conversation/owner=<id>/` | `AssistantMemoryArchive.deleteAll`，同上 |
 | 帳號（名稱、密碼雜湊、顯示名稱） | `account` | `JdbcAccountAdapter.delete` |
 | Google／GitHub 的對應（`sub`） | `account_identity` | 外鍵 `ON DELETE CASCADE`，跟帳號同一句 |
 | 登入狀態 | session（app 記憶體）、`XSRF-TOKEN` cookie | 刪完由 Spring Security 登出 |
@@ -162,6 +168,7 @@ curl -X DELETE http://localhost:18080/api/auth/me -b cookies.txt -H "X-XSRF-TOKE
 - **授權和 CSRF**：沒登入 401；別的網站騙瀏覽器送（沒有 `X-XSRF-TOKEN`）403，什麼都沒刪
 - **跨模組**：calendar 和 auth 互不認識（ArchitectureTest）。auth 定義 `ForgetAccountDataPort`（「刪帳號前，請別的模組忘掉這個人」），
   `app.config` 把它接到 calendar 的 `ForgetOwnerUseCase`
+- **資料庫先、歸檔後**：歸檔排程只搬「資料庫裡還有的」，資料庫清空後就不會再多出新的一包。反過來的話，刪完歸檔、還沒刪資料庫的那一刻排程剛好在跑，又會存進一包
 - **順序：先刪資料，最後刪帳號**。兩邊不在同一個交易，中途失敗時留下的永遠是「帳號還在」，使用者再按一次就補完（每一步都可以重複執行）。
   反過來的話，帳號沒了、資料刪一半，使用者連再要求一次都沒辦法
 - **留一筆紀錄**：`刪除帳號：account=<UUID>`（只有 id），使用者之後問「刪了沒」有紀錄可查
@@ -170,18 +177,23 @@ curl -X DELETE http://localhost:18080/api/auth/me -b cookies.txt -H "X-XSRF-TOKE
 
 | 題目 | 反例 |
 |---|---|
-| amy 刪帳號：帳號、Google 對應、行程、對話，以及**資料庫裡每一張帶 `owner_id` 欄位的表**都歸零 | bob 的每一列都還在，月曆照常 |
+| amy 刪帳號：帳號、Google 對應，**資料庫裡每一張帶 `owner_id` 欄位的表**，以及**物件儲存裡 key 帶 `owner=<amy>` 的每一包歸檔**都歸零 | bob 的每一列、每一包都還在，月曆照常 |
 | 刪完 session 失效（401），帳密登不進來 | bob 照常登入 |
 | 沒帶 CSRF token：403，一列都沒少；沒登入：401 | — |
 
-「每一張帶 `owner_id` 的表」是從 `information_schema` 掃出來的，不是手寫清單：之後新增帶擁有者的表（冪等 key #51、歸檔 #54），
-刪除流程忘了加，這題就紅燈。實測反例：把 `JdbcOwnerDataAdapter.TABLES` 拿掉 `calendar_assistant_message`，這題 FAILED。
+「每一張帶 `owner_id` 的表」是從 `information_schema` 掃出來的，歸檔是掃整個 bucket，都不是手寫清單。
+刪之前還先確認每一張表都有 amy 的資料 —— 不然某張表本來就是空的，漏刪也測不出來；之後新增的表會先在這個前提紅燈，提醒替它放一列。
+實測反例（各自改回來之後全綠）：
+
+- `JdbcOwnerDataAdapter.TABLES` 拿掉 `calendar_assistant_message`（第一版）、拿掉 `assistant_proposal`（合進 #36、#51 之後）→ FAILED
+- `ForgetOwnerService` 不刪行程歸檔 → FAILED
 
 已知限制：
 
 - **同一個人在別的裝置上的 session**：刪除只登出發出請求的這一個。另一台的 session 在 `GET /api/auth/me` 會是 401（帳號查不到），
   但它最多 8 小時（`server.servlet.session.timeout`）內還能新增行程，新增的資料不屬於任何帳號。要補的話是「每個請求確認帳號還在」或改用 Spring Session 集中管理 session
-- **備份**：刪除不會回頭改已經做好的資料庫備份。備份的保留期限（#45）就是刪除真正生效的最晚時間
+- **備份**：刪除不會回頭改已經做好的資料庫備份（改備份等於讓備份不可信）。備份的保留期限就是刪除真正生效的最晚時間：本機 14 天、雲端 30 天（§5）
+- **歸檔排程正在跑的那一刻**：排程已經讀出一批、還沒上傳時剛好刪帳號，那一包會在刪除之後才存進去。機率很低（每天一次、幾秒鐘），要補的話是刪帳號時先擋排程（同一把鎖）
 - **前端還沒有按鈕**：目前是 API（Swagger UI 上試得到）
 
 ## 5. 觀測資料留多久
@@ -191,8 +203,11 @@ curl -X DELETE http://localhost:18080/api/auth/me -b cookies.txt -H "X-XSRF-TOKE
 | log | Loki | **7 天**（以前沒設 = 永遠不刪） | `ops/loki/loki-config.yaml`：`limits_config.retention_period: 168h`、`compactor.retention_enabled: true` |
 | trace | Tempo | 72 小時 | `ops/tempo/tempo.yaml`：`backend_worker.compaction.block_retention` |
 | 指標 | Mimir | 沒設（不含個資：只有路徑樣板、狀態碼、數字） | — |
-| AI 助理的對話 | PostgreSQL | 30 天沒說話就刪（`AssistantMemoryCleanup`，每天凌晨四點） | `calendar.assistant.retention=30d` |
-| 行程、帳號 | PostgreSQL | 直到使用者刪除 | §4 |
+| AI 助理的對話 | PostgreSQL → 物件儲存 | 30 天沒說話就搬到歸檔；歸檔留到使用者刪除 | `calendar.assistant.retention=30d`（`AssistantMemoryArchive`） |
+| 行程 | PostgreSQL → 物件儲存 | 結束 2 年後搬到歸檔；歸檔留到使用者刪除 | `calendar.event.retention=2y`（`EventArchiveJob`） |
+| 冪等 key | PostgreSQL | 1 天 | `calendar.idempotency.retention=1d`（`IdempotencyKeyCleanup`） |
+| 帳號 | PostgreSQL | 直到使用者刪除 | §4 |
+| 資料庫備份 | 本機資料夾／S3 | 本機 14 天（`deploy/backup/pg-backup.sh` 的 `KEEP_DAYS`）、雲端 30 天（`infra/envs/1-ec2/variables.tf` 的 `backup_retention_days`） | 刪帳號不回頭改備份，到期才真的沒有 |
 
 為什麼 log 是 7 天：回頭查「上週出了什麼事」夠用；更久的趨勢看 Mimir 的指標，不需要原始 log。
 log 裡已經沒有對話內容，但還有帳號 ID、路徑、時間 —— 不該比帳號本身活得更久。
@@ -202,6 +217,7 @@ log 裡已經沒有對話內容，但還有帳號 ID、路徑、時間 —— �
 ## 6. 新增功能時的檢查清單
 
 - 新的 log：只記「發生了什麼」（id、數量、狀態、耗時），不記「說了什麼」
-- 新的表帶使用者資料：加 `owner_id` 欄位，並加進 `JdbcOwnerDataAdapter.TABLES`（漏了 `PrivacySystemTest` 會紅燈）
+- 新的表帶使用者資料：加 `owner_id` 欄位，加進 `JdbcOwnerDataAdapter.TABLES`，並在 `PrivacySystemTest` 替它放一列（漏了會紅燈）
+- 新的物件儲存位置：key 帶 `owner=<id>/`，並接進刪除流程（`ForgetOwnerService` 或 `CalendarConfiguration.forgetOwner`）
 - 新的 query string：會不會帶使用者打的字（搜尋）？nginx 的 access log 會記下整個網址
 - 打開 Spring AI 的內容記錄、`include-content`：先改這份文件，說明為什麼、存多久、誰看得到
