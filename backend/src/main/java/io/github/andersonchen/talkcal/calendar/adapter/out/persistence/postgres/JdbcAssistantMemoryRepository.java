@@ -13,7 +13,6 @@ import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.dao.DataAccessException;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -142,21 +141,26 @@ public final class JdbcAssistantMemoryRepository {
      * 刪掉一段已經歸檔好的對話，但只在它「現在」還是 cutoff 之前就沒說過話的時候。回傳有沒有刪。
      *
      * 這個條件擋的是：讀出來、上傳的那幾秒之間，使用者剛好又接著聊了 —— 那段已經不舊了，刪掉就是刪掉正在聊的對話。
-     * 條件和刪除在同一句 SQL 裡，不是先查再刪。
+     * 條件和刪除在同一句 SQL 裡，不是先查再刪；而且先拿這段對話的鎖，跟接上新一輪的 add 排隊：
+     * 不排隊的話，還沒 commit 的新一輪看不到，舊的整段被刪掉，線上只剩最新一輪，之後還原也會因為「已經有了」而跳過。
      */
     public boolean deleteIfInactiveSince(OwnerId owner, UUID conversationId, Instant cutoff) {
         try {
-            return jdbc.sql("""
-                            DELETE FROM calendar_assistant_message
-                            WHERE owner_id = :owner AND conversation_id = :id
-                              AND (SELECT max(created_at) FROM calendar_assistant_message
-                                   WHERE owner_id = :owner AND conversation_id = :id) < :cutoff
-                            """)
-                    .param("owner", owner.value())
-                    .param("id", conversationId)
-                    .param("cutoff", OffsetDateTime.ofInstant(cutoff, ZoneOffset.UTC))
-                    .update() > 0;
-        } catch (DataAccessException e) {
+            Boolean deleted = transaction.execute(status -> {
+                lock(owner.value(), conversationId);
+                return jdbc.sql("""
+                                DELETE FROM calendar_assistant_message
+                                WHERE owner_id = :owner AND conversation_id = :id
+                                  AND (SELECT max(created_at) FROM calendar_assistant_message
+                                       WHERE owner_id = :owner AND conversation_id = :id) < :cutoff
+                                """)
+                        .param("owner", owner.value())
+                        .param("id", conversationId)
+                        .param("cutoff", OffsetDateTime.ofInstant(cutoff, ZoneOffset.UTC))
+                        .update() > 0;
+            });
+            return Boolean.TRUE.equals(deleted);
+        } catch (DataAccessException | TransactionException e) {
             throw new IllegalStateException("刪除已歸檔的對話失敗：" + conversationId, e);
         }
     }
@@ -166,10 +170,12 @@ public final class JdbcAssistantMemoryRepository {
      *
      * 這個人名下已經有同一個 conversation_id 的對話（還原過、或還沒被刪）就整段跳過：
      * 線上那份可能比歸檔新，不能拿舊的蓋掉；跳過也讓還原按幾次結果都一樣。
+     * 先拿這段對話的鎖，跟 add 和其他還原排隊，「查有沒有 → 插入」之間不會有人插隊撞主鍵。
      */
     public boolean restore(StoredConversation conversation) {
         try {
             Boolean restored = transaction.execute(status -> {
+                lock(conversation.owner().value(), conversation.conversationId());
                 boolean exists = jdbc.sql("""
                                 SELECT EXISTS (SELECT 1 FROM calendar_assistant_message
                                                WHERE owner_id = :owner AND conversation_id = :id)
@@ -201,13 +207,18 @@ public final class JdbcAssistantMemoryRepository {
                 return true;
             });
             return Boolean.TRUE.equals(restored);
-        } catch (DuplicateKeyException e) {
-            // 查完「沒有」到插進去之間，同一段被別人放進去了（兩個還原請求同時跑、或使用者剛好用這個 id 說話）：
-            // 交易整個 rollback，結果跟「已經在了」一樣，跳過，不當成錯誤
-            return false;
         } catch (DataAccessException | TransactionException e) {
             throw new IllegalStateException("還原 AI 助理的對話失敗：" + conversation.conversationId(), e);
         }
+    }
+
+    // 鎖的是 (擁有者, 對話) 這一組，交易結束自動放掉；hashtextextended 把它變成 advisory lock 要的 bigint。
+    // 不同對話剛好撞到同一個雜湊值，只是多排一下隊，不會錯。這段對話的每一種寫入（接上、歸檔刪除、還原）都要先拿
+    private void lock(UUID owner, UUID conversationId) {
+        jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
+                .param("key", "calendar_assistant_message:" + owner + ":" + conversationId)
+                .query((rs, rowNum) -> 0)
+                .list();
     }
 
     /** 一段對話在資料庫裡原本的樣子（歸檔、還原用）。lastActive 是最後一次說話的時間。 */
@@ -269,7 +280,7 @@ public final class JdbcAssistantMemoryRepository {
             }
             try {
                 transaction.executeWithoutResult(status -> {
-                    lock(id);
+                    lock(owner, id);
                     int next = jdbc.sql("""
                                     SELECT coalesce(max(position) + 1, 0) FROM calendar_assistant_message
                                     WHERE owner_id = :owner AND conversation_id = :id
@@ -299,15 +310,6 @@ public final class JdbcAssistantMemoryRepository {
             } catch (DataAccessException e) {
                 throw new IllegalStateException("刪除 AI 助理的對話失敗：" + conversationId, e);
             }
-        }
-
-        // 鎖的是 (擁有者, 對話) 這一組；hashtextextended 把它變成 advisory lock 要的 bigint。
-        // 不同對話剛好撞到同一個雜湊值，只是多排一下隊，不會錯
-        private void lock(UUID id) {
-            jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
-                    .param("key", "calendar_assistant_message:" + owner + ":" + id)
-                    .query((rs, rowNum) -> 0)
-                    .list();
         }
 
         /**

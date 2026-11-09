@@ -16,11 +16,13 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -348,6 +350,61 @@ class JdbcAssistantMemoryRepositoryTest {
 
         assertTrue(memory.get(id).isEmpty());
         assertEquals(1, store.of(OTHER).get(id).size());
+    }
+
+    @Test
+    @DisplayName("#50 歸檔的刪除跟接上新一輪排隊：新一輪 commit 之後才判斷，對話變新了就不刪")
+    void archiveDeleteWaitsForAppend() throws Exception {
+        // 反例：deleteIfInactiveSince 拿掉鎖，它不用等、馬上把舊的刪掉，這個測試是紅的
+        memory.add(id, oneTurnWithTool());
+        makeOld(OWNER, id, 31);
+
+        boolean deleted = whileAppending(4, () -> store.deleteIfInactiveSince(OWNER, UUID.fromString(id), cutoff()));
+
+        assertFalse(deleted);
+        assertEquals(5, memory.get(id).size());
+    }
+
+    @Test
+    @DisplayName("#50 還原跟接上新一輪排隊：新的先存好，還原就跳過，不撞主鍵")
+    void restoreWaitsForAppend() throws Exception {
+        // 反例：restore 拿掉鎖，它不用等、馬上把舊的插回去，這個測試是紅的
+        memory.add(id, oneTurnWithTool());
+        makeOld(OWNER, id, 31);
+        StoredConversation archived = store.findInactiveSince(cutoff(), 100).getFirst();
+        assertTrue(store.deleteIfInactiveSince(OWNER, UUID.fromString(id), cutoff()));
+
+        boolean restored = whileAppending(0, () -> store.restore(archived));
+
+        assertFalse(restored);
+        assertEquals(1, memory.get(id).size());
+    }
+
+    /** 模擬 add 進行到一半：拿著這段對話的鎖，other 必須等到新的一列 commit 之後才跑得完。 */
+    private boolean whileAppending(int position, Callable<Boolean> other) throws Exception {
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            Future<Boolean> result = new TransactionTemplate(new DataSourceTransactionManager(dataSource)).execute(status -> {
+                jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
+                        .param("key", "calendar_assistant_message:" + OWNER.value() + ":" + id)
+                        .query((rs, rowNum) -> 0)
+                        .list();
+                Future<Boolean> waiting = pool.submit(other);
+                assertThrows(TimeoutException.class, () -> waiting.get(500, TimeUnit.MILLISECONDS));
+                jdbc.sql("""
+                                INSERT INTO calendar_assistant_message (owner_id, conversation_id, position, type, content)
+                                VALUES (:owner, :id, :position, 'USER', '又來了')
+                                """)
+                        .param("owner", OWNER.value())
+                        .param("id", UUID.fromString(id))
+                        .param("position", position)
+                        .update();
+                return waiting;
+            });
+            return result.get(30, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     private static Instant cutoff() {
