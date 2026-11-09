@@ -9,7 +9,7 @@
 
 ## 指令
 
-都在 repo 根目錄下打：
+都在 repo 根目錄下打。前端指令要先裝好依賴（`corepack enable`、`pnpm --dir web install`，見 [web/README.md](web/README.md)）：
 
 | 要做什麼 | 指令 |
 |---|---|
@@ -19,7 +19,7 @@
 | 前端單元測試 | `pnpm --dir web test` |
 | 前端 E2E | `pnpm --dir web run e2e` |
 | 前端 lint | `pnpm --dir web run lint` |
-| 後端 lint（Error Prone，編譯時檢查） | `cd backend && ./gradlew classes` |
+| 後端 lint（Error Prone，編譯時檢查） | `cd backend && ./gradlew classes testClasses` |
 
 ## 動手前要讀的規則
 

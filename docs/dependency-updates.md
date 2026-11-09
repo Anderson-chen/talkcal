@@ -48,7 +48,7 @@ CI 的 `pnpm install --frozen-lockfile` 遇到 lockfile 裡不滿兩週的版本
    `pr-issue` 對 Renovate 的 PR 會跳過（它們沒有對應的 issue，追蹤看 Dependency Dashboard），跳過算通過。
    ruleset 要求分支跟 master 同步，Renovate 會自己 rebase。
 2. **看 release notes**：Renovate 的 PR 描述附了每個套件的 changelog 連結。patch 看有沒有寫 breaking；minor 看有沒有棄用（deprecation）。
-3. **改到 `deploy/`、`ops/`、`infra/` 的 PR**：照 [CLAUDE.md](../CLAUDE.md) 的規則對一次架構頁。
+3. **改到 `deploy/`、`ops/`、`infra/` 的 PR**：照 [AGENTS.md](../AGENTS.md) 的規則對一次架構頁。
    映像檔版本 Renovate 已經一起改了，人要看的是說明文字（例如「Caddy 已出到 2.11.x，這裡仍釘 2.10.0」）和頁尾的「最後核對」日期。
 4. **要本機驗的**：CI 跑不到的東西要自己跑過才合 ——
    - 觀測堆疊：`ops/compose.yaml` 起來，Grafana 的 dashboard 還畫得出來。
