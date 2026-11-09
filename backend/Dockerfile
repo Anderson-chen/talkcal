@@ -34,8 +34,11 @@ RUN --mount=type=cache,target=/gradle-cache \
 # ════════════════════════════════════════════════════════════════════
 FROM eclipse-temurin:25-jre-noble AS runtime
 
+# apt-get upgrade：基底映像檔要等上游重建才帶到修補，這段期間 CI 的 vulns 會擋下所有 PR。
+# 全部升級，不只點名 apt：下一個 CVE 不用再改這裡。代價是建置結果會隨 Ubuntu 的更新變動；有 Docker 快取的機器重建時不會重跑這層。
 # curl：給 compose 的 healthcheck 打 management 埠的 /actuator/health/readiness。JRE 映像檔沒附 curl 也沒附 wget。
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
