@@ -32,7 +32,7 @@ AI 助理有三個工具（`propose_events`、`list_events`、`find_free_slots`�
 ## 代價
 
 - 迴圈和記憶是自己的程式，要自己測（測試用假模型照劇本呼叫工具）。
-- 存檔是整段刪掉重插：同一段對話同時送兩句，晚存的蓋掉早的（V7 寫明接受，epic [#46](https://github.com/Anderson-chen/talkcal/issues/46) 的「並行修改」）。
+- 存檔原本是整段刪掉重插，同一段對話同時送兩句時晚存的蓋掉早的（V7 寫明接受）；[#50](https://github.com/Anderson-chen/talkcal/issues/50) 改成只往後接，同一段對話的寫入用 advisory lock 排隊，兩輪都留著。
 
 ## 什麼時候重想
 

@@ -53,6 +53,13 @@ import java.util.stream.Collectors;
  * 一個類別實作讀、存、刪幾個 port：碰的是同一張表，「這張表長什麼樣」的知識只該在一個地方。
  * 冪等鍵的表也在這裡：記下的是「哪一批行程」，要跟 calendar_event 在同一個交易裡一起寫。
  * 歸檔（#54）要的三個 port 也在這裡：找出舊的、歸檔好之後刪掉、從歸檔還原回來 —— 一樣是這張表。
+ *
+ * 沒有修改（UPDATE）：只有新增和刪除，兩個分頁同時動也不會互相蓋掉（#50）。
+ * 之後要加修改，要用樂觀鎖，不然晚存的分頁會把先存的改動蓋回去，兩邊還都看到「儲存成功」：
+ * calendar_event 加 version 欄位，讀行程時回給前端、修改時帶回來；
+ * UPDATE calendar_event SET ..., version = version + 1 WHERE id = :id AND owner_id = :owner AND version = :version；
+ * 更新 0 列回 409，前端顯示「這筆行程剛被改過了，請重新整理後再改」，不自動重試（重試等於拿舊畫面再蓋一次）。
+ * 同時加一個整合測試：兩個人拿同一個 version 改，第二個人要拿到 409。
  */
 public final class JdbcCalendarEventAdapter implements SaveEventsPort, SaveEventsOncePort, LoadEventsPort, DeleteEventPort,
         LoadEndedEventsPort, DeleteArchivedEventsPort, RestoreEventsPort {

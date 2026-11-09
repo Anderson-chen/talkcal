@@ -29,7 +29,7 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 
@@ -98,7 +98,7 @@ class PromptInjectionTest {
                         .maxRetries(0)
                         .build())
                 .build();
-        return new CalendarAssistant(chatModel, owner -> new InMemoryChatMemoryRepository(),
+        return new CalendarAssistant(chatModel, owner -> MessageWindowChatMemory.builder().maxMessages(Integer.MAX_VALUE).build(),
                 new ParseEventsService(new SpringAiExtractEventsAdapter(chatModel), TUE),
                 new ListEventsService(calendar), new FindFreeSlotsService(calendar, TUE), TUE);
     }
