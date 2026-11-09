@@ -4,6 +4,7 @@ import io.github.andersonchen.talkcal.auth.application.domain.model.Account;
 import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
 import io.github.andersonchen.talkcal.auth.application.domain.model.ExternalIdentity;
 import io.github.andersonchen.talkcal.auth.application.domain.model.Username;
+import io.github.andersonchen.talkcal.auth.application.port.out.DeleteAccountPort;
 import io.github.andersonchen.talkcal.auth.application.port.out.LoadAccountPort;
 import io.github.andersonchen.talkcal.auth.application.port.out.SaveAccountPort;
 
@@ -20,7 +21,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * 帳號存 PostgreSQL（表的定義在 db/migration/V9、V10）。寫法跟 calendar 的 JdbcCalendarEventAdapter 一致。
  */
-public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPort {
+public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPort, DeleteAccountPort {
 
     private static final String COLUMNS = "account.id, account.display_name, account.username, account.password_hash";
 
@@ -111,6 +112,18 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
                     .optional();
         } catch (DataAccessException e) {
             throw new IllegalStateException("讀取帳號失敗：" + identity, e);
+        }
+    }
+
+    @Override
+    public boolean delete(AccountId id) {
+        try {
+            // account_identity 是 ON DELETE CASCADE（V10）：Google、GitHub 的對應跟著帳號一起刪，同一句 SQL、同一個交易
+            return jdbc.sql("DELETE FROM account WHERE id = :id")
+                    .param("id", id.value())
+                    .update() > 0;
+        } catch (DataAccessException e) {
+            throw new IllegalStateException("刪除帳號失敗：" + id, e);
         }
     }
 

@@ -11,10 +11,12 @@ import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantProposalAdapter;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcCalendarEventAdapter;
+import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcOwnerDataAdapter;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.AddEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ArchiveEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.CountActiveUsersService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.FindFreeSlotsService;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.ForgetOwnerService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ListEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ParseEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.RemoveEventService;
@@ -25,6 +27,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.service.TrackP
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.CountActiveUsersUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlotsUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.ForgetOwnerUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ParseEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.RemoveEventUseCase;
@@ -273,5 +276,20 @@ class CalendarConfiguration {
     @Bean
     ArchiveController.RestoreConversations restoreConversations(AssistantMemoryArchive assistantMemoryArchive) {
         return assistantMemoryArchive::restore;
+    }
+
+    /**
+     * 使用者要求刪除帳號時，calendar 這邊的資料全部刪掉（#52）：資料庫裡的行程、對話、冪等 key、提議紀錄，
+     * 加上物件儲存裡歸檔的行程和對話。auth 那頭怎麼接過來，見 AuthConfiguration。
+     *
+     * 對話的歸檔不走 port（AssistantMemoryArchive 在 app.job，原因寫在它的註解），所以在這裡接在 use case 後面：
+     * 一樣是資料庫先、歸檔後。
+     */
+    @Bean
+    ForgetOwnerUseCase forgetOwner(JdbcClient jdbcClient, PlatformTransactionManager transactionManager,
+                                   EventArchivePort eventArchive, AssistantMemoryArchive assistantMemoryArchive) {
+        ForgetOwnerService calendar = new ForgetOwnerService(
+                new JdbcOwnerDataAdapter(jdbcClient, new TransactionTemplate(transactionManager)), eventArchive);
+        return owner -> calendar.forget(owner) + assistantMemoryArchive.deleteAll(owner);
     }
 }

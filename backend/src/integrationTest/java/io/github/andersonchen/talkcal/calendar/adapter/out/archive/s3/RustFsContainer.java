@@ -18,9 +18,9 @@ import java.net.URI;
  */
 public final class RustFsContainer extends GenericContainer<RustFsContainer> {
 
-    static final String ACCESS_KEY = "archive-test";
-    static final String SECRET_KEY = "archive-test-secret";
-    static final String REGION = "us-east-1";
+    public static final String ACCESS_KEY = "archive-test";
+    public static final String SECRET_KEY = "archive-test-secret";
+    public static final String REGION = "us-east-1";
 
     public RustFsContainer() {
         super("rustfs/rustfs:1.0.3");
