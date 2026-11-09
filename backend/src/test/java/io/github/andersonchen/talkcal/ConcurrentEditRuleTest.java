@@ -44,9 +44,9 @@ import org.junit.jupiter.api.Test;
 @DisplayName("並行修改的規則：UPDATE calendar_event 一定要帶 version（樂觀鎖）")
 class ConcurrentEditRuleTest {
 
-    // 一句 UPDATE calendar_event：到 text block 結束（"""）或一般字串結束（"）為止
+    // 一句 UPDATE calendar_event：到字串結束的第一個雙引號為止（text block 的三個雙引號也一樣）
     private static final Pattern UPDATE_EVENT = Pattern.compile(
-            "UPDATE\\s+calendar_event\\b.*?(?=\"\"\"|\")", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+            "UPDATE\\s+calendar_event\\b[^\"]*", Pattern.CASE_INSENSITIVE);
     private static final Pattern CHECKS_VERSION = Pattern.compile("\\bversion\\s*=\\s*:", Pattern.CASE_INSENSITIVE);
     private static final Pattern BUMPS_VERSION = Pattern.compile(
             "\\bversion\\s*=\\s*version\\s*\\+\\s*1", Pattern.CASE_INSENSITIVE);

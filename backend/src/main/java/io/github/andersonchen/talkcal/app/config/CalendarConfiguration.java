@@ -88,6 +88,9 @@ import java.time.ZoneId;
 @EnableScheduling
 class CalendarConfiguration {
 
+    // 對話最多留幾輪（一輪 = 使用者一句話，加上之後的工具呼叫和回覆）
+    private static final int ASSISTANT_MEMORY_TURNS = 10;
+
     private static final String GUARDED_CHAT_MODEL = "guardedChatModel";
 
     // ChatModel 是 Spring AI 依 spring.ai.openai.chat.* 自動建好的，跟 AI 助理背後是同一個。
@@ -171,10 +174,10 @@ class CalendarConfiguration {
         return new JdbcAssistantProposalAdapter(jdbcClient);
     }
 
-    // 助理讀寫、歸檔工作搬走，用的是同一張表、同一個實作。存的時候只留最近幾輪，跟助理送給模型的輪數一樣
+    // 助理讀寫、歸檔工作搬走，用的是同一張表、同一個實作。存的時候只留最近幾輪，助理讀到的就是這幾輪
     @Bean
     JdbcAssistantMemoryRepository assistantMemory(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
-        return new JdbcAssistantMemoryRepository(jdbcClient, new TransactionTemplate(transactionManager), CalendarAssistant.MAX_TURNS);
+        return new JdbcAssistantMemoryRepository(jdbcClient, new TransactionTemplate(transactionManager), ASSISTANT_MEMORY_TURNS);
     }
 
     @Bean

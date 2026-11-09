@@ -30,7 +30,6 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
-import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -54,6 +53,7 @@ class CalendarAssistantTest {
     private static final CalendarEvent DINNER = new CalendarEvent("吃飯", LocalDateTime.of(2026, 10, 7, 19, 0), LocalDateTime.of(2026, 10, 7, 20, 0));
 
     private final ChatMemoryRepository memory = new InMemoryChatMemoryRepository();
+    private final ChatMemory window = MessageWindowChatMemory.builder().chatMemoryRepository(memory).maxMessages(Integer.MAX_VALUE).build();
     private final List<Prompt> prompts = new ArrayList<>();
     private final List<String> parsed = new ArrayList<>();
     // 助理拿了誰的記憶、工具查了誰的行事曆
@@ -88,7 +88,7 @@ class CalendarAssistantTest {
         return new CalendarAssistant(model,
                 owner -> {
                     memoryOwners.add(owner);
-                    return MessageWindowChatMemory.builder().chatMemoryRepository(memory).maxMessages(Integer.MAX_VALUE).build();
+                    return window;
                 },
                 description -> {
                     parsed.add(description);
@@ -186,25 +186,6 @@ class CalendarAssistantTest {
     }
 
     @Test
-    @DisplayName("recentTurns：只留最近幾輪，而且從「使用者的話」截，不拆散工具呼叫和結果")
-    void trimsAtTurnBoundaries() {
-        List<Message> conversation = new ArrayList<>();
-        for (int turn = 0; turn < CalendarAssistant.MAX_TURNS + 2; turn++) {
-            conversation.add(new UserMessage("第 " + turn + " 句"));
-            conversation.add(proposes("第 " + turn + " 個行程"));
-            conversation.add(ToolResponseMessage.builder()
-                    .responses(List.of(new ToolResponseMessage.ToolResponse("call", "propose_events", "已顯示"))).build());
-            conversation.add(says("請確認"));
-        }
-
-        List<Message> kept = CalendarAssistant.recentTurns(conversation);
-
-        assertEquals(CalendarAssistant.MAX_TURNS * 4, kept.size());
-        assertEquals(MessageType.USER, kept.getFirst().getMessageType());
-        assertEquals("第 2 句", kept.getFirst().getText());
-    }
-
-    @Test
     @DisplayName("#50 同一段對話同時送兩句：先送的還在跑模型、後送的就存好了，兩句和兩個回覆都留著")
     void concurrentRepliesKeepBothTurns() {
         // 用重入代替兩條執行緒，順序固定、每次都一樣：第一句讀完歷史、正在等模型的時候，第二句從頭跑到存好，第一句才回來存。
@@ -234,7 +215,6 @@ class CalendarAssistantTest {
     void addsOnlyThisTurn() {
         assistant(scripted(says("早上還是晚上？"))).reply(OWNER, ID, "明天七點吃飯");
         List<List<Message>> added = new ArrayList<>();
-        ChatMemory window = MessageWindowChatMemory.builder().chatMemoryRepository(memory).maxMessages(Integer.MAX_VALUE).build();
         ChatMemory recording = new ChatMemory() {
             @Override
             public void add(String conversationId, List<Message> messages) {
@@ -291,7 +271,7 @@ class CalendarAssistantTest {
                 new ModelUnavailableException(ModelUnavailableException.Reason.BUSY, Duration.ofSeconds(5), null);
         CalendarAssistant assistant = new CalendarAssistant(
                 scripted(proposes("明天晚上七點吃飯"), says("抱歉，現在加不了行程。")),
-                owner -> MessageWindowChatMemory.builder().chatMemoryRepository(memory).maxMessages(Integer.MAX_VALUE).build(),
+                owner -> window,
                 description -> {
                     throw unavailable;
                 },
@@ -307,7 +287,7 @@ class CalendarAssistantTest {
     void otherToolFailuresStillGoBackToModel() {
         CalendarAssistant assistant = new CalendarAssistant(
                 scripted(proposes("明天晚上七點吃飯"), says("抱歉，剛剛沒整理好，請再說一次。")),
-                owner -> MessageWindowChatMemory.builder().chatMemoryRepository(memory).maxMessages(Integer.MAX_VALUE).build(),
+                owner -> window,
                 description -> {
                     throw new IllegalStateException("呼叫模型抽行程失敗：連線逾時");
                 },

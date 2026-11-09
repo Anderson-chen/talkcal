@@ -107,10 +107,6 @@ public final class CalendarAssistant {
     private static final int MAX_TOKENS = 1024;
     // 一句話最多跑幾步（呼叫模型的次數）。正常是兩步：呼叫工具 → 根據結果回話；超過就是在繞圈
     static final int MAX_STEPS = 4;
-    // 記憶只留最近幾輪（一輪 = 使用者一句話，加上之後的工具呼叫和回覆）。
-    // 以輪為單位截：從中間截會留下沒有前頭呼叫的工具結果，API 會直接拒收。
-    // public：組裝根把同一個數字交給資料庫那邊的記憶，存的時候就刪掉更早的輪
-    public static final int MAX_TURNS = 10;
     private static final DateTimeFormatter NOW_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final ChatModel chatModel;
@@ -158,7 +154,7 @@ public final class CalendarAssistant {
         Objects.requireNonNull(owner, "owner 不可為 null");
         Objects.requireNonNull(conversationId, "conversationId 不可為 null");
         try {
-            return recentTurns(memories.apply(owner).get(conversationId)).stream()
+            return memories.apply(owner).get(conversationId).stream()
                     .filter(m -> m.getMessageType() == MessageType.USER
                             || (m instanceof AssistantMessage a && !a.hasToolCalls() && a.getText() != null && !a.getText().isBlank()))
                     .map(m -> new Line(m.getMessageType() == MessageType.USER, m.getText().strip()))
@@ -200,8 +196,8 @@ public final class CalendarAssistant {
             // 每一輪都重給 system：日期表要跟著「現在」走，昨天開始的對話今天繼續，「明天」就不一樣了。所以 system 不進記憶
             SystemMessage system = new SystemMessage(instruction(LocalDateTime.now(clock)));
             ChatMemory memory = memories.apply(owner);
-            // 只拿最近 MAX_TURNS 輪給模型；記到哪裡為止是歷史，之後的就是這一輪新增的
-            List<Message> earlier = recentTurns(memory.get(conversationId));
+            // 記憶自己只留最近幾輪；記到哪裡為止是歷史，之後的就是這一輪新增的
+            List<Message> earlier = memory.get(conversationId);
             List<Message> conversation = new ArrayList<>(earlier);
             conversation.add(new UserMessage(message));
             // 工具要知道使用者實際說過什麼（例如有沒有講早上晚上），不能只看模型整理出來的那句
@@ -313,23 +309,6 @@ public final class CalendarAssistant {
 
     private static String flat(String text) {
         return text.replaceAll("\\s+", "");
-    }
-
-    /**
-     * 只留最近 MAX_TURNS 輪。從某一輪的開頭（使用者的話）截，不從中間截：
-     * 工具結果前面一定要有呼叫它的那則助理訊息，拆開了 API 會拒收整個請求。
-     */
-    static List<Message> recentTurns(List<Message> conversation) {
-        List<Integer> turnStarts = new ArrayList<>();
-        for (int i = 0; i < conversation.size(); i++) {
-            if (conversation.get(i).getMessageType() == MessageType.USER) {
-                turnStarts.add(i);
-            }
-        }
-        if (turnStarts.size() <= MAX_TURNS) {
-            return List.copyOf(conversation);
-        }
-        return List.copyOf(conversation.subList(turnStarts.get(turnStarts.size() - MAX_TURNS), conversation.size()));
     }
 
     private static List<Message> withSystem(SystemMessage system, List<Message> conversation) {
