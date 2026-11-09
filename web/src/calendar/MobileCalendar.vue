@@ -13,6 +13,7 @@ import ClearChatButton from './ClearChatButton.vue'
 import EventDetail from './EventDetail.vue'
 import EventForm from './EventForm.vue'
 import Icon from './Icon.vue'
+import LoadError from './LoadError.vue'
 import ThemePicker from './ThemePicker.vue'
 import TimeGrid from './TimeGrid.vue'
 import ViewTabs from './ViewTabs.vue'
@@ -98,7 +99,7 @@ const dotColor = (category: Category) => theme.colors.value[category].color
       </template>
 
       <ViewTabs wide class="tabs" />
-      <p v-if="calendar.loadError.value" role="alert" class="error">讀不到行程：{{ calendar.loadError.value }}</p>
+      <LoadError class="load-error-gap" />
 
       <!-- 月視圖 -->
       <template v-if="calendar.view.value === 'month'">
@@ -222,7 +223,7 @@ h1.small { font-size: 22px; line-height: 1.3; white-space: nowrap; }
 .back { height: 44px; padding: 0 12px 0 6px; border: 0; background: transparent; color: var(--accent); font-size: 16px; font-weight: 500; display: flex; align-items: center; gap: 2px; }
 .day-title { margin: 0 20px 8px; font-size: 26px; }
 .tabs { margin: 4px 20px 12px; }
-.error { margin: 0 20px 8px; padding: 10px 12px; border-radius: 10px; background: var(--dangerSoft); color: var(--danger); font-size: 14px; }
+.load-error-gap { margin: 0 20px 8px; }
 
 .month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 0 12px; row-gap: 2px; }
 .weekday { text-align: center; font-size: 12px; color: var(--muted); font-weight: 500; padding: 4px 0; }

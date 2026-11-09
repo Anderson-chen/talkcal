@@ -94,6 +94,23 @@ class ArchitectureTest {
                     .because("用哪個模型解析行程是組裝時的決定；日期表、JSON Schema 這些只對某顆模型有效的手法，"
                             + "只該出現在 extraction 這一包");
 
+    // EventArchivePort 的實作們（目前只有 S3 那個，#54）和它的零件（ArchiveBucket、JsonLinesGzip）。
+    // app.job 的 AssistantMemoryArchive 也用這兩個零件：它在組裝根裡，所以可以
+    @ArchTest
+    static final ArchRule onlyTheCompositionRootMayKnowTheArchiveAdapters =
+            noClasses().that().resideOutsideOfPackages(CONFIG, JOB, "..adapter.out.archive..")
+                    .should().dependOnClassesThat().resideInAPackage("..adapter.out.archive..")
+                    .because("歸檔放在哪（S3、別家的物件儲存）、壓成什麼格式是組裝時的決定；"
+                            + "bucket、key 的排法只該出現在 archive 這一包");
+
+    // RecordUsagePort 的實作們（目前只有 Micrometer 那個，#36）
+    @ArchTest
+    static final ArchRule onlyTheCompositionRootMayKnowTheMetricsAdapters =
+            noClasses().that().resideOutsideOfPackages(CONFIG, JOB, "..adapter.out.metrics..")
+                    .should().dependOnClassesThat().resideInAPackage("..adapter.out.metrics..")
+                    .because("用量記到哪（Micrometer、別的分析系統）是組裝時的決定；"
+                            + "指標名稱和標籤只該出現在 metrics 這一包");
+
     /**
      * Adapter 這個字尾是有意義的，不是隨手加的裝飾。
      *
@@ -120,6 +137,16 @@ class ArchitectureTest {
             noClasses().that().resideInAPackage("..application..")
                     .should().dependOnClassesThat().resideInAnyPackage("java.net..", "javax.net..")
                     .because("怎麼把提問送出去是 adapter 的事，core 只知道有個 port");
+
+    /**
+     * core 不准碰 AWS SDK（#54）。跟上一條同一個道理：歸檔放在 S3 是 adapter 的事，
+     * core 只知道「一個人、一個月的行程存一包」（EventArchivePort）。
+     */
+    @ArchTest
+    static final ArchRule coreMustNotTouchAwsSdk =
+            noClasses().that().resideInAPackage("..application..")
+                    .should().dependOnClassesThat().resideInAPackage("software.amazon..")
+                    .because("放在哪一家的物件儲存是 adapter 的事；core 綁上 S3 的型別，就換不掉儲存、也沒法不連 AWS 單獨測");
 
     /**
      * core 不准依賴 Spring。這條是「導入 Spring」這件事的護欄。
@@ -167,10 +194,24 @@ class ArchitectureTest {
                     .because("API 文件描述的是線路格式，屬於 inbound adapter，不該滲進業務規則");
 
     /**
+     * core 不准依賴 Resilience4j（#44）。跟 Spring、Jackson 那幾條同一個道理，只是換成容錯的函式庫。
+     *
+     * 斷路器、bulkhead 保護的是「呼叫外面的依賴」這件事，那是 adapter 的工作（見 GuardedChatModel）；
+     * 規則寫在 application.properties，之後上 k8s 還可能整個交給 service mesh。
+     * core 一旦直接用它（例如在 use case 裡包一個 CircuitBreaker），業務規則就跟「怎麼呼叫外面」焊在一起，
+     * 換成 mesh 那天得改到核心。
+     */
+    @ArchTest
+    static final ArchRule coreMustNotDependOnResilience4j =
+            noClasses().that().resideInAPackage("..application..")
+                    .should().dependOnClassesThat().resideInAPackage("io.github.resilience4j..")
+                    .because("容錯是呼叫外部依賴時的事，屬於 adapter；core 綁上它，之後就沒辦法交給平台（service mesh）處理");
+
+    /**
      * 模組之間互不認識：不同的業務各自一個模組。
      *
      * 目前只有 calendar 一個模組（一般問答的 conversation 模組已經拿掉），這條暫時不會擋到東西。
-     * 留著是因為 AI 助理遲早要拆成自己的模組（見 AssistantMemoryCleanup 的註解），拆開那天它就開始守門。
+     * 留著是因為 AI 助理遲早要拆成自己的模組（見 AssistantMemoryArchive 的註解），拆開那天它就開始守門。
      *
      * ROOT.(*).. 把根 package 底下第一層的 package 各切成一片（一個模組一片），app 也是一片。
      * app 裡的 config、job 是組裝根，本來就要認識各個模組 —— 從它們出發的依賴不算；

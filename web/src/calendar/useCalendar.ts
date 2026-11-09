@@ -4,8 +4,9 @@
 // 由 CalendarView 建一份、provide 給底下所有元件，元件之間不必一層一層傳 props。
 // 螢幕寬度跨過分界、版面整個換掉時，狀態也還在（選的日期、看的月份不會跳回今天）。
 
-import { computed, inject, ref, watch, type InjectionKey } from 'vue'
+import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
 import { addEvents, listEvents, NotFoundError, removeEvent, type Category, type EventFields, type SavedEvent } from '../calendar'
+import { message } from '../http'
 import { addDays, daysCovered, gridRange, monthGrid, toIsoDate } from '../monthGrid'
 
 export type View = 'month' | 'week' | 'day'
@@ -54,6 +55,13 @@ export function useCalendar() {
   }, { immediate: true })
 
   const reload = () => version.value++
+
+  // 讀失敗之後網路回來了（瀏覽器的 online 事件），自己重讀一次，不必等使用者按「重新讀取」（#43）
+  const reloadIfFailed = () => {
+    if (loadError.value) reload()
+  }
+  window.addEventListener('online', reloadIfFailed)
+  onScopeDispose(() => window.removeEventListener('online', reloadIfFailed))
 
   // ── 查詢 ──────────────────────────────────────────────
   const visible = computed(() => events.value.filter((e) => !hidden.value[e.category]))
@@ -108,9 +116,12 @@ export function useCalendar() {
   }
 
   // ── 新增、刪除 ─────────────────────────────────────────
-  /** 存起來、跳到第一筆那天、重讀這一頁。存進去的分類如果被篩掉了，打開它 —— 不然使用者會以為沒存到。 */
-  async function add(drafts: EventFields[]): Promise<SavedEvent[]> {
-    const saved = await addEvents(drafts)
+  /**
+   * 存起來、跳到第一筆那天、重讀這一頁。存進去的分類如果被篩掉了，打開它 —— 不然使用者會以為沒存到。
+   * idempotencyKey 由呼叫端（表單、助理的卡片）管：它們才知道「再按一次」是不是同一次新增（#51）。
+   */
+  async function add(drafts: EventFields[], idempotencyKey?: string): Promise<SavedEvent[]> {
+    const saved = await addEvents(drafts, idempotencyKey)
     const shownAgain = { ...hidden.value }
     for (const e of saved) delete shownAgain[e.category]
     hidden.value = shownAgain
@@ -161,6 +172,5 @@ export function monthOf(day: string) {
   return { year: Number(day.slice(0, 4)), month: Number(day.slice(5, 7)) }
 }
 
-export function message(e: unknown): string {
-  return e instanceof Error ? e.message : String(e)
-}
+// 錯誤變成一句話的共用函式在 http.ts（auth.ts 也用），這裡轉出去，元件照舊從這裡 import
+export { message }

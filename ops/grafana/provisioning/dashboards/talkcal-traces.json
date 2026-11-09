@@ -1,7 +1,7 @@
 {
   "uid": "talkcal-traces",
   "title": "talkcal — Traces (Tempo)",
-  "description": "資料全部來自 Tempo，用 TraceQL 查。上排是從 trace 算出來的數字（TraceQL metrics），下排是一筆一筆的請求清單，點 Trace ID 就打開那個請求的瀑布圖。只挑 /api/calendar/assistant，只看跟 AI 助理的對話（actuator 的抓取與健康檢查在 app 端就不產生 trace，見 ObservationConfiguration）。",
+  "description": "資料全部來自 Tempo，用 TraceQL 查。上排是從 trace 算出來的數字（TraceQL metrics），下排是一筆一筆的請求清單，點 Trace ID 就打開那個請求的瀑布圖。只挑 /api/calendar/assistant，只看跟 AI 助理的對話（actuator 的抓取與健康檢查走 management 埠 8091，那個埠上的請求本來就不產生 trace）。",
   "tags": [
     "talkcal",
     "traces",

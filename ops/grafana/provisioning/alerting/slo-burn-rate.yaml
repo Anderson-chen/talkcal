@@ -1,0 +1,113 @@
+# SLO 的 burn-rate 告警：error budget 燒得太快就叫人。目標、數字的理由見 docs/slo.md。
+#
+# 只有規則，不管「告警送去哪」：contact point 和 notification policy 由 #121 那份檔案負責。
+# 每條規則都帶 severity 標籤，用跟 #121 基本告警同一套值：critical（快燒，Workbook 說的 page，現在就要處理）、
+# warning（慢燒，Workbook 說的 ticket，上班時間處理）。policy 要分流時用它比對。
+# policies.yaml 目前把所有告警（不分 severity）都寄到同一個信箱；沒設 SMTP 時不寄，規則照樣評估、狀態照樣看得到。
+#
+# 做法是 Google SRE Workbook 第 5 章的 multi-window, multi-burn-rate（Grafana 的 SLO 功能、Sloth、Pyrra 也都是這套）：
+#   - 只看一個長視窗：事情結束了很久告警還響著（1 小時的平均要等很久才降下來）。
+#   - 只看一個短視窗：一點小抖動就響。
+#   - 所以每個條件都是「長視窗和短視窗（長的 1/12）都超過門檻」：長的證明燒得夠久、夠多，短的證明現在還在燒，
+#     事情一停短視窗馬上掉下來，告警就解除。
+# 門檻 = 「這段時間燒掉幾成 budget」換算成 burn rate。SLO 視窗是 28 天（672 小時）：
+#   快燒 1h：燒掉 2%  → 0.02 × 672 / 1  = 13.44   （照這個速度 2 天就燒光）
+#   快燒 6h：燒掉 5%  → 0.05 × 672 / 6  = 5.6     （5 天燒光）
+#   慢燒 1d：燒掉 10% → 0.10 × 672 / 24 = 2.8     （10 天燒光）
+#   慢燒 3d：燒掉 10% → 0.10 × 672 / 72 ≈ 0.933   （照這速度 28 天剛好燒完多一點：不急，但這個月會不達標）
+# Workbook 的表是以 30 天算的（14.4、6、3、1），這裡照 28 天等比換算。
+#
+# burn rate 是 Mimir 的錄製規則先算好的（ops/mimir/rules/anonymous/slo.yaml 的 slo:burn_rate:<視窗>），
+# 這裡只做比較。每個 SLO（slo 標籤）各自一個告警實例，不必一個 SLO 寫一條規則。
+
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: slo-burn-rate
+    folder: SLO
+    interval: 1m        # 跟 Mimir 錄製短視窗的頻率一樣，再快也只是讀到同一個值
+    rules:
+      - uid: slo-fast-burn
+        title: SLO 快燒：error budget 幾天內就會燒光
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: mimir
+            model:
+              refId: A
+              instant: true
+              # 兩組條件任一成立就算；結果的值是長視窗的 burn rate，window 標籤說是哪一組。
+              # 都不成立時查詢是空的 → 下面 noDataState: OK = 正常。
+              expr: |
+                max by (slo, window) (
+                    label_replace(slo:burn_rate:1h > 13.44 and on (slo) slo:burn_rate:5m > 13.44, "window", "1h/5m", "", "")
+                  or
+                    label_replace(slo:burn_rate:6h > 5.6 and on (slo) slo:burn_rate:30m > 5.6, "window", "6h/30m", "", "")
+                )
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        # 沒查到東西 = 沒有 SLO 在快燒，是正常狀態，不是「資料斷了」。
+        # 資料斷掉（app 沒被抓到）要靠 up == 0 那類告警（#121），不是這條的責任。
+        noDataState: OK
+        execErrState: Error
+        # 不另外等：短視窗本身就是「確認現在還在燒」，Workbook 的做法不加 for。
+        for: 0s
+        labels:
+          severity: critical   # Workbook 說的 page：現在就要處理
+          team: talkcal
+        annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/slo-fast-burn.md
+          summary: '{{ $labels.slo }} 的 error budget 燒太快（{{ $labels.window }} 視窗 burn rate {{ printf "%.1f" $values.A.Value }}）'
+          description: >-
+            照目前的速度，28 天的 error budget 幾天內就會燒光。
+            先看 SLO 儀表板是哪個 SLO、從什麼時候開始，再到 talkcal-app 儀表板和 Loki 的 access log 找 5xx 或慢請求。
+            目標與處理方式見 docs/slo.md。
+          dashboard: /d/talkcal-slo
+
+      - uid: slo-slow-burn
+        title: SLO 慢燒：照這速度這個月會不達標
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: mimir
+            model:
+              refId: A
+              instant: true
+              expr: |
+                max by (slo, window) (
+                    label_replace(slo:burn_rate:1d > 2.8 and on (slo) slo:burn_rate:2h > 2.8, "window", "1d/2h", "", "")
+                  or
+                    label_replace(slo:burn_rate:3d > 0.933 and on (slo) slo:burn_rate:6h > 0.933, "window", "3d/6h", "", "")
+                )
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels:
+          severity: warning    # Workbook 說的 ticket：上班時間處理
+          team: talkcal
+        annotations:
+          # 告警信裡直接有連結：照著做的步驟（#41）
+          runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/slo-slow-burn.md
+          summary: '{{ $labels.slo }} 的 error budget 持續在燒（{{ $labels.window }} 視窗 burn rate {{ printf "%.2f" $values.A.Value }}）'
+          description: >-
+            不是急事，但照這個速度 28 天的 error budget 會用完。開一張 issue，上班時間查原因。
+            目標與處理方式見 docs/slo.md。
+          dashboard: /d/talkcal-slo

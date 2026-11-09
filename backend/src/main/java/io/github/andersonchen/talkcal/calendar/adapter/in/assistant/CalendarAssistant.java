@@ -1,6 +1,7 @@
 package io.github.andersonchen.talkcal.calendar.adapter.in.assistant;
 
 import io.github.andersonchen.talkcal.calendar.adapter.shared.DateTable;
+import io.github.andersonchen.talkcal.calendar.adapter.shared.ModelUnavailableException;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlotsUseCase;
@@ -22,6 +23,7 @@ import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.support.ToolCallbacks;
+import org.springframework.ai.tool.execution.DefaultToolExecutionExceptionProcessor;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -113,7 +115,14 @@ public final class CalendarAssistant {
     private final ChatModel chatModel;
     // 擁有者 → 這個人名下的對話記憶。框架的 ChatMemoryRepository 只認 conversationId，擁有者要在拿到它之前先決定
     private final Function<OwnerId, ChatMemoryRepository> memories;
-    private final ToolCallingManager toolCallingManager = ToolCallingManager.builder().build();
+    // 工具裡叫模型被斷路器、bulkhead 擋下（ModelUnavailableException，#44）要原樣丟出來，回 503。
+    // Spring AI 預設把工具丟的例外轉成一段文字交給模型（讓模型自己道歉、改問別的），那樣使用者會拿到 200 和一段模型編的話，
+    // 看不出「現在不能用、過一陣子再來」。其他例外照預設，轉成文字讓模型處理
+    private final ToolCallingManager toolCallingManager = ToolCallingManager.builder()
+            .toolExecutionExceptionProcessor(DefaultToolExecutionExceptionProcessor.builder()
+                    .rethrowExceptions(List.of(ModelUnavailableException.class))
+                    .build())
+            .build();
     private final ParseEventsUseCase parseEvents;
     private final ListEventsUseCase listEvents;
     private final FindFreeSlotsUseCase findFreeSlots;
@@ -173,6 +182,8 @@ public final class CalendarAssistant {
      *
      * 失敗時（模型、資料庫出事、繞圈超過 MAX_STEPS）一律丟 IllegalStateException：
      * 背後的例外型別五花八門，裡面還可能混著 IllegalArgumentException，不包起來會被誤認成「呼叫端送錯」。
+     * 「模型這次沒被叫」（ModelUnavailableException，#44）本來就是 IllegalStateException，原樣丟出去，呼叫端才回得出 503；
+     * 工具裡被擋下的也一樣（見 toolCallingManager）。
      */
     public Reply reply(OwnerId owner, String conversationId, String message) {
         Objects.requireNonNull(owner, "owner 不可為 null");

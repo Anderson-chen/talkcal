@@ -1,0 +1,31 @@
+# 故障演練用：疊在 compose.yaml 上，在 app 和它的兩個依賴（模型、PostgreSQL）中間各插一段 Toxiproxy（#44）。
+#
+#   docker compose -f deploy/compose.yaml -f deploy/compose.chaos.yaml up -d
+#
+# 平常不疊：多一跳就多一個會壞的東西，正式環境（EC2 的 deploy.sh）不疊它。
+# 為什麼用 Toxiproxy、怎麼手動弄壞（toxiproxy-cli 的指令）見 deploy/README.md 的「故障演練」；按時弄壞並量 app 的反應用 perf/outage.js。
+
+services:
+  toxiproxy:
+    # 版本釘死，跟其他映像檔一樣
+    image: ghcr.io/shopify/toxiproxy:2.13.0
+    container_name: talkcal-toxiproxy
+    # 兩段 proxy 啟動時就從設定檔建好，不必每次演練前先用 API 建
+    command: ["-host=0.0.0.0", "-config=/config/toxiproxy.json"]
+    volumes:
+      - ./toxiproxy.json:/config/toxiproxy.json:ro
+    ports:
+      # 只發佈控制用的 API（k6、CLI 從主機打）。兩段 proxy 本身只給同網路的 app 連，不發佈
+      - "127.0.0.1:8474:8474"
+    restart: unless-stopped
+
+  app:
+    environment:
+      # 改連 Toxiproxy，由它轉給 llm-chat、postgres（蓋掉 application-docker.properties 裡的服務名稱）。
+      # 18080、15432 是 toxiproxy.json 裡兩段 proxy 聽的埠，改一邊要改另一邊
+      SPRING_AI_OPENAI_CHAT_BASEURL: http://toxiproxy:18080/v1
+      SPRING_DATASOURCE_URL: jdbc:postgresql://toxiproxy:15432/talkcal
+    depends_on:
+      toxiproxy:
+        # 映像檔裡沒有 curl 之類的工具，做不了 healthcheck；它起得很快，起了就能轉
+        condition: service_started

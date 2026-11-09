@@ -1,0 +1,56 @@
+14:16:07 desktop 「明天有什麼行程？」→ 200
+14:16:07 截圖 before-1-normal-desktop.png
+14:16:07 desktop 正常回覆時的 alert 數： 0
+14:16:07 mobile 「明天有什麼行程？」→ 200
+14:16:07 截圖 before-1-normal-mobile.png
+14:16:07 mobile 正常回覆時的 alert 數： 0
+14:16:07 docker stop talkcal43-llm-proxy
+14:17:08 desktop 「明天下午三點和 Amy 開會」→ 502
+14:17:08 截圖 before-2-model-failed-desktop.png
+14:17:12 mobile 「明天下午三點和 Amy 開會」→ 502
+14:17:13 截圖 before-2-model-failed-mobile.png
+14:17:13 湊失敗 502 ASSISTANT_FAILED
+14:17:13 湊失敗 503 MODEL_UNAVAILABLE
+14:17:13 desktop 「明天下午三點和 Amy 開會」→ 503
+14:17:13 截圖 before-3-circuit-open-desktop.png
+14:17:13 mobile 「明天下午三點和 Amy 開會」→ 503
+14:17:13 截圖 before-3-circuit-open-mobile.png
+14:17:13 docker start talkcal43-llm-proxy
+14:17:14 等熔斷關回來 503 MODEL_UNAVAILABLE
+14:17:19 等熔斷關回來 503 MODEL_UNAVAILABLE
+14:17:24 等熔斷關回來 503 MODEL_UNAVAILABLE
+14:17:29 等熔斷關回來 503 MODEL_UNAVAILABLE
+14:17:34 等熔斷關回來 503 MODEL_UNAVAILABLE
+14:17:39 等熔斷關回來 503 MODEL_UNAVAILABLE
+14:17:44 等熔斷關回來 200 null
+14:17:44 docker pause talkcal43-llm-proxy
+14:18:01 截圖 before-4-slow-desktop.png
+14:18:01 mobile 「明天有什麼行程？」→ 503
+14:18:01 截圖 before-4-busy-mobile.png
+14:18:01 docker unpause talkcal43-llm-proxy
+14:18:01 desktop 卡住那句 → 200
+14:18:07 docker pause talkcal43-llm-proxy
+14:18:24 截圖 before-4-slow-mobile.png
+14:18:24 desktop 「明天有什麼行程？」→ 503
+14:18:24 截圖 before-4-busy-desktop.png
+14:18:24 docker unpause talkcal43-llm-proxy
+14:18:24 mobile 卡住那句 → 200
+14:18:31 desktop 「明天有什麼行程？」→ no response
+14:18:31 截圖 before-5-offline-desktop.png
+14:18:31 mobile 「明天有什麼行程？」→ no response
+14:18:31 截圖 before-5-offline-mobile.png
+14:18:31 docker stop talkcal43-app
+14:18:46 desktop 「明天有什麼行程？」→ 502
+14:18:46 截圖 before-6-app-down-desktop.png
+14:18:51 mobile 「明天有什麼行程？」→ 502
+14:18:51 截圖 before-6-app-down-mobile.png
+14:18:59 截圖 before-6-app-down-calendar-desktop.png
+14:19:01 截圖 before-6-app-down-reload-waiting-desktop.png
+14:19:07 截圖 before-6-app-down-reload-desktop.png
+14:19:10 截圖 before-6-app-down-reload-waiting-mobile.png
+14:19:16 截圖 before-6-app-down-reload-mobile.png
+14:19:16 docker start talkcal43-app
+14:19:22 desktop 「明天有什麼行程？」→ 429
+14:19:22 截圖 before-7-rate-limited-desktop.png
+14:19:23 mobile 「明天有什麼行程？」→ 429
+14:19:23 截圖 before-7-rate-limited-mobile.png
