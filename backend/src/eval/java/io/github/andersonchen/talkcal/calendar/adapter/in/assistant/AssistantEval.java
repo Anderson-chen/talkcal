@@ -43,7 +43,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
-import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 
@@ -214,7 +215,8 @@ class AssistantEval {
                         .build())
                 .build();
         // 同一題的每一輪共用一份記憶
-        InMemoryChatMemoryRepository memory = new InMemoryChatMemoryRepository();
+        // 不讓它自己截（截輪數是 CalendarAssistant 的事），它只負責往後接
+        ChatMemory memory = MessageWindowChatMemory.builder().maxMessages(Integer.MAX_VALUE).build();
         return new CalendarAssistant(chatModel, owner -> memory,
                 new ParseEventsService(new SpringAiExtractEventsAdapter(chatModel), TUE),
                 new ListEventsService(load), new FindFreeSlotsService(load, TUE), TUE);

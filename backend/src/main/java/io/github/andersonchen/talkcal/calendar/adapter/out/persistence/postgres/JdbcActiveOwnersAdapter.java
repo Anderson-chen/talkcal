@@ -21,7 +21,7 @@ import java.util.stream.IntStream;
  *
  * 時間看兩張表的 created_at：
  * - calendar_event：寫進來的時間（V2）
- * - calendar_assistant_message：存檔是整段刪掉重插（V7），所以 created_at 其實是「這段對話最後一次說話」—— 正好是要的
+ * - calendar_assistant_message：只往後接（#50），舊輪會被刪掉，所以 created_at 是最近幾輪各自存進來的時間 —— 看得出這段期間有沒有說話，正好是要的
  *
  * 幾個期間在同一句 SQL 裡用 FILTER 一起數：兩張表各掃一次，不是每個期間各掃一次。
  * 只掃最早那個時間點之後的資料（WHERE created_at >= 最早的 since），其他期間再從裡面篩。

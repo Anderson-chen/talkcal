@@ -12,15 +12,24 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.memory.ChatMemoryRepository;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -47,12 +56,16 @@ class JdbcAssistantMemoryRepositoryTest {
     private static final OwnerId OWNER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000001");
     private static final OwnerId OTHER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000002");
 
+    // 測試用小一點，截舊輪的測試才不必造很多輪
+    private static final int KEEP_TURNS = 3;
+
     static JdbcAssistantMemoryRepository store;
+    static DriverManagerDataSource dataSource;
     static JdbcClient jdbc;
 
     private final String id = UUID.randomUUID().toString();
     // 大部分的測試只看一個人：OWNER 名下的對話
-    private final ChatMemoryRepository memory = store.of(OWNER);
+    private final ChatMemory memory = store.of(OWNER);
 
     @BeforeAll
     static void migrateAndConnect() {
@@ -60,10 +73,9 @@ class JdbcAssistantMemoryRepositoryTest {
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .load()
                 .migrate();
-        DriverManagerDataSource dataSource =
-                new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        dataSource = new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         jdbc = JdbcClient.create(dataSource);
-        store = new JdbcAssistantMemoryRepository(jdbc, new TransactionTemplate(new DataSourceTransactionManager(dataSource)));
+        store = new JdbcAssistantMemoryRepository(jdbc, new TransactionTemplate(new DataSourceTransactionManager(dataSource)), KEEP_TURNS);
     }
 
     @BeforeEach
@@ -87,9 +99,9 @@ class JdbcAssistantMemoryRepositoryTest {
     @Test
     @DisplayName("存了讀得回來：順序、類型、文字、工具呼叫（id、名稱、參數）、工具結果都一樣")
     void roundTripsToolMessages() {
-        memory.saveAll(id, oneTurnWithTool());
+        memory.add(id, oneTurnWithTool());
 
-        List<Message> read = memory.findByConversationId(id);
+        List<Message> read = memory.get(id);
 
         assertEquals(4, read.size());
         assertEquals("晚上", read.get(0).getText());
@@ -103,42 +115,133 @@ class JdbcAssistantMemoryRepositoryTest {
     }
 
     @Test
-    @DisplayName("saveAll 是整段取代：存第二次，第一次的不會留著")
-    void saveAllReplaces() {
-        memory.saveAll(id, oneTurnWithTool());
-        memory.saveAll(id, List.of(new UserMessage("嗨"), new AssistantMessage("嗨！")));
+    @DisplayName("#50 add 是往後接，不是整段取代：存第二次，第一次的還在，第二次的接在後面")
+    void addAppends() {
+        memory.add(id, oneTurnWithTool());
+        memory.add(id, List.of(new UserMessage("嗨"), new AssistantMessage("嗨！")));
 
-        assertEquals(List.of("嗨", "嗨！"), memory.findByConversationId(id).stream().map(Message::getText).toList());
+        assertEquals(List.of("晚上", "", "", "請確認卡片。", "嗨", "嗨！"), memory.get(id).stream().map(Message::getText).toList());
+    }
+
+    @Test
+    @DisplayName("#50 遺失更新：兩個請求讀到同一份歷史、各自存這一輪，兩輪都留著（舊的整段寫回只會剩晚存的那輪）")
+    void twoRequestsReadingTheSameHistoryBothSurvive() {
+        memory.add(id, List.of(new UserMessage("開頭"), new AssistantMessage("好")));
+        // 兩個請求都先讀，讀到的是同一份
+        assertEquals(memory.get(id), memory.get(id));
+
+        // 各自跑完模型，只存自己這一輪；後送的先跑完
+        memory.add(id, List.of(new UserMessage("第二句"), new AssistantMessage("收到第二句")));
+        memory.add(id, List.of(new UserMessage("第一句"), new AssistantMessage("收到第一句")));
+
+        assertEquals(List.of("開頭", "好", "第二句", "收到第二句", "第一句", "收到第一句"),
+                memory.get(id).stream().map(Message::getText).toList());
+    }
+
+    @Test
+    @DisplayName("#50 真的同時寫：多條執行緒同一瞬間往同一段對話接，一輪都不少、position 不重複、每一輪不被拆開")
+    void concurrentAddsAreSerialized() throws Exception {
+        // 反例：拿掉 advisory lock，大家讀到同一個 max(position)，撞主鍵（duplicate key），這個測試是紅的
+        int writers = 8;
+        // 每次 add 都從 DriverManagerDataSource 開一條新的連線，各自的交易在資料庫那邊真的同時跑
+        JdbcAssistantMemoryRepository roomy = new JdbcAssistantMemoryRepository(jdbc,
+                new TransactionTemplate(new DataSourceTransactionManager(dataSource)), 100);
+        ExecutorService pool = Executors.newFixedThreadPool(writers);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            List<Future<?>> done = new ArrayList<>();
+            for (int i = 0; i < writers; i++) {
+                String said = "第 " + i + " 句";
+                done.add(pool.submit(() -> {
+                    start.await();
+                    roomy.of(OWNER).add(id, List.of(new UserMessage(said), new AssistantMessage("收到" + said)));
+                    return null;
+                }));
+            }
+            start.countDown();
+            for (Future<?> f : done) {
+                f.get(30, TimeUnit.SECONDS);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+
+        List<Message> stored = memory.get(id);
+        assertEquals(writers * 2, stored.size());
+        for (int i = 0; i < stored.size(); i += 2) {
+            // 一輪的兩則緊緊相鄰：別人的那輪不會插進中間
+            assertEquals("收到" + stored.get(i).getText(), stored.get(i + 1).getText());
+        }
+        List<Integer> positions = jdbc.sql("SELECT position FROM calendar_assistant_message WHERE conversation_id = :id")
+                .param("id", UUID.fromString(id)).query(Integer.class).list();
+        assertEquals(writers * 2, new HashSet<>(positions).size());
+    }
+
+    @Test
+    @DisplayName("只留最近 keepTurns 輪：接上新的一輪就刪掉更早的，從使用者的話那裡切，不拆散工具呼叫和結果")
+    void dropsOldTurnsAtTurnBoundaries() {
+        for (int turn = 0; turn < KEEP_TURNS + 2; turn++) {
+            memory.add(id, oneTurnWithTool());
+            memory.add(id, List.of(new UserMessage("第 " + turn + " 輪"), new AssistantMessage("好")));
+        }
+
+        List<Message> kept = memory.get(id);
+
+        // 最後 3 輪：第 3 輪、工具那輪、第 4 輪
+        assertEquals(List.of("第 3 輪", "好", "晚上", "", "", "請確認卡片。", "第 4 輪", "好"),
+                kept.stream().map(Message::getText).toList());
+        assertInstanceOf(ToolResponseMessage.class, kept.get(4));
+    }
+
+    @Test
+    @DisplayName("截舊輪只動這個人、這段對話：同一個人的另一段、別人同一個 conversationId 的，都不受影響")
+    void droppingOnlyTouchesThisConversation() {
+        String other = UUID.randomUUID().toString();
+        memory.add(other, List.of(new UserMessage("另一段")));
+        store.of(OTHER).add(id, List.of(new UserMessage("別人")));
+        for (int turn = 0; turn < KEEP_TURNS + 2; turn++) {
+            memory.add(id, List.of(new UserMessage("我 " + turn)));
+        }
+
+        assertEquals(KEEP_TURNS, memory.get(id).size());
+        assertEquals(1, memory.get(other).size());
+        assertEquals(1, store.of(OTHER).get(id).size());
+    }
+
+    @Test
+    @DisplayName("keepTurns 小於 1 不收：0 輪等於什麼都不記")
+    void keepTurnsMustBePositive() {
+        assertThrows(IllegalArgumentException.class, () -> new JdbcAssistantMemoryRepository(jdbc,
+                new TransactionTemplate(new DataSourceTransactionManager(dataSource)), 0));
     }
 
     @Test
     @DisplayName("system 不存（每一輪由程式重新給）")
     void systemIsNotStored() {
-        memory.saveAll(id, List.of(new SystemMessage("你是助理"), new UserMessage("嗨"), new AssistantMessage("嗨！")));
+        memory.add(id, List.of(new SystemMessage("你是助理"), new UserMessage("嗨"), new AssistantMessage("嗨！")));
 
-        assertEquals(2, memory.findByConversationId(id).size());
+        assertEquals(2, memory.get(id).size());
     }
 
     @Test
-    @DisplayName("對話之間互不干擾；找得到有哪些對話；刪掉一段只刪那段")
+    @DisplayName("對話之間互不干擾；刪掉一段只刪那段")
     void conversationsAreSeparate() {
         String other = UUID.randomUUID().toString();
-        memory.saveAll(id, oneTurnWithTool());
-        memory.saveAll(other, List.of(new UserMessage("另一段")));
+        memory.add(id, oneTurnWithTool());
+        memory.add(other, List.of(new UserMessage("另一段")));
 
-        assertTrue(memory.findConversationIds().containsAll(List.of(id, other)));
-        memory.deleteByConversationId(id);
+        memory.clear(id);
 
-        assertTrue(memory.findByConversationId(id).isEmpty());
-        assertEquals(1, memory.findByConversationId(other).size());
+        assertTrue(memory.get(id).isEmpty());
+        assertEquals(1, memory.get(other).size());
     }
 
     @Test
     @DisplayName("#54 找要歸檔的對話：最後一次說話早於期限的整段拿出來（連工具呼叫的 JSON 原文），最近還在聊的不拿")
     void findsInactiveConversations() {
         String old = UUID.randomUUID().toString();
-        memory.saveAll(old, oneTurnWithTool());
-        memory.saveAll(id, List.of(new UserMessage("嗨"), new AssistantMessage("嗨！")));
+        memory.add(old, oneTurnWithTool());
+        memory.add(id, List.of(new UserMessage("嗨"), new AssistantMessage("嗨！")));
         makeOld(OWNER, old, 31);
 
         List<StoredConversation> found = store.findInactiveSince(cutoff(), 100);
@@ -155,90 +258,88 @@ class JdbcAssistantMemoryRepositoryTest {
     @Test
     @DisplayName("#54 反例：開頭很舊、最後一則是最近的，不算舊 —— 不拿、也刪不掉")
     void conversationWithRecentMessageIsNotOld() {
-        memory.saveAll(id, oneTurnWithTool());
+        memory.add(id, oneTurnWithTool());
         jdbc.sql("UPDATE calendar_assistant_message SET created_at = now() - interval '31 days' WHERE conversation_id = :id AND position < 3")
                 .param("id", UUID.fromString(id)).update();
 
         assertTrue(store.findInactiveSince(cutoff(), 100).isEmpty());
         assertFalse(store.deleteIfInactiveSince(OWNER, UUID.fromString(id), cutoff()));
-        assertEquals(4, memory.findByConversationId(id).size());
+        assertEquals(4, memory.get(id).size());
     }
 
     @Test
     @DisplayName("#54 歸檔好之後刪：還是舊的就刪；讀出來之後使用者又接著聊了（變新了）就不刪")
     void deletesOnlyIfStillInactive() {
         String resumed = UUID.randomUUID().toString();
-        memory.saveAll(id, oneTurnWithTool());
-        memory.saveAll(resumed, List.of(new UserMessage("嗨")));
+        memory.add(id, oneTurnWithTool());
+        memory.add(resumed, List.of(new UserMessage("嗨")));
         makeOld(OWNER, id, 31);
         makeOld(OWNER, resumed, 31);
         assertEquals(2, store.findInactiveSince(cutoff(), 100).size());
-        // 歸檔讀出來之後、刪之前，使用者回來接著聊（saveAll 整段重插，created_at 變成現在）
-        memory.saveAll(resumed, List.of(new UserMessage("嗨"), new AssistantMessage("又見面了")));
+        // 歸檔讀出來之後、刪之前，使用者回來接著聊（接上新的一則，最後說話的時間變成現在）
+        memory.add(resumed, List.of(new AssistantMessage("又見面了")));
 
         assertTrue(store.deleteIfInactiveSince(OWNER, UUID.fromString(id), cutoff()));
         assertFalse(store.deleteIfInactiveSince(OWNER, UUID.fromString(resumed), cutoff()));
 
-        assertTrue(memory.findByConversationId(id).isEmpty());
-        assertEquals(2, memory.findByConversationId(resumed).size());
+        assertTrue(memory.get(id).isEmpty());
+        assertEquals(2, memory.get(resumed).size());
     }
 
     @Test
     @DisplayName("#54 還原：照原樣插回去，讀出來跟歸檔前一樣（工具呼叫一個欄位都不少、時間也還是舊的）；線上已經有的同一段不蓋掉")
     void restoresConversationAsItWas() {
-        memory.saveAll(id, oneTurnWithTool());
+        memory.add(id, oneTurnWithTool());
         makeOld(OWNER, id, 31);
-        List<Message> before = memory.findByConversationId(id);
+        List<Message> before = memory.get(id);
         StoredConversation archived = store.findInactiveSince(cutoff(), 100).getFirst();
         assertTrue(store.deleteIfInactiveSince(OWNER, UUID.fromString(id), cutoff()));
 
         assertTrue(store.restore(archived));
 
-        assertEquals(before.toString(), memory.findByConversationId(id).toString());
+        assertEquals(before.toString(), memory.get(id).toString());
         assertEquals(archived, store.findInactiveSince(cutoff(), 100).getFirst());
         // 再還原一次：已經在了，跳過，不會多出一份
         assertFalse(store.restore(archived));
-        assertEquals(4, memory.findByConversationId(id).size());
+        assertEquals(4, memory.get(id).size());
     }
 
     @Test
     @DisplayName("#54 反例：線上那段比歸檔新（使用者後來又聊了），還原不拿舊的蓋掉")
     void restoreDoesNotOverwriteNewerConversation() {
-        memory.saveAll(id, oneTurnWithTool());
+        memory.add(id, oneTurnWithTool());
         makeOld(OWNER, id, 31);
         StoredConversation archived = store.findInactiveSince(cutoff(), 100).getFirst();
-        memory.saveAll(id, List.of(new UserMessage("新的")));
+        memory.add(id, List.of(new UserMessage("新的")));
 
         assertFalse(store.restore(archived));
-        assertEquals(1, memory.findByConversationId(id).size());
+        assertEquals(5, memory.get(id).size());
     }
 
     @Test
     @DisplayName("沒存過的對話：空的")
     void unknownConversation() {
-        assertTrue(memory.findByConversationId(UUID.randomUUID().toString()).isEmpty());
+        assertTrue(memory.get(UUID.randomUUID().toString()).isEmpty());
     }
 
     @Test
     @DisplayName("#104 別人拿著同一個 conversationId：讀到的是空的；存、刪都只動到他自己名下的，碰不到我的那段")
     void conversationsAreSeparatedByOwner() {
-        memory.saveAll(id, oneTurnWithTool());
-        ChatMemoryRepository other = store.of(OTHER);
+        memory.add(id, oneTurnWithTool());
+        ChatMemory other = store.of(OTHER);
 
-        assertTrue(other.findByConversationId(id).isEmpty());
-        assertTrue(other.findConversationIds().isEmpty());
-        other.saveAll(id, List.of(new UserMessage("蓋掉你")));
-        other.deleteByConversationId(id);
+        assertTrue(other.get(id).isEmpty());
+        other.add(id, List.of(new UserMessage("蓋掉你")));
+        other.clear(id);
 
-        assertEquals(4, memory.findByConversationId(id).size());
-        assertEquals(List.of(id), memory.findConversationIds());
+        assertEquals(4, memory.get(id).size());
     }
 
     @Test
     @DisplayName("#104 兩個人剛好同一個 conversationId，歸檔也各算各的：只拿、只刪很久沒說話的那個人的")
     void archivingCountsEachOwnersConversation() {
-        memory.saveAll(id, oneTurnWithTool());
-        store.of(OTHER).saveAll(id, List.of(new UserMessage("嗨")));
+        memory.add(id, oneTurnWithTool());
+        store.of(OTHER).add(id, List.of(new UserMessage("嗨")));
         jdbc.sql("UPDATE calendar_assistant_message SET created_at = now() - interval '31 days' WHERE owner_id = :owner")
                 .param("owner", OWNER.value()).update();
 
@@ -247,8 +348,63 @@ class JdbcAssistantMemoryRepositoryTest {
         assertFalse(store.deleteIfInactiveSince(OTHER, UUID.fromString(id), cutoff()));
         assertTrue(store.deleteIfInactiveSince(OWNER, UUID.fromString(id), cutoff()));
 
-        assertTrue(memory.findByConversationId(id).isEmpty());
-        assertEquals(1, store.of(OTHER).findByConversationId(id).size());
+        assertTrue(memory.get(id).isEmpty());
+        assertEquals(1, store.of(OTHER).get(id).size());
+    }
+
+    @Test
+    @DisplayName("#50 歸檔的刪除跟接上新一輪排隊：新一輪 commit 之後才判斷，對話變新了就不刪")
+    void archiveDeleteWaitsForAppend() throws Exception {
+        // 反例：deleteIfInactiveSince 拿掉鎖，它不用等、馬上把舊的刪掉，這個測試是紅的
+        memory.add(id, oneTurnWithTool());
+        makeOld(OWNER, id, 31);
+
+        boolean deleted = whileAppending(4, () -> store.deleteIfInactiveSince(OWNER, UUID.fromString(id), cutoff()));
+
+        assertFalse(deleted);
+        assertEquals(5, memory.get(id).size());
+    }
+
+    @Test
+    @DisplayName("#50 還原跟接上新一輪排隊：新的先存好，還原就跳過，不撞主鍵")
+    void restoreWaitsForAppend() throws Exception {
+        // 反例：restore 拿掉鎖，它不用等、馬上把舊的插回去，這個測試是紅的
+        memory.add(id, oneTurnWithTool());
+        makeOld(OWNER, id, 31);
+        StoredConversation archived = store.findInactiveSince(cutoff(), 100).getFirst();
+        assertTrue(store.deleteIfInactiveSince(OWNER, UUID.fromString(id), cutoff()));
+
+        boolean restored = whileAppending(0, () -> store.restore(archived));
+
+        assertFalse(restored);
+        assertEquals(1, memory.get(id).size());
+    }
+
+    /** 模擬 add 進行到一半：拿著這段對話的鎖，other 必須等到新的一列 commit 之後才跑得完。 */
+    private boolean whileAppending(int position, Callable<Boolean> other) throws Exception {
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            Future<Boolean> result = new TransactionTemplate(new DataSourceTransactionManager(dataSource)).execute(status -> {
+                jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
+                        .param("key", "calendar_assistant_message:" + OWNER.value() + ":" + id)
+                        .query((rs, rowNum) -> 0)
+                        .list();
+                Future<Boolean> waiting = pool.submit(other);
+                assertThrows(TimeoutException.class, () -> waiting.get(500, TimeUnit.MILLISECONDS));
+                jdbc.sql("""
+                                INSERT INTO calendar_assistant_message (owner_id, conversation_id, position, type, content)
+                                VALUES (:owner, :id, :position, 'USER', '又來了')
+                                """)
+                        .param("owner", OWNER.value())
+                        .param("id", UUID.fromString(id))
+                        .param("position", position)
+                        .update();
+                return waiting;
+            });
+            return result.get(30, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     private static Instant cutoff() {
@@ -271,17 +427,16 @@ class JdbcAssistantMemoryRepositoryTest {
     }
 
     @Test
-    @DisplayName("資料庫出事：四個方法都丟 IllegalStateException（502），不讓 Spring 的例外往外跑")
+    @DisplayName("資料庫出事：三個方法都丟 IllegalStateException（502），不讓 Spring 的例外往外跑")
     void databaseFailuresAreUpstreamFailures() {
         // 連到一個沒有資料庫的埠：每一次查詢都會失敗
         DriverManagerDataSource nowhere = new DriverManagerDataSource("jdbc:postgresql://127.0.0.1:1/none", "x", "x");
-        ChatMemoryRepository broken = new JdbcAssistantMemoryRepository(JdbcClient.create(nowhere),
-                new TransactionTemplate(new DataSourceTransactionManager(nowhere))).of(OWNER);
+        ChatMemory broken = new JdbcAssistantMemoryRepository(JdbcClient.create(nowhere),
+                new TransactionTemplate(new DataSourceTransactionManager(nowhere)), KEEP_TURNS).of(OWNER);
 
-        assertThrows(IllegalStateException.class, broken::findConversationIds);
-        assertThrows(IllegalStateException.class, () -> broken.findByConversationId(id));
-        assertThrows(IllegalStateException.class, () -> broken.saveAll(id, List.of(new UserMessage("嗨"))));
-        assertThrows(IllegalStateException.class, () -> broken.deleteByConversationId(id));
+        assertThrows(IllegalStateException.class, () -> broken.get(id));
+        assertThrows(IllegalStateException.class, () -> broken.add(id, List.of(new UserMessage("嗨"))));
+        assertThrows(IllegalStateException.class, () -> broken.clear(id));
     }
 
     @Test
