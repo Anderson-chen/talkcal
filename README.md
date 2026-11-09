@@ -44,6 +44,8 @@ ci/        CI 要檢查什麼、在什麼環境檢查
 docs/      設計稿
 ```
 
+給 AI 工具的指令和規則入口在 [AGENTS.md](AGENTS.md)；commit、PR、issue 的寫法在 [`.claude/rules/`](.claude/rules/)。
+
 ## 程式結構
 
 後端（`backend/`）是六角架構（Hexagonal / Ports & Adapters），目錄照 BuckPal 的慣例：
