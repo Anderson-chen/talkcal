@@ -46,7 +46,7 @@ cd ops && docker compose up -d alloy        # 雲端：oc up -d alloy（oc 見 R
 剛改過 `ops/alloy/config.alloy`、log 有 `Error: ... config.alloy:<行>`。先驗設定：
 
 ```bash
-docker run --rm -v "$PWD/ops/alloy:/c" grafana/alloy:v1.11.0 fmt /c/config.alloy
+docker run --rm -v "$PWD/ops/alloy:/c" grafana/alloy:v1.21.2 fmt /c/config.alloy
 ```
 
 改回上一版（`git checkout HEAD~1 -- ops/alloy/config.alloy`）、重起，再走 PR 修。

@@ -8,27 +8,13 @@
 #   - postgres 的埠只綁在 127.0.0.1（deploy/compose.yaml），外面連不到
 # paths 限定在 gosu：同一個 CVE 出現在別的地方（例如 app 自己的程式）照樣會報
 #
-# brotli-libs（CVE-2026-111497）—— 2026-10-24 評估：
-#   - 還升不了：Alpine 已經有修補版 1.2.1-r0，但 postgres:18.6-alpine 最近一次 build 是 2026-10-22，裡面還是 1.2.0-r1
-#   - 碰不到：brotli 是 libcurl 帶進來的，PG18 用 libcurl 只為了 libpq 的 OAuth 登入流程；我們用密碼登入，埠只綁 127.0.0.1
-#   - 到期日只給兩週：官方映像檔重新 build 後這條就該拿掉，到期 CI 變紅會逼人回來看
-#
-# libcurl（CVE-2026-92392）—— 2026-10-27 評估，理由跟上面的 brotli 一樣：
-#   - 還升不了：Alpine 已經有修補版 8.23.0-r0，但 postgres:18.6-alpine 還是上面說的那次 build
-#     （2026-10-22 台灣時間，映像檔的 Created 是 2026-10-21 22:56 UTC；2026-10-27 重新 pull 確認過），裡面還是 8.22.0-r0
-#   - 碰不到：PG18 用 libcurl 只為了 libpq 的 OAuth 登入流程；我們用密碼登入，埠只綁 127.0.0.1
-#   - 到期日跟 brotli 那條一樣：兩條都等同一次官方重新 build，到時一起拿掉
-#   - 考慮過自己包一層 postgres 跑 apk upgrade（像 web/Dockerfile 對 nginx 那樣），沒選：見 #217
-#   - 限制：例外只能寫 CVE 編號，會套用到每個掃的映像檔。app 的 runtime 也裝了 curl（Ubuntu 的 libcurl），
-#     Ubuntu 若也對它發這個 CVE 會一起被忽略。Trivy 0.74 對 OS 套件限定不到 purl（2026-10-27 試過三種寫法都對不到），
-#     所以到期日給短：最多兩週後一定會重新報出來
+# 第三方映像檔（#239）—— 2026-11-10 評估。已升到發布滿 14 天的最新版（.github/renovate.json5 的 minimumReleaseAge），剩下的分三種：
+#   - Caddy 2.11.6：唯一對外的服務，HTTP/2、Range 的 DoS 外面碰得到，這裡是「接受到升版為止」，不是「碰不到」。
+#     2.11.9 已修掉除了 x/net/html 以外的全部，2026-11-20 滿 14 天，Renovate 下一個週一（11-23）開 PR（patch 不用勾選）；到期日給到合併的隔天
+#   - 觀測堆疊：Grafana 只綁 127.0.0.1、其他只在 compose 網路裡，沒有對外的路；這幾版上游還沒帶修補，給一個月
+#   - postgres-exporter：v0.20.1 已是最新版，上游沒發新版就沒得升。不發佈埠，只有 Alloy 會來抓；給兩個月
+# 限制（2026-10-27 試過）：作業系統套件的例外限定不到映像檔，會套用到每個掃的映像檔，所以 OS 套件那幾條到期日都給短的
 vulnerabilities:
-  - id: CVE-2026-111497
-    statement: libcurl 帶進來，只給 libpq 的 OAuth 用；我們用密碼登入。等 postgres 官方映像檔重新 build，見檔案開頭
-    expired_at: 2026-11-07
-  - id: CVE-2026-92392
-    statement: libcurl 只給 libpq 的 OAuth 用；我們用密碼登入。等 postgres 官方映像檔重新 build，見檔案開頭
-    expired_at: 2026-11-07
   - id: CVE-2025-61726
     paths: [usr/local/bin/gosu]
     statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
@@ -137,6 +123,118 @@ vulnerabilities:
     paths: [usr/local/bin/gosu]
     statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭（2026-10-22 公布，postgres:18.6-alpine 當天重 build 的 gosu 仍是 Go 1.24.6）
     expired_at: 2027-01-14
+  # ── 第三方映像檔（#239），說明見檔案開頭 ──
+  - id: CVE-2026-111497
+    statement: Caddy 2.11.6 基底的 brotli；Caddy 不用 libcurl。等 2.11.9，見檔案開頭
+    expired_at: 2026-11-24
+  - id: CVE-2026-92392
+    statement: Caddy 2.11.6 基底的 curl；Caddy 執行時不呼叫它。等 2.11.9，見檔案開頭
+    expired_at: 2026-11-24
+  - id: CVE-2026-107891
+    statement: Caddy 2.11.6 基底的 musl regcomp；等 2.11.9，見檔案開頭
+    expired_at: 2026-11-24
+  - id: CVE-2026-85091
+    statement: Caddy 2.11.6 基底的 zlib gz 檔函式，Caddy 的壓縮不走這條；等 2.11.9，見檔案開頭
+    expired_at: 2026-11-24
+  - id: CVE-2026-78669
+    paths: [usr/bin/caddy]
+    statement: Caddy 2.11.6 對外，碰得到；只接受到 2.11.9 滿 14 天，見檔案開頭
+    expired_at: 2026-11-24
+  - id: CVE-2026-111943
+    paths: [usr/bin/caddy]
+    statement: Caddy 2.11.6 對外，碰得到；只接受到 2.11.9 滿 14 天，見檔案開頭
+    expired_at: 2026-11-24
+  - id: CVE-2026-78667
+    paths: [usr/bin/caddy]
+    statement: Caddy 2.11.6 對外，碰得到；只接受到 2.11.9 滿 14 天，見檔案開頭
+    expired_at: 2026-11-24
+  - id: CVE-2026-97031
+    paths: [usr/bin/caddy]
+    statement: Caddy 2.11.6 對外，碰得到；只接受到 2.11.9 滿 14 天，見檔案開頭
+    expired_at: 2026-11-24
+  - id: CVE-2026-116587
+    paths: [usr/bin/caddy, usr/bin/alloy, usr/share/grafana/bin/grafana, usr/bin/mimir, tempo, usr/bin/loki]
+    statement: go-jose 解析惡意 JWK 的 DoS；沒有設定 JWT、OAuth 登入，Caddy 只跟 Let's Encrypt 交換。等上游帶修補，見檔案開頭
+    expired_at: 2026-12-10
+  - id: CVE-2026-78661
+    paths: [usr/bin/caddy, usr/bin/alloy, usr/share/grafana/bin/grafana, usr/bin/mimir, tempo, usr/bin/loki, bin/postgres_exporter]
+    statement: x/net/html 解析惡意 HTML 的 DoS；設定裡沒有處理外部 HTML 的路（Caddyfile 只有 reverse_proxy）。等上游帶修補，見檔案開頭
+    expired_at: 2026-12-10
+  - id: CVE-2026-109518
+    statement: Alloy 映像檔裡的 apt；容器執行時不跑 apt。等上游換基底，見檔案開頭
+    expired_at: 2026-12-10
+  - id: CVE-2026-21728
+    paths: [usr/share/grafana/bin/grafana]
+    statement: Grafana 只內嵌 tempo 函式庫當查詢用，不跑 Tempo 伺服器；Grafana 埠只綁 127.0.0.1
+    expired_at: 2027-01-10
+  - id: CVE-2026-28377
+    paths: [usr/share/grafana/bin/grafana]
+    statement: 洩漏的是 Tempo 伺服器的 S3 金鑰；Grafana 不跑 Tempo 伺服器，我們也沒有用 S3 存 trace
+    expired_at: 2027-01-10
+  - id: CVE-2026-56854
+    paths: [bin/postgres_exporter]
+    statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2027-01-10
+  - id: CVE-2026-46600
+    paths: [bin/postgres_exporter]
+    statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2027-01-10
+  - id: CVE-2026-78669
+    paths: [bin/postgres_exporter]
+    statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2027-01-10
+  - id: CVE-2026-56851
+    paths: [bin/postgres_exporter]
+    statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2027-01-10
+  - id: CVE-2026-56852
+    paths: [bin/postgres_exporter]
+    statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2027-01-10
+  - id: CVE-2026-111943
+    paths: [bin/postgres_exporter]
+    statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2027-01-10
+  - id: CVE-2026-33818
+    paths: [bin/postgres_exporter]
+    statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2027-01-10
+  - id: CVE-2026-39821
+    paths: [bin/postgres_exporter]
+    statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2027-01-10
+  - id: CVE-2026-39822
+    paths: [bin/postgres_exporter]
+    statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2027-01-10
+  - id: CVE-2026-56853
+    paths: [bin/postgres_exporter]
+    statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2027-01-10
+  - id: CVE-2026-56858
+    paths: [bin/postgres_exporter]
+    statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2027-01-10
+  - id: CVE-2026-56859
+    paths: [bin/postgres_exporter]
+    statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2027-01-10
+  - id: CVE-2026-56860
+    paths: [bin/postgres_exporter]
+    statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2027-01-10
+  - id: CVE-2026-56862
+    paths: [bin/postgres_exporter]
+    statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2027-01-10
+  - id: CVE-2026-78667
+    paths: [bin/postgres_exporter]
+    statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2027-01-10
+  - id: CVE-2026-97031
+    paths: [bin/postgres_exporter]
+    statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2027-01-10
 
 # ── 設定檢查（trivy config，#235）──────────────────────────────────────────────
 # 規則：Trivy 內建的（DS-*：Dockerfile、AWS-*：Terraform）和 ci/config-checks/ 自己寫的（TALKCAL-COMPOSE-*：compose）。

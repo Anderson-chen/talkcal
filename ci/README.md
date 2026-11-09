@@ -115,8 +115,7 @@ gitleaks 補的是邊界：
 
 ```bash
 docker compose -f deploy/compose.yaml build app web
-ci/vulns.sh --repo talkcal/app:local talkcal/web:local postgres:18.6-alpine
-ci/vulns.sh $(ci/compose-images.sh)    # EC2 上的第三方映像檔
+ci/vulns.sh --repo talkcal/app:local talkcal/web:local $(ci/compose-images.sh)
 ```
 
 | 時機 | 為什麼 |
@@ -127,17 +126,14 @@ ci/vulns.sh $(ci/compose-images.sh)    # EC2 上的第三方映像檔
 
 **掃哪些映像檔**：
 
-| | 映像檔 | 擋不擋 |
-|---|---|---|
-| 自己 build 的 | `talkcal/app`、`talkcal/web` | 擋（`vulns` job） |
-| 資料庫 | `postgres` | 擋（`vulns` job） |
-| EC2 上的其他第三方 | caddy、grafana、loki、mimir、tempo、alloy、postgres-exporter | **先不擋**（`third-party-images` job，結果貼結果頁；PR 上不跑，push 到 master 和每天排程跑） |
+全部擋（`vulns` job）：自己 build 的 `talkcal/app`、`talkcal/web`，加上 `ci/compose-images.sh` 列出的第三方映像檔。
+PR 上只有動到 compose、`ci/trivyignore.yaml`、`ci/compose-images.sh`、`ci/vulns.sh`、`ci/Dockerfile` 時才掃全部，其他 PR 只掃 postgres；排程和 push 到 master 一律全掃。
 
 第三方的清單由 `ci/compose-images.sh` 問 compose（`docker compose config --images`，疊的檔案跟 `deploy.sh` 一樣），不在 ci.yml 另外抄。
 用 compose 自己解析，不 grep：疊上去的檔案會蓋掉 image，有 profiles 的服務（mailpit）雲端不會起，grep 都看不出來。
 
-第三方的第一次掃（2026-10-30）有約 400 筆 HIGH、CRITICAL，全部要靠升版解決（Grafana 11.4、Loki 3.3 這類都落後好幾版），
-升版在 #239 做；升乾淨後拿掉 `continue-on-error`、併進 `vulns`。跟 #85「先掃、修完再擋」同一個做法。
+第三方的第一次掃（2026-10-30）有約 400 筆 HIGH、CRITICAL，#239 升版後改成擋（跟 #85「先掃、修完再擋」同一個做法）。
+升不掉的（上游還沒帶修補、版本未滿 14 天）寫在 `ci/trivyignore.yaml`，附理由和到期日。新公布的 CVE 或例外到期，會讓每天的排程和 master 變紅，要升版或評估後寫例外。
 
 不掃的，和理由：
 

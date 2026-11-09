@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 列出 EC2 上會跑的第三方映像檔，一行一個。給 ci/vulns.sh 當參數（.github/workflows/ci.yml 的 vulns、third-party-images）。
+# 列出 EC2 上會跑的第三方映像檔，一行一個。給 ci/vulns.sh 當參數（.github/workflows/ci.yml 的 vulns）。
 #
 #   ci/vulns.sh $(ci/compose-images.sh)
 #

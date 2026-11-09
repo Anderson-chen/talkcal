@@ -20,7 +20,7 @@ services:
   # ── 指標資料庫 ────────────────────────────────────────────────
   # 只存不抓：指標由 Alloy 抓完用 remote_write 推進來。為什麼不用 Prometheus 見 README 的「選型理由」。
   mimir:
-    image: grafana/mimir:3.2.1        # 釘死版本，換機器也拉到同一版（跟 build.gradle 釘 JDK 版本同個道理）
+    image: grafana/mimir:3.2.3        # 釘死版本，換機器也拉到同一版（跟 build.gradle 釘 JDK 版本同個道理）
     container_name: talkcal-mimir
     command:
       - -config.file=/etc/mimir/mimir.yaml
@@ -40,7 +40,7 @@ services:
 
   # ── 日誌資料庫 ────────────────────────────────────────────────
   loki:
-    image: grafana/loki:3.3.0
+    image: grafana/loki:3.7.9
     container_name: talkcal-loki
     command: -config.file=/etc/loki/loki-config.yaml
     ports:
@@ -54,7 +54,7 @@ services:
 
   # ── 追蹤資料庫 ────────────────────────────────────────────────
   tempo:
-    image: grafana/tempo:3.1.0
+    image: grafana/tempo:3.1.1
     container_name: talkcal-tempo
     command:
       - -config.file=/etc/tempo/tempo.yaml
@@ -67,7 +67,7 @@ services:
 
   # ── 畫圖前台 ─────────────────────────────────────────────────
   grafana:
-    image: grafana/grafana:11.4.0
+    image: grafana/grafana:12.4.14
     container_name: talkcal-grafana
     ports:
       # 主角。開 http://localhost:3000 就是儀表板。
@@ -115,7 +115,7 @@ services:
   # 三種訊號的唯一入口：抓 deploy/ 那組的指標 → Mimir、讀它們的 stdout → Loki、接 app 推來的 trace → Tempo。
   # 管線怎麼接見 alloy/config.alloy。
   alloy:
-    image: grafana/alloy:v1.11.0
+    image: grafana/alloy:v1.21.2
     container_name: talkcal-alloy
     command:
       - run
@@ -160,7 +160,7 @@ services:
   #   2. docker compose --env-file ../deploy/.env --profile mailtest up -d
   #   3. 開 http://localhost:8025 看信
   mailpit:
-    image: axllent/mailpit:v1.31.6
+    image: axllent/mailpit:v1.32.0
     container_name: talkcal-mailpit
     profiles: ["mailtest"]
     ports:

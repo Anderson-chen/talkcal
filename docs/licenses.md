@@ -99,7 +99,7 @@ CI 的規則因此是：**前端、後端會打包的依賴都不能是 GPL、AG
 | `node:22-alpine`、`node:22-bookworm-slim` | build、CI | MIT | 只在 build 階段 |
 | `postgres:18.6-alpine` | 資料庫 | PostgreSQL License（類似 MIT） | |
 | `nvidia/cuda:13.0.1-{devel,runtime}-ubuntu24.04` | llama-server | NVIDIA Deep Learning Container License／CUDA EULA | runtime 函式庫 NVIDIA 允許隨應用程式一起散布；目前也沒有散布 |
-| `caddy:2.10.0-alpine` | EC2 的 HTTPS | Apache-2.0 | |
+| `caddy:2.11.6-alpine` | EC2 的 HTTPS | Apache-2.0 | |
 | `grafana/alloy` | 觀測：收集 | Apache-2.0 | |
 | `grafana/grafana`、`loki`、`tempo`、`mimir` | 觀測：儲存、看板 | **AGPL-3.0** | 原封不動自己用，沒改程式、沒提供給別人當服務，不觸發 AGPL。要改它們的程式碼、或開放給外部使用者時，要公開改過的原始碼 |
 | `aquasec/trivy` | CI 掃描 | Apache-2.0 | |
