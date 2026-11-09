@@ -70,7 +70,7 @@ $env:K6_WEB_DASHBOARD_EXPORT="perf/results/smoke-report.html"; k6 run -o web-das
 
 ### 接進 Grafana：跟 app、模型的指標疊在同一個時間軸
 
-先起 `ops/`（`docker compose -f ops/compose.yaml up -d`），然後把 `k6 run` 換成這支（Git Bash）：
+先起 `ops/`（`docker compose --env-file deploy/.env -f ops/compose.yaml up -d`），然後把 `k6 run` 換成這支（Git Bash）：
 
 ```bash
 perf/run-to-grafana.sh perf/knee.js
@@ -178,6 +178,92 @@ Grafana 的「talkcal — 壓測（k6）」上，紅線是舊 app 收到 SIGTERM
 
 `RATE_PER_MIN` 要低於容量：每分鐘 60 人、問題隨機混合時模型的 KV cache 會塞爆、回 502，跟部署無關的失敗混進來就分不清了。
 
+### outage：模型掛掉演練（#44）
+
+模型斷線、卡住、變慢的時候，助理是不是快速失敗、行程 API 是不是照常可用。同時跑兩群人：每分鐘 `RATE_PER_MIN` 個人（預設 20）跟助理說一句，
+每秒 1 個人讀行程。故障由腳本自己透過 Toxiproxy 按時製造（第 60 秒弄壞、第 180 秒恢復），每一句的結果都印一行（帶時間），對著看。
+
+deploy/ 要疊 `compose.chaos.yaml` 起，app 和模型、資料庫中間才有 Toxiproxy（見 [deploy/README.md](../deploy/README.md#故障演練toxiproxy)）：
+
+```bash
+docker compose -f deploy/compose.yaml -f deploy/compose.chaos.yaml up -d
+```
+
+```bash
+FAULT=down k6 run perf/outage.js                                      # 斷線：幾毫秒就失敗
+```
+
+```bash
+FAULT=slow k6 run perf/outage.js                                      # 每個回應慢 40 秒（SLOW_MS），超過 30 秒的慢呼叫門檻
+```
+
+```bash
+FAULT=hang DURATION_S=360 RECOVER_AT_S=220 k6 run perf/outage.js      # 卡住：連得上、永遠不回，要等到逾時
+```
+
+```bash
+PROXY=postgres FAULT=down DURATION_S=180 RECOVER_AT_S=120 k6 run perf/outage.js   # 反例：弄壞資料庫那段，斷路器不該動
+```
+
+不給 `FAULT` 就不碰 Toxiproxy，由你在另一個終端機自己弄壞（`toxiproxy-cli` 的指令見 [deploy/README.md](../deploy/README.md#故障演練toxiproxy)）。
+
+收工的表：助理的 200、502、503（MODEL_UNAVAILABLE／MODEL_BUSY）各幾個、中位數和最久花多久；行程 API 有門檻（0 失敗、p95 < 1 秒），
+所以弄壞資料庫那次 k6 會以非 0 結束 —— 那次本來就該失敗。
+斷路器的門檻和理由在 `backend/src/main/resources/application.properties` 的 `resilience4j.*`（`chat-model`）。
+實際跑過的結果：[2026-10-29 用 Toxiproxy](../docs/drills/2026-10-29-toxiproxy/README.md)（斷線、變慢、卡住、資料庫斷線的反例）、
+[2026-10-19 手動停容器](../docs/drills/2026-10-19-model-outage/README.md)。
+
+### slo：平常流量，量 SLO 的基準、驗 burn-rate 告警
+
+行程 CRUD 為主（每秒 `CRUD_RPS` 個，預設 10）、每分鐘跟助理說 `ASSIST_PER_MIN` 句（預設 6），跑 `DURATION`（預設 2m）。
+用固定到達速率：使用者照常來，不會因為 server 變慢就少來，SLO 算的「幾成被好好服務」才對。
+收工分開印行程 API 和助理的 p95、p99、失敗率，[docs/slo.md](../docs/slo.md) 的門檻就是從這裡量出來的。
+
+```bash
+k6 run perf/slo.js
+CRUD_RPS=50 ASSIST_PER_MIN=0 DURATION=60s k6 run perf/slo.js     # 只壓行程 API，5 倍量
+```
+
+開著它當背景流量，再弄壞一個依賴（停資料庫、模型位址指錯），SLO 儀表板的 burn rate 會往上衝、告警進 firing；
+依賴恢復、只剩這支的時候不該響。做法和結果見 docs/slo.md 的「驗證」。
+
+### db-pool：把資料庫連線池壓到不夠用
+
+其他腳本都壓 AI 助理，瓶頸在模型，連線池永遠用不滿。這支改壓只碰資料庫的 `GET /api/calendar/events`，
+看 Grafana 的 **talkcal — Spring app** 的「資料庫連線池」那一排（#32）：
+
+```bash
+perf/run-to-grafana.sh perf/db-pool.js
+```
+
+**實測（2026-10-17，池子 10 條、Tomcat 200 條執行緒、4 核）**：只壓讀取壓不滿池子。
+150 VU 起吞吐量就停在約 1,540 req/s，一條連線平均只占 3.6 毫秒，算下來平均同時只借出約 5.5 條
+（Little's Law：1,540 × 0.0036），pending 只偶爾跳到個位數。先撐不住的是 CPU 和 JSON 序列化，不是連線池 ——
+這個 app 照現在的查詢，池子 10 條是夠的。
+
+池子真正會不夠，是**查詢變慢**的時候：連線借出去還不回來。用鎖表模擬（例如 migration 改表、有人開著交易沒關）：
+50 VU 持續讀，同時在另一個終端機鎖住行程表 20 秒：
+
+```bash
+STAGES=50 HOLD_S=140 perf/run-to-grafana.sh perf/db-pool.js
+```
+
+```bash
+docker exec talkcal-postgres psql -U talkcal -d talkcal -c "BEGIN; LOCK TABLE calendar_event IN ACCESS EXCLUSIVE MODE; SELECT pg_sleep(20); COMMIT;"
+```
+
+| 鎖多久 | active | pending | 逾時 | 使用者看到的 |
+|--------|--------|---------|------|--------------|
+| 不鎖 | 平均約 5 | 0～個位數 | 0 | p95 不到 100 毫秒 |
+| 20 秒 | 貼著上限 10 | 衝到 40（50 VU − 10 條） | 0 | 卡 20 秒後全部成功 |
+| 40 秒 | 貼著上限 10 | 40 上下 | 約 40 次 | 等滿 30 秒（`connectionTimeout`）的請求回 502 |
+
+![連線池那一排：兩次鎖表時 active 貼著 10、pending 衝到 40，第二次鎖 40 秒出現逾時](../docs/images/2026-10-17-db-pool-lock.png)
+
+左邊 10:03 那一段是鎖 20 秒、10:04 那一段是鎖 40 秒（截圖時間是台北時間）。
+鎖表的那段時間，PostgreSQL 那張圖上 active 也是 10：10 條連線都在等鎖，不是在做事。
+看到「app 的 pending 高、資料庫的 active 等於池子大小」，就知道問題在資料庫那頭，加大池子沒用。
+
 ## 怎麼讀結果
 
 k6 收工時印一張表，看三個地方就夠：
@@ -196,8 +282,8 @@ k6 收工時印一張表，看三個地方就夠：
 拿毫秒級門檻來套只會全紅，量錯東西。
 
 所以 `smoke.js` 的門檻是「離譜線」而不是「效能目標」：`p(95)<60000`（60 秒）——
-超過它八成是卡住/逾時，不是慢。同樣理由，k6 每個請求的 `timeout` 放到 `120s`，
-跟 app 叫一次模型的 2 分鐘逾時對齊；不然 k6 預設 60 秒先斷線，
+超過它八成是卡住/逾時，不是慢。同樣理由，k6 每個請求的 `timeout` 放到 `150s`，
+比 app 叫一次模型的 2 分鐘逾時長一點（剛好 120 秒的話兩邊同時到點，app 回的 502 會被 k6 自己的斷線搶先）；不然 k6 預設 60 秒先斷線，
 會把「模型還在想」誤判成「app 掛了」。
 
 **第一次請求會偏慢**：暖 KV cache 等。真的要看穩定延遲時，第一輪當暖身、別算進門檻 ——
@@ -233,6 +319,10 @@ launch.json 的原生 llama-server 沒帶 `-np`，是 llama.cpp 的預設值（4
 - **`load.js`** —— 三段平台找併發上限，暖身不算數。
 - **`concurrent.js`** —— 一波人在短時間內各說一句，看尖峰時最後來的人等多久。
 - **`knee.js`** —— 同時數逐階往上加，印出每階的延遲與吞吐量，找臨界值。
+- **`outage.js`** —— 模型斷線、卡住時，助理多快失敗、熔斷有沒有打開又關回來、行程 API 有沒有被拖累。
+- **`db-pool.js`** —— 只壓資料庫的讀取，看連線池（HikariCP）什麼時候不夠用。
+- **`tokens.js`** —— 一句一句說完訊息池，量每個請求平均燒多少 token、換算成多少錢（讀 app 的 token 指標前後相減）。
+  成本分析 [docs/cost.md](../docs/cost.md) 的輸入就是它量的。
 - **`lib/assistant.js`** —— 各腳本共用的位址、訊息池、請求參數、正常回覆的檢查。
 - **`lib/docker-target.js`** —— 把預設位址改成 docker 那台 app，有給 `BASE_URL` 就尊重它。
 
@@ -255,5 +345,9 @@ perf/
 ├── concurrent.js   # 一波人在短時間內各說一句（尖峰）
 ├── knee.js         # 同時數逐階往上加，找臨界值
 ├── deploy.js       # 邊壓邊部署：部署期間有幾個人受影響
+├── outage.js       # 模型掛掉演練：助理快速失敗、行程 API 照常
+├── slo.js          # 平常流量：量 SLO 的基準、驗 burn-rate 告警
+├── db-pool.js      # 只壓資料庫的讀取，看連線池什麼時候不夠用
+├── tokens.js       # 每個請求燒多少 token、值多少錢（docs/cost.md 用）
 └── run-to-grafana.sh  # 跑任何一支腳本，指標同時送進 ops/ 的 Grafana
 ```

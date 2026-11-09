@@ -34,12 +34,23 @@ RUN --mount=type=cache,target=/gradle-cache \
 # ════════════════════════════════════════════════════════════════════
 FROM eclipse-temurin:25-jre-noble AS runtime
 
-# curl：給 compose 的 healthcheck 打 /actuator/health。JRE 映像檔沒附 curl 也沒附 wget。
+# curl：給 compose 的 healthcheck 打 management 埠的 /actuator/health/readiness。JRE 映像檔沒附 curl 也沒附 wget。
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app.jar /app/app.jar
+
+# 版本（#25）：由 compose 的 build.args 傳進來（cd/version.sh 算的），貼成 OCI 標準名稱的 label。
+# 容器建立時會帶著映像檔的 label，`docker inspect talkcal-app` 看的就是正在跑的那個容器是哪個 commit。
+# 只放在這最後一層：jar 跟版本無關，只改了 web/、docs/ 的 commit，上面編譯那層照樣吃快取。
+# 預設值 local / unknown：直接 docker build 沒帶參數，就誠實地說不知道是哪一版
+ARG APP_VERSION=local
+ARG GIT_COMMIT=unknown
+LABEL org.opencontainers.image.title="talkcal-app" \
+      org.opencontainers.image.source="https://github.com/Anderson-chen/talkcal" \
+      org.opencontainers.image.version="$APP_VERSION" \
+      org.opencontainers.image.revision="$GIT_COMMIT"
 
 # 不跑 root：映像檔內建 uid 1000 的 ubuntu 使用者，直接用（跟 llama-server 那個一樣）
 USER ubuntu

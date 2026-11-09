@@ -1,0 +1,21 @@
+# 告警寄到哪（contact point）。Grafana 啟動時照這個檔建好，不必在 UI 手動加。
+#
+# 收件人、SMTP 都不寫在這裡：值在不進 git 的 deploy/.env（範本 deploy/.env.example），
+# 由 ops/compose.yaml 交給 grafana 容器。Grafana 讀 provisioning 檔時會把 $XXX 換成同名的環境變數。
+# SMTP 伺服器本身不屬於 contact point，是 Grafana 全域設定（compose.yaml 裡的 GF_SMTP_*）。
+
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: email
+    receivers:
+      # uid 釘死：policies.yaml 用名字找它，但 UI、API 用 uid，不釘的話每次重建都換一個
+      - uid: talkcal-email
+        type: email
+        settings:
+          # 多個收件人用分號分開。沒設時 compose 給一個 .invalid 的位址（寄不出去，但 Grafana 照樣啟動）
+          addresses: $ALERT_EMAIL_TO
+          # 多個收件人時寄一封、大家都在收件人欄，不是每人各一封
+          singleEmail: true
+        # 「恢復正常」也會寄一封（預設就是，沒寫 disableResolveMessage）：收到告警的人才知道不用再看了

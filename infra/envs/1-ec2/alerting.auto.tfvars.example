@@ -1,0 +1,9 @@
+# 複製成 alerting.auto.tfvars（不進 git）再填值，terraform apply 會自動讀 *.auto.tfvars。
+# 填了之後 apply、再到機器上重跑 deploy.sh，ops/ 的 Grafana 才拿得到。alert_smtp_host 沒填就不寄信。
+# Gmail：smtp.gmail.com:587，密碼用「應用程式密碼」（不是登入密碼）；SES：SMTP 憑證是另外產生的帳密，寄件人要先驗證
+alert_smtp_host     = ""
+alert_smtp_user     = ""
+alert_smtp_password = ""
+alert_smtp_from     = ""
+# 多個收件人用分號分開
+alert_email_to      = ""

@@ -1,0 +1,56 @@
+# 問題：壞掉、跟預期不一樣。欄位照現有的問題回報（例如 #76）：
+# 症狀（Actual Behavior）、預期（Expected Behavior）、怎麼發現的（Environment）、重現（Steps to Reproduce）、原因（Root Cause）、做法（Proposed Solution）、做完的證據（Acceptance Criteria）。
+# 表單上看得到的文字（欄位名稱、說明）用英文，填的內容用中文。欄位名稱取 2026 年主流 repo 的用法（kubernetes、terraform、grafana…）。
+# Acceptance Criteria 寫成 checkbox，見 #207。
+name: Bug
+description: Something is broken or not behaving as expected
+labels: [bug]
+projects: ["Anderson-chen/6"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Title:** the visible symptom, e.g. `app 換 IP 後 nginx 還連舊的，API 回 502`.
+        It's fine if the cause isn't known yet; write what you saw first.
+
+        **Labels:** `bug` is added for you; also add exactly one `stage:` or `product:` (how to choose: README), exactly one of `p0`/`p1`, and any `area:` it touches.
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What you saw.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened instead.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: When and where it happened (local, EC2), and what you were doing.
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to Reproduce
+      description: Steps that make it happen. If it can't be reproduced yet, say so.
+  - type: textarea
+    id: cause
+    attributes:
+      label: Root Cause
+      description: What caused it. Can stay empty until known.
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How you plan to fix it. Can stay empty until known.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: How to prove it's fixed. One checkbox per item, e.g. the reproduction steps no longer trigger it, and a counter-example (removing the fix brings it back). Tick each one as it's done. Can stay empty until the cause is known.
+      placeholder: |
+        - [ ] Following the reproduction steps no longer triggers it
+        - [ ] Counter-example: removing the fix brings it back
