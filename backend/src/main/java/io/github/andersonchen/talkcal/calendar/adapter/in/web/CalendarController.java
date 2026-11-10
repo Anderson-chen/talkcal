@@ -9,10 +9,12 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Idempote
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddedEvents;
+import io.github.andersonchen.talkcal.calendar.application.port.in.EventChangedException;
 import io.github.andersonchen.talkcal.calendar.application.port.in.EventNotFoundException;
 import io.github.andersonchen.talkcal.calendar.application.port.in.IdempotencyKeyReusedException;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.RemoveEventUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.UpdateEventUseCase;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -30,6 +32,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -47,10 +50,11 @@ import java.util.Optional;
 /**
  * 行事曆的 HTTP 入口（inbound adapter）。
  *
- * 三個端點對應三個 use case：
+ * 四個端點對應四個 use case：
  * 1. POST   /events       —— 使用者確認過的助理提議、或手動表單填的行程 → 存起來
  * 2. GET    /events       —— 月曆一頁的行程
- * 3. DELETE /events/{id}  —— 拿掉一個行程
+ * 3. PUT    /events/{id}  —— 把一個行程改成另一個樣子（詳情的「修改」、助理的修改卡片）
+ * 4. DELETE /events/{id}  —— 拿掉一個行程
  *
  * 一句話變成行程草稿不在這裡：那是 AI 助理的工作（CalendarAssistantController），
  * 草稿以 proposals 回給前端，使用者確認後才送到 POST /events。
@@ -71,11 +75,14 @@ public final class CalendarController {
 
     private final AddEventsUseCase addEvents;
     private final ListEventsUseCase listEvents;
+    private final UpdateEventUseCase updateEvent;
     private final RemoveEventUseCase removeEvent;
 
-    public CalendarController(AddEventsUseCase addEvents, ListEventsUseCase listEvents, RemoveEventUseCase removeEvent) {
+    public CalendarController(AddEventsUseCase addEvents, ListEventsUseCase listEvents, UpdateEventUseCase updateEvent,
+                              RemoveEventUseCase removeEvent) {
         this.addEvents = Objects.requireNonNull(addEvents, "addEvents 不可為 null");
         this.listEvents = Objects.requireNonNull(listEvents, "listEvents 不可為 null");
+        this.updateEvent = Objects.requireNonNull(updateEvent, "updateEvent 不可為 null");
         this.removeEvent = Objects.requireNonNull(removeEvent, "removeEvent 不可為 null");
     }
 
@@ -134,6 +141,28 @@ public final class CalendarController {
         return SavedEvents.of(listEvents.listEvents(SignedIn.owner(signedIn), from, to));
     }
 
+    @PutMapping("/events/{id}")
+    @Operation(summary = "把一個行程改成另一個樣子",
+            description = "expected 是改之前看到的樣子（GET 拿到的那筆原樣帶回來），event 是改好的樣子。"
+                    + "資料庫裡那筆跟 expected 不一樣，就是在你看到之後被改過了，這次不改、回 409。")
+    @ApiResponse(responseCode = "200", description = "改好了，回改好的那筆")
+    @ApiResponse(responseCode = "400", description = "id 不是 UUID，或某個欄位不合規（標題空白、結束不晚於開始、分類不認得），沒有改",
+            content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
+    @ApiResponse(responseCode = "404", description = "你沒有這個行程（可能已經被刪掉了）；別人的行程也是 404",
+            content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
+    @ApiResponse(responseCode = "409", description = "這筆在你看到之後被改過了，沒有改；重新讀一次再決定要不要改",
+            content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
+    @ApiResponse(responseCode = "502", description = "資料庫出事，沒有改；稍後重試",
+            content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
+    public SavedEvent update(Principal signedIn, @Parameter(description = "行程的 ID") @PathVariable String id,
+                             @RequestBody UpdateEventRequest request) {
+        // 先轉 id、再轉兩份內容：格式錯的、規則不合的在這裡就是 400，不必走到資料庫
+        EventId eventId = EventId.of(id);
+        CalendarEvent expected = toDomain(request.expected());
+        CalendarEvent replacement = toDomain(request.event());
+        return SavedEvent.of(updateEvent.updateEvent(SignedIn.owner(signedIn), eventId, expected, replacement));
+    }
+
     @DeleteMapping("/events/{id}")
     // 204：刪掉了，沒有東西要回。比回 200 加一個空物件誠實
     @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -150,10 +179,10 @@ public final class CalendarController {
         removeEvent.removeEvent(SignedIn.owner(signedIn), EventId.of(id));
     }
 
-    // JSON 裡的 events 陣列可能夾著 null（[{...}, null]）。不先擋的話 toDomain 會 NullPointerException → 500
+    // JSON 裡的 events 陣列可能夾著 null（[{...}, null]），修改的 expected、event 也可能沒帶。不先擋的話 toDomain 會 NullPointerException → 500
     private static CalendarEvent toDomain(EventFields fields) {
         if (fields == null) {
-            throw new IllegalArgumentException("events 裡不可有 null");
+            throw new IllegalArgumentException("行程不可為 null");
         }
         return fields.toDomain();
     }
@@ -162,6 +191,12 @@ public final class CalendarController {
     public ResponseEntity<CalendarFailure> onEventNotFound(EventNotFoundException e) {
         log.warn("行程不存在，回 404：{}", e.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new CalendarFailure(e.getMessage()));
+    }
+
+    @ExceptionHandler(EventChangedException.class)
+    public ResponseEntity<CalendarFailure> onEventChanged(EventChangedException e) {
+        log.warn("行程在呼叫端看到之後被改過了，回 409：{}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new CalendarFailure(e.getMessage()));
     }
 
     @ExceptionHandler(IdempotencyKeyReusedException.class)
@@ -210,8 +245,17 @@ public final class CalendarController {
 
         // 助理的提議：帶著伺服器剛發的卡片 id
         static EventFields of(CalendarEvent event, ProposalId proposal) {
+            return of(event, proposal.toString());
+        }
+
+        // 助理的修改卡片：只是行程內容，不是要新增的提議，不帶卡片 id
+        static EventFields of(CalendarEvent event) {
+            return of(event, (String) null);
+        }
+
+        private static EventFields of(CalendarEvent event, String proposal) {
             return new EventFields(event.title(), event.start(), event.end(), fromCategory(event.category()),
-                    event.location().orElse(null), event.note().orElse(null), proposal.toString());
+                    event.location().orElse(null), event.note().orElse(null), proposal);
         }
 
         CalendarEvent toDomain() {
@@ -245,6 +289,11 @@ public final class CalendarController {
     }
 
     public record AddEventsRequest(@Schema(description = "要存的行程，通常是助理提議、使用者確認過的（可能改過）") List<EventFields> events) {
+    }
+
+    public record UpdateEventRequest(
+            @Schema(description = "改之前看到的樣子（GET 拿到的那筆原樣帶回來，不含 id）", requiredMode = Schema.RequiredMode.REQUIRED) EventFields expected,
+            @Schema(description = "改好的樣子", requiredMode = Schema.RequiredMode.REQUIRED) EventFields event) {
     }
 
     public record SavedEvent(

@@ -23,6 +23,7 @@ import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsageP
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -342,7 +343,7 @@ class CalendarAssistantControllerTest {
             Map<OwnerId, ChatMemory> memories = new ConcurrentHashMap<>();
             return new CalendarAssistant(model, owner -> memories.computeIfAbsent(owner, o -> MessageWindowChatMemory.builder().maxMessages(Integer.MAX_VALUE).build()),
                     description -> List.of(CalendarEvent.startingAt("開會", LocalDateTime.of(2026, 10, 7, 15, 0))),
-                    (owner, start, end) -> List.of(), (owner, start, end, period, minimum) -> List.of(),
+                    (owner, start, end) -> List.of(), (owner, id) -> Optional.empty(), (owner, start, end, period, minimum) -> List.of(),
                     Clock.systemDefaultZone());
         }
     }

@@ -33,11 +33,23 @@ export interface SavedEvent extends EventFields {
   id: string
 }
 
-/** AI 助理一輪的回覆：助理說的話，以及這一輪提議的行程（確認後送 addEvents 才存）。 */
+/** 助理提議的一個修改（#259）：行事曆上現在的樣子 → 要改成的樣子。確認後送 updateEvent 才改。 */
+export interface AssistantChange {
+  eventId: string
+  before: EventFields
+  after: EventFields
+}
+
+/**
+ * AI 助理一輪的回覆：助理說的話，以及這一輪提議的新增（確認後送 addEvents 才存）、
+ * 修改（確認後送 updateEvent 才改）、刪除（確認後送 removeEvent 才刪）。
+ */
 export interface AssistantReply {
   conversationId: string
   reply: string
   proposals: EventFields[]
+  changes: AssistantChange[]
+  removals: SavedEvent[]
 }
 
 /**
@@ -47,7 +59,13 @@ export interface AssistantReply {
 export async function talkToAssistant(message: string, conversationId?: string): Promise<AssistantReply> {
   const res = await send('/api/calendar/assistant', { method: 'POST', body: JSON.stringify({ message, conversationId }) })
   const body = (await res.json()) as AssistantReply
-  return { ...body, proposals: body.proposals.map(normalize) }
+  return {
+    ...body,
+    proposals: body.proposals.map(normalize),
+    // 舊版後端沒有這兩個欄位（前後端不一定同時部署）：當成沒有修改、刪除的卡片
+    changes: (body.changes ?? []).map((c) => ({ ...c, before: normalize(c.before), after: normalize(c.after) })),
+    removals: (body.removals ?? []).map(normalize),
+  }
 }
 
 /** 一段對話給人看的部分（工具呼叫、提議過的卡片不在裡面）。 */
@@ -88,6 +106,22 @@ export async function listEvents(from: string, to: string): Promise<SavedEvent[]
   const query = new URLSearchParams({ from, to })
   const res = await send(`/api/calendar/events?${query}`, { method: 'GET' })
   return ((await res.json()) as { events: SavedEvent[] }).events.map(normalize)
+}
+
+/**
+ * 把一個行程改成 event 的樣子（#259）。expected 是改之前看到的樣子（讀回來的那筆、或助理卡片的 before）：
+ * 那筆在你看到之後被改過了，後端回 409、這次不改（ApiError，status 409）；已經不在了丟 NotFoundError。
+ */
+export async function updateEvent(id: string, expected: EventFields, event: EventFields): Promise<SavedEvent> {
+  const body = JSON.stringify({ expected: fieldsOf(expected), event: fieldsOf(event) })
+  const res = await send(`/api/calendar/events/${encodeURIComponent(id)}`, { method: 'PUT', body })
+  return normalize((await res.json()) as SavedEvent)
+}
+
+// 只送行程本身的欄位：讀回來的那筆多帶著 id，助理卡片的草稿可能帶著 proposalId，都不屬於「行程長什麼樣」
+function fieldsOf(event: EventFields): EventFields {
+  const { title, start, end, category, location, note } = event
+  return { title, start, end, category, location, note }
 }
 
 /** 拿掉一個行程。已經不在了（例如另一個分頁先刪了）會丟 NotFoundError，畫面該重新整理。 */

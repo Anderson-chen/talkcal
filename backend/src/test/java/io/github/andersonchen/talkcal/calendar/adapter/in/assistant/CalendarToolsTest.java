@@ -9,6 +9,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.DayPerio
 import io.github.andersonchen.talkcal.calendar.application.domain.model.FreeSlot;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
+import io.github.andersonchen.talkcal.calendar.application.port.in.FindEventUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlotsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ParseEventsUseCase;
@@ -18,6 +19,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -42,9 +44,16 @@ class CalendarToolsTest {
         parsed.add(description);
         return List.of(DINNER);
     };
+    private static final ScheduledEvent SAVED = ScheduledEvent.schedule(DINNER);
+
     private ListEventsUseCase list = (owner, start, end) -> {
         listOwners.add(owner);
-        return List.of(ScheduledEvent.schedule(DINNER));
+        return List.of(SAVED);
+    };
+    private final List<Object[]> findCalls = new ArrayList<>();
+    private FindEventUseCase find = (owner, id) -> {
+        findCalls.add(new Object[] {owner, id});
+        return id.equals(SAVED.id()) ? Optional.of(SAVED) : Optional.empty();
     };
     private FindFreeSlotsUseCase free = (owner, start, end, period, minimum) -> {
         freeSlotCalls.add(new Object[] {owner, start, end, period, minimum});
@@ -55,7 +64,7 @@ class CalendarToolsTest {
     private List<String> userSaid = List.of("明天下午三點跟小明吃飯");
 
     private CalendarTools tools() {
-        return new CalendarTools(OWNER, parse, list, free, userSaid);
+        return new CalendarTools(OWNER, parse, list, find, free, userSaid);
     }
 
     @Nested
@@ -113,9 +122,9 @@ class CalendarToolsTest {
     class ListTool {
 
         @Test
-        @DisplayName("列出行程：日期、星期、起訖、標題、分類、地點；標題和地點用「」框起來，前面講明那是資料（#13）")
+        @DisplayName("列出行程：編號、日期、星期、起訖、標題、分類、地點；標題和地點用「」框起來，前面講明那是資料（#13）")
         void listsEvents() {
-            assertEquals(CalendarTools.DATA_NOTICE + "- 2026-10-07（週三）15:00–16:00 「跟小明吃飯」〔社交〕＠「拉麵店」",
+            assertEquals(CalendarTools.DATA_NOTICE + "- 〔編號 " + SAVED.id() + "〕2026-10-07（週三）15:00–16:00 「跟小明吃飯」〔社交〕＠「拉麵店」",
                     tools().listEvents("2026-10-07", "2026-10-08"));
         }
 
@@ -154,6 +163,128 @@ class CalendarToolsTest {
 
             assertTrue(tools().listEvents("明天", "後天").contains("yyyy-MM-dd"));
             assertTrue(tools().listEvents("2026-10-08", "2026-10-07").contains("to 要晚於 from"));
+        }
+    }
+
+    @Nested
+    @DisplayName("propose_change（#259）")
+    class ChangeTool {
+
+        @Test
+        @DisplayName("用編號找到那筆、新的那句交給解析：收進 changes（原本 → 改成），行事曆不動")
+        void collectsChange() {
+            CalendarEvent coffee = CalendarEvent.startingAt("喝咖啡", LocalDateTime.of(2026, 10, 7, 15, 0));
+            parse = description -> {
+                parsed.add(description);
+                return List.of(coffee);
+            };
+            CalendarTools tools = tools();
+
+            String said = tools.proposeChange(SAVED.id().toString(), "10/7 下午三點喝咖啡");
+
+            assertEquals(List.of("10/7 下午三點喝咖啡"), parsed);
+            assertEquals(1, tools.changes().size());
+            assertEquals(SAVED, tools.changes().getFirst().before());
+            assertEquals("喝咖啡", tools.changes().getFirst().after().title());
+            assertTrue(tools.proposals().isEmpty(), "改不是新增，不該多一張新增卡片");
+            assertTrue(tools.proposedAnything());
+            assertTrue(said.contains("原本") && said.contains("改成"), said);
+        }
+
+        @Test
+        @DisplayName("新的那句沒講地點就沿用原本的，備註一律沿用：改一次不會把它們清掉")
+        void keepsLocationAndNote() {
+            ScheduledEvent withNote = new ScheduledEvent(SAVED.id(), DINNER.withDetails("拉麵店", "帶傘"));
+            find = (owner, id) -> Optional.of(withNote);
+            parse = description -> List.of(CalendarEvent.startingAt("喝咖啡", LocalDateTime.of(2026, 10, 7, 16, 0)));
+            CalendarTools tools = tools();
+
+            tools.proposeChange(SAVED.id().toString(), "10/7 下午四點喝咖啡");
+
+            CalendarEvent after = tools.changes().getFirst().after();
+            assertEquals(Optional.of("拉麵店"), after.location());
+            assertEquals(Optional.of("帶傘"), after.note());
+        }
+
+        @Test
+        @DisplayName("#104 反例：編號不是這個人的（找不到）、或根本不是 UUID：不提議，請模型先查編號")
+        void unknownId() {
+            CalendarTools tools = tools();
+
+            assertEquals(CalendarTools.NOT_FOUND, tools.proposeChange("3f1c8a2e-0000-4000-8000-000000000999", "10/7 下午三點喝咖啡"));
+            assertEquals(CalendarTools.NOT_FOUND, tools.proposeChange("編號 1", "10/7 下午三點喝咖啡"));
+            assertEquals(CalendarTools.NOT_FOUND, tools.proposeChange(null, "10/7 下午三點喝咖啡"));
+            assertTrue(tools.changes().isEmpty());
+            assertTrue(parsed.isEmpty(), "找不到那筆就不必解析");
+            assertEquals(OWNER, findCalls.getFirst()[0], "找的是這段對話擁有者的行程");
+        }
+
+        @Test
+        @DisplayName("開始時刻沒變（只改名稱）：使用者沒講早晚也照樣提議 —— 原本的時間是他確認過的")
+        void sameStartNeedsNoPeriod() {
+            ScheduledEvent lunch = new ScheduledEvent(SAVED.id(), CalendarEvent.startingAt("吃飯", LocalDateTime.of(2026, 10, 7, 11, 0)));
+            find = (owner, id) -> Optional.of(lunch);
+            parse = description -> List.of(CalendarEvent.startingAt("喝咖啡", LocalDateTime.of(2026, 10, 7, 11, 0)));
+            userSaid = List.of("今天的吃飯改成喝咖啡");
+            CalendarTools tools = tools();
+
+            tools.proposeChange(SAVED.id().toString(), "今天 11 點喝咖啡");
+
+            assertEquals(1, tools.changes().size());
+        }
+
+        @Test
+        @DisplayName("反例：改到 7～11 點、19～23 點的新時刻，使用者又沒講早晚：不提議，請模型先問")
+        void newAmbiguousTimeAsks() {
+            parse = description -> List.of(CalendarEvent.startingAt("喝咖啡", LocalDateTime.of(2026, 10, 7, 19, 0)));
+            userSaid = List.of("改到七點");
+            CalendarTools tools = tools();
+
+            assertTrue(tools.proposeChange(SAVED.id().toString(), "10/7 七點喝咖啡").contains("早上還是晚上"));
+            assertTrue(tools.changes().isEmpty());
+        }
+
+        @Test
+        @DisplayName("反例：解析不出、解析出兩筆、改完跟原本一樣：都不提議")
+        void rejectsUnusableDescriptions() {
+            parse = description -> List.of();
+            assertTrue(tools().proposeChange(SAVED.id().toString(), "改一下").contains("解析不出"));
+
+            parse = description -> List.of(DINNER, DINNER);
+            assertTrue(tools().proposeChange(SAVED.id().toString(), "兩個").contains("一次只能改成一個"));
+
+            parse = description -> List.of(DINNER);
+            CalendarTools same = tools();
+            assertTrue(same.proposeChange(SAVED.id().toString(), "一樣").contains("一模一樣"));
+            assertTrue(same.changes().isEmpty());
+        }
+    }
+
+    @Nested
+    @DisplayName("propose_removal（#259）")
+    class RemovalTool {
+
+        @Test
+        @DisplayName("用編號找到那筆：收進 removals，行事曆不動")
+        void collectsRemoval() {
+            CalendarTools tools = tools();
+
+            String said = tools.proposeRemoval(SAVED.id().toString());
+
+            assertEquals(List.of(SAVED), tools.removals());
+            assertTrue(tools.proposals().isEmpty() && tools.changes().isEmpty());
+            assertTrue(said.contains("刪除卡片") && said.contains("跟小明吃飯"), said);
+        }
+
+        @Test
+        @DisplayName("#104 反例：找不到（別人的、不存在的、亂編的編號）：不提議")
+        void unknownId() {
+            CalendarTools tools = tools();
+
+            assertEquals(CalendarTools.NOT_FOUND, tools.proposeRemoval("3f1c8a2e-0000-4000-8000-000000000999"));
+            assertEquals(CalendarTools.NOT_FOUND, tools.proposeRemoval("吃飯"));
+            assertTrue(tools.removals().isEmpty());
+            assertTrue(!tools.proposedAnything());
         }
     }
 

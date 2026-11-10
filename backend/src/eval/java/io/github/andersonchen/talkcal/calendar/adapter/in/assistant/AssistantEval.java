@@ -219,7 +219,8 @@ class AssistantEval {
         ChatMemory memory = MessageWindowChatMemory.builder().maxMessages(Integer.MAX_VALUE).build();
         return new CalendarAssistant(chatModel, owner -> memory,
                 new ParseEventsService(new SpringAiExtractEventsAdapter(chatModel), TUE),
-                new ListEventsService(load), new FindFreeSlotsService(load, TUE), TUE);
+                new ListEventsService(load), (owner, id) -> events.stream().filter(e -> e.id().equals(id)).findFirst(),
+                new FindFreeSlotsService(load, TUE), TUE);
     }
 
     private static List<Case> loadCases() {

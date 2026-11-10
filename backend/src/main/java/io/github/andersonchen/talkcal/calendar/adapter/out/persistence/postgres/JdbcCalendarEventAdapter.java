@@ -10,10 +10,12 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Schedule
 import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteArchivedEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteEventPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEndedEventsPort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.RestoreEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsOncePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.UpdateEventPort;
 
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -54,15 +56,13 @@ import java.util.stream.Collectors;
  * 冪等鍵的表也在這裡：記下的是「哪一批行程」，要跟 calendar_event 在同一個交易裡一起寫。
  * 歸檔（#54）要的三個 port 也在這裡：找出舊的、歸檔好之後刪掉、從歸檔還原回來 —— 一樣是這張表。
  *
- * 沒有修改（UPDATE）：只有新增和刪除，兩個分頁同時動也不會互相蓋掉（#50）。
- * 之後要加修改，要用樂觀鎖，不然晚存的分頁會把先存的改動蓋回去，兩邊還都看到「儲存成功」：
- * calendar_event 加 version 欄位，讀行程時回給前端、修改時帶回來；
- * UPDATE calendar_event SET ..., version = version + 1 WHERE id = :id AND owner_id = :owner AND version = :version；
- * 更新 0 列回 409，前端顯示「這筆行程剛被改過了，請重新整理後再改」，不自動重試（重試等於拿舊畫面再蓋一次）。
- * 同時加一個整合測試：兩個人拿同一個 version 改，第二個人要拿到 409。
+ * 修改（UPDATE，#259）用樂觀鎖，不然晚存的分頁會把先存的改動蓋回去，兩邊還都看到「儲存成功」：
+ * WHERE 除了 id、owner_id，每個欄位都要跟呼叫端「改之前看到的樣子」一樣（跟 deleteArchived 同一個寫法），
+ * 更新 0 列就是被改過了（或不存在），由 UpdateEventService 分成 409、404。
+ * 不加 version 欄位的理由見 UpdateEventService。
  */
-public final class JdbcCalendarEventAdapter implements SaveEventsPort, SaveEventsOncePort, LoadEventsPort, DeleteEventPort,
-        LoadEndedEventsPort, DeleteArchivedEventsPort, RestoreEventsPort {
+public final class JdbcCalendarEventAdapter implements SaveEventsPort, SaveEventsOncePort, LoadEventsPort, LoadEventPort,
+        DeleteEventPort, UpdateEventPort, LoadEndedEventsPort, DeleteArchivedEventsPort, RestoreEventsPort {
 
     private final JdbcClient jdbc;
     private final TransactionTemplate transaction;
@@ -217,6 +217,59 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, SaveEvent
                     .update() > 0;
         } catch (DataAccessException e) {
             throw new IllegalStateException("刪除行程失敗：" + id, e);
+        }
+    }
+
+    @Override
+    public Optional<ScheduledEvent> loadOne(OwnerId owner, EventId id) {
+        List<Row> rows;
+        try {
+            rows = jdbc.sql("""
+                            SELECT id, title, start_at, end_at, category, location, note
+                            FROM calendar_event
+                            WHERE id = :id AND owner_id = :owner
+                            """)
+                    .param("id", id.value())
+                    .param("owner", owner.value())
+                    .query(JdbcCalendarEventAdapter::row)
+                    .list();
+        } catch (DataAccessException e) {
+            throw new IllegalStateException("讀取行程失敗：" + id, e);
+        }
+        return rows.stream().findFirst().map(JdbcCalendarEventAdapter::restore);
+    }
+
+    @Override
+    public boolean update(OwnerId owner, ScheduledEvent expected, CalendarEvent replacement) {
+        CalendarEvent before = expected.event();
+        try {
+            // 比對和修改在同一句：兩個請求同時改同一筆時，後到的那句會等先到的 commit，再拿改過的那一版比對，比不上就改 0 列。
+            // location、note 可以是 NULL，用 IS NOT DISTINCT FROM（理由同 deleteArchived）
+            return jdbc.sql("""
+                            UPDATE calendar_event
+                            SET title = :title, start_at = :start, end_at = :end, category = :category,
+                                location = :location, note = :note
+                            WHERE owner_id = :owner AND id = :id
+                              AND title = :oldTitle AND start_at = :oldStart AND end_at = :oldEnd AND category = :oldCategory
+                              AND location IS NOT DISTINCT FROM :oldLocation AND note IS NOT DISTINCT FROM :oldNote
+                            """)
+                    .param("owner", owner.value())
+                    .param("id", expected.id().value())
+                    .param("title", replacement.title())
+                    .param("start", replacement.start())
+                    .param("end", replacement.end())
+                    .param("category", replacement.category().name())
+                    .param("location", replacement.location().orElse(null), Types.VARCHAR)
+                    .param("note", replacement.note().orElse(null), Types.VARCHAR)
+                    .param("oldTitle", before.title())
+                    .param("oldStart", before.start())
+                    .param("oldEnd", before.end())
+                    .param("oldCategory", before.category().name())
+                    .param("oldLocation", before.location().orElse(null), Types.VARCHAR)
+                    .param("oldNote", before.note().orElse(null), Types.VARCHAR)
+                    .update() > 0;
+        } catch (DataAccessException e) {
+            throw new IllegalStateException("修改行程失敗：" + expected.id(), e);
         }
     }
 

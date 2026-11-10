@@ -3,6 +3,8 @@
 // 助理自己決定要做什麼：時間不確定就反問、查行程、找空檔，或提議行程。
 // 提議的行程顯示成卡片 —— 還是「先預覽再確認」：按了「加入行事曆」才送 /events 存起來。
 // 一句話可以提議好幾筆，每筆一張卡片；可以先「修改」（帶到新增表單）或「移除」某一筆，再一次全部加入。
+// 要改、要刪已經在行事曆上的行程（#259），助理給的是修改卡片（原本 → 改成）和刪除卡片，一樣按了確認才送 PUT、DELETE。
+// 這兩種卡片一張一張確認：改錯一筆比漏加一筆麻煩，不做「全部確認」。
 //
 // 對話的記憶在後端，這裡只記 conversationId（存在 localStorage）和畫面上的訊息。
 // 重新整理之後，用 conversationId 向後端讀回那段對話的文字接著聊；按「清空」只是丟掉這個 id，下一句由後端發新的 id、從頭開始。
@@ -17,7 +19,7 @@
 
 import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
 import { me } from '../auth'
-import { assistantHistory, dismissProposals, talkToAssistant, type EventFields } from '../calendar'
+import { assistantHistory, dismissProposals, talkToAssistant, type AssistantChange, type EventFields, type SavedEvent } from '../calendar'
 import { UnauthorizedError } from '../http'
 import { describeAssistantFailure, type FailureKind } from './assistantFailure'
 import { oneAtATime, retryKey, type RetryKey } from './submitOnce'
@@ -30,11 +32,29 @@ export interface Proposal {
   status: ProposalStatus
 }
 
+/** 修改、刪除卡片的狀態：還沒決定、已經改（刪）好了、使用者按了取消 */
+export type ActionStatus = 'pending' | 'done' | 'dismissed'
+
+export interface ChangeCard {
+  change: AssistantChange
+  status: ActionStatus
+  // 送出失敗的原因（例如 409：卡片出現之後那筆被改過了），顯示在卡片下面
+  error: string | null
+}
+
+export interface RemovalCard {
+  event: SavedEvent
+  status: ActionStatus
+  error: string | null
+}
+
 export interface ChatMessage {
   id: number
   role: 'me' | 'ai'
   text: string
   proposals: Proposal[]
+  changes: ChangeCard[]
+  removals: RemovalCard[]
   // 加入行事曆失敗時的原因，顯示在卡片下面；草稿留著讓使用者再按一次
   error: string | null
   // 使用者這句沒送成功（#43）：泡泡標成「沒送出」
@@ -49,7 +69,7 @@ export const SLOW_AFTER_SECONDS = 10
 // 三種能做的事各舉一個例子：新增、查詢、找空檔
 export const SUGGESTIONS = ['明天下午3點和 Amy 開會', '明天有什麼行程？', '這週哪天下午有空？']
 
-const GREETING = '嗨！我是你的行事曆助理。可以幫你新增行程、查某天的安排，或找出空檔。要新增的話，我會整理好讓你確認後再加入。'
+const GREETING = '嗨！我是你的行事曆助理。可以幫你新增、修改、刪除行程，查某天的安排，或找出空檔。不管哪一種，我都會整理成卡片讓你確認後才動行事曆。'
 
 // conversationId 存在這台瀏覽器：跟主題一樣是個人的東西，不必存到後端。
 // 私密視窗、被封鎖的網站資料都可能讓 localStorage 丟例外，一律吞掉 —— 最壞就是重新整理後開新對話
@@ -97,7 +117,7 @@ function saveConversationId(id: string | undefined) {
 export function useAssistant(calendar: CalendarState) {
   let nextId = 1
   const say = (role: ChatMessage['role'], text: string, proposals: Proposal[] = []): ChatMessage =>
-    ({ id: nextId++, role, text, proposals, error: null })
+    ({ id: nextId++, role, text, proposals, changes: [], removals: [], error: null })
 
   const messages = ref<ChatMessage[]>([say('ai', GREETING)])
   const draft = draftKey(me.value?.id)
@@ -185,7 +205,10 @@ export function useAssistant(calendar: CalendarState) {
       const answer = await talkToAssistant(said, conversationId)
       conversationId = answer.conversationId
       saveConversationId(conversationId)
-      messages.value.push(say('ai', answer.reply, answer.proposals.map((draft) => ({ draft, status: 'pending' }))))
+      const reply = say('ai', answer.reply, answer.proposals.map((draft) => ({ draft, status: 'pending' })))
+      reply.changes = answer.changes.map((change) => ({ change, status: 'pending', error: null }))
+      reply.removals = answer.removals.map((event) => ({ event, status: 'pending', error: null }))
+      messages.value.push(reply)
       unsent = ''
       keepDraft()
     } catch (e) {
@@ -269,7 +292,49 @@ export function useAssistant(calendar: CalendarState) {
     })
   }
 
-  return { messages, input, typing, saving, waitSeconds, blocked, waitedSeconds, send, retry, canRetry, confirm, cancel, drop, edit, clear }
+  // ── 修改、刪除卡片（#259）──────────────────────────────
+  // 送出中再按不會送第二次（跟「加入行事曆」共用 saving：同一時間只做一件事，畫面上的按鈕一起停用）
+
+  /** 照卡片改。卡片出現之後那筆被改過（409）或已經不在了（404），顯示原因、卡片留著；不自動重試，重試等於拿舊的樣子再蓋一次 */
+  const confirmChange = oneAtATime(saving, async (card: ChangeCard) => {
+    if (card.status !== 'pending') return
+    card.error = null
+    try {
+      await calendar.update(card.change.eventId, card.change.before, card.change.after)
+      card.status = 'done'
+    } catch (e) {
+      card.error = message(e)
+    }
+  })
+
+  /** 帶著「要改成的樣子」打開表單，使用者自己調；存好了這張卡片就算「已修改」 */
+  function editChange(card: ChangeCard) {
+    if (card.status !== 'pending') return
+    calendar.openEdit(card.change.eventId, card.change.before, card.change.after, () => {
+      card.status = 'done'
+    })
+  }
+
+  /** 照卡片刪。已經不在了也算刪好了（calendar.remove 的規則） */
+  const confirmRemoval = oneAtATime(saving, async (card: RemovalCard) => {
+    if (card.status !== 'pending') return
+    card.error = null
+    try {
+      await calendar.remove(card.event.id)
+      card.status = 'done'
+    } catch (e) {
+      card.error = message(e)
+    }
+  })
+
+  function dismiss(card: ChangeCard | RemovalCard) {
+    if (card.status === 'pending') card.status = 'dismissed'
+  }
+
+  return {
+    messages, input, typing, saving, waitSeconds, blocked, waitedSeconds, send, retry, canRetry, confirm, cancel, drop, edit, clear,
+    confirmChange, editChange, confirmRemoval, dismiss,
+  }
 }
 
 export type AssistantState = ReturnType<typeof useAssistant>

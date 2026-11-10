@@ -2,6 +2,7 @@ package io.github.andersonchen.talkcal.calendar.adapter.in.web;
 
 import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.CalendarAssistant;
 import io.github.andersonchen.talkcal.calendar.adapter.in.web.CalendarController.EventFields;
+import io.github.andersonchen.talkcal.calendar.adapter.in.web.CalendarController.SavedEvent;
 import io.github.andersonchen.talkcal.calendar.adapter.shared.ModelUnavailableException;
 
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
@@ -39,8 +40,10 @@ import java.util.stream.IntStream;
 /**
  * 行事曆 AI 助理的 HTTP 入口：一句話進來，助理的回覆和它提議的行程出去。
  *
- * 這裡是一段對話 —— 助理可能先反問、可能去查行程或找空檔，也可能提議新增。
+ * 這裡是一段對話 —— 助理可能先反問、可能去查行程或找空檔，也可能提議新增、修改、刪除。
  * 提議的行程跟 POST /events 收的是同一個形狀（EventFields），畫面顯示卡片、使用者確認後送 POST /events 才存。
+ * 修改（changes）、刪除（removals）也一樣只是卡片（#259）：使用者按確認才送 PUT、DELETE /events/{id}。
+ * 修改卡片的 before 原樣當 PUT 的 expected 送回來，卡片顯示之後那筆被改過，PUT 就會 409，不會蓋掉別人的改動。
  *
  * 多輪對話靠 conversationId（UUID）：第一句不帶，回應裡會拿到一個；之後每句帶著它。歷史存在伺服器。
  * 重新整理頁面後用 GET 讀回那段對話給人看的部分。
@@ -100,7 +103,11 @@ public final class CalendarAssistantController {
         List<EventFields> cards = IntStream.range(0, drafts.size())
                 .mapToObj(i -> EventFields.of(drafts.get(i), ids.get(i)))
                 .toList();
-        return new AssistantResponse(conversationId, reply.text(), cards);
+        List<AssistantChange> changes = reply.changes().stream()
+                .map(c -> new AssistantChange(c.before().id().toString(), EventFields.of(c.before().event()), EventFields.of(c.after())))
+                .toList();
+        List<SavedEvent> removals = reply.removals().stream().map(SavedEvent::of).toList();
+        return new AssistantResponse(conversationId, reply.text(), cards, changes, removals);
     }
 
     @PostMapping("/dismissals")
@@ -191,7 +198,15 @@ public final class CalendarAssistantController {
     public record AssistantResponse(
             @Schema(description = "這段對話的 ID，下一句帶著它") String conversationId,
             @Schema(description = "助理說的話") String reply,
-            @Schema(description = "這一輪提議的行程，使用者確認後送 POST /api/calendar/events 才會存") List<EventFields> proposals) {
+            @Schema(description = "這一輪提議的行程，使用者確認後送 POST /api/calendar/events 才會存") List<EventFields> proposals,
+            @Schema(description = "這一輪提議的修改，使用者確認後送 PUT /api/calendar/events/{eventId} 才會改") List<AssistantChange> changes,
+            @Schema(description = "這一輪提議刪除的行程，使用者確認後送 DELETE /api/calendar/events/{id} 才會刪") List<SavedEvent> removals) {
+    }
+
+    public record AssistantChange(
+            @Schema(description = "要改的行程的 ID") String eventId,
+            @Schema(description = "行事曆上現在的樣子；確認時原樣當 PUT 的 expected") EventFields before,
+            @Schema(description = "要改成的樣子；確認時當 PUT 的 event（使用者可以先改過）") EventFields after) {
     }
 
     public record AssistantDismissals(
