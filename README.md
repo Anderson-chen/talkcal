@@ -4,7 +4,18 @@
 
 個人行事曆功能，可透過對話方式來建立行程。
 
-技術：Java 25 · Spring Boot 4.1 · Spring AI · Vue 3 · PostgreSQL 18 · llama.cpp／Bedrock · Grafana（Alloy、Mimir、Loki、Tempo） · k6 · Docker Compose · Terraform（AWS）
+## 技術
+
+| 層 | 用什麼 |
+|---|---|
+| 後端 | Java 25、Spring Boot 4.1 |
+| 跟模型講話 | Spring AI 2.0（OpenAI 相容協定） |
+| 模型 | 本機：llama.cpp + Qwen3-8B；雲端：Bedrock 的 Qwen3 32B |
+| 資料庫 | PostgreSQL 18 + Flyway |
+| 前端 | Vue 3 + TypeScript + Vite |
+| 觀測 | Grafana Alloy → Mimir、Loki、Tempo → Grafana |
+| 壓測 | k6 |
+| 部署 | Docker Compose；雲端用 Terraform 開 AWS EC2 |
 
 ## 架構
 
@@ -22,6 +33,7 @@
 | [`ci/`](ci/README.md) | CI 要檢查什麼、在什麼環境檢查 |
 | [`cd/`](cd/README.md) | 部署、退版、版本號 |
 | [`infra/`](infra/README.md) | 搬上 AWS 的 Terraform |
+| [`docs/`](docs/README.md) | 跨資料夾的文件：架構圖、ADR、issue 分類依據、腳本地圖、SLO、告警、runbook、演練紀錄 |
 
 ## 怎麼跑
 
@@ -63,7 +75,3 @@ pnpm --dir web run dev           # 前端在 5173，/api 轉給 8090；在 repo 
 ```
 
 push 之前 pre-push hook 會先跑 `ci/run.sh`（`git config core.hooksPath .githooks` 開啟）。GitHub 上沒有 GPU，模型相關的測試只有本機會跑。細節見 [ci/README.md](ci/README.md)。
-
-## 文件地圖
-
-架構圖、ADR、SLO、告警、runbook 這些跨資料夾的文件，從 [docs/README.md](docs/README.md) 找。
