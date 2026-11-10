@@ -31,6 +31,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -263,6 +264,83 @@ class JdbcCalendarEventAdapterTest {
 
             assertFalse(adapter.delete(OWNER, dinner.id()));
             assertFalse(adapter.delete(OWNER, EventId.newId()));
+        }
+    }
+
+    @Nested
+    @DisplayName("讀一筆、修改（#259）")
+    class Update {
+
+        private static final CalendarEvent COFFEE = CalendarEvent.startingAt("喝咖啡", LocalDateTime.of(2026, 10, 6, 16, 0))
+                .withCategory(Category.SOCIAL).withDetails("咖啡店", "帶筆電");
+
+        @Test
+        @DisplayName("用 id 讀得回那一筆；沒有這筆就是 empty")
+        void loadsOne() {
+            ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);
+            adapter.save(OWNER, List.of(dinner));
+
+            assertEquals(Optional.of(dinner), adapter.loadOne(OWNER, dinner.id()));
+            assertEquals(Optional.empty(), adapter.loadOne(OWNER, EventId.newId()));
+        }
+
+        @Test
+        @DisplayName("改之前的樣子對得上：改成新的樣子（每個欄位，含地點、備註），回 true，id 不變")
+        void updates() {
+            ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);
+            adapter.save(OWNER, List.of(dinner));
+
+            assertTrue(adapter.update(OWNER, dinner, COFFEE));
+
+            assertEquals(Optional.of(new ScheduledEvent(dinner.id(), COFFEE)), adapter.loadOne(OWNER, dinner.id()));
+            assertEquals(1, count());
+        }
+
+        @Test
+        @DisplayName("地點、備註原本是 NULL 也比得上（IS NOT DISTINCT FROM），也改得回 NULL")
+        void comparesNulls() {
+            ScheduledEvent coffee = ScheduledEvent.schedule(COFFEE);
+            adapter.save(OWNER, List.of(coffee));
+
+            assertTrue(adapter.update(OWNER, coffee, DINNER));
+            assertTrue(adapter.update(OWNER, new ScheduledEvent(coffee.id(), DINNER), COFFEE));
+
+            assertEquals(Optional.of(coffee), adapter.loadOne(OWNER, coffee.id()));
+        }
+
+        @Test
+        @DisplayName("反例：兩邊拿同一個「改之前」來改，第二個改不到（false），第一個的改動沒被蓋掉")
+        void secondWriterWithStaleViewLoses() {
+            ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);
+            adapter.save(OWNER, List.of(dinner));
+            CalendarEvent lunch = CalendarEvent.startingAt("吃午餐", LocalDateTime.of(2026, 10, 6, 12, 0));
+
+            assertTrue(adapter.update(OWNER, dinner, COFFEE));
+            assertFalse(adapter.update(OWNER, dinner, lunch));
+
+            assertEquals(COFFEE, adapter.loadOne(OWNER, dinner.id()).orElseThrow().event());
+        }
+
+        @Test
+        @DisplayName("反例：只有備註不一樣也算被改過")
+        void anyFieldCounts() {
+            ScheduledEvent coffee = ScheduledEvent.schedule(COFFEE);
+            adapter.save(OWNER, List.of(coffee));
+            ScheduledEvent staleNote = new ScheduledEvent(coffee.id(), COFFEE.withDetails("咖啡店", "不同的備註"));
+
+            assertFalse(adapter.update(OWNER, staleNote, DINNER));
+            assertEquals(Optional.of(coffee), adapter.loadOne(OWNER, coffee.id()));
+        }
+
+        @Test
+        @DisplayName("#104 IDOR 反例：拿別人行程的 id 和內容來讀、來改 —— 讀不到、改不到，那筆原封不動")
+        void cannotTouchOthers() {
+            ScheduledEvent theirs = ScheduledEvent.schedule(DINNER);
+            adapter.save(OTHER, List.of(theirs));
+
+            assertEquals(Optional.empty(), adapter.loadOne(OWNER, theirs.id()));
+            assertFalse(adapter.update(OWNER, theirs, COFFEE));
+            assertEquals(Optional.of(theirs), adapter.loadOne(OTHER, theirs.id()));
         }
     }
 

@@ -22,6 +22,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Optional;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -106,7 +107,7 @@ class CalendarAssistantConversationTest {
                 new ListEventsService((owner, range) -> {
                     calendarReads.incrementAndGet();
                     return CALENDAR.load(owner, range);
-                }), new FindFreeSlotsService(CALENDAR, TUE), TUE);
+                }), (owner, id) -> Optional.empty(), new FindFreeSlotsService(CALENDAR, TUE), TUE);
         conversation = UUID.randomUUID().toString();
     }
 

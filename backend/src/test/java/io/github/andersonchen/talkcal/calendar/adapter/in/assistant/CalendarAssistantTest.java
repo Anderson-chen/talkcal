@@ -9,12 +9,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.andersonchen.talkcal.calendar.adapter.shared.ModelUnavailableException;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Optional;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -59,6 +61,8 @@ class CalendarAssistantTest {
     // 助理拿了誰的記憶、工具查了誰的行事曆
     private final List<OwnerId> memoryOwners = new ArrayList<>();
     private final List<OwnerId> listOwners = new ArrayList<>();
+    // 行事曆上已經有的那筆：修改、刪除的工具用編號找得到它
+    private static final ScheduledEvent SAVED = ScheduledEvent.schedule(new CalendarEvent("開會", LocalDateTime.of(2026, 10, 7, 19, 0), LocalDateTime.of(2026, 10, 7, 20, 0)));
 
     /** 照劇本回話：每呼叫一次拿下一句；劇本用完就一直回最後一句。 */
     private ChatModel scripted(AssistantMessage... script) {
@@ -98,7 +102,14 @@ class CalendarAssistantTest {
                     listOwners.add(owner);
                     return List.of();
                 },
+                (owner, id) -> id.equals(SAVED.id()) ? Optional.of(SAVED) : Optional.empty(),
                 (owner, start, end, period, minimum) -> List.of(), TUE);
+    }
+
+    private static AssistantMessage calls(String tool, String arguments) {
+        return AssistantMessage.builder().content("")
+                .toolCalls(List.of(new AssistantMessage.ToolCall("call-" + tool, "function", tool, arguments)))
+                .build();
     }
 
     @Test
@@ -233,7 +244,7 @@ class CalendarAssistantTest {
             }
         };
         CalendarAssistant second = new CalendarAssistant(scripted(proposes("明天晚上七點吃飯"), says("請確認卡片。")), owner -> recording,
-                description -> List.of(DINNER), (owner, start, end) -> List.of(), (owner, start, end, period, minimum) -> List.of(), TUE);
+                description -> List.of(DINNER), (owner, start, end) -> List.of(), (owner, id) -> Optional.empty(), (owner, start, end, period, minimum) -> List.of(), TUE);
 
         second.reply(OWNER, ID, "晚上");
 
@@ -275,7 +286,7 @@ class CalendarAssistantTest {
                 description -> {
                     throw unavailable;
                 },
-                (owner, start, end) -> List.of(),
+                (owner, start, end) -> List.of(), (owner, id) -> Optional.empty(),
                 (owner, start, end, period, minimum) -> List.of(), TUE);
 
         assertSame(unavailable, assertThrows(ModelUnavailableException.class, () -> assistant.reply(OWNER, ID, "晚上")));
@@ -291,7 +302,7 @@ class CalendarAssistantTest {
                 description -> {
                     throw new IllegalStateException("呼叫模型抽行程失敗：連線逾時");
                 },
-                (owner, start, end) -> List.of(),
+                (owner, start, end) -> List.of(), (owner, id) -> Optional.empty(),
                 (owner, start, end, period, minimum) -> List.of(), TUE);
 
         assertEquals("抱歉，剛剛沒整理好，請再說一次。", assistant.reply(OWNER, ID, "晚上").text());
@@ -454,6 +465,90 @@ class CalendarAssistantTest {
                 "我可以幫你查行程、找空檔、新增行程。", "要的話按卡片上的「加入行事曆」。")) {
             assertFalse(CalendarAssistant.revealsInternals(reply, system), reply);
         }
+    }
+
+    @Test
+    @DisplayName("#259 模型呼叫 propose_change、propose_removal：修改和刪除的卡片交回畫面，行事曆不動")
+    void changesAndRemovalsReachTheReply() {
+        CalendarAssistant.Reply reply = assistant(scripted(
+                calls("propose_change", "{\"eventId\":\"" + SAVED.id() + "\",\"description\":\"明天晚上七點喝咖啡\"}"),
+                calls("propose_removal", "{\"eventId\":\"" + SAVED.id() + "\"}"),
+                says("已顯示卡片，請按卡片確認。")))
+                .reply(OWNER, ID, "晚上的吃飯改成喝咖啡，然後刪掉");
+
+        assertEquals(1, reply.changes().size());
+        assertEquals(SAVED, reply.changes().getFirst().before());
+        assertEquals(List.of(SAVED), reply.removals());
+        assertTrue(reply.proposals().isEmpty());
+        assertEquals("已顯示卡片，請按卡片確認。", reply.text());
+        assertEquals(3, prompts.size(), "有卡片就不算說謊，不必提醒");
+    }
+
+    @Test
+    @DisplayName("#259 回報的 bug：沒呼叫工具卻說「已刪除」「已修改」也是說謊 → 提醒，還是一樣就換成固定回覆")
+    void falseRemovalOrChangeClaimIsCaught() {
+        for (String text : List.of("已刪除「吃飯」行程。", "已經幫你修改好了。", "好的，已改成喝咖啡。", "我幫你刪掉了。")) {
+            prompts.clear();
+            CalendarAssistant.Reply reply = assistant(scripted(says(text))).reply(OWNER, ID, "刪除吃飯");
+
+            assertEquals(CalendarAssistant.HONEST_FALLBACK, reply.text(), text);
+            assertEquals(2, prompts.size(), text);
+        }
+    }
+
+    @Test
+    @DisplayName("#259 查完行事曆、沒呼叫 propose_removal 就說「已刪除」：照樣抓到（改、刪一定先查，不能因為查過就放過）")
+    void falseRemovalAfterListingIsCaught() {
+        AssistantMessage lists = calls("list_events", "{\"from\":\"2026-10-07\",\"to\":\"2026-10-08\"}");
+        CalendarAssistant.Reply reply = assistant(scripted(lists, says("已刪除明天的開會。"))).reply(OWNER, ID, "刪除明天的開會");
+
+        assertEquals(CalendarAssistant.HONEST_FALLBACK, reply.text());
+        assertTrue(prompts.get(2).getInstructions().stream().anyMatch(m -> CalendarAssistant.CORRECTION_DONE.equals(m.getText())));
+    }
+
+    @Test
+    @DisplayName("#259 提議了修改卡片卻說「已修改」：使用者還沒確認，提醒過還是一樣就換成「請按卡片確認」")
+    void doneClaimWithCardsIsCaught() {
+        CalendarAssistant.Reply reply = assistant(scripted(
+                calls("propose_change", "{\"eventId\":\"" + SAVED.id() + "\",\"description\":\"明天晚上七點喝咖啡\"}"),
+                says("好的，已修改成喝咖啡。")))
+                .reply(OWNER, ID, "晚上的開會改成喝咖啡");
+
+        assertEquals(CalendarAssistant.CONFIRM_CARDS_FALLBACK, reply.text());
+        assertEquals(1, reply.changes().size(), "卡片還是要交回畫面");
+    }
+
+    @Test
+    @DisplayName("#259 反例：查完行事曆照實說「行事曆上已經沒有」不是宣稱刪除，不提醒")
+    void describingCalendarIsFine() {
+        AssistantMessage lists = calls("list_events", "{\"from\":\"2026-10-07\",\"to\":\"2026-10-08\"}");
+        CalendarAssistant.Reply reply = assistant(scripted(lists, says("行事曆上已經沒有明天的開會了。"))).reply(OWNER, ID, "刪掉了嗎？");
+
+        assertEquals("行事曆上已經沒有明天的開會了。", reply.text());
+        assertEquals(2, prompts.size());
+    }
+
+    @Test
+    @DisplayName("#259 反例：「還沒刪除」「是否要修改」是否定和問句，不是宣稱：不提醒")
+    void removalQuestionsAreNotClaims() {
+        for (String text : List.of("這個行程還沒刪除。", "請問是否已修改過？", "要刪除哪一個？")) {
+            prompts.clear();
+            assistant(scripted(says(text))).reply(OWNER, ID, "嗨");
+
+            assertEquals(1, prompts.size(), text);
+        }
+    }
+
+    @Test
+    @DisplayName("#259 LLM07：新的工具名稱、參數名稱也是內部的名字")
+    void newToolNamesAreInternal() {
+        String system = CalendarAssistant.instruction(LocalDateTime.now(TUE));
+
+        for (String reply : List.of("我會呼叫 propose_change。", "用 propose_removal 刪掉", "eventId 是 123")) {
+            assertTrue(CalendarAssistant.revealsInternals(reply, system), reply);
+        }
+        assertFalse(CalendarAssistant.revealsInternals("我可以幫你查行程、找空檔、新增、修改、刪除行程。", system),
+                "用一般的話說能做什麼不能被誤擋");
     }
 
     @Test

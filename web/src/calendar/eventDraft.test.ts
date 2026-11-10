@@ -1,7 +1,7 @@
 // eventDraft.ts 的單元測試：新增表單的每一條規則。
 // 從 EventForm 抽出來之後，不必掛元件、不必等畫面更新，一種情況一行。元件有沒有接好，交給 Playwright（e2e/）。
 import { describe, expect, it } from 'vitest'
-import { isOvernight, toDraft, type FormFields } from './eventDraft'
+import { daysApart, endDayOffset, isOvernight, toDraft, type FormFields } from './eventDraft'
 
 // 一份合法的表單；每個測試只改它要測的那一欄，一眼看得出差在哪
 const valid: FormFields = {
@@ -53,5 +53,30 @@ describe('isOvernight', () => {
     expect(isOvernight('09:00', '09:00')).toBe(false)
     expect(isOvernight('', '01:00')).toBe(false)
     expect(isOvernight('22:00', '')).toBe(false)
+  })
+})
+
+describe('修改跨天的行程（#259）：記住原本跨幾天', () => {
+  it('三天的出差只改標題：結束還是在兩天後，不會變成當天結束', () => {
+    const trip = { ...valid, title: '台中出差', start: '09:00', end: '18:00', endDays: 2 }
+    expect(toDraft(trip)).toEqual({
+      draft: expect.objectContaining({ start: '2026-10-06T09:00', end: '2026-10-08T18:00' }),
+    })
+  })
+
+  it('跨天的行程，結束時刻跟開始一樣也合法（隔天同一時間）', () => {
+    expect(toDraft({ ...valid, start: '09:00', end: '09:00', endDays: 1 })).toEqual({
+      draft: expect.objectContaining({ end: '2026-10-07T09:00' }),
+    })
+  })
+
+  it('反例：沒有 endDays 的照舊，結束早於開始算隔天、否則當天', () => {
+    expect(endDayOffset({ start: '22:00', end: '01:00' })).toBe(1)
+    expect(endDayOffset({ start: '09:00', end: '10:00' })).toBe(0)
+  })
+
+  it('daysApart 只看日期：跨月也算得對', () => {
+    expect(daysApart('2026-10-30T22:00:00', '2026-11-02T01:00:00')).toBe(3)
+    expect(daysApart('2026-10-06T09:00', '2026-10-06T23:00')).toBe(0)
   })
 })

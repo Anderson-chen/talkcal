@@ -4,13 +4,14 @@
 // 它記得存過哪些行程：存檔之後畫面會重新查一次，新的那筆要查得到，月曆上才會出現。
 // 帳號（#103）也照後端的規則演：
 //   - 沒登入時行事曆的 API 回 401
-//   - 會改東西的請求（POST、DELETE）要帶 X-XSRF-TOKEN header，而且要跟發出去的 XSRF-TOKEN cookie 一樣，不然 403
+//   - 會改東西的請求（POST、PUT、DELETE）要帶 X-XSRF-TOKEN header，而且要跟發出去的 XSRF-TOKEN cookie 一樣，不然 403
 //     —— 這樣才測得出前端真的有帶 token，而不是假後端照單全收
 // 測試可以：
 //   - 預先放幾筆行程（events）、決定一開始有沒有登入（loggedIn）、開了哪些 Google／GitHub 登入（providers）
 //   - 讓下一次存檔失敗（failNextSave）：模擬後端掛了
 //   - 讓登入在下一個請求失效（expireSession）：模擬 session 過期
 //   - 事後檢查前端送了什麼（saved）
+//   - 修改、刪除（#259）：照後端的規則演，改之前的樣子對不上就 409；事後檢查送了什麼（updated、deleted）
 //   - AI 助理（#223）：不打模型，每句話都回一張固定的提議卡片（帶著假後端發的 proposalId）；事後檢查按掉了哪幾張（dismissed）
 import type { Page, Route } from '@playwright/test'
 
@@ -39,6 +40,12 @@ const PROPOSAL = { title: '開會', start: '2026-10-07T15:00:00', end: '2026-10-
 
 const CSRF_TOKEN = 'fake-csrf-token'
 
+// 時間比的是牆上時間本身：前端表單送的是 "2026-10-06T10:00"，讀回來的是 "2026-10-06T10:00:00"，後端（LocalDateTime）當成同一個時間
+const sameTime = (a: string, b: string) => a.padEnd(19, ':00').slice(0, 19) === b.padEnd(19, ':00').slice(0, 19)
+const sameEvent = (a: Omit<FakeEvent, 'id'>, b: Omit<FakeEvent, 'id'>) =>
+  a.title === b.title && sameTime(a.start, b.start) && sameTime(a.end, b.end) && a.category === b.category
+  && (a.location ?? null) === (b.location ?? null) && (a.note ?? null) === (b.note ?? null)
+
 export async function fakeApi(page: Page, options: Options = {}) {
   const state = {
     events: [...(options.events ?? [])],
@@ -56,6 +63,9 @@ export async function fakeApi(page: Page, options: Options = {}) {
     // 發過幾張助理卡片；每次 POST /assistant/dismissals 收到的 proposalIds
     cards: 0,
     dismissed: [] as string[][],
+    // 每次 PUT、DELETE /events/{id} 收到什麼（#259）
+    updated: [] as { id: string; expected: Omit<FakeEvent, 'id'>; event: Omit<FakeEvent, 'id'> }[],
+    deleted: [] as string[],
   }
 
   const json = (route: Route, status: number, body: unknown) => route.fulfill({ status, json: body })
@@ -130,6 +140,25 @@ export async function fakeApi(page: Page, options: Options = {}) {
       state.events.push(...created)
       return json(route, 201, { events: created })
     }
+    // 修改（#259）：照後端的規則，expected 要跟現在那筆的每個欄位都一樣才改，不一樣 409、沒有那筆 404
+    const one = url.pathname.match(/^\/api\/calendar\/events\/([^/]+)$/)
+    if (one && method === 'PUT') {
+      const body = request.postDataJSON() as { expected: Omit<FakeEvent, 'id'>; event: Omit<FakeEvent, 'id'> }
+      state.updated.push({ id: one[1], ...body })
+      const at = state.events.findIndex((e) => e.id === one[1])
+      if (at < 0) return json(route, 404, { error: `找不到行程：${one[1]}` })
+      const { id, ...current } = state.events[at]
+      if (!sameEvent(current, body.expected)) return json(route, 409, { error: '這筆行程剛被改過了，請重新整理後再改' })
+      state.events[at] = { ...body.event, id }
+      return json(route, 200, state.events[at])
+    }
+    if (one && method === 'DELETE') {
+      state.deleted.push(one[1])
+      const at = state.events.findIndex((e) => e.id === one[1])
+      if (at < 0) return json(route, 404, { error: `找不到行程：${one[1]}` })
+      state.events.splice(at, 1)
+      return route.fulfill({ status: 204 })
+    }
     if (url.pathname === '/api/calendar/assistant' && method === 'POST') {
       state.cards++
       return json(route, 200, {
@@ -151,6 +180,9 @@ export async function fakeApi(page: Page, options: Options = {}) {
     get saveKeys() { return state.saveKeys },
     get csrfRejected() { return state.csrfRejected },
     get dismissed() { return state.dismissed },
+    get updated() { return state.updated },
+    get deleted() { return state.deleted },
+    get events() { return state.events },
     set failNextSave(error: string | null) { state.failNextSave = error },
     /** 模擬 session 過期：之後的請求都當成沒登入 */
     expireSession() { state.me = null },

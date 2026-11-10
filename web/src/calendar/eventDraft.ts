@@ -16,6 +16,20 @@ export interface FormFields {
   category: Category
   location: string
   note: string
+  // 結束在開始那天之後的第幾天（#259）。只有修改跨天的行程時才有：表單只有一個日期欄，
+  // 不記住的話，改一個三天的出差只改標題，存起來就變成當天結束。沒有就照 isOvernight 判斷
+  endDays?: number
+}
+
+/** 結束在開始之後的第幾天：表單記著原本的跨幾天就照它，不然結束早於開始算隔天 */
+export function endDayOffset(form: Pick<FormFields, 'start' | 'end' | 'endDays'>): number {
+  return form.endDays ?? (isOvernight(form.start, form.end) ? 1 : 0)
+}
+
+/** 兩個 'YYYY-MM-DDTHH:mm…' 之間差幾個日期（只看日期部分） */
+export function daysApart(start: string, end: string): number {
+  const day = (iso: string) => Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)))
+  return Math.round((day(end) - day(start)) / 86_400_000)
 }
 
 /**
@@ -32,12 +46,13 @@ export function toDraft(form: FormFields): { draft: EventFields } | { error: str
   if (!form.title.trim()) return { error: '請輸入行程標題' }
   if (!form.date) return { error: '請選擇日期' }
   if (!form.start || !form.end) return { error: '請選擇開始與結束時間' }
-  if (form.end === form.start) return { error: '結束時間不能跟開始時間一樣' }
+  const offset = endDayOffset(form)
+  if (offset === 0 && form.end === form.start) return { error: '結束時間不能跟開始時間一樣' }
   return {
     draft: {
       title: form.title.trim(),
       start: `${form.date}T${form.start}`,
-      end: `${isOvernight(form.start, form.end) ? addDays(form.date, 1) : form.date}T${form.end}`,
+      end: `${addDays(form.date, offset)}T${form.end}`,
       category: form.category,
       // 只有空白的選填欄位當成沒填，送 null，不送一串空白
       location: form.location.trim() || null,

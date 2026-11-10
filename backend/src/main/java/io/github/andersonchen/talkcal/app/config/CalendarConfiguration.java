@@ -18,6 +18,8 @@ import io.github.andersonchen.talkcal.calendar.application.domain.service.FindFr
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ListEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ParseEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.RemoveEventService;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.FindEventService;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.UpdateEventService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.RestoreEventsService;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ArchiveEventsUseCase;
@@ -28,6 +30,8 @@ import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlots
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ParseEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.RemoveEventUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.FindEventUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.UpdateEventUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.RestoreEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteArchivedEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.in.TrackProposalsUseCase;
@@ -37,6 +41,8 @@ import io.github.andersonchen.talkcal.calendar.application.port.out.EventArchive
 import io.github.andersonchen.talkcal.calendar.application.port.out.ExtractEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEndedEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventsPort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventPort;
+import io.github.andersonchen.talkcal.calendar.application.port.out.UpdateEventPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.RestoreEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsagePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsOncePort;
@@ -78,7 +84,7 @@ import java.time.ZoneId;
  *
  * 這裡要下的決定：
  * - ExtractEventsPort 用 Spring AI 的 ChatModel（跟 AI 助理共用同一個，自動組裝的那一個）
- * - 行程存 PostgreSQL（一個實作同時當 Save / SaveOnce / Load / DeleteEventPort，和歸檔要的那三個）
+ * - 行程存 PostgreSQL（一個實作同時當 Save / SaveOnce / Load / Update / DeleteEventPort，和歸檔要的那三個）
  * - 「現在」用哪個時區的時鐘
  * - 舊資料歸檔到哪（S3 相容的物件儲存）、AI 助理的對話和行程各留多久（#54；排程每天搬一次，所以要開排程）
  * - 產品用量記到哪（#36）：Micrometer 的 counter；活躍使用者從資料庫數，掛成 gauge
@@ -119,7 +125,7 @@ class CalendarConfiguration {
                 bulkheads.bulkhead(ResilienceConfiguration.CHAT_MODEL), busyRetryAfter, callTimeout);
     }
 
-    // 一個實作三個 port：回傳型別只能寫實作本身，下面的 use case 照樣用各自的 port 介面收它
+    // 一個實作好幾個 port：回傳型別只能寫實作本身，下面的 use case 照樣用各自的 port 介面收它
     @Bean
     JdbcCalendarEventAdapter calendarEventStore(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
         return new JdbcCalendarEventAdapter(jdbcClient, new TransactionTemplate(transactionManager));
@@ -143,7 +149,7 @@ class CalendarConfiguration {
     }
 
     /**
-     * AI 助理：模型 + 自己的對話記憶 + 三個工具（工具背後是上面那些 use case）。
+     * AI 助理：模型 + 自己的對話記憶 + 五個工具（工具背後是上面那些 use case）。
      *
      * 直接拿 ChatModel（跟抽行程背後是同一個），agent loop 由 CalendarAssistant 自己跑。
      * 記憶不用 Spring AI 自動組裝的那個（JdbcChatMemoryRepository 會把工具訊息濾掉），用自己的表，原因寫在 V7。
@@ -154,9 +160,10 @@ class CalendarConfiguration {
     CalendarAssistant calendarAssistant(@Qualifier(GUARDED_CHAT_MODEL) ChatModel chatModel,
                                         JdbcAssistantMemoryRepository assistantMemory,
                                         ParseEventsUseCase parseEvents, ListEventsUseCase listEvents,
-                                        FindFreeSlotsUseCase findFreeSlots, @Value("${calendar.zone}") ZoneId zone) {
+                                        FindEventUseCase findEvent, FindFreeSlotsUseCase findFreeSlots,
+                                        @Value("${calendar.zone}") ZoneId zone) {
         return new CalendarAssistant(chatModel, assistantMemory::of,
-                parseEvents, listEvents, findFreeSlots, Clock.system(zone));
+                parseEvents, listEvents, findEvent, findFreeSlots, Clock.system(zone));
     }
 
     // 時鐘帶 calendar.zone：對話歸檔的 key 依「最後說話的月份」分，月份要用使用者看到的那個時區算
@@ -229,6 +236,16 @@ class CalendarConfiguration {
     @Bean
     RemoveEventUseCase removeEvent(DeleteEventPort deleteEventPort) {
         return new RemoveEventService(deleteEventPort);
+    }
+
+    @Bean
+    FindEventUseCase findEvent(LoadEventPort loadEventPort) {
+        return new FindEventService(loadEventPort);
+    }
+
+    @Bean
+    UpdateEventUseCase updateEvent(UpdateEventPort updateEventPort, LoadEventPort loadEventPort) {
+        return new UpdateEventService(updateEventPort, loadEventPort);
     }
 
     // ── 資料歸檔（#54）─────────────────────────────────────────────────────

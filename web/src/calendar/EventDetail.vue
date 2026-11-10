@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // 行程詳情。桌面版是右側抽屜、手機版是整頁，內容一樣，只有外框和按鈕排法不同（variant）。
 //
+// 「修改」打開同一個表單（EventForm），存檔時送 PUT（#259）。
 // 刪除要按兩次（「刪除」→「確定刪除？」）：設計稿是按一下就刪，但這裡是真的刪資料庫，沒有復原。
 import { computed, ref, watch } from 'vue'
 import { addDays, dayLabel, timeOf, weekdayName } from '../monthGrid'
@@ -46,6 +47,11 @@ const close = () => (calendar.detailId.value = null)
 
 function showDay() {
   if (event.value) calendar.pickDate(event.value.start.slice(0, 10), 'day')
+}
+
+// 打開表單改這一筆（#259）：表單帶著現在的樣子，存的時候拿它核對這之間有沒有被別人改過
+function edit() {
+  if (event.value) calendar.openEdit(event.value.id, event.value)
 }
 
 async function remove() {
@@ -104,6 +110,7 @@ async function remove() {
 
     <div class="actions">
       <button v-if="variant === 'drawer'" type="button" class="secondary" @click="showDay">在日視圖查看</button>
+      <button type="button" class="secondary edit" @click="edit"><Icon name="edit" :size="18" />修改</button>
       <button type="button" class="danger" :class="{ confirming }" :disabled="removing" @click="remove">
         <Icon v-if="variant === 'page'" name="trash" :size="18" />
         {{ removing ? '刪除中…' : confirming ? '確定刪除？' : variant === 'page' ? '刪除行程' : '刪除' }}
@@ -136,5 +143,8 @@ h2 { margin: 0; font-size: 24px; font-weight: 700; line-height: 1.3; }
 .secondary { flex: 1; height: 44px; border: 1px solid var(--field); border-radius: 10px; background: transparent; color: var(--ink); font-size: 14px; font-weight: 600; }
 .danger { height: 44px; padding: 0 16px; border: 1px solid var(--dangerLine); border-radius: 10px; background: transparent; color: var(--danger); font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .page .danger { width: 100%; height: 50px; border-radius: 14px; font-size: 16px; }
+.edit { flex: none; padding: 0 16px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.page .actions { flex-direction: column; }
+.page .edit { width: 100%; height: 50px; border-radius: 14px; font-size: 16px; }
 .danger.confirming { background: var(--danger); color: var(--card); border-color: var(--danger); }
 </style>

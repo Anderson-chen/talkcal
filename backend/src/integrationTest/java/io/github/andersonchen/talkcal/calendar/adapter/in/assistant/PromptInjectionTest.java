@@ -22,6 +22,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Optional;
 import java.util.List;
 import java.util.UUID;
 
@@ -100,7 +101,7 @@ class PromptInjectionTest {
                 .build();
         return new CalendarAssistant(chatModel, owner -> MessageWindowChatMemory.builder().maxMessages(Integer.MAX_VALUE).build(),
                 new ParseEventsService(new SpringAiExtractEventsAdapter(chatModel), TUE),
-                new ListEventsService(calendar), new FindFreeSlotsService(calendar, TUE), TUE);
+                new ListEventsService(calendar), (owner, id) -> Optional.empty(), new FindFreeSlotsService(calendar, TUE), TUE);
     }
 
     @Test

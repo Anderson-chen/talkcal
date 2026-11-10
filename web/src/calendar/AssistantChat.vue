@@ -3,6 +3,7 @@
 //
 // 每個解析出的行程一張卡片，卡片上可以「修改」（帶到新增表單）或「移除」；
 // 訊息底下的「加入行事曆」把還沒處理的那幾筆一次存起來。
+// 修改、刪除卡片（#259）每張有自己的按鈕：「確認修改」「自己調整」（帶到修改表單）「確定刪除」「取消」。
 //
 // 回不了的時候（#43）：沒送出的那句標「沒送出」，助理那邊是一則說明＋「再試一次」。
 // 要等的話按鈕上倒數，送出鈕、建議說法也一起停用，輸入框照樣可以打字。
@@ -62,6 +63,36 @@ const thinking = computed(() =>
               <button type="button" class="secondary" :disabled="assistant.saving.value" @click="assistant.cancel(m)">取消</button>
             </div>
             <span v-else-if="m.proposals.length && m.proposals.every((p) => p.status === 'removed')" class="cancelled">已取消</span>
+            <div v-for="(c, i) in m.changes" :key="`change-${i}`" class="card" data-card="change">
+              <span class="kind">修改行程</span>
+              <span class="before"><span class="visually-hidden">原本：</span>{{ c.change.before.title }}　{{ when(c.change.before) }}</span>
+              <span class="chip" :style="theme.chipStyle(c.change.after.category)">{{ theme.colors.value[c.change.after.category].label }}</span>
+              <span class="title"><span class="visually-hidden">改成：</span>{{ c.change.after.title }}</span>
+              <span class="when">{{ when(c.change.after) }}</span>
+              <span v-if="c.change.after.location" class="where"><Icon name="pin" :size="14" />{{ c.change.after.location }}</span>
+              <div v-if="c.status === 'pending'" class="card-buttons">
+                <button type="button" class="primary" :disabled="assistant.saving.value" @click="assistant.confirmChange(c)">確認修改</button>
+                <button type="button" class="secondary" :disabled="assistant.saving.value" @click="assistant.editChange(c)">自己調整</button>
+                <button type="button" class="secondary" :disabled="assistant.saving.value" @click="assistant.dismiss(c)">取消</button>
+              </div>
+              <span v-else-if="c.status === 'done'" class="done">已修改</span>
+              <span v-else class="cancelled">已取消</span>
+              <span v-if="c.error" role="alert" class="error">{{ c.error }}</span>
+            </div>
+            <div v-for="(r, i) in m.removals" :key="`removal-${i}`" class="card" data-card="removal">
+              <span class="kind danger">刪除行程</span>
+              <span class="chip" :style="theme.chipStyle(r.event.category)">{{ theme.colors.value[r.event.category].label }}</span>
+              <span class="title">{{ r.event.title }}</span>
+              <span class="when">{{ when(r.event) }}</span>
+              <span v-if="r.event.location" class="where"><Icon name="pin" :size="14" />{{ r.event.location }}</span>
+              <div v-if="r.status === 'pending'" class="card-buttons">
+                <button type="button" class="primary danger" :disabled="assistant.saving.value" @click="assistant.confirmRemoval(r)">確定刪除</button>
+                <button type="button" class="secondary" :disabled="assistant.saving.value" @click="assistant.dismiss(r)">取消</button>
+              </div>
+              <span v-else-if="r.status === 'done'" class="done">已刪除</span>
+              <span v-else class="cancelled">已取消</span>
+              <span v-if="r.error" role="alert" class="error">{{ r.error }}</span>
+            </div>
             <span v-if="m.error" role="alert" class="error">{{ m.error }}</span>
             <button v-if="assistant.canRetry(m)" type="button" class="retry" :disabled="assistant.blocked.value" @click="assistant.retry(m)">
               {{ assistant.waitSeconds.value > 0 ? `${assistant.waitSeconds.value} 秒後可以再試` : '再試一次' }}
@@ -113,6 +144,13 @@ const thinking = computed(() =>
 .large .primary, .large .secondary { height: 44px; font-size: 14px; }
 .secondary { height: 40px; padding: 0 12px; border: 1px solid var(--field); border-radius: 9px; background: transparent; color: var(--ink); font-size: 13px; }
 .error { font-size: 13px; color: var(--danger); }
+/* 修改、刪除卡片（#259）：最上面標明是哪一種，原本的樣子劃掉 */
+.kind { font-size: 12px; font-weight: 700; color: var(--accent); }
+.kind.danger { color: var(--danger); }
+.before { font-size: 13px; color: var(--muted); text-decoration: line-through; }
+.card-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.card-buttons .primary { flex: 1; min-width: 96px; }
+.primary.danger { background: var(--danger); color: var(--card); }
 .suggestions { display: flex; gap: 6px; padding: 8px 16px 4px; overflow-x: auto; }
 .suggestions button { flex: none; height: 32px; padding: 0 10px; border: 1px solid var(--field); border-radius: 16px; background: transparent; color: var(--ink); font-size: 12px; white-space: nowrap; }
 .input { display: flex; gap: 8px; align-items: center; padding: 8px 16px 20px; }

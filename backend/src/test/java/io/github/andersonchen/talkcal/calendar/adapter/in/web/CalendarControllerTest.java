@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -23,9 +24,11 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Schedule
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddedEvents;
 import io.github.andersonchen.talkcal.calendar.application.port.in.IdempotencyKeyReusedException;
+import io.github.andersonchen.talkcal.calendar.application.port.in.EventChangedException;
 import io.github.andersonchen.talkcal.calendar.application.port.in.EventNotFoundException;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.RemoveEventUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.UpdateEventUseCase;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -55,7 +58,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * CalendarController 走一遍真的 Spring MVC：這個類別幾乎每一行都在跟 Spring 講話
  * （路由、JSON 綁定、狀態碼、例外翻譯），不起 MockMvc 就等於沒測。
  *
- * 三個 use case 由一個手寫的假物件同時扮演。假物件照著核心真正的規則演
+ * 四個 use case 由一個手寫的假物件同時扮演。假物件照著核心真正的規則演
  * （期間交給 DateRange 檢查、不存在的 id 丟 EventNotFoundException），測試才不會描述一個不存在的情境。
  */
 @WebMvcTest(CalendarController.class)
@@ -225,6 +228,66 @@ class CalendarControllerTest {
                         .andExpect(jsonPath("$.error").value(org.hamcrest.Matchers.containsString(category)));
             }
             assertTrue(calendar.added.isEmpty());
+        }
+    }
+
+    @Nested
+    @DisplayName("PUT /api/calendar/events/{id}（#259）")
+    class Update {
+
+        // 改之前看到的樣子（DINNER）＋改好的樣子
+        private static final String BODY = """
+                {"expected": {"title": "跟小明吃飯", "start": "2026-10-06T15:00:00", "end": "2026-10-06T16:00:00",
+                              "category": "SOCIAL", "location": "拉麵店"},
+                 "event":    {"title": "喝咖啡", "start": "2026-10-06T16:00:00", "end": "2026-10-06T17:00:00",
+                              "category": "PERSONAL", "location": "拉麵店"}}
+                """;
+
+        @Test
+        @DisplayName("改好了：200，回改好的那筆；use case 收到的 expected 就是 GET 拿到的那一筆")
+        void updates() throws Exception {
+            mockMvc.perform(put("/api/calendar/events/" + DINNER_ID).contentType(MediaType.APPLICATION_JSON).content(BODY))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(DINNER_ID.toString()))
+                    .andExpect(jsonPath("$.title").value("喝咖啡"))
+                    .andExpect(jsonPath("$.start").value("2026-10-06T16:00:00"))
+                    .andExpect(jsonPath("$.category").value("PERSONAL"));
+
+            assertEquals(List.of(DINNER), calendar.expected);
+            assertEquals(List.of(SIGNED_IN), calendar.owners);
+        }
+
+        @Test
+        @DisplayName("反例：expected 跟現在那筆不一樣（看到之後被改過了）：409，沒有改")
+        void changedMeanwhile() throws Exception {
+            String stale = BODY.replace("\"跟小明吃飯\"", "\"跟小明吃午餐\"");
+
+            mockMvc.perform(put("/api/calendar/events/" + DINNER_ID).contentType(MediaType.APPLICATION_JSON).content(stale))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.error").exists());
+        }
+
+        @Test
+        @DisplayName("沒有這個行程（或是別人的）：404")
+        void notFound() throws Exception {
+            mockMvc.perform(put("/api/calendar/events/00000000-0000-0000-0000-000000000000")
+                            .contentType(MediaType.APPLICATION_JSON).content(BODY))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("反例：id 不是 UUID、改壞的內容（結束早於開始）、沒帶 expected：400，不驚動 use case")
+        void rejectsBadInput() throws Exception {
+            mockMvc.perform(put("/api/calendar/events/not-a-uuid").contentType(MediaType.APPLICATION_JSON).content(BODY))
+                    .andExpect(status().isBadRequest());
+            String backwards = BODY.replace("\"end\": \"2026-10-06T17:00:00\"", "\"end\": \"2026-10-06T15:00:00\"");
+            mockMvc.perform(put("/api/calendar/events/" + DINNER_ID).contentType(MediaType.APPLICATION_JSON).content(backwards))
+                    .andExpect(status().isBadRequest());
+            mockMvc.perform(put("/api/calendar/events/" + DINNER_ID).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"event\": {\"title\": \"喝咖啡\", \"start\": \"2026-10-06T16:00:00\", \"end\": \"2026-10-06T17:00:00\"}}"))
+                    .andExpect(status().isBadRequest());
+
+            assertTrue(calendar.expected.isEmpty());
         }
     }
 
@@ -440,7 +503,7 @@ class CalendarControllerTest {
     /**
      * 一個假物件同時扮演三個 use case：記下收到什麼，每題可以換掉行為。
      */
-    static final class StubCalendar implements AddEventsUseCase, ListEventsUseCase, RemoveEventUseCase {
+    static final class StubCalendar implements AddEventsUseCase, ListEventsUseCase, UpdateEventUseCase, RemoveEventUseCase {
 
         // 預設行為照核心的規則演：期間交給 DateRange 檢查
         private static final Function<DateRange, List<ScheduledEvent>> DEFAULT_LIST =
@@ -452,6 +515,7 @@ class CalendarControllerTest {
         final List<List<ProposalId>> adopting = new ArrayList<>();
         final List<DateRange> ranges = new ArrayList<>();
         final List<EventId> removed = new ArrayList<>();
+        final List<CalendarEvent> expected = new ArrayList<>();
         final List<IdempotencyKey> keys = new ArrayList<>();
         // 照真正的 use case 演：同一個鍵第二次來，內容一樣就是重送、不一樣就丟例外
         private final Map<IdempotencyKey, List<CalendarEvent>> seen = new HashMap<>();
@@ -487,6 +551,20 @@ class CalendarControllerTest {
             return list.apply(range);
         }
 
+        // 只有 DINNER_ID 存在，內容是 DINNER：其他 id 丟「找不到」，expected 不是 DINNER 丟「被改過了」，照真正的 use case 演
+        @Override
+        public ScheduledEvent updateEvent(OwnerId owner, EventId id, CalendarEvent expected, CalendarEvent replacement) {
+            owners.add(owner);
+            if (!DINNER_ID.equals(id)) {
+                throw new EventNotFoundException(id);
+            }
+            if (!DINNER.equals(expected)) {
+                throw new EventChangedException(id);
+            }
+            this.expected.add(expected);
+            return new ScheduledEvent(id, replacement);
+        }
+
         // 只有 DINNER_ID 存在；其他 id 照真正的 use case 那樣丟「找不到」
         @Override
         public void removeEvent(OwnerId owner, EventId id) {
@@ -504,6 +582,7 @@ class CalendarControllerTest {
             adopting.clear();
             ranges.clear();
             removed.clear();
+            expected.clear();
             keys.clear();
             seen.clear();
         }

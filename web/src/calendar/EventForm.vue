@@ -1,12 +1,13 @@
 <script setup lang="ts">
-// 手動新增行程。桌面版是對話框、手機版是整頁（variant）。從 AI 卡片按「修改」過來時，欄位帶著草稿。
+// 手動新增行程，或修改已經存好的那一筆（#259，calendar.form 帶著 editing）。桌面版是對話框、手機版是整頁（variant）。
+// 從 AI 卡片按「修改」過來時，欄位帶著草稿。
 //
 // 這裡只管畫面和接線：欄位怎麼驗證、怎麼變成送出的資料，在 eventDraft.ts（純函式，有單元測試）。
 // 跟設計稿不同的地方：結束時間早於開始時間時，當成「結束在隔天」並標示出來（理由見 isOvernight）。
 import { computed, onMounted, reactive, ref } from 'vue'
 import { CATEGORIES } from '../calendar'
 import { timeOf } from '../monthGrid'
-import { isOvernight, toDraft, type FormFields } from './eventDraft'
+import { daysApart, endDayOffset, isOvernight, toDraft, type FormFields } from './eventDraft'
 import { oneAtATime, retryKey } from './submitOnce'
 import Icon from './Icon.vue'
 import { message, useCalendarState } from './useCalendar'
@@ -26,16 +27,30 @@ const form = reactive<FormFields>({
   category: initial.category,
   location: initial.location ?? '',
   note: initial.note ?? '',
+  endDays: keptEndDays(),
 })
+
+// 修改跨天的行程（#259）：記住原本跨幾天，只有一個日期欄也不會把結束日改掉。
+// 一般的跨夜（22:00–01:00）不必記，照「結束早於開始算隔天」就對；記了反而改成白天時段時還停在隔天
+function keptEndDays(): number | undefined {
+  if (!request.editing) return undefined
+  const days = daysApart(initial.start, initial.end)
+  const plainOvernight = days === 1 && isOvernight(timeOf(initial.start), timeOf(initial.end))
+  return days > 0 && !plainOvernight ? days : undefined
+}
 const error = ref<string | null>(null)
 const saving = ref(false)
 // 這個表單的冪等鍵（#51）：存失敗後再按「儲存」，內容沒改就帶同一把，上次其實存好了也不會多一筆
 const saveKey = retryKey()
 const titleInput = ref<HTMLInputElement | null>(null)
+const heading = request.editing ? '修改行程' : '新增行程'
 
 onMounted(() => titleInput.value?.focus())
 
-const overnight = computed(() => isOvernight(form.start, form.end))
+const endHint = computed(() => {
+  const offset = endDayOffset(form)
+  return offset === 0 ? '' : offset === 1 ? '（隔天）' : `（${offset} 天後）`
+})
 
 function close() {
   calendar.form.value = null
@@ -48,11 +63,17 @@ const save = oneAtATime(saving, async () => {
 
   error.value = null
   try {
-    // 表單只產生行程內容；從 AI 卡片「修改」來的，初始值裡有卡片的 id，再把它接回去（#223）。手動新增不帶這個欄位
-    const proposalId = initial.proposalId
-    const drafts = [proposalId ? { ...result.draft, proposalId } : result.draft]
-    const [saved] = await calendar.add(drafts, saveKey.for(drafts))
-    saveKey.done()
+    let saved
+    if (request.editing) {
+      // 改已經存好的那一筆（#259）：帶著打開表單時看到的樣子，這之間被別人改過的話後端回 409，不會蓋掉
+      saved = await calendar.update(request.editing.id, request.editing.expected, result.draft)
+    } else {
+      // 表單只產生行程內容；從 AI 卡片「修改」來的，初始值裡有卡片的 id，再把它接回去（#223）。手動新增不帶這個欄位
+      const proposalId = initial.proposalId
+      const drafts = [proposalId ? { ...result.draft, proposalId } : result.draft]
+      ;[saved] = await calendar.add(drafts, saveKey.for(drafts))
+      saveKey.done()
+    }
     request.onSaved?.(saved)
     close()
     // 存好直接打開它的詳情（照設計稿），使用者看得到存進去的樣子
@@ -71,11 +92,11 @@ function fail(text: string) {
   <div class="form" :class="variant" @keydown.esc="close">
     <header v-if="props.variant === 'page'" class="page-head">
       <button type="button" class="text muted" @click="close">取消</button>
-      <h1 id="event-form-title">新增行程</h1>
+      <h1 id="event-form-title">{{ heading }}</h1>
       <button type="button" class="text accent" :disabled="saving" @click="save">{{ saving ? '儲存中' : '儲存' }}</button>
     </header>
     <header v-else class="dialog-head">
-      <h2 id="event-form-title">新增行程</h2>
+      <h2 id="event-form-title">{{ heading }}</h2>
       <button type="button" class="icon" aria-label="關閉" @click="close"><Icon name="close" /></button>
     </header>
 
@@ -94,7 +115,7 @@ function fail(text: string) {
           <input id="ev-start" v-model="form.start" type="time" />
         </div>
         <div class="field">
-          <label for="ev-end">結束<span v-if="overnight" class="hint">（隔天）</span></label>
+          <label for="ev-end">結束<span v-if="endHint" class="hint">{{ endHint }}</span></label>
           <input id="ev-end" v-model="form.end" type="time" />
         </div>
       </div>

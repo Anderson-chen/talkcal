@@ -1,20 +1,25 @@
-// 行事曆的狀態與動作：選了哪天、看哪種視圖、這一頁有哪些行程、篩掉哪些分類、新增、刪除。
+// 行事曆的狀態與動作：選了哪天、看哪種視圖、這一頁有哪些行程、篩掉哪些分類、新增、修改、刪除。
 //
 // 桌面版和手機版共用這一份：兩種版面只是把同樣的狀態畫成不同樣子。
 // 由 CalendarView 建一份、provide 給底下所有元件，元件之間不必一層一層傳 props。
 // 螢幕寬度跨過分界、版面整個換掉時，狀態也還在（選的日期、看的月份不會跳回今天）。
 
 import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
-import { addEvents, listEvents, NotFoundError, removeEvent, type Category, type EventFields, type SavedEvent } from '../calendar'
+import { addEvents, listEvents, NotFoundError, removeEvent, updateEvent, type Category, type EventFields, type SavedEvent } from '../calendar'
 import { message } from '../http'
 import { addDays, daysCovered, gridRange, monthGrid, toIsoDate } from '../monthGrid'
 
 export type View = 'month' | 'week' | 'day'
 
-/** 新增表單的初始值：手動新增是空白的，從 AI 卡片「修改」過來的帶著草稿。 */
+/**
+ * 表單的初始值：手動新增是空白的，從 AI 卡片「修改」過來的帶著草稿。
+ * editing（#259）：改已經存好的那一筆，存檔時送 PUT 而不是新增。id 是哪一筆，expected 是改之前看到的樣子，
+ * 存的時候一起送出去，那筆在這之後被別人改過就會失敗（409），不會蓋掉別人的改動。
+ */
 export interface FormRequest {
   initial: EventFields
-  // 存好之後要通知誰（AI 卡片要把那一筆標成「已加入」）
+  editing?: { id: string; expected: EventFields }
+  // 存好之後要通知誰（AI 卡片要把那一筆標成「已加入」「已修改」）
   onSaved?: (saved: SavedEvent) => void
 }
 
@@ -115,18 +120,30 @@ export function useCalendar() {
     hidden.value = { ...hidden.value, [category]: !hidden.value[category] }
   }
 
-  // ── 新增、刪除 ─────────────────────────────────────────
+  // ── 新增、修改、刪除 ─────────────────────────────────────────
   /**
    * 存起來、跳到第一筆那天、重讀這一頁。存進去的分類如果被篩掉了，打開它 —— 不然使用者會以為沒存到。
    * idempotencyKey 由呼叫端（表單、助理的卡片）管：它們才知道「再按一次」是不是同一次新增（#51）。
    */
   async function add(drafts: EventFields[], idempotencyKey?: string): Promise<SavedEvent[]> {
     const saved = await addEvents(drafts, idempotencyKey)
+    showSaved(saved)
+    return saved
+  }
+
+  // 存好之後（新增、修改共用）：跳到第一筆那天、打開被篩掉的分類、重讀這一頁
+  function showSaved(saved: SavedEvent[]) {
     const shownAgain = { ...hidden.value }
     for (const e of saved) delete shownAgain[e.category]
     hidden.value = shownAgain
     if (saved.length) pickDate(saved[0].start.slice(0, 10))
     reload()
+  }
+
+  /** 改成 event 的樣子（#259）。存好之後跟新增一樣（showSaved） */
+  async function update(id: string, expected: EventFields, event: EventFields): Promise<SavedEvent> {
+    const saved = await updateEvent(id, expected, event)
+    showSaved([saved])
     return saved
   }
 
@@ -146,9 +163,18 @@ export function useCalendar() {
     form.value = { initial: { ...blankDraft(sel.value), ...initial }, onSaved }
   }
 
+  /**
+   * 打開表單改已經存好的那一筆（#259）。initial 不給就是它現在的樣子；助理的修改卡片會給「要改成的樣子」。
+   * expected 是改之前看到的樣子，存的時候拿它核對那筆有沒有在這之間被改過。
+   */
+  function openEdit(id: string, expected: EventFields, initial: EventFields = expected, onSaved?: (saved: SavedEvent) => void) {
+    detailId.value = null
+    form.value = { initial: { ...initial }, editing: { id, expected }, onSaved }
+  }
+
   return {
     today, sel, view, shown, days, events, loadError, hidden, detailId, detail, form, monthCounts,
-    eventsOn, pickDate, shiftMonth, step, toggleCategory, add, remove, openForm, reload,
+    eventsOn, pickDate, shiftMonth, step, toggleCategory, add, update, remove, openForm, openEdit, reload,
   }
 }
 
