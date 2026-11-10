@@ -4,6 +4,8 @@
 
 個人行事曆功能，可透過對話方式來建立行程。
 
+技術：Java 25 · Spring Boot 4.1 · Spring AI · Vue 3 · PostgreSQL 18 · llama.cpp／Bedrock · Grafana（Alloy、Mimir、Loki、Tempo） · k6 · Docker Compose · Terraform（AWS）
+
 ## 架構
 
 - 本機、雲端的總覽圖和本機細節：[docs/architecture.md](docs/architecture.md#總覽)
