@@ -1,10 +1,9 @@
 # 自動化腳本地圖
 
-repo 裡每一支腳本：什麼時候跑、誰叫它、做什麼。照一個改動從寫好到上線、再到出事的順序排。
-每支腳本的參數和設計理由寫在它自己的開頭註解，這裡只負責「找得到」。
+每支腳本什麼時候跑、誰叫它。順序照一個改動從 push 到上線、再到出事。
+參數和設計理由看腳本開頭的註解。
 
-手動跑的幾乎都收進根目錄的 [justfile](../justfile)（`just` 列出全部），表格裡的「just」欄就是對應的指令；
-空白的是只由別的腳本、排程或 GitHub 叫，不給人直接用。
+「just」那欄是 [justfile](../justfile) 裡對應的指令；空白的不是給人直接跑的。
 
 ```mermaid
 flowchart LR
@@ -18,13 +17,13 @@ flowchart LR
 
 ## 1. push 之前（本機）
 
-由 [.githooks/pre-push](../.githooks/pre-push) 在每次 `git push` 前自動跑（`git config core.hooksPath .githooks` 啟用一次）。
+[.githooks/pre-push](../.githooks/pre-push) 在每次 `git push` 前跑。每個 clone 要先開一次：`git config core.hooksPath .githooks`。
 
 | 腳本 | 做什麼 | 誰叫 | just |
 |---|---|---|---|
 | [ci/secrets.sh](../ci/secrets.sh) | gitleaks 掃要推出去的 commit 有沒有 key | pre-push（只掃還沒推的）、CI（整個歷史） | `just secrets` |
 | [ci/run.sh](../ci/run.sh) | 在乾淨的容器裡跑 `ci/checks.sh`；改到 prompt、模型相關檔案時加跑 AI eval | pre-push、CI 的 `checks`、手動 | `just ci` |
-| [ci/checks.sh](../ci/checks.sh) | CI 要檢查什麼的唯一定義：ShellCheck、後端測試和 Error Prone、前端 lint、測試、型別檢查、打包、E2E | `ci/run.sh`（在容器裡） | |
+| [ci/checks.sh](../ci/checks.sh) | CI 的檢查項目都寫在這：ShellCheck、後端測試、前端 lint 和測試、打包、E2E | `ci/run.sh`（在容器裡） | |
 | [ci/licenses.sh](../ci/licenses.sh) | 前端會打包出去的套件不能是 GPL、AGPL | `ci/checks.sh` | |
 
 ## 2. PR、master（GitHub Actions）
@@ -32,7 +31,7 @@ flowchart LR
 | workflow | 什麼時候 | 跑哪些腳本 |
 |---|---|---|
 | [ci.yml](../.github/workflows/ci.yml) | 每個 PR、push 到 master | `checks`：`ci/run.sh`；`secrets`：`ci/secrets.sh HEAD`；`migrations`：`ci/migrations.sh`；`rules`：`ci/rules.sh`；`sast`：`ci/sast.sh`；`vulns`：`ci/vulns.sh` + `ci/compose-images.sh` |
-| ci.yml（排程） | 每天台灣 09:00 | 只跑 `vulns`：程式沒變，新的 CVE 也會冒出來 |
+| ci.yml（排程） | 每天台灣 09:00 | 只跑 `vulns`，抓新公布的 CVE |
 | [alerting.yml](../.github/workflows/alerting.yml) | PR 改到告警規則、Mimir、Alloy、`ops/compose.yaml`；或手動 | `ci/alerting.sh` |
 | [pr-issue.yml](../.github/workflows/pr-issue.yml) | PR 開啟、編輯、更新 | 沒有腳本：檢查描述有沒有 `Closes #N` |
 | [pages.yml](../.github/workflows/pages.yml) | push 到 master 且改到 `docs/architecture/` | 沒有腳本：把互動架構圖發到 GitHub Pages |
@@ -45,11 +44,11 @@ flowchart LR
 | [ci/vulns.sh](../ci/vulns.sh) | Trivy 掃映像檔漏洞和 Dockerfile、compose、Terraform 的危險設定 | `just vulns <映像檔>` |
 | [ci/compose-images.sh](../ci/compose-images.sh) | 從 compose 列出 EC2 上會跑的第三方映像檔，交給 `vulns.sh` | |
 | [ci/alerting.sh](../ci/alerting.sh)（+ [ci/alerting/fake-app.py](../ci/alerting/fake-app.py)） | 告警端到端：真的造出問題，確認信寄得出來，約 15 分鐘 | `just alerting` |
-| [ci/format.sh](../ci/format.sh) | Spotless 檢查改過的 Java 檔格式。**目前沒接上**：`backend/build.gradle` 沒有 Spotless，CI、pre-push 也沒呼叫 | `just format` |
+| [ci/format.sh](../ci/format.sh) | 檢查改過的 Java 檔格式。目前跑不起來，見 [#251](https://github.com/Anderson-chen/talkcal/issues/251) | `just format` |
 
 ## 3. 部署、發版、退版
 
-本機是 pull：機器自己去看 master 有沒有新的綠燈版本（理由見 [cd/README.md](../cd/README.md)）。EC2 目前手動部署。
+本機每 5 分鐘自己去看 master 有沒有新的綠燈版本（為什麼見 [cd/README.md](../cd/README.md)）。EC2 還是手動部署。
 
 | 腳本 | 做什麼 | 誰叫 | just |
 |---|---|---|---|
@@ -85,6 +84,6 @@ flowchart LR
 
 ## 不在這張表上的
 
-- k6 壓測（`perf/run-to-grafana.sh`、`just perf`）：只會手動跑，用法見 [perf/README.md](../perf/README.md)。
-- Gradle 的 task（`./gradlew deploy`、`test`、`integrationTest`…）：見 README 的「怎麼跑」「測試」。
-- 演練時一次性的腳本（例如 `docs/drills/` 底下截圖用的 `shoot.mjs`）：只為了重現那次演練，跟著演練紀錄放。
+- k6 壓測：看 [perf/README.md](../perf/README.md)。
+- Gradle 的 task：看根目錄 README 的「怎麼跑」「測試」。
+- `docs/drills/` 底下演練用的一次性腳本。
