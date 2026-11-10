@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| severity | warning —— 上班時間處理；同時 SLO 快燒或 5xx 也響的話，照那條的 critical 處理 |
+| severity | warning，上班時間處理；同時 SLO 快燒或 5xx 也響的話，照那條的 critical 處理 |
 | 規則 | [`respond.yaml`](../../ops/grafana/provisioning/alerting/respond.yaml) 第 2 條，總表見 [alerts.md](../alerts.md) |
 | 條件 | 近 5 分鐘 `hikaricp_connections_timeout_total` 增加了（> 0.5），一成立就寄 |
 
@@ -21,7 +21,7 @@ app 的連線池（HikariCP，預設 10 條）全部被借走，新的請求排�
 
 ## 怎麼確認
 
-1. **talkcal-app dashboard 的「資料庫連線池」那一排**（#32）：
+1. talkcal-app dashboard 的「資料庫連線池」那一排（#32）：
    - active 貼著 max（紅虛線）、pending 衝高 → 池子被占滿
    - acquire（借連線花多久）衝到秒級
 2. 同一排的 **PostgreSQL 連線狀態**（`pg_stat_activity`）：

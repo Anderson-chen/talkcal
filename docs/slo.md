@@ -17,10 +17,10 @@ dashboard 看得到數字，但數字要跟一條線比才知道該不該處理�
 
 | SLO | 範圍 | 好的請求 | 目標 | error budget（28 天） |
 |-----|------|----------|------|------------------------|
-| `calendar-availability` | 一般 API：`/api/calendar/events…`、`GET /api/calendar/assistant/{id}`、`POST /api/calendar/assistant/dismissals` | 不是 5xx | **99.5%** | 0.5% 的請求可以失敗 |
-| `calendar-latency` | 同上 | 300 ms 內回應 | **99%** | 1% 的請求可以超過 300 ms |
-| `assistant-availability` | 跟助理說話：`POST /api/calendar/assistant` | 不是 5xx | **99%** | 1% |
-| `assistant-latency` | 同上 | 8 秒內回應 | **95%** | 5% 的請求可以超過 8 秒 |
+| `calendar-availability` | 一般 API：`/api/calendar/events…`、`GET /api/calendar/assistant/{id}`、`POST /api/calendar/assistant/dismissals` | 不是 5xx | 99.5% | 0.5% 的請求可以失敗 |
+| `calendar-latency` | 同上 | 300 ms 內回應 | 99% | 1% 的請求可以超過 300 ms |
+| `assistant-availability` | 跟助理說話：`POST /api/calendar/assistant` | 不是 5xx | 99% | 1% |
+| `assistant-latency` | 同上 | 8 秒內回應 | 95% | 5% 的請求可以超過 8 秒 |
 
 ### 為什麼一般 API 和助理分開
 
@@ -44,44 +44,44 @@ dashboard 看得到數字，但數字要跟一條線比才知道該不該處理�
 | 1 | 783 ms | 825 ms | 1.30 |
 | 2 | 1317 ms | 1683 ms | 1.47 |
 | 4 | 3570 ms | 3669 ms | 1.20 |
-| 8 | 6638 ms | **8903 ms** | 1.23 |
+| 8 | 6638 ms | 8903 ms | 1.23 |
 
 吞吐量在 2 個人時就到頂（約 1.3～1.5 個/秒），之後再加人只是排隊：這台的臨界值大約是**同時 2 個**。
 
 由此推門檻：
 
-- **一般 API 300 ms**：5 倍量時最差的 p99 是 152 ms，300 ms 約留兩倍空間。正常時碰不到，碰到了就是真的有事（資料庫慢、連線池等不到）。
+- 一般 API 300 ms：5 倍量時最差的 p99 是 152 ms，300 ms 約留兩倍空間。正常時碰不到，碰到了就是真的有事（資料庫慢、連線池等不到）。
   比門檻定在 p99 剛好的位置好：那樣平常的抖動就會一直扣 budget。
-- **一般 API 99.5% 可用**：實測 0 個 5xx。但只有一台 app、一個資料庫、沒有備援，部署時也會斷一小段（[postmortem](postmortems/2026-10-12-deploy-cuts-in-flight-requests.md)），
+- 一般 API 99.5% 可用：實測 0 個 5xx。但只有一台 app、一個資料庫、沒有備援，部署時也會斷一小段（[postmortem](postmortems/2026-10-12-deploy-cuts-in-flight-requests.md)），
   99.9% 意味著 28 天只能壞 0.1%，一次資料庫重啟就用完；99.5% 是單機架構老實做得到的數字。
-- **助理 8 秒、95%**：低於臨界值時 p95 3.76s，8 秒約是兩倍。同時 8 個人（臨界值的 4 倍）時 p95 8.9s 就超過了——
+- 助理 8 秒、95%：低於臨界值時 p95 3.76s，8 秒約是兩倍。同時 8 個人（臨界值的 4 倍）時 p95 8.9s 就超過了：
   所以這條線剛好落在「正常」和「塞車」中間：平常不會燒，塞車一陣子就燒得到。
   只要 95% 而不是 99%：模型生成長度本來就會變（thinking 有時特別長），p99 會比 p95 抖得多，99% 會常常為了正常的長尾扣 budget。
-- **助理 99% 可用**：比一般 API 鬆，因為多了一顆模型，而且 7 天的資料裡壓過容量時有 502（KV cache 滿）。
+- 助理 99% 可用：比一般 API 鬆，因為多了一顆模型，而且 7 天的資料裡壓過容量時有 502（KV cache 滿）。
   能讓使用者重問一次的失敗，比行程存不進去輕微。
 
 ### 量了什麼、沒量什麼
 
-- **從 app 量，不是從使用者量。** app 前面還有 nginx（和雲端的 Caddy），nginx 自己回的 502（app 掛了）、429（限流）不會出現在 app 的指標裡。
-  app 整個掛掉時這幾個 SLO 反而是「沒資料」而不是「壞」——那種情況要靠 `up == 0` 告警（#121）。
+- 從 app 量，不是從使用者量。app 前面還有 nginx（和雲端的 Caddy），nginx 自己回的 502（app 掛了）、429（限流）不會出現在 app 的指標裡。
+  app 整個掛掉時這幾個 SLO 反而是「沒資料」而不是「壞」：那種情況要靠 `up == 0` 告警（#121）。
   之後要更貼近使用者，可以改從 nginx 的 access log（Loki）或外部探測算。
-- **4xx 不算壞。** 格式錯、沒登入、找不到是呼叫端的問題；但 401 突然暴增也可能是登入壞了，那是產品指標（#36）要看的。
-- **延遲算全部請求，包括失敗的。** 失敗得很快的請求會被算成「快」，但它已經在可用性那邊扣過分了。
-- **機器平常是關著的**（[AWS 那台](../infra/envs/1-ec2/README.md) 用完就關）。沒請求就沒資料，關機那段時間不算好也不算壞，
+- 4xx 不算壞。格式錯、沒登入、找不到是呼叫端的問題；但 401 突然暴增也可能是登入壞了，那是產品指標（#36）要看的。
+- 延遲算全部請求，包括失敗的。失敗得很快的請求會被算成「快」，但它已經在可用性那邊扣過分了。
+- 機器平常是關著的（[AWS 那台](../infra/envs/1-ec2/README.md) 用完就關）。沒請求就沒資料，關機那段時間不算好也不算壞，
   所以「28 天」實際上是「28 天裡有開機的時候」。
 
 ## error budget 和 burn rate
 
-- **error budget** = 1 − 目標。99.5% 的 budget 就是「每 200 個請求可以壞 1 個」。用完了代表這 28 天不達標。
+- error budget = 1 − 目標。99.5% 的 budget 就是「每 200 個請求可以壞 1 個」。用完了代表這 28 天不達標。
   儀表板上的「還剩幾成」= 1 − 28 天的壞事件比例 / budget。
-- **burn rate** = 現在的壞事件比例 / budget。1 = 照這速度剛好 28 天用完；10 = 2.8 天用完。
+- burn rate = 現在的壞事件比例 / budget。1 = 照這速度剛好 28 天用完；10 = 2.8 天用完。
   有了 burn rate，四個目標不同的 SLO 可以用同一組門檻比。
 
 28 天的資料還沒累積滿的時候（例如 Mimir 剛清空），28 天視窗用的是現有的資料，數字會比較跳。
 
 ## burn-rate 告警
 
-做法是 Google SRE Workbook 第 5 章〈Alerting on SLOs〉的 **multi-window, multi-burn-rate**——
+做法是 Google SRE Workbook 第 5 章〈Alerting on SLOs〉的 **multi-window, multi-burn-rate**：
 Grafana 自己的 SLO 功能、Sloth、Pyrra 也都是這套。每個條件都要**長、短兩個視窗**同時超過門檻：
 長的證明「燒得夠久、夠多，不是一下下的抖動」；短的（長的 1/12）證明「現在還在燒」，事情一結束短視窗馬上掉下來、告警就解除，
 不會等 1 小時的平均慢慢降。
@@ -129,7 +129,7 @@ burn rate 是比例。一個小時只有 10 個請求、其中 1 個 502，比�
 | 00:51 | 接回網路 | 5m 的 burn rate 回到 0，1h 還有 23.7，`1h/5m` 那組在 01:00 解除：**事情結束，短視窗讓告警跟著停**，不必等 1 小時的平均降下來 |
 | 01:01–01:08 | **資料庫斷續卡住**：每 5 秒 `docker pause` postgres 2 秒 | 約三成行程請求超過 300 ms（5m burn 28.8、1h 4.3）：只有慢燒 `calendar-latency` 進 firing，**沒到快燒門檻**；`calendar-availability` 維持 0（慢但沒失敗） |
 | 01:08–01:16 | **資料庫停掉**：`docker stop` postgres | 行程 API 全部 502（5m burn 200 = 100% 失敗），01:15 快燒 `calendar-availability` 進 firing；助理也要讀資料庫，`assistant-availability` 跟著燒 |
-| 01:16–01:50 | 重新啟動 postgres，只剩平常流量 | 01:50 快燒全部解除：5m、30m 的 burn rate 都回到 0，但 1h（`calendar-availability` 8.3）、6h（6.5）還很高——**故障結束後告警不會因為長視窗還沒降下來就一直響** |
+| 01:16–01:50 | 重新啟動 postgres，只剩平常流量 | 01:50 快燒全部解除：5m、30m 的 burn rate 都回到 0，但 1h（`calendar-availability` 8.3）、6h（6.5）還很高，**故障結束後告警不會因為長視窗還沒降下來就一直響** |
 
 ![平常流量：budget 100%、burn rate 0](images/2026-10-19-slo-dashboard-normal.jpg)
 
@@ -137,7 +137,7 @@ burn rate 是比例。一個小時只有 10 個請求、其中 1 個 502，比�
 
 ![資料庫停掉時快燒告警的實例](images/2026-10-19-slo-fast-burn-firing-db-down.jpg)
 
-讀這組結果要注意：驗證用的 Mimir 只有不到 1 小時的資料，所以 6h、1d、3d、28d 視窗看到的其實都是這 1 小時——
+讀這組結果要注意：驗證用的 Mimir 只有不到 1 小時的資料，所以 6h、1d、3d、28d 視窗看到的其實都是這 1 小時：
 
 - 快燒先從 `6h/30m` 那組響（門檻 5.6 比 13.44 低），真實環境 6 小時視窗裡有更多正常流量，會是 `1h/5m` 先響。
 - 慢燒（`1d/2h`、`3d/6h`）跟著一起響、budget 掉到 −1338%：一天裡只有這一小時的資料，等於把這一小時當成一整天。

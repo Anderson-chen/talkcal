@@ -15,8 +15,8 @@
 瀏覽器 → web（nginx.conf＋前端）→ app（#44 的熔斷＋bulkhead，bulkhead 縮成 1）→ llm-proxy（假模型）
 ```
 
-- **故障都打在容器上**：`docker stop llm-proxy` = 模型斷線、`docker pause llm-proxy` = 模型卡住、`docker stop app` = app 停掉；網路斷是 Playwright 的 `setOffline`；問太快是對 nginx 灌 20 個請求
-- **模型是假的**（[`fake-model.conf`](fake-model.conf)，每次回同一句）：要看的是失敗時的畫面，回覆內容不重要；而且演練當時共用的 `talkcal-llm-chat` 是停著的，這組不去開它
+- 故障都打在容器上：`docker stop llm-proxy` = 模型斷線、`docker pause llm-proxy` = 模型卡住、`docker stop app` = app 停掉；網路斷是 Playwright 的 `setOffline`；問太快是對 nginx 灌 20 個請求
+- 模型是假的（[`fake-model.conf`](fake-model.conf)，每次回同一句）：要看的是失敗時的畫面，回覆內容不重要；而且演練當時共用的 `talkcal-llm-chat` 是停著的，這組不去開它
 - 腳本 [`shoot.mjs`](shoot.mjs)（截圖存到 repo 外面），紀錄 [`before-run.log`](before-run.log)、[`after-run.log`](after-run.log)（每一步打到的 HTTP 狀態）
 - 跑完已 `down -v`
 

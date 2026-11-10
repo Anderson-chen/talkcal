@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| severity | warning —— 上班時間處理（但今天內要處理完） |
+| severity | warning，上班時間處理（但今天內要處理完） |
 | 規則 | [`respond.yaml`](../../ops/grafana/provisioning/alerting/respond.yaml) 第 4 條，總表見 [alerts.md](../alerts.md) |
 | 條件 | 距離上次成功備份超過 2 小時 15 分，**而且**開機也超過 2 小時 15 分 |
 | 只有雲端 | 本機的備份是手動的，沒有這個指標，這條不會響 |
@@ -17,7 +17,7 @@
 
 ## 對使用者的影響
 
-**現在沒有**。資料都還在，服務照常。
+現在沒有。資料都還在，服務照常。
 影響的是「萬一」：這時候資料庫壞掉或被誤刪，能救回來的只到上一次成功的備份，中間寫進去的行程和對話會掉（RPO 從 1 小時變成告警信上寫的那麼久）。
 
 ## 怎麼確認
@@ -49,7 +49,7 @@
 
 journalctl 裡 `pg_dump` 那段成功（`[pg-backup] 完成：…`），後面 `aws s3 cp` 報錯：
 
-- `AccessDenied`：EC2 角色沒有寫這個 bucket 的權限 —— 常見於 #45 剛合併、還沒 `terraform apply` 就跑了 deploy.sh
+- `AccessDenied`：EC2 角色沒有寫這個 bucket 的權限，常見於 #45 剛合併、還沒 `terraform apply` 就跑了 deploy.sh
 - `NoSuchBucket`：bucket 還沒建
 - 連線逾時：機器連不到 S3（網路、DNS）
 

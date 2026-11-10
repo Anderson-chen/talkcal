@@ -5,7 +5,7 @@
 要退回去或從線上那一版開分支，得先說得出線上是哪一版。
 
 以前說不出來：沒有 git tag，映像檔固定叫 `talkcal/app:local`，每次部署都蓋掉同一個名字。
-GitHub Deployments 記的是「watcher 想部署哪個 commit」，不是「容器裡實際跑的是哪個」——
+GitHub Deployments 記的是「watcher 想部署哪個 commit」，不是「容器裡實際跑的是哪個」：
 手動 `./gradlew deploy` 一次，兩邊就對不上了。
 
 ## 版本號長什麼樣
@@ -32,16 +32,16 @@ GitHub Deployments 記的是「watcher 想部署哪個 commit」，不是「容�
 | 只用 semver tag | ✗：CD 每個綠燈 commit 都部署，不會每個都打 tag | 要查 | ✓ | 兩次 release 之間的部署全部沒名字 |
 | `git describe`（`v0.2.0-3-g3f9c2ab`） | ✓ | ✓ | **✗**：EC2 是 `--depth 1` 淺 clone，算不出「離 tag 幾個 commit」 | 同一個 commit 在兩台機器名字不同 |
 | CalVer（`2026.10.16`） | 一天多次部署要再加序號 | ✗ | 要另外存「今天第幾次」 | 版本號本身不帶 commit |
-| **tag 有就用 tag，沒有用 SHA（選這個）** | ✓ | ✓（tag 也是指著一個 commit） | ✓：只看「指著 HEAD 的 tag」，淺 clone 也拉得到 | 每次部署都有名字，確認過的那幾個另外有好記的名字 |
+| tag 有就用 tag，沒有用 SHA（選這個） | ✓ | ✓（tag 也是指著一個 commit） | ✓：只看「指著 HEAD 的 tag」，淺 clone 也拉得到 | 每次部署都有名字，確認過的那幾個另外有好記的名字 |
 
 業界的共識（2026 年查的，見下面來源）是兩件事一起做：每個 build 一個不可變、帶 commit 的 tag 方便追溯；
 正式 release 另外用 semver tag。這裡沒有 registry，兩件事收成一個名字：有 release tag 時就是 release tag。
 
-**為什麼是 semver 不是 CalVer**：talkcal 沒有外部的 API 使用者，「主版號代表不相容」的意義不大；
-但 semver 有清楚的「修補版」——從 `v0.2.0` 修出來的 hotfix 就是 `v0.2.1`，
+為什麼是 semver 不是 CalVer：talkcal 沒有外部的 API 使用者，「主版號代表不相容」的意義不大；
+但 semver 有清楚的「修補版」：從 `v0.2.0` 修出來的 hotfix 就是 `v0.2.1`，
 一看就知道它是哪一版的修補。CalVer 只說得出日期，說不出它跟哪一版是同一條線。
 
-**為什麼 `-dirty` 要誠實寫出來**：`./gradlew deploy` 是從開發用的 clone 部署，可能有還沒 commit 的改動。
+為什麼 `-dirty` 要誠實寫出來：`./gradlew deploy` 是從開發用的 clone 部署，可能有還沒 commit 的改動。
 這時候映像檔裡的程式碼不等於任何一個 commit，掛著乾淨的 SHA 會讓人以為 checkout 那個 commit 就能重現。
 被 `.gitignore` 的檔案（`deploy/.env`、`build/`）不算：git 本來就不列它們。
 
@@ -123,7 +123,7 @@ gh release create v0.2.0 --verify-tag --generate-notes   # 依合併的 PR 自�
 
 ### 為什麼是手動，不是 workflow 自動打
 
-| | 每次合併自動打（semantic-release、release-please） | **手動跑 cd/release.sh（選這個）** |
+| | 每次合併自動打（semantic-release、release-please） | 手動跑 cd/release.sh（選這個） |
 |---|---|---|
 | 版號怎麼決定 | 從 commit 訊息推（要 Conventional Commits 的 `feat:`、`fix:`） | 人決定 |
 | 「這一版確認過」 | 做不到：合併當下還沒部署 | 部署、看過之後才打 |
@@ -145,17 +145,17 @@ commit 訊息用的是這個 repo 自己的 `[feat]`、`[fix]`（見 CLAUDE.md�
 
 ## 已知限制
 
-- **還不是 build once**：本機和 EC2 各自從原始碼 build，同一個 commit 是兩個不同的映像檔
+- 還不是 build once：本機和 EC2 各自從原始碼 build，同一個 commit 是兩個不同的映像檔
   （名字一樣，base image 的修補可能不同）。要做到 build once 得把映像檔推到 registry（ECR、GHCR），
   部署改成拉指定 tag；目前一台 EC2、平常關機，先不做
-- **tag 沒有被保護**：GitHub 的 ruleset 可以禁止刪除、移動 `v*` tag，這是 repo 設定，要使用者自己決定要不要開
+- tag 沒有被保護：GitHub 的 ruleset 可以禁止刪除、移動 `v*` tag，這是 repo 設定，要使用者自己決定要不要開
 - GitHub Deployments 記的還是 commit，不是版本號
 
 ## 驗證紀錄（2026-10-16）
 
 每一項都造了「該抓的」和「不該被誤抓的」。
 
-**版本號規則**（在 scratchpad 的 clone 裡造 tag，不碰真的 repo）：
+版本號規則（在 scratchpad 的 clone 裡造 tag，不碰真的 repo）：
 
 | 情況 | 結果 |
 |---|---|
@@ -170,7 +170,7 @@ commit 訊息用的是這個 repo 自己的 `[feat]`、`[fix]`（見 CLAUDE.md�
 | 模擬 EC2：`git fetch --depth 1 --tags` 拉有 `v0.11.0` 的 commit | `v0.11.0`（淺 clone 也認得） |
 | 模擬 EC2：淺 clone 拉沒 tag 的 commit | `0f36f0e`，跟完整 clone 算出來的一樣 |
 
-**從 git 帶進映像檔和容器**（2026-10-27，拿掉 `/actuator/info` 之後重驗；只 build、起暫時的容器，沒有換掉正在跑的服務）：
+從 git 帶進映像檔和容器（2026-10-27，拿掉 `/actuator/info` 之後重驗；只 build、起暫時的容器，沒有換掉正在跑的服務）：
 
 ```
 docker build --build-arg APP_VERSION=a5f5372 --build-arg GIT_COMMIT=a5f5372…  backend
@@ -180,9 +180,9 @@ compose 沒設 APP_VERSION → build args 整段不傳（用 Dockerfile 的預�
 容器內 /actuator/info → 404（端點已拿掉）
 ```
 
-**反例：沒帶版本直接 `docker build backend`**：容器的 label 是 `version=local revision=unknown`，不會冒充某個版本。
+反例：沒帶版本直接 `docker build backend`：容器的 label 是 `version=local revision=unknown`，不會冒充某個版本。
 
-**cd/release.sh**（2026-10-27 改成只認 master 後重跑；在本機建的 tag 立刻刪掉，沒有推任何 tag）：
+cd/release.sh（2026-10-27 改成只認 master 後重跑；在本機建的 tag 立刻刪掉，沒有推任何 tag）：
 
 | 輸入 | 結果 |
 |---|---|
@@ -199,6 +199,6 @@ compose 沒設 APP_VERSION → build args 整段不傳（用 Dockerfile 的預�
 ## 來源
 
 - [How to Handle Docker Image Tagging（OneUptime，2026-02）](https://oneuptime.com/blog/post/2026-02-02-docker-image-tagging/view)：每個 build 帶 commit SHA 的不可變 tag，release 另外用 semver，部署不用 `latest`
-- [Image tag best practices（Microsoft Learn，Azure Container Registry）](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-image-tag-version)：穩定 tag 與唯一 tag 的差別；只有 commit 的 tag 是「半穩定」——同一個 commit 重 build 會換 base image
+- [Image tag best practices（Microsoft Learn，Azure Container Registry）](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-image-tag-version)：穩定 tag 與唯一 tag 的差別；只有 commit 的 tag 是「半穩定」，同一個 commit 重 build 會換 base image
 - [Tag and manage Docker image versions in Artifact Registry（OneUptime，2026-02）](https://oneuptime.com/blog/post/2026-02-17-how-to-tag-and-manage-docker-image-versions-in-artifact-registry/markdown)：不可變 tag、用唯一 tag 或 digest 部署
 - [OCI image annotations](https://github.com/opencontainers/image-spec/blob/main/annotations.md)：`org.opencontainers.image.version`、`revision`、`source` 這幾個 label 名稱

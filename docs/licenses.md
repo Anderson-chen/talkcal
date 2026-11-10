@@ -8,7 +8,7 @@
 
 | 對象 | 授權 | 商用 | 再散布 | 我們有沒有散布它 |
 |---|---|---|---|---|
-| **talkcal 本身** | MIT（[LICENSE](../LICENSE)） | 可 | 可 | 原始碼公開在 GitHub |
+| talkcal 本身 | MIT（[LICENSE](../LICENSE)） | 可 | 可 | 原始碼公開在 GitHub |
 | Qwen3-8B（本機 llama.cpp 用的 GGUF） | Apache-2.0 | 可 | 可，要附授權全文、保留聲明、標出改了什麼 | 沒有：模型檔不進 git，只在自己的機器和私有 S3 |
 | Qwen3 32B（雲端 Bedrock，`qwen.qwen3-32b`） | Apache-2.0＋AWS 的服務條款 | 可 | 不適用：我們只呼叫 API，拿不到權重 | 沒有 |
 | llama.cpp（`b10964`） | MIT | 可 | 可，附授權聲明 | 沒有：映像檔自己 build、不推到任何 registry |
@@ -16,7 +16,7 @@
 | 前端打包進去的套件（vue 和它的依賴） | MIT、BSD、ISC | 可 | 可，要附版權和授權聲明 | **有**：js 送到每個使用者的瀏覽器，所以 build 會附上 `licenses.txt` |
 | Docker 基底映像檔 | 見[映像檔](#docker-映像檔) | 可 | — | 沒有 |
 
-**沒有 GPL、AGPL 進到會散布或對外提供服務的產物**。觀測工具（Grafana、Loki、Tempo、Mimir）是 AGPL-3.0，但都是原封不動地自己跑，沒有改程式碼、也沒有提供給別人用，不觸發 AGPL 的義務（見[映像檔](#docker-映像檔)）。
+沒有 GPL、AGPL 進到會散布或對外提供服務的產物。觀測工具（Grafana、Loki、Tempo、Mimir）是 AGPL-3.0，但都是原封不動地自己跑，沒有改程式碼、也沒有提供給別人用，不觸發 AGPL 的義務（見[映像檔](#docker-映像檔)）。
 
 ## 什麼時候授權的義務會成立
 
@@ -69,8 +69,8 @@ CI 的規則因此是：**前端、後端會打包的依賴都不能是 GPL、AG
 
 外掛預設設定的兩個坑，`backend/build.gradle` 都處理了，驗證見[下面](#驗證反例)：
 
-1. **jar 裡附的 LICENSE 檔會被當成整個套件的授權**。itextpdf（AGPL-3.0）的 jar 裡有一份給內嵌元件用的 Apache 授權檔，外掛把它也算成 itextpdf 的授權，再加上「其中一個在清單上就過」，AGPL 的套件就這樣過了。改成只看套件自己宣告的授權（POM、jar 的 manifest），不看 jar 裡附帶的授權檔（`DeclaredLicensesOnly` 這個 filter）
-2. **加了依賴，`checkLicense` 還是 UP-TO-DATE**。報告重新產生了，檢查卻沿用上一次「通過」的結果。改成每次都重新跑（只要幾秒）
+1. jar 裡附的 LICENSE 檔會被當成整個套件的授權。itextpdf（AGPL-3.0）的 jar 裡有一份給內嵌元件用的 Apache 授權檔，外掛把它也算成 itextpdf 的授權，再加上「其中一個在清單上就過」，AGPL 的套件就這樣過了。改成只看套件自己宣告的授權（POM、jar 的 manifest），不看 jar 裡附帶的授權檔（`DeclaredLicensesOnly` 這個 filter）
+2. 加了依賴，`checkLicense` 還是 UP-TO-DATE。報告重新產生了，檢查卻沿用上一次「通過」的結果。改成每次都重新跑（只要幾秒）
 
 ### 前端：`ci/licenses.sh`（Trivy）
 
@@ -85,7 +85,7 @@ CI 的規則因此是：**前端、後端會打包的依賴都不能是 GPL、AG
 
 ### 為什麼後端不也用 Trivy
 
-#15 已經用 Trivy 掃映像檔，本來想一套工具掃到底。實測 `trivy image --scanners license` 掃 app 映像檔，jar 裡的 Java 函式庫**一個授權都沒有回報**（Trivy 讀 jar 不會去找 POM 裡的授權），結果是「沒有問題」—— 跟上面 pnpm 的情況一樣，是靜靜地通過。所以 Java 交給讀得到 POM 的 Gradle 外掛。
+#15 已經用 Trivy 掃映像檔，本來想一套工具掃到底。實測 `trivy image --scanners license` 掃 app 映像檔，jar 裡的 Java 函式庫**一個授權都沒有回報**（Trivy 讀 jar 不會去找 POM 裡的授權），結果是「沒有問題」：跟上面 pnpm 的情況一樣，是靜靜地通過。所以 Java 交給讀得到 POM 的 Gradle 外掛。
 
 ## Docker 映像檔
 
@@ -101,7 +101,7 @@ CI 的規則因此是：**前端、後端會打包的依賴都不能是 GPL、AG
 | `nvidia/cuda:13.0.1-{devel,runtime}-ubuntu24.04` | llama-server | NVIDIA Deep Learning Container License／CUDA EULA | runtime 函式庫 NVIDIA 允許隨應用程式一起散布；目前也沒有散布 |
 | `caddy:2.11.6-alpine` | EC2 的 HTTPS | Apache-2.0 | |
 | `grafana/alloy` | 觀測：收集 | Apache-2.0 | |
-| `grafana/grafana`、`loki`、`tempo`、`mimir` | 觀測：儲存、看板 | **AGPL-3.0** | 原封不動自己用，沒改程式、沒提供給別人當服務，不觸發 AGPL。要改它們的程式碼、或開放給外部使用者時，要公開改過的原始碼 |
+| `grafana/grafana`、`loki`、`tempo`、`mimir` | 觀測：儲存、看板 | AGPL-3.0 | 原封不動自己用，沒改程式、沒提供給別人當服務，不觸發 AGPL。要改它們的程式碼、或開放給外部使用者時，要公開改過的原始碼 |
 | `aquasec/trivy` | CI 掃描 | Apache-2.0 | |
 
 ## 其他程式與工具
@@ -115,7 +115,7 @@ Java、JavaScript 套件以外，還有這些會被執行或跟著 repo 走的�
 | CUDA 函式庫 | NVIDIA EULA | llama-server 的 runtime | NVIDIA 允許隨應用程式散布 runtime 函式庫 |
 | Terraform CLI（2026-10-30 本機 v1.15.8） | **BUSL-1.1**（1.6 起從 MPL-2.0 改過來） | 管理自己的 AWS | 可以。BUSL 限制的是拿它做跟 HashiCorp 競爭的產品；不想受這個限制的替代品是 OpenTofu（MPL-2.0） |
 | Terraform provider（`hashicorp/aws`、`hashicorp/random`） | MPL-2.0 | 同上 | 可以 |
-| k6（`perf/` 壓測） | **AGPL-3.0** | 本機原封不動執行 | 可以。沒有修改、也沒有提供給別人當服務 |
+| k6（`perf/` 壓測） | AGPL-3.0 | 本機原封不動執行 | 可以。沒有修改、也沒有提供給別人當服務 |
 | squawk（`ci/migrations.sh`） | Apache-2.0 | CI 工具 | 可以 |
 | gitleaks（`ci/secrets.sh`） | MIT | CI 工具 | 可以 |
 | GitHub Actions（`actions/*`、`gradle/actions`） | MIT | CI | 可以 |
@@ -147,13 +147,13 @@ Java、JavaScript 套件以外，還有這些會被執行或跟著 repo 走的�
 
 分成兩種情況，影響差很多：
 
-1. **新版本換成收費授權**：已經發布的版本收不回去。Apache-2.0 第 2 條給的授權是 “perpetual, worldwide, … irrevocable”，Spring Boot 4.1.1 拿到的授權永遠有效。新版本換授權的話，升版那個 PR 的 `checkLicense` 會紅燈（新的授權不在允許清單上），不會不知不覺換過去。
-2. **免費的維護期結束**：這個比較可能，而且**已經發生了**。[Spring 的支援政策](https://spring.io/support-policy)：每個小版本（例如 4.1.x）開源的免費修補至少 13 個月；之後的修補、以及「Day 0」安全修補，要買 Broadcom 的 Tanzu Spring 訂閱才拿得到。授權沒變，但停在舊版本就收不到漏洞修補了。
+1. 新版本換成收費授權：已經發布的版本收不回去。Apache-2.0 第 2 條給的授權是 “perpetual, worldwide, … irrevocable”，Spring Boot 4.1.1 拿到的授權永遠有效。新版本換授權的話，升版那個 PR 的 `checkLicense` 會紅燈（新的授權不在允許清單上），不會不知不覺換過去。
+2. 免費的維護期結束：這個比較可能，而且**已經發生了**。[Spring 的支援政策](https://spring.io/support-policy)：每個小版本（例如 4.1.x）開源的免費修補至少 13 個月；之後的修補、以及「Day 0」安全修補，要買 Broadcom 的 Tanzu Spring 訂閱才拿得到。授權沒變，但停在舊版本就收不到漏洞修補了。
 
 對策：
 
-- **跟著升版，不要停在舊的小版本**：#48 的依賴升級負責這件事。停太久 `ci/vulns.sh` 會開始報修不了的漏洞，那就是提醒
-- **選有社群接手的東西**：前例都是社群 fork 出免費版本，例如 Oracle JDK 2019 年起商用要付費 → 我們用的是 Eclipse Temurin（OpenJDK，GPL-2.0+CE，免費）；Terraform 改 BUSL → OpenTofu；Redis 改授權 → Valkey
+- 跟著升版，不要停在舊的小版本：#48 的依賴升級負責這件事。停太久 `ci/vulns.sh` 會開始報修不了的漏洞，那就是提醒
+- 選有社群接手的東西：前例都是社群 fork 出免費版本，例如 Oracle JDK 2019 年起商用要付費 → 我們用的是 Eclipse Temurin（OpenJDK，GPL-2.0+CE，免費）；Terraform 改 BUSL → OpenTofu；Redis 改授權 → Valkey
 - 真的發生時，選項依序是：升到還在免費維護期的版本 → 換社群版本 → 評估付費
 
 所以每一列都附了「看的時候是哪一版」，重看時才知道要比對什麼。沒有自動通知的那幾類，在升級時順手看，並把開頭的「最後核對」日期往前推；很久沒升級的話，**至少每半年**整份看一次（2027-04 前）。
@@ -172,9 +172,9 @@ Java、JavaScript 套件以外，還有這些會被執行或跟著 repo 走的�
 
 CI 紅在授權時，依序考慮：
 
-1. **換一個套件**：通常有同功能、授權寬鬆的替代品
-2. **看有沒有雙授權、是不是寫法不同**：很多套件「GPL 或商業授權」「LGPL 或 EPL」；也常見同一個授權換個寫法（「BSD licence」）。確認內容之後，在 `backend/allowed-licenses.json` 加一條寫明 `moduleName` 的規則（例如 antlr 的兩條 BSD）
-3. **真的要用**：確認在我們的用法下沒有義務（例如只在後端、不散布的 GPL），才放行，而且只放行那一個套件 ——
+1. 換一個套件：通常有同功能、授權寬鬆的替代品
+2. 看有沒有雙授權、是不是寫法不同：很多套件「GPL 或商業授權」「LGPL 或 EPL」；也常見同一個授權換個寫法（「BSD licence」）。確認內容之後，在 `backend/allowed-licenses.json` 加一條寫明 `moduleName` 的規則（例如 antlr 的兩條 BSD）
+3. 真的要用：確認在我們的用法下沒有義務（例如只在後端、不散布的 GPL），才放行，而且只放行那一個套件：
    - 後端：在 `backend/allowed-licenses.json` 加一條同時寫 `moduleName` 和 `moduleLicense` 的規則，不要只寫 `moduleLicense`（那等於整個授權類別都開了）
    - 前端：前端的套件都會散布，GPL、AGPL 不放行
    - 放行的理由寫進這份文件

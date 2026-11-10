@@ -2,13 +2,13 @@
 
 | | |
 |---|---|
-| severity | warning —— 上班時間處理 |
+| severity | warning，上班時間處理 |
 | 規則 | `meta-monitoring.yaml` 第 3 條（PR #175，#40），總表見 [alerts.md](../alerts.md) |
 | 條件 | `min by (job) (up{job=~"loki\|tempo"}) < 1`，持續 2 分鐘；信上的 `job` 說是哪一個 |
 
 ## 代表什麼
 
-Alloy 還活著，但抓不到 Loki 或 Tempo 自己的指標 —— 多半是它停了。
+Alloy 還活著，但抓不到 Loki 或 Tempo 自己的指標：多半是它停了。
 
 | 停的是 | 這段時間 |
 |--------|---------|

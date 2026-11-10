@@ -26,7 +26,7 @@
 
 ## 決定
 
-**llama.cpp 的 llama-server，模型 Qwen3-8B Q4_K_M，全部層放 GPU（`-ngl 99`）；映像檔兩段式自己 build，llama.cpp 釘版本、tarball 驗 SHA256。**
+llama.cpp 的 llama-server，模型 Qwen3-8B Q4_K_M，全部層放 GPU（`-ngl 99`）；映像檔兩段式自己 build，llama.cpp 釘版本、tarball 驗 SHA256。
 
 模型檔不直接 bind mount Windows 資料夾：實測只有約 20 MB/s，Qwen 載了 5 分鐘還卡在 275 MB；
 改由一次性的 `model-seed` 複製進 volume，從 volume 讀約 1.8 GB/s，載入回到 2.2 秒（[deploy/README.md](../../deploy/README.md)）。

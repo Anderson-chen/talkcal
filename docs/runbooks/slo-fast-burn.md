@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| severity | **critical** —— 現在就處理 |
+| severity | **critical**，現在就處理 |
 | 規則 | [`slo-burn-rate.yaml`](../../ops/grafana/provisioning/alerting/slo-burn-rate.yaml) 第 1 條；SLO 的定義與門檻見 [docs/slo.md](../slo.md) |
 | 條件 | 任一 SLO：`1h` 和 `5m` 的 burn rate 都 > 13.44，或 `6h` 和 `30m` 都 > 5.6 |
 
@@ -22,12 +22,12 @@
 
 ## 對使用者的影響
 
-看 `slo`：可用性的是使用者拿到錯誤；延遲的是使用者在等。burn rate 13.44 代表壞的比例是預算的 13 倍 ——
+看 `slo`：可用性的是使用者拿到錯誤；延遲的是使用者在等。burn rate 13.44 代表壞的比例是預算的 13 倍：
 以 `calendar-availability`（目標 99.5%）來說，約 6.7% 的請求在失敗。
 
 ## 怎麼確認
 
-1. **talkcal — SLO** 儀表板（`/d/talkcal-slo`）：哪個 SLO 的 burn rate 越過虛線、從什麼時候開始、budget 還剩多少
+1. talkcal — SLO 儀表板（`/d/talkcal-slo`）：哪個 SLO 的 burn rate 越過虛線、從什麼時候開始、budget 還剩多少
 2. 同時在響的告警：Grafana → Alerting → Alert rules，篩 Firing。有原因類的告警就直接照那份 runbook：
 
    | 同時響的 | 去哪 |
@@ -91,7 +91,7 @@ sudo GIT_REF=<上一個 commit> bash /opt/talkcal/repo/infra/envs/1-ec2/deploy.s
 
 ## 事後要不要寫 postmortem
 
-**要**（使用者受影響、而且燒掉一大塊 budget）。原因 5 的誤報例外：在下面紀錄，累積幾次就改 docs/slo.md 的做法（例如加最低請求數）。
+要（使用者受影響、而且燒掉一大塊 budget）。原因 5 的誤報例外：在下面紀錄，累積幾次就改 docs/slo.md 的做法（例如加最低請求數）。
 
 ## 紀錄
 

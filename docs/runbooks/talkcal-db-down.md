@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| severity | **critical** —— 現在就處理 |
+| severity | **critical**，現在就處理 |
 | 規則 | [`respond.yaml`](../../ops/grafana/provisioning/alerting/respond.yaml) 第 1 條，總表見 [alerts.md](../alerts.md) |
 | 條件 | `pg_up{job="postgres"}` 為 0（exporter 連不上 PostgreSQL），或 exporter 本身抓不到（`up{job="postgres"}` 為 0），持續 1 分鐘 |
 
@@ -19,25 +19,25 @@ postgres_exporter 每 15 秒自己去連一次資料庫，連續 1 分鐘以上�
 
 如果是 exporter 壞了，使用者**沒有影響**，只是看不到資料庫那一頭的指標。
 
-**同一件事會連帶收到好幾封**（2026-10-20 演練實測，有流量時）：「有請求等不到資料庫連線」（比這封早約 1 分鐘，請求等滿 30 秒逾時）、
+同一件事會連帶收到好幾封（2026-10-20 演練實測，有流量時）：「有請求等不到資料庫連線」（比這封早約 1 分鐘，請求等滿 30 秒逾時）、
 「SLO 快燒」、幾分鐘後「SLO 慢燒」。它們都是這個原因的結果，照這份處理就好，不用分頭查。
 
 ## 怎麼確認
 
-1. **是資料庫還是 exporter？** Grafana → Explore → Mimir：
+1. 是資料庫還是 exporter？Grafana → Explore → Mimir：
 
    ```promql
    pg_up{job="postgres"}          # 有值且是 0 → exporter 活著、資料庫連不上
    up{job="postgres"}             # 0 → exporter 本身抓不到（看下面原因 4）
    ```
 
-2. **使用者那頭有沒有出事**：talkcal-app dashboard 的 5xx、或
+2. 使用者那頭有沒有出事：talkcal-app dashboard 的 5xx、或
 
    ```promql
    sum(rate(http_server_requests_seconds_count{job="talkcal-app", status=~"5.."}[5m]))
    ```
 
-   沒流量時這裡是空的，不代表沒事 —— 直接問 app 的 health（它會檢查資料庫）：
+   沒流量時這裡是空的，不代表沒事：直接問 app 的 health（它會檢查資料庫）：
 
    ```bash
    curl -s -w ' %{http_code}\n' http://127.0.0.1:18090/actuator/health   # 本機
@@ -46,7 +46,7 @@ postgres_exporter 每 15 秒自己去連一次資料庫，連續 1 分鐘以上�
 
    `{"status":"DOWN"}` 503 → app 連不上資料庫；`UP` 200 → 資料庫其實沒事，看原因 4。
 
-3. **容器狀態**：
+3. 容器狀態：
 
    ```bash
    docker compose ps postgres postgres-exporter app
@@ -132,7 +132,7 @@ postgres log 一直出 `PANIC`、`invalid page`、`could not read block`，重�
 
 ## 事後要不要寫 postmortem
 
-**要**，只要使用者真的連不上（原因 1、2、3、5、6）。原因 4（只有 exporter 壞）不必，在下面紀錄一行。
+要，只要使用者真的連不上（原因 1、2、3、5、6）。原因 4（只有 exporter 壞）不必，在下面紀錄一行。
 
 ## 紀錄
 

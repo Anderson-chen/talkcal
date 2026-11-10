@@ -29,7 +29,7 @@ trace 要另外一個庫（Tempo）：trace 是一棵 span 樹，Mimir 只放得
 
 ## 決定
 
-**Alloy 是唯一的收集器：抓指標 remote_write 到 Mimir、讀 stdout 送 Loki、收 OTLP trace 送 Tempo。三種訊號用同一套標籤（`service`、`env`）。**
+Alloy 是唯一的收集器：抓指標 remote_write 到 Mimir、讀 stdout 送 Loki、收 OTLP trace 送 Tempo。三種訊號用同一套標籤（`service`、`env`）。
 
 選 Mimir 不是現在的量需要它，而是為了學正式環境的形狀（[ops/README.md](../../ops/README.md#為什麼存指標用-mimir-而不是-prometheus) 的對照表）。
 app 只認得 OTLP、只知道 Alloy 在哪；之後換儲存，app 不必重新部署。

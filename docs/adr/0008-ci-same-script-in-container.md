@@ -27,7 +27,7 @@ GitHub Actions 沒有 GPU，跑不到連真模型的測試；本機有 GPU，但
 
 ## 決定
 
-**`checks.sh` 是「要檢查什麼」、`Dockerfile` 是「在什麼環境檢查」、`run.sh` 負責把 commit 放進容器；`.github/workflows/ci.yml` 和 `.githooks/pre-push` 都只呼叫 `ci/run.sh`。**
+`checks.sh` 是「要檢查什麼」、`Dockerfile` 是「在什麼環境檢查」、`run.sh` 負責把 commit 放進容器；`.github/workflows/ci.yml` 和 `.githooks/pre-push` 都只呼叫 `ci/run.sh`。
 
 跟後端的六角架構同一個道理：`checks.sh` 是核心，各平台的設定檔是 adapter（[0005](0005-hexagonal-with-archunit.md)）。
 兩邊各守一道：本機補上 GitHub 跑不到的模型測試，GitHub 補上本機可以繞過的那一道。

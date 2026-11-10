@@ -10,8 +10,8 @@
 
 <!-- One point per change, as Before / After; paste screenshots or numbers if any. Put anything intentionally skipped under Deliberately left out -->
 
-- **Before:**
-- **After:**
+- Before:
+- After:
 
 Deliberately left out:
 
@@ -25,9 +25,9 @@ Deliberately left out:
 
 ## Risk
 
-**Door:** <!-- two-way: a revert undoes it; one-way: data migrations, deleted resources, anything that can't be rolled back -->
+Door: <!-- two-way: a revert undoes it; one-way: data migrations, deleted resources, anything that can't be rolled back -->
 
-**Blast Radius:** <!-- Who and which features are affected -->
+Blast Radius: <!-- Who and which features are affected -->
 
 Closes #
 

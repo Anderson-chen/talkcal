@@ -13,7 +13,7 @@
 | 流量 | 一個腳本：登入一次，每秒列一次月曆，每 6 秒跟助理說一句（並行，卡住的不擋後面的） |
 | 信箱 | Mailpit，收件人 `oncall@example.test`，沒寄到任何真的信箱 |
 
-**跟正式環境不同的地方**：測試環境的 app 不屬於 `talkcal-deploy` 這個 compose 專案，Alloy 照設定不收它的 log，所以 runbook 裡的 Loki 查詢改用 `docker logs` 看同一份內容（內容一樣是 ECS JSON）。Runbook 寫的 `docker compose …` 在這裡是同一組參數加上 `-p a39-obs`。
+跟正式環境不同的地方：測試環境的 app 不屬於 `talkcal-deploy` 這個 compose 專案，Alloy 照設定不收它的 log，所以 runbook 裡的 Loki 查詢改用 `docker logs` 看同一份內容（內容一樣是 ECS JSON）。Runbook 寫的 `docker compose …` 在這裡是同一組參數加上 `-p a39-obs`。
 
 ## 反例：正常狀態下，確認步驟不會誤判成出事（20:04:58）
 
@@ -36,7 +36,7 @@
 |------|------|
 | 20:05:10 | **故障**：`docker stop postgres` |
 | 20:05:10～ | 使用者：列月曆每個都等滿 30 秒才拿到 502（連線池逾時） |
-| 20:06:35 | 收到 `[FIRING] 有請求等不到資料庫連線`（warning）—— 比資料庫那封還早 |
+| 20:06:35 | 收到 `[FIRING] 有請求等不到資料庫連線`（warning），比資料庫那封還早 |
 | 20:07:32 | 收到 **`[FIRING] talkcal 資料庫連不上`**（critical），信裡有 **View runbook** 按鈕 |
 | 20:09:16 | 收到 `[FIRING] SLO 快燒`（`calendar-availability`） |
 | 20:12:05 | 開始照 runbook（這段延遲是演練操作的空檔，不是 runbook 的問題） |
@@ -53,7 +53,7 @@
 
 ![資料庫連不上的告警信，下面有 View runbook](../images/2026-10-20-drill-db-down-email-runbook.jpg)
 
-**這次學到、已改進 runbook 的**：同一件事會連帶收到好幾封（等不到連線、SLO 快燒、SLO 慢燒），值班的人要知道「都是同一個原因」，不用分頭查 —— 補在 runbook 的「對使用者的影響」。
+這次學到、已改進 runbook 的：同一件事會連帶收到好幾封（等不到連線、SLO 快燒、SLO 慢燒），值班的人要知道「都是同一個原因」，不用分頭查，補在 runbook 的「對使用者的影響」。
 
 ## 演練 2：模型熔斷持續打開（[runbook](../runbooks/talkcal-model-circuit-open.md)）
 
@@ -73,17 +73,17 @@
 
 - 熔斷打開到收到信：**6 分 9 秒**（「5 分鐘沒關回來」＋評估＋湊批）
 - 照 runbook 從確認到恢復：**1 分 17 秒**
-- 影響（20:20:58～20:34:01）：助理 40 個 502、77 個 503；**列月曆 712 個全部 200** —— 行程功能照常
+- 影響（20:20:58～20:34:01）：助理 40 個 502、77 個 503；**列月曆 712 個全部 200**，行程功能照常
 
 ![模型熔斷的告警信](../images/2026-10-20-drill-model-circuit-email-runbook.jpg)
 
-**這次學到、已改進 runbook 的**：
+這次學到、已改進 runbook 的：
 
-1. ERROR log 的 message 看不出原因，要看 stack trace 最後的 `Caused by` —— 補了一張「`Caused by` → 哪個原因」的對照表
+1. ERROR log 的 message 看不出原因，要看 stack trace 最後的 `Caused by`：補了一張「`Caused by` → 哪個原因」的對照表
 2. 熔斷失敗率 -1 的意思（上面的反例）
 
 ## 附帶發現
 
-- **Watchdog 寄了一封 email**（20:05:15）：#175 的設計是 Watchdog 只走 `notification_settings` 送 heartbeat。之後每 30 秒都正常送 heartbeat（測試環境沒設網址，Grafana log 是送不出去的錯誤），沒有再寄 email；只有 Grafana 換上新設定、第一次評估那一次。看起來是規則剛建立時繞到了預設 policy。影響很小（換設定時多一封信），記給 #175。
+- Watchdog 寄了一封 email（20:05:15）：#175 的設計是 Watchdog 只走 `notification_settings` 送 heartbeat。之後每 30 秒都正常送 heartbeat（測試環境沒設網址，Grafana log 是送不出去的錯誤），沒有再寄 email；只有 Grafana 換上新設定、第一次評估那一次。看起來是規則剛建立時繞到了預設 policy。影響很小（換設定時多一封信），記給 #175。
   - 後續（2026-10-30）：告警 CI 在「正常流量 0 封」那步也抓到同一封信。#175 改成在 `policies.yaml` 明寫一條子路由（`alert_type=watchdog` → heartbeat），不靠規則上的 `notification_settings`。
 - 資料庫停掉時，「有請求等不到資料庫連線」比「資料庫連不上」**早**一分鐘到：有流量時逾時馬上就發生，資料庫那條要撐滿 1 分鐘。兩條都寄是對的（一條說使用者受影響、一條說原因）。

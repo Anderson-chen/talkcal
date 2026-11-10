@@ -27,7 +27,7 @@
 
 ## 決定
 
-**兩個階段、一個資料夾一個（`infra/envs/1-ec2`、`infra/envs/2-eks`）。階段一 Terraform 變數 `model_backend` 預設 `bedrock`：m7i-flex.large，app 打 Bedrock 的 Qwen3 32B；設成 `gpu` 就回到 g6.xlarge + llama-server。**
+兩個階段、一個資料夾一個（`infra/envs/1-ec2`、`infra/envs/2-eks`）。階段一 Terraform 變數 `model_backend` 預設 `bedrock`：m7i-flex.large，app 打 Bedrock 的 Qwen3 32B；設成 `gpu` 就回到 g6.xlarge + llama-server。
 
 app 一行不用改：因為跟模型講話走 OpenAI 相容協定（[0001](0001-spring-ai-openai-compatible.md)），`compose.bedrock.yaml` 只用環境變數換位址、key、模型名稱，並把 `llm-chat`、`model-seed` 放進不會啟用的 profile。
 key 綁在只能呼叫模型的專用 IAM user 上、90 天過期，跟 DB 密碼一起寫進 SSM 的 `.env`。

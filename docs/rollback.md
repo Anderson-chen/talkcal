@@ -22,9 +22,9 @@ cd/rollback.sh local --unpin         # 修好了：解除釘住，watcher 下一
 | 情況 | 做法 | 理由 |
 |---|---|---|
 | 剛部署完就壞了，上一版是好的，兩版之間**沒有** migration | **退**（`--previous`） | 最快止血：不用 build、不用等 CI，幾十秒 |
-| 兩版之間有 migration，但照 expand/contract 寫（上一版讀寫得了新 schema） | **退** | 這就是 expand/contract 要保證的事（見[資料庫](#資料庫schema-不退)） |
+| 兩版之間有 migration，但照 expand/contract 寫（上一版讀寫得了新 schema） | 退 | 這就是 expand/contract 要保證的事（見[資料庫](#資料庫schema-不退)） |
 | 兩版之間有**不相容**的 migration（例如 V11：加了 NOT NULL 欄位、沒有預設值） | **往前修**：在 master 上修（或 `git revert` 壞掉的 commit），照一般流程發 PR，合併後 `--unpin` | 退回去容器會 healthy，但寫入全部失敗（下面的驗證 N 真的發生了） |
-| 兩版之間有**安全、權限**的修正 | **往前修** | 退回去等於把漏洞放回來。驗證 N：退到 #104 之前，新註冊的人讀得到別人的行程 |
+| 兩版之間有**安全、權限**的修正 | 往前修 | 退回去等於把漏洞放回來。驗證 N：退到 #104 之前，新註冊的人讀得到別人的行程 |
 | 只有一小塊功能壞了，其他正常 | 看影響，多半往前修 | 退版會把同一版其他的修正也一起退掉 |
 
 看兩版之間有沒有 migration：
@@ -52,7 +52,7 @@ cd/rollback.sh local --previous   # 或指定版本
 它會依序做：
 
 1. 檢查版本號格式；`talkcal/app:<版本>` 的 label 要有 40 碼的 commit（沒有 label、或沒經過 `apply.sh` 直接 build 出來的 `unknown` 都不算），
-   `talkcal/web:<版本>` 也要在 —— 不符合就結束，**什麼都沒動**。
+   `talkcal/web:<版本>` 也要在：不符合就結束，**什麼都沒動**。
    `-dirty` 的版本（從有沒 commit 改動的 clone 部署的）可以指定，但會提醒內容不等於那個 commit
 2. 拿 watcher 的鎖（`.git/cd-local.lock`）：watcher 正在部署就不退，退的途中 watcher 也不會插進來
 3. 先換 web、再換 app，每個都 `--no-build --pull never --no-deps --wait`，換完確認容器跑的真的是那個 tag
@@ -111,15 +111,15 @@ V11 是在這道檢查之前寫的，所以驗證 N 才退得到一個不相容�
 
 watcher（`cd/triggers/watch.sh`）只部署「master 最新的綠燈 commit、而且沒試過的」：
 
-- **剛才壞掉的那個 commit** 已經試過，不會再自動部署 —— 這本來就成立
-- **但下一個綠燈的 commit** 一出現就會部署。如果修正還沒進去（例如中間合併了別的 PR），壞掉的程式又上線了
+- 剛才壞掉的那個 commit 已經試過，不會再自動部署：這本來就成立
+- 但下一個綠燈的 commit 一出現就會部署。如果修正還沒進去（例如中間合併了別的 PR），壞掉的程式又上線了
 
 所以 rollback 會**釘住**：寫一個 `.git/cd-<env>.pin`，watcher 每一輪先看它，在就不部署、log 寫「釘在 X」。
 `--unpin` 才解除。手動部署（`./gradlew deploy`、`cd/apply.sh`）不看釘住：人自己決定要部署的，不擋。
 
 | 做法 | 選了嗎 | 理由 |
 |---|---|---|
-| **釘住檔（`.git/cd-<env>.pin`）** | ✅ | 跨平台（EC2 之後也跑同一支 watcher）；檔案內容寫著釘在哪版、什麼時候、從哪版退的；rollback 自動釘，忘不了 |
+| 釘住檔（`.git/cd-<env>.pin`） | ✅ | 跨平台（EC2 之後也跑同一支 watcher）；檔案內容寫著釘在哪版、什麼時候、從哪版退的；rollback 自動釘，忘不了 |
 | 停掉排程（`Disable-ScheduledTask talkcal-cd-local`） | 留著當緊急開關 | 只有 Windows；要另外記得；看不出為什麼被停 |
 | 在 master 上 `git revert` 壞掉的 commit | 修正的正道，但不是止血 | 要開 PR、等 CI、等 watcher，十幾分鐘；釘住之後慢慢做 |
 
@@ -177,7 +177,7 @@ EC2 沒有 watcher（手動部署），不用釘住。等 `ec2.env` 有了，換
 
 | 做法 | 多快 | 退回的是不是「當時那個東西」 | 選了嗎 |
 |---|---|---|---|
-| **換回機器上舊 tag 的映像檔** | 幾十秒（只等 healthcheck） | 是：同一個映像檔 | ✅ |
+| 換回機器上舊 tag 的映像檔 | 幾十秒（只等 healthcheck） | 是：同一個映像檔 | ✅ |
 | checkout 舊 commit、重 build | 幾分鐘 | 不一定：base image、依賴可能變了 | 映像檔不在時的退路 |
 | `git revert`、走一般流程 | 十幾分鐘（PR、CI、watcher） | 是新的 commit | 修正的正道，不是止血 |
 | 推到 registry（ECR）、用 digest 部署 | 跟第一個一樣 | 是，而且換機器也在 | 還沒有 registry；上 EKS（#58）時一起做 |
@@ -188,7 +188,7 @@ EC2 沒有 watcher（手動部署），不用釘住。等 `ec2.env` 有了，換
 
 ### 為什麼 `--no-build --pull never`
 
-- 不帶 `--no-build`：compose 會拿**目前 checkout 的程式碼** build、貼上舊版本的 tag —— 名字是舊的，內容是新的，等於沒退
+- 不帶 `--no-build`：compose 會拿**目前 checkout 的程式碼** build、貼上舊版本的 tag，名字是舊的，內容是新的，等於沒退
 - 不帶 `--pull never`：機器上沒有的版本，compose 會去 Docker Hub 找 `talkcal/app`，那不是這個專案的 namespace
 - 兩個都帶了，又先檢查映像檔在不在：不在就在動任何東西之前結束（驗證 B、C）
 
@@ -219,7 +219,7 @@ GitHub 的 token 故意給壞的，不寫真的 Deployments；`--previous` 用�
 ### 2026-10-27：#25 合併後（master `3b28b34`）重驗
 
 映像檔：`c354003`（這個分支，照 `apply.sh` 的做法 build，label 帶 commit）、`3b28b34` 和 `v0.1.0`（#25 的 session 部署過的，
-**同一個 commit 兩個映像檔**）；另外造了 `3b28b34-dirty`（同一個 commit label）、只有 app 的 `halfonly`、healthcheck 永遠不過的 `broken`。
+同一個 commit 兩個映像檔）；另外造了 `3b28b34-dirty`（同一個 commit label）、只有 app 的 `halfonly`、healthcheck 永遠不過的 `broken`。
 機器上本來就有沒 label 的 `local`、`issue33`、`lic`。
 
 | | 情況 | 結果 |
@@ -249,7 +249,7 @@ GitHub 的 token 故意給壞的，不寫真的 Deployments；`--previous` 用�
 
 | | 情況 | 結果 |
 |---|---|---|
-| N | 跨 migration：`ae12882`（資料庫 V11）→ `aee2252`（程式到 V10） | 退成功、容器 healthy，Flyway 只警告 schema 比較新；**但新增行程 502**（`null value in column "owner_id"`），而且列表**讀得到別人的行程**（#104 之前沒有依使用者分開）—— 第 1 步那張表的兩列就是從這裡來的。這次的改動只動挑版本的邏輯，不影響這個結果，沒有重做 |
+| N | 跨 migration：`ae12882`（資料庫 V11）→ `aee2252`（程式到 V10） | 退成功、容器 healthy，Flyway 只警告 schema 比較新；**但新增行程 502**（`null value in column "owner_id"`），而且列表**讀得到別人的行程**（#104 之前沒有依使用者分開），第 1 步那張表的兩列就是從這裡來的。這次的改動只動挑版本的邏輯，不影響這個結果，沒有重做 |
 
 那次也抓到一個 bug：`--previous` 在 gh 連不上時沒停，拿空的 repo 一路往下查（Q 就是在驗它）。
 

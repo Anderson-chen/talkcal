@@ -23,9 +23,9 @@ GitHub 不該有連進自己電腦的權限。
 
 ## 決定
 
-**`cd/triggers/watch.sh` 每 5 分鐘找 master 最新的綠燈 commit，沒試過就 checkout 並跑那個 commit 的 `cd/apply.sh`，結果寫回 GitHub Deployments。同一個 commit 只試一次。**
+`cd/triggers/watch.sh` 每 5 分鐘找 master 最新的綠燈 commit，沒試過就 checkout 並跑那個 commit 的 `cd/apply.sh`，結果寫回 GitHub Deployments。同一個 commit 只試一次。
 
-「做什麼」只寫一次：部署步驟在 `cd/apply.sh`，入口（watcher、Gradle 的 deploy、手動）可以很多個 —— 跟 CI 同一個原則（[0008](0008-ci-same-script-in-container.md)）。
+「做什麼」只寫一次：部署步驟在 `cd/apply.sh`，入口（watcher、Gradle 的 deploy、手動）可以很多個，跟 CI 同一個原則（[0008](0008-ci-same-script-in-container.md)）。
 `apply.sh` 一次換一個服務、都帶 `--no-deps`，部署 app 不會順便重啟模型。
 
 ## 代價

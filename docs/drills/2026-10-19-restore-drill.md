@@ -11,7 +11,7 @@
 | 資料量 | 50 帳號、20,000 筆行程、5,000 則對話（backend 全部 11 個 Flyway migration 建的 schema） |
 | 備份 | 1 秒，784 KB |
 | 還原演練（`--verify-only`，線上不動） | 3 秒 |
-| **誤刪 → 資料回來** | **4 秒**（`pg-restore.sh` 本身 3 秒，含停、起假 app） |
+| 誤刪 → 資料回來 | **4 秒**（`pg-restore.sh` 本身 3 秒，含停、起假 app） |
 | 還原後資料 | 整庫指紋（每張表依主鍵排序後的 md5）跟備份當下一樣 |
 | RPO 示範 | 備份之後才寫的 1 則對話：線上消失（RPO 內），被換下來的庫裡還在，用情境 C 的指令撈回來，沒有重複 |
 | 退回 | runbook「選錯備份」的反向改名可行：回到還原前（誤刪後）的狀態 |
@@ -19,7 +19,7 @@
 同一天跑了 4 次，前兩次發現並修掉兩個問題：
 
 1. 第一次「還原」花 13 秒：假 app 不處理 SIGTERM，`docker stop` 白等 10 秒才 SIGKILL。改成會處理 SIGTERM 之後 3–4 秒。
-   真的 app 一樣要等：它會把手上的請求做完（最多 2 分鐘）——所以 RTO 的大頭是停、起 app，不是還原本身。
+   真的 app 一樣要等：它會把手上的請求做完（最多 2 分鐘），所以 RTO 的大頭是停、起 app，不是還原本身。
 2. 被換下來的庫名稱原本帶大寫的 `T…Z`，PostgreSQL 沒加引號的名稱會轉小寫，log 印的跟實際名稱對不上。改成只用數字和底線。
 
 ## 反例：壞掉的備份、錯的步驟會被擋下
@@ -200,8 +200,8 @@ Unit talkcal-backup.timer has a bad unit file setting.
 
 ## 沒驗到的
 
-- **真的 EC2 上的關機備份**：容器裡不是 PID 1 的 systemd，跑不了「關機時 ExecStop 在 Docker 之前跑」。依據是 systemd 關機時以啟動順序的反向停止 unit（`After=docker.service`）。下次開機器時要驗：`sudo systemctl stop talkcal-backup-on-shutdown` 看 S3 多一份，再真的 stop instance、開回來看 `journalctl -u talkcal-backup-on-shutdown -b -1`。
-- **真的 S3、IAM**：只跑了 `terraform validate`，沒有 apply。IAM 少給的權限要等真的上去才會報 AccessDenied。
+- 真的 EC2 上的關機備份：容器裡不是 PID 1 的 systemd，跑不了「關機時 ExecStop 在 Docker 之前跑」。依據是 systemd 關機時以啟動順序的反向停止 unit（`After=docker.service`）。下次開機器時要驗：`sudo systemctl stop talkcal-backup-on-shutdown` 看 S3 多一份，再真的 stop instance、開回來看 `journalctl -u talkcal-backup-on-shutdown -b -1`。
+- 真的 S3、IAM：只跑了 `terraform validate`，沒有 apply。IAM 少給的權限要等真的上去才會報 AccessDenied。
 
 ## 2026-10-28 補充：備份之後到現在變了什麼（PR 意見）
 

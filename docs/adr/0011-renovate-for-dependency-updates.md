@@ -43,23 +43,23 @@ CI 每天掃漏洞（`ci/vulns.sh`），掃到了也只會紅燈，還是要人�
 
 ## 決定
 
-**用 Renovate，透過 Mend 的 Renovate GitHub App 跑；設定在 [`.github/renovate.json5`](../../.github/renovate.json5)。**
+用 Renovate，透過 Mend 的 Renovate GitHub App 跑；設定在 [`.github/renovate.json5`](../../.github/renovate.json5)。
 
 決定性的是兩件事：
 
-1. **pnpm 11**：#107 合併之後前端就是 pnpm 11，Dependabot 的官方支援表還停在 v10。選一個「現在支援、明天可能壞」的工具不划算。
-2. **看得到全部七種地方**：掃描工具（Trivy、gitleaks）本身舊了，CI 的兩道關卡就跟著變弱；Dependabot 看不到 shell 腳本裡的版本。
+1. pnpm 11：#107 合併之後前端就是 pnpm 11，Dependabot 的官方支援表還停在 v10。選一個「現在支援、明天可能壞」的工具不划算。
+2. 看得到全部七種地方：掃描工具（Trivy、gitleaks）本身舊了，CI 的兩道關卡就跟著變弱；Dependabot 看不到 shell 腳本裡的版本。
    架構頁抄的版本也用同一招，跟 compose 在同一個 PR 裡改，不會一邊升了一邊沒改。
 
 設定的取捨（細節寫在設定檔註解）：
 
-- **排程**：週一早上台灣時間 9 點前開；新版滿 14 天才開，跟 repo 選套件的兩週規則、#107 要加的 `web/pnpm-workspace.yaml` 的 `minimumReleaseAge` 一致 —— 比 pnpm 短的話，CI 的 `pnpm install --frozen-lockfile` 會擋下 Renovate 的 PR。
-- **分組**：minor、patch 依生態系各一個 PR（後端、前端、映像檔、Actions、Terraform）；要一起升的綁在一起（Gradle wrapper ＋ gradle 映像檔、各處的 JDK、各處的 Node、觀測堆疊）。
-- **安全修補**：不等週一的排程，但一樣滿 14 天才開。repo 沒開 GitHub 的 Dependabot alerts，所以讓 Renovate 自己查 OSV。
+- 排程：週一早上台灣時間 9 點前開；新版滿 14 天才開，跟 repo 選套件的兩週規則、#107 要加的 `web/pnpm-workspace.yaml` 的 `minimumReleaseAge` 一致，比 pnpm 短的話，CI 的 `pnpm install --frozen-lockfile` 會擋下 Renovate 的 PR。
+- 分組：minor、patch 依生態系各一個 PR（後端、前端、映像檔、Actions、Terraform）；要一起升的綁在一起（Gradle wrapper ＋ gradle 映像檔、各處的 JDK、各處的 Node、觀測堆疊）。
+- 安全修補：不等週一的排程，但一樣滿 14 天才開。repo 沒開 GitHub 的 Dependabot alerts，所以讓 Renovate 自己查 OSV。
   HIGH、CRITICAL 要提早由人在 Dependency Dashboard 勾選：Renovate 的設定做不到依嚴重度分流（實測見 [docs/dependency-updates.md](../dependency-updates.md)）。
-- **major**：只列在 Dependency Dashboard，勾了才開 PR。GitHub Actions 例外（major 多半只是換 Node 執行環境）。
-- **不自動合併**：每個 PR 都由使用者看過、CI 綠燈才合（[docs/dependency-updates.md](../dependency-updates.md)）。
-- **用 App 不自己跑**：自己用 Actions 跑要一把能開 PR、能觸發 CI 的 token（PAT 或自建 GitHub App），還要自己升 Renovate 本身；App 這些都不用管。
+- major：只列在 Dependency Dashboard，勾了才開 PR。GitHub Actions 例外（major 多半只是換 Node 執行環境）。
+- 不自動合併：每個 PR 都由使用者看過、CI 綠燈才合（[docs/dependency-updates.md](../dependency-updates.md)）。
+- 用 App 不自己跑：自己用 Actions 跑要一把能開 PR、能觸發 CI 的 token（PAT 或自建 GitHub App），還要自己升 Renovate 本身；App 這些都不用管。
 
 ## 代價
 

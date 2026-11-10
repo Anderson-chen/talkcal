@@ -22,7 +22,7 @@ AI 助理有三個工具（`propose_events`、`list_events`、`find_free_slots`�
 
 ## 決定
 
-**`CalendarAssistant` 自己跑 agent loop（最多 4 步），記憶存在自己的表 `calendar_assistant_message`，工具呼叫和結果用 JSONB 存。**
+`CalendarAssistant` 自己跑 agent loop（最多 4 步），記憶存在自己的表 `calendar_assistant_message`，工具呼叫和結果用 JSONB 存。
 
 歷史裡留著工具呼叫，同一段對話三次都正確呼叫工具（[V7](../../backend/src/main/resources/db/migration/V7__create_calendar_assistant_message.sql) 開頭的註解）。
 

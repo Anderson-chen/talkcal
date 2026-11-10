@@ -18,7 +18,7 @@
 
 ## 決定
 
-**adapter 用 Spring 的 `JdbcClient` 手寫 SQL；交易用 `TransactionTemplate`。**
+adapter 用 Spring 的 `JdbcClient` 手寫 SQL；交易用 `TransactionTemplate`。
 
 `TransactionTemplate` 而不是 `@Transactional`：adapter 是 `final` 類別，CGLIB 代理包不了。
 一個 adapter 實作同一張表的讀、存、刪幾個 port，「這張表長什麼樣」的知識只在一個地方。
