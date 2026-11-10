@@ -46,7 +46,7 @@ services:
   # 不把憑證塞進 nginx：那要另外跑 certbot、排續期，Caddy 一個設定檔就包了。
   # web 的 18080 照舊只綁 127.0.0.1，對外只有 Caddy 的 80/443。
   caddy:
-    image: caddy:2.10.0-alpine
+    image: caddy:2.11.6-alpine
     container_name: talkcal-caddy
     ports:
       - "80:80"

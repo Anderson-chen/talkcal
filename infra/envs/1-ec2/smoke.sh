@@ -86,8 +86,8 @@ check_https() {
 }
 
 # Grafana 用資料源設定去連一次，連得上才算：位址、網路、對方 ready 都包含在內。
-# Mimir（prometheus）、Loki 有 health API；Tempo 的 plugin 在 Grafana 11.4 沒實作（回 404 Method not implemented），
-# 改經 Grafana 的資料源 proxy 打 Tempo 的 /ready，一樣是走 Grafana 那份設定連過去
+# Mimir（prometheus）、Loki 有 health API；Tempo 的 health 在 Grafana 11.4 沒實作（回 404），12.4 才有；
+# 這裡沿用當時的寫法：改經 Grafana 的資料源 proxy 打 Tempo 的 /ready，一樣是走 Grafana 那份設定連過去
 datasource_path() {
   case "$1" in
     tempo) echo "/api/datasources/proxy/uid/tempo/ready" ;;

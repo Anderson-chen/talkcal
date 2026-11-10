@@ -130,52 +130,41 @@ jobs:
         if: always()
         run: cat ci/build/sast/summary.md >> "$GITHUB_STEP_SUMMARY" || true
 
-  # 漏洞掃描：前端的 lockfile，和 build 出來會上線的映像檔，有 HIGH、CRITICAL 就紅燈（必過檢查）。
+  # 漏洞掃描：前端的 lockfile、build 出來會上線的映像檔、EC2 上的第三方映像檔，有 HIGH、CRITICAL 就紅燈（必過檢查）。
   # --pull：每次都拉最新的基底映像檔，掃到的才是重新部署時真的會拿到的版本
+  # 第三方映像檔：排程、push 到 master 全掃；PR 只有動到映像檔版本或例外時才全掃（#239）——
+  # 把 compose 改回有漏洞的版本要在合併前紅燈，但無關的 PR 不必多拉約 1.5 GB，也不該被剛公布的第三方 CVE 弄紅
   vulns:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
+      # fetch-depth: 0 —— PR 要跟目標分支比，才知道有沒有動到映像檔版本
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       # 跟 deploy/compose.yaml 同樣的 context，標成同樣的名字
       - run: docker build --quiet --pull --tag talkcal/app:local backend
       - run: docker build --quiet --pull --tag talkcal/web:local web
 
-      # --repo：先掃設定（Dockerfile、compose、Terraform）和前端 lockfile，再掃映像檔。
-      # postgres 從 compose 讀（ci/compose-images.sh），不在這裡再寫一次：compose 升版時掃的就跟著換。
-      # 其他第三方映像檔在下面的 third-party-images
-      - run: ci/vulns.sh --repo talkcal/app:local talkcal/web:local "$(ci/compose-images.sh | grep '^postgres:')"
-
-      - name: 掃描結果貼到結果頁
-        if: always()
-        run: cat ci/build/vulns.md >> "$GITHUB_STEP_SUMMARY" || true
-
-  # EC2 上的其他第三方映像檔（caddy、grafana、loki…，清單從 compose 讀，見 ci/compose-images.sh）。
-  # 先掃、不擋（#235）：第一次掃有約 400 筆 HIGH、CRITICAL，全部要靠升版解決（#239）；
-  # 現在就擋的話 master 和所有 PR 都會紅到升完為止。升乾淨之後拿掉 continue-on-error，併進上面的 vulns。
-  # PR 上不跑：不擋合併，結果只看 compose 的版本和新公布的 CVE —— 每天的排程和 push 到 master 就看得到，
-  # 不必每個 PR 都多拉 1.5 GB 的映像檔
-  third-party-images:
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-
-      # 先列清單、自己一步，不跟掃描放在一起：compose 解析失敗或清單是空的要真的紅，
-      # 不然下一步的 continue-on-error 會把它吃掉，什麼都沒掃卻是綠的
+      # 先列清單、自己一步：compose 解析失敗或清單是空的要真的紅，
+      # 寫在 $() 裡的話失敗會變成少了參數，什麼第三方映像檔都沒掃卻是綠的。
+      # 清單從 compose 讀（ci/compose-images.sh），不在這裡再寫一次：升版、加服務時掃的就跟著換
       - id: list
+        # git diff --quiet 出錯（非 0、非 1）也會走全掃那邊：寧可多掃，不要少掃
         run: |
-          set -o pipefail
-          images=$(ci/compose-images.sh | grep -v '^postgres:' | paste -sd' ')
+          images=$(ci/compose-images.sh)
           test -n "$images"
-          echo "images=$images" >> "$GITHUB_OUTPUT"
+          if [ -n "$BASE_REF" ] && git diff --quiet "origin/$BASE_REF...HEAD" --               deploy/compose.yaml ops/compose.yaml 'infra/envs/1-ec2/compose*.yaml'               ci/compose-images.sh ci/trivyignore.yaml ci/Dockerfile ci/vulns.sh; then
+            images=$(grep '^postgres:' <<<"$images")
+          fi
+          echo "images=$(paste -sd' ' <<<"$images")" >> "$GITHUB_OUTPUT"
+        env:
+          BASE_REF: ${{ github.base_ref }}
 
-      # continue-on-error：有漏洞時這一步標紅，但 job 綠。結果看結果頁
+      # --repo：先掃設定（Dockerfile、compose、Terraform）和前端 lockfile，再掃映像檔。
       # $IMAGES 刻意不加引號：映像檔之間用空白隔開，要拆成多個參數
-      - run: ci/vulns.sh $IMAGES
-        continue-on-error: true
+      - run: ci/vulns.sh --repo talkcal/app:local talkcal/web:local $IMAGES
         env:
           IMAGES: ${{ steps.list.outputs.images }}
 
