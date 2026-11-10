@@ -402,17 +402,7 @@ Mimir 掛掉時 Watchdog 照樣會響，因為它不查任何資料源，只算�
 
 ## 告警：出事寄信
 
-規則、收件人、寄信節奏都用 provisioning 管（`grafana/provisioning/alerting/`），Grafana 一啟動就建好，UI 上是唯讀的。
-
-| 規則 | 檔案 | 什麼時候響 | 嚴重度 |
-|------|------|------|------|
-| app 掛了或抓不到指標 | `rules.yaml` | `max(up{job="talkcal-app"}) < 1` 持續 1 分鐘；**沒資料也算**（Alloy 掛了一樣看不到 app） | critical |
-| SLO 快燒 | `slo-burn-rate.yaml` | 照這速度幾天內就燒光 error budget（[docs/slo.md](../docs/slo.md)） | critical |
-| SLO 慢燒 | `slo-burn-rate.yaml` | 照這速度這個月會不達標 | warning |
-
-錯誤和延遲只看 SLO 的 burn rate，不另外設「5xx > 5%」「p95 > 1 秒」這種固定門檻。兩邊都設的話，同一件事會寄兩封，門檻還不一樣。SLO 管不到的是根本沒資料的情況：app 掛掉時沒有請求，SLO 沒資料會被當成正常，所以 `up` 這條另外留著。全部告警都寄到同一個信箱（`policies.yaml`），要分流時比對 `severity` 標籤。
-
-除了上面這幾條，還有資料庫、連線池、模型熔斷、備份的告警（`respond.yaml`）。所有告警的總表（式子、門檻、severity、為什麼要有）在 [docs/alerts.md](../docs/alerts.md)。
+規則、收件人、寄信節奏都用 provisioning 管（`grafana/provisioning/alerting/`），Grafana 一啟動就建好，UI 上是唯讀的。有哪些告警、式子和門檻、為什麼要有，都在 [docs/alerts.md](../docs/alerts.md) 的總表；這裡只記它在觀測堆疊裡怎麼接。
 
 「備份太久沒成功」那條用到的指標，是 `infra/envs/1-ec2/backup-to-s3.sh` 成功時寫的 `.prom` 檔，由 Alloy 用 textfile collector 讀（`config.alloy` 的 (4)）。雲端由 `infra/envs/1-ec2/compose.ops.yaml` 把那個資料夾掛給 Alloy；本機沒有備份排程，掛的是一個空的 volume，那條告警的查詢是空的，會維持正常。
 
