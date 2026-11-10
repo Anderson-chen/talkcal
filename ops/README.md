@@ -1,4 +1,4 @@
-# ops —— 觀測環境（Observability）
+# ops：觀測環境（Observability）
 
 用 Docker 一次拉起 **Alloy + Mimir + Loki + Tempo + Grafana**，跟被觀測的服務分開。
 被觀測的是 `deploy/` 那組容器（app、模型、資料庫、前端），以及本機開發時在 `backend/` 裡用 `./gradlew bootRun` 跑的 app。
@@ -275,7 +275,7 @@ app 端因此**必須**維持 1.0：app 先丟掉的 trace，Alloy 根本看不�
 
 | 組別 | 送幾個 | 雲端設定（10%）留下 | 本機設定（100%）留下 |
 |------|------:|------:|------:|
-| 一般（40ms、200） | 200 | **19** | 200 |
+| 一般（40 ms、200） | 200 | **19** | 200 |
 | 4xx（`CLIENT_ERROR`） | 40 | **6** | 40 |
 | 接近門檻（4.5 秒） | 40 | **2** | 40 |
 | 慢（6 秒） | 20 | **20** | 20 |
@@ -289,7 +289,7 @@ app 端因此**必須**維持 1.0：app 先丟掉的 trace，Alloy 根本看不�
 2. **不是什麼都留**：接近門檻的 4.5 秒、4xx 都只按比例留（2/40、6/40），規則沒有寬到把它們全收。
    丟掉的 trace 連子 span 都沒進 Tempo（不帶根 span 的條件查也是 19），沒有留下半截。
 3. **等太短會漏慢請求**：模擬慢請求真實的到達順序——子 span 先到、根 span 8 秒後才到。
-   等 5 秒：20 個慢請求留下 **0** 個（決定時只看到 5ms 的子 span）；等 20 秒：**20** 個全留。
+   等 5 秒：20 個慢請求留下 **0** 個（決定時只看到 5 ms 的子 span）；等 20 秒：**20** 個全留。
 
 **對從 trace 算出來的數字的影響**
 
@@ -335,7 +335,7 @@ Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](..
 | 延遲用 exponential histogram（Mimir 存成 native histogram） | 預設的固定 bucket 最大 10 秒，模型一塞車 p95 就被壓在 10 秒。要 Alloy 的 remote_write 開 `send_native_histograms`，不開會整批被丟掉、不報錯 |
 | 名稱加 `k6_` 前綴 | k6 預設不加，會出現 `checks_total`、`vus` 這種跟別的服務分不清的名字 |
 
-驗過準不準：同一次 knee 壓測，Grafana 算出的 p95（792ms → 1572ms → 3360ms）跟 k6 收工印的表一致。
+驗過準不準：同一次 knee 壓測，Grafana 算出的 p95（792 ms → 1572 ms → 3360 ms）跟 k6 收工印的表一致。
 
 ## SLO：怎樣才算「夠好」
 
@@ -344,7 +344,7 @@ Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](..
 
 | 誰 | 做什麼 | 檔案 |
 |----|--------|------|
-| app | 延遲直方圖多兩個剛好在門檻上的 bucket（300ms、8s） | `backend/.../application.properties` |
+| app | 延遲直方圖多兩個剛好在門檻上的 bucket（300 ms、8s） | `backend/.../application.properties` |
 | Mimir 的 ruler | 每分鐘把 SLI、burn rate、error budget 算好，寫回成新的序列（`slo:*`） | `mimir/rules/anonymous/slo.yaml` |
 | Grafana 告警 | 讀 `slo:burn_rate:*`，長短兩個視窗都超過門檻就進 firing（multi-window, multi-burn-rate） | `grafana/provisioning/alerting/slo-burn-rate.yaml` |
 | Grafana 儀表板 | **talkcal — SLO**：budget 還剩多少、燒多快、告警狀態 | `grafana/provisioning/dashboards/talkcal-slo.json` |

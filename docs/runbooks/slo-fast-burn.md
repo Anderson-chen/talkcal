@@ -14,7 +14,7 @@
 | `slo` 標籤 | 壞的是什麼 |
 |-----------|-----------|
 | `calendar-availability` | 行程 API（和讀對話紀錄）回 5xx |
-| `calendar-latency` | 行程 API 超過 300ms |
+| `calendar-latency` | 行程 API 超過 300 ms |
 | `assistant-availability` | 跟助理說話回 5xx（含熔斷、滿載的 503） |
 | `assistant-latency` | 跟助理說話超過 8 秒 |
 

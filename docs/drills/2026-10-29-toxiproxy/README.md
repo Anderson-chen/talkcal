@@ -24,16 +24,16 @@ k6 ──> app（這個分支的 jar，主機上跑）──> cb44-toxiproxy ─
 
 | 演練 | 指令 | 斷路器 | 被擋下的助理請求 | 恢復後 | 行程 API |
 |---|---|---|---|---|---|
-| 模型斷線 | `FAULT=down` | 弄壞後 12 秒打開 | 38 次 503，中位數 9ms | 29 秒關回來 | 301 次全 200，p95 16ms |
-| 模型變慢（每個回應 +40 秒） | `FAULT=slow` | 慢呼叫率到 100%，弄壞後 52 秒打開 | 45 次 503，中位數 22ms | 33 秒關回來 | 301 次全 200，p95 19ms |
-| 模型卡住（bulkhead 縮成 10） | `FAULT=hang` | bulkhead 先擋，卡住的逾時後打開 | 11 次 `MODEL_BUSY`（中位數 8ms）、25 次 `MODEL_UNAVAILABLE`（中位數 9ms） | 恢復當下就關回來 | 361 次全 200，p95 19ms |
+| 模型斷線 | `FAULT=down` | 弄壞後 12 秒打開 | 38 次 503，中位數 9 ms | 29 秒關回來 | 301 次全 200，p95 16 ms |
+| 模型變慢（每個回應 +40 秒） | `FAULT=slow` | 慢呼叫率到 100%，弄壞後 52 秒打開 | 45 次 503，中位數 22 ms | 33 秒關回來 | 301 次全 200，p95 19 ms |
+| 模型卡住（bulkhead 縮成 10） | `FAULT=hang` | bulkhead 先擋，卡住的逾時後打開 | 11 次 `MODEL_BUSY`（中位數 8 ms）、25 次 `MODEL_UNAVAILABLE`（中位數 9 ms） | 恢復當下就關回來 | 361 次全 200，p95 19 ms |
 | 反例：**資料庫**斷線 | `PROXY=postgres FAULT=down` | **沒動**（只管模型） | 0 | — | 18 次 502（等 30 秒連線逾時），k6 門檻判失敗 |
 
 斷路器每一次狀態改變都記在 [breaker-log.txt](breaker-log.txt)，每一句的結果在各自的 `*-k6.txt`。
 
 ### 模型斷線
 
-[down-k6.txt](down-k6.txt)。跟 10/19 手動停容器的結果一致：前 5 次 502（19ms，連線被拒），斷路器打開，之後 503；
+[down-k6.txt](down-k6.txt)。跟 10/19 手動停容器的結果一致：前 5 次 502（19 ms，連線被拒），斷路器打開，之後 503；
 11 次 502 = 打開前 5 次 + 三輪半開各 2 次試探。
 
 ![斷線](../../images/2026-10-29-toxiproxy-down.jpg)
@@ -64,7 +64,7 @@ bulkhead 用 `-Dresilience4j.bulkhead.instances.chat-model.max-concurrent-calls=
 一開始用 Toxiproxy 的 timeout 毒（「資料不轉、連線不關」），app 卻在 5～6 秒就收到 `unexpected end of stream`，等於斷線：
 
 - 加在 downstream（模型 → app）：請求照樣送到，模型回完就關連線，Toxiproxy 把關閉傳回 app
-- 加在 upstream（app → 模型）：請求到不了模型，但 llama-server 對閒置 5 秒的連線也會關掉，一樣傳回 app（[hang-upstream-timeout-k6.txt](hang-upstream-timeout-k6.txt)：502 的中位數 5039ms）
+- 加在 upstream（app → 模型）：請求到不了模型，但 llama-server 對閒置 5 秒的連線也會關掉，一樣傳回 app（[hang-upstream-timeout-k6.txt](hang-upstream-timeout-k6.txt)：502 的中位數 5039 ms）
 
 timeout 毒擋得住資料、擋不住關連線。改成超長延遲之後，回應和關連線一起被延後，才是真的卡住。腳本和 `deploy/README.md` 都改了。
 

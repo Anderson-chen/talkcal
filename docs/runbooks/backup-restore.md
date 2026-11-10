@@ -28,7 +28,7 @@
 
 ---
 
-## 情境 A：本機——誤刪了，要回到最近一份備份
+## 情境 A：本機：誤刪了，要回到最近一份備份
 
 **1. 找備份**（檔名是 UTC 時間，最後一個就是最新的）
 
@@ -65,7 +65,7 @@ docker exec talkcal-postgres psql -U talkcal -d talkcal -c "SELECT count(*) FROM
 docker exec talkcal-postgres psql -U talkcal -d postgres -c "DROP DATABASE talkcal_before_<時間>"
 ```
 
-## 情境 B：雲端——誤刪了、或資料被新版程式寫壞了
+## 情境 B：雲端：誤刪了、或資料被新版程式寫壞了
 
 **1. 開機、連進去**（在本機的 `infra/envs/1-ec2`）
 

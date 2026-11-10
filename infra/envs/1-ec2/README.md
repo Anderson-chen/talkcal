@@ -93,7 +93,7 @@ flowchart LR
 | DB 密碼 | 自己填在不進 git 的 `deploy/.env`（[#123](https://github.com/Anderson-chen/talkcal/issues/123)） | Terraform 隨機產生 → SSM → 同一個位置的 `deploy/.env`（[#14](https://github.com/Anderson-chen/talkcal/issues/14)） | `secrets.tf`、`compose.ec2.yaml` |
 | Google、GitHub 登入 | client id／secret 填在 `deploy/.env`，回呼網址 `http://localhost:5173/...` | `oauth.auto.tfvars` → SSM → `deploy/.env`；回呼網址 `https://<網站>/...`，nginx 照轉 Caddy 的 `X-Forwarded-Proto`、app 信任它才組得出 https（[#127](https://github.com/Anderson-chen/talkcal/issues/127)） | `variables.tf`、`secrets.tf`、`web/nginx.conf` |
 | 告警寄信 | SMTP、收件人填在 `deploy/.env`，起 `ops/` 時帶 `--env-file ../deploy/.env`；試寄用 Mailpit（`--profile mailtest`） | `alerting.auto.tfvars` → SSM → `deploy/.env`，`deploy.sh` 起 `ops/` 時帶 `--env-file deploy/.env`（[#121](https://github.com/Anderson-chen/talkcal/issues/121)） | `variables.tf`、`secrets.tf`、`deploy.sh`、`ops/compose.yaml` |
-| app 記憶體 | 沒上限 | `mem_limit: 2g`：沒設的話 JVM 的 75% 是算整台（8GB 或 16GB） | `compose.ec2.yaml` |
+| app 記憶體 | 沒上限 | `mem_limit: 2g`：沒設的話 JVM 的 75% 是算整台（8 GB 或 16 GB） | `compose.ec2.yaml` |
 | Trace 取樣 | 全留 | 錯的、5xx、超過 5 秒的全留，其餘留 10%（[#37](https://github.com/Anderson-chen/talkcal/issues/37)，理由見 [ops/README.md](../../../ops/README.md)） | `compose.ops.yaml` |
 | 映像檔 | 本機 build | 在 EC2 上 build；做[版本 tag](https://github.com/Anderson-chen/talkcal/issues/25) 時再改成 CI 推到 ECR | `deploy.sh` |
 
@@ -170,7 +170,7 @@ terraform output -raw grafana_tunnel
 ## 省錢
 
 機器按小時計費（bedrock 的 m7i-flex.large 約 0.1 USD/h，gpu 的 g6.xlarge 約 0.8–1 USD/h），平常關機、展示時才開。
-關機時還在收費的只有 EBS（bedrock 30GB、gpu 150GB 的 gp3）和沒掛在執行中機器上的 Elastic IP。Bedrock 按 token 計費，不叫就不收。
+關機時還在收費的只有 EBS（bedrock 30 GB、gpu 150 GB 的 gp3）和沒掛在執行中機器上的 Elastic IP。Bedrock 按 token 計費，不叫就不收。
 
 ```bash
 export HEALTHCHECKS_API_KEY=...   # 有設 heartbeat_url 才需要；#40 做完之前不要設，見下面
@@ -206,7 +206,7 @@ Healthchecks 也會寄 DOWN 的信。#40 做完再設。已經設過的，部署
 | 問題 | 選擇 | 理由 |
 |---|---|---|
 | 模型在哪跑 | 先走 Bedrock，`model_backend` 留著切回 gpu | GPU 配額被拒；理由見上面「為什麼先走 Bedrock」 |
-| 機型（bedrock） | m7i-flex.large | 8GB 放得下 app、Postgres、Caddy、整組觀測；t3.small（2GB）、c7i-flex.large（4GB）不夠 |
+| 機型（bedrock） | m7i-flex.large | 8 GB 放得下 app、Postgres、Caddy、整組觀測；t3.small（2 GB）、c7i-flex.large（4 GB）不夠 |
 | 機型（gpu） | g6.xlarge | 映像檔是 sm_89，L4 不用重編；T4 便宜但要另外編一份 |
 | Bedrock 怎麼驗證身分 | 長期 API key（專用 IAM user，90 天過期），存 SSM | app 的 OpenAI client 只會送 Bearer key、不會 SigV4；先用 key 驗證模型合不合用，之後再換成吃 EC2 角色的 Bedrock Converse |
 | HTTPS | Caddy + sslip.io | 一個設定檔包辦憑證和續期，不必買網域；跟 cool-down 同一套做法 |

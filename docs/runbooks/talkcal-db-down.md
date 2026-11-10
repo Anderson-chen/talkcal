@@ -90,7 +90,7 @@ docker stats --no-stream             # 誰在吃記憶體（app 有 mem_limit，
 docker compose up -d --wait postgres
 ```
 
-雲端的機器記憶體不大（m7i-flex.large 8GB），如果是 app 長期吃太多，看 talkcal-app dashboard 的 JVM heap。
+雲端的機器記憶體不大（m7i-flex.large 8 GB），如果是 app 長期吃太多，看 talkcal-app dashboard 的 JVM heap。
 
 ### 4. exporter 自己壞了（資料庫其實沒事）
 

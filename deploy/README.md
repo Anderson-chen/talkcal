@@ -1,4 +1,4 @@
-# deploy —— 在本機模擬雲端部署
+# deploy：在本機模擬雲端部署
 
 把原本用 `.bat` 跑在 Windows 上的服務，**一次一個**搬進容器。之後上雲端，跑的就是這裡的定義。
 跟 `ops/` 分開：`ops/` 是觀測（看別人），這裡是被部署的服務本身（被看的那些）。
@@ -100,7 +100,7 @@ ops/ 的 Alloy 也不靠它：Alloy 加入了這組的網路，跟 app 一樣用
 ## 映像檔從哪來
 
 **app**：`backend/Dockerfile`，build 用 Docker Hub 的 `gradle:9.2.1-jdk25`，執行用 `eclipse-temurin:25-jre`。
-不用 `./gradlew`：Gradle 本體的下載點轉到 GitHub，本機實測 0.17 MB/s。第一次 build 約 1.5 分鐘，映像檔約 500MB。
+不用 `./gradlew`：Gradle 本體的下載點轉到 GitHub，本機實測 0.17 MB/s。第一次 build 約 1.5 分鐘，映像檔約 500 MB。
 
 **模型**：用一個**自己 build** 的映像檔 `talkcal/llama-server:b10964-cuda13.0.1`（`llama-server/Dockerfile`）。
 
@@ -115,7 +115,7 @@ docker compose build        # 第一次或改了 Dockerfile 才需要；compose 
 docker compose build app    # 改了 app 的程式碼後，只重 build app
 ```
 
-實測：拉 CUDA 底 ~6 分鐘 + 編譯 3.5 分鐘（只編 sm_89），共約 10 分鐘。映像檔 4.3GB。
+實測：拉 CUDA 底 ~6 分鐘 + 編譯 3.5 分鐘（只編 sm_89），共約 10 分鐘。映像檔 4.3 GB。
 
 ## 模型檔怎麼進容器
 
@@ -123,12 +123,12 @@ docker compose build app    # 改了 app 的程式碼後，只重 build app
 從 volume 唯讀讀取。已經複製過的（大小相同）會跳過，所以只有第一次慢；有列在 `SHA256SUMS` 的會驗證內容。
 
 為什麼不直接掛 `C:\llm\models`：實測 Windows → WSL2 檔案通道循序讀只有約 20 MB/s，
-llama.cpp 預設的 mmap 零碎讀更慢——Qwen 5GB 載了 5 分鐘還卡在 275MB。
+llama.cpp 預設的 mmap 零碎讀更慢——Qwen 5 GB 載了 5 分鐘還卡在 275 MB。
 
 | | 直接掛 Windows 資料夾 | volume（現在） |
 |---|---|---|
 | Qwen 載入 | 5 分鐘以上沒載完 | **2.2 秒**（跟原生一樣） |
-| 代價 | — | 第一次啟動多一次複製（約 2 分鐘），磁碟多存一份 5.6GB |
+| 代價 | — | 第一次啟動多一次複製（約 2 分鐘），磁碟多存一份 5.6 GB |
 
 ## 怎麼切換
 

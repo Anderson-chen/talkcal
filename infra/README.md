@@ -1,4 +1,4 @@
-# infra —— 搬上 AWS 的基礎設施
+# infra：搬上 AWS 的基礎設施
 
 狀態：階段一的 Terraform 寫好了、還沒 apply 過；階段二還在規劃。本機現在怎麼跑見 [docs/architecture.md](../docs/architecture.md)。
 

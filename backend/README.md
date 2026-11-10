@@ -1,4 +1,4 @@
-# backend —— Spring Boot app
+# backend：Spring Boot app
 
 程式碼、Gradle、Dockerfile。怎麼跑、怎麼測見根目錄的 [README.md](../README.md#怎麼跑)；為什麼選這些技術見 [docs/adr/](../docs/adr/README.md)。
 

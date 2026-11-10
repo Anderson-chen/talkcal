@@ -27,7 +27,7 @@ AI 助理一個請求（`POST /api/calendar/assistant`）是一段 agent loop：
 |---|---|---|
 | Bedrock Qwen3 32B input（東京，`bedrock-mantle`，Standard） | **0.18 USD / 1M token** | AWS Price List，`AmazonBedrock` 東京，publicationDate 2026-10-16，usagetype `APN1-qwen.qwen3-32b-mantle-input-tokens-standard` |
 | Bedrock Qwen3 32B output（同上） | **0.73 USD / 1M token** | 同上，`...-output-tokens-standard` |
-| EC2 g6.xlarge（L4 24GB，東京，Linux 隨需） | **1.1672 USD / 小時** | AWS 定價頁的資料檔（`ec2-ondemand-without-sec-sel`，東京，Linux），發布 2026-10-15 |
+| EC2 g6.xlarge（L4 24 GB，東京，Linux 隨需） | **1.1672 USD / 小時** | AWS 定價頁的資料檔（`ec2-ondemand-without-sec-sel`，東京，Linux），發布 2026-10-15 |
 | EC2 m7i-flex.large（東京，Linux 隨需） | **0.12369 USD / 小時** | 同上 |
 
 兩種部署方式就是 [infra/envs/1-ec2](../infra/envs/1-ec2/README.md) 的 `model_backend`：
