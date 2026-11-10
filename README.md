@@ -11,17 +11,6 @@
 - 本機、雲端的總覽圖和本機細節：[docs/architecture.md](docs/architecture.md#總覽)
 - AWS 階段一的互動架構圖（點元件看由哪個檔案哪幾行決定）：<https://anderson-chen.github.io/talkcal/>
 
-## AI 助理
-
-AI 助理是自己寫的 agent loop：每一輪把對話歷史和三個工具交給模型，模型決定要不要呼叫工具，
-工具背後是行事曆的 use case。
-
-| 工具 | 做什麼 | 會不會存檔 |
-|---|---|---|
-| `propose_events` | 把一句話解析成行程，畫面上顯示確認卡片 | 不會：使用者按確認才送 `POST /api/calendar/events` |
-| `list_events` | 查一段日期裡的行程 | 不會 |
-| `find_free_slots` | 找一段日期、某個時段裡的空檔 | 不會 |
-
 ## 目錄
 
 每個資料夾是一個關注點，各自有 README 說明設計理由：
