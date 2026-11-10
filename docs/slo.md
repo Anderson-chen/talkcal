@@ -7,13 +7,13 @@ dashboard 看得到數字，但數字要跟一條線比才知道該不該處理�
 |------|------|
 | 錄製規則（算 SLI、burn rate、budget） | [ops/mimir/rules/anonymous/slo.yaml](../ops/mimir/rules/anonymous/slo.yaml) |
 | 告警規則（burn rate 太高就叫人） | [ops/grafana/provisioning/alerting/slo-burn-rate.yaml](../ops/grafana/provisioning/alerting/slo-burn-rate.yaml) |
-| 儀表板 **talkcal — SLO** | [ops/grafana/provisioning/dashboards/talkcal-slo.json](../ops/grafana/provisioning/dashboards/talkcal-slo.json)，<http://localhost:3000/d/talkcal-slo> |
+| 儀表板 talkcal — SLO | [ops/grafana/provisioning/dashboards/talkcal-slo.json](../ops/grafana/provisioning/dashboards/talkcal-slo.json)，<http://localhost:3000/d/talkcal-slo> |
 | 延遲門檻的 bucket | [application.properties](../backend/src/main/resources/application.properties) 的 `management.metrics.distribution.slo.http.server.requests` |
 | 平常流量／量基準的腳本 | [perf/slo.js](../perf/slo.js) |
 
 ## 四個 SLO
 
-全部是**請求數比例**（好的請求 / 全部請求），從 app 自己的 `http_server_requests_seconds` 算；視窗是**滾動 28 天**。
+全部是請求數比例（好的請求 / 全部請求），從 app 自己的 `http_server_requests_seconds` 算；視窗是滾動 28 天。
 
 | SLO | 範圍 | 好的請求 | 目標 | error budget（28 天） |
 |-----|------|----------|------|------------------------|
@@ -25,7 +25,7 @@ dashboard 看得到數字，但數字要跟一條線比才知道該不該處理�
 ### 為什麼一般 API 和助理分開
 
 助理一個請求是一段 agent loop，要叫模型好幾次（見 [perf/lib/assistant.js](../perf/lib/assistant.js) 開頭），
-慢好幾個數量級是**預期**的。放在一起算的話，門檻定 300 ms 助理全紅，定 8 秒行程 API 慢 20 倍也看不出來。
+慢好幾個數量級是預期的。放在一起算的話，門檻定 300 ms 助理全紅，定 8 秒行程 API 慢 20 倍也看不出來。
 可用性也分開：助理多依賴一顆模型，模型塞爆（KV cache 滿）會回 502，一般 API 不該跟著被扣分。
 
 ### 數字怎麼來的
@@ -35,8 +35,8 @@ dashboard 看得到數字，但數字要跟一條線比才知道該不該處理�
 | 量什麼 | 怎麼量 | 結果 |
 |--------|--------|------|
 | 行程 API，平常量 | `perf/slo.js`，每秒 10 個（列表 8 : 新增+刪除 2），90 秒 | p95 13.8 ms、p99 26.7 ms、max 196 ms，0 個 5xx |
-| 行程 API，5 倍量 | 同上，每秒 50 個，60 秒 | p95 13.6 ms、**p99 152 ms**、max 270 ms，0 個 5xx |
-| 助理，低於臨界值 | `perf/slo.js`，每分鐘 20 句（10 句隨機混合，查詢和提議都有），3 分鐘 | 中位 1.52s、**p95 3.76s**、p99 4.02s，0 個 5xx |
+| 行程 API，5 倍量 | 同上，每秒 50 個，60 秒 | p95 13.6 ms、p99 152 ms、max 270 ms，0 個 5xx |
+| 助理，低於臨界值 | `perf/slo.js`，每分鐘 20 句（10 句隨機混合，查詢和提議都有），3 分鐘 | 中位 1.52s、p95 3.76s、p99 4.02s，0 個 5xx |
 | 助理，同時數一階一階加 | `STEPS=1,2,4,8 HOLD_S=30 perf/knee.js`（每句都是「明天有什麼行程？」） | 見下表 |
 
 | 同時數 | 中位 | p95 | 吞吐量（個/秒） |
@@ -46,7 +46,7 @@ dashboard 看得到數字，但數字要跟一條線比才知道該不該處理�
 | 4 | 3570 ms | 3669 ms | 1.20 |
 | 8 | 6638 ms | 8903 ms | 1.23 |
 
-吞吐量在 2 個人時就到頂（約 1.3～1.5 個/秒），之後再加人只是排隊：這台的臨界值大約是**同時 2 個**。
+吞吐量在 2 個人時就到頂（約 1.3～1.5 個/秒），之後再加人只是排隊：這台的臨界值大約是同時 2 個。
 
 由此推門檻：
 
@@ -81,8 +81,8 @@ dashboard 看得到數字，但數字要跟一條線比才知道該不該處理�
 
 ## burn-rate 告警
 
-做法是 Google SRE Workbook 第 5 章〈Alerting on SLOs〉的 **multi-window, multi-burn-rate**：
-Grafana 自己的 SLO 功能、Sloth、Pyrra 也都是這套。每個條件都要**長、短兩個視窗**同時超過門檻：
+做法是 Google SRE Workbook 第 5 章〈Alerting on SLOs〉的 multi-window, multi-burn-rate：
+Grafana 自己的 SLO 功能、Sloth、Pyrra 也都是這套。每個條件都要長、短兩個視窗同時超過門檻：
 長的證明「燒得夠久、夠多，不是一下下的抖動」；短的（長的 1/12）證明「現在還在燒」，事情一結束短視窗馬上掉下來、告警就解除，
 不會等 1 小時的平均慢慢降。
 
@@ -103,7 +103,7 @@ Grafana 自己的 SLO 功能、Sloth、Pyrra 也都是這套。每個條件都�
 
 burn rate 是比例。一個小時只有 10 個請求、其中 1 個 502，比例就是 10%，對 99.5% 的目標是 burn rate 20，會 page。
 這個作品集平常的流量就是這麼小。Workbook 對低流量的建議是加最低請求數、或合併成比較大的服務一起算；
-目前**不加**，理由是：真的有人在用的那段時間，一個 502 就是那位使用者遇到的問題，寧可多看一眼。
+目前不加，理由是：真的有人在用的那段時間，一個 502 就是那位使用者遇到的問題，寧可多看一眼。
 等真的被誤報吵到，再在告警條件加「長視窗至少 N 個請求」。
 
 ### 通知送去哪
@@ -111,7 +111,7 @@ burn rate 是比例。一個小時只有 10 個請求、其中 1 個 502，比�
 這份只寫規則。送 email 的 contact point 和 notification policy 在同一個資料夾的 `contact-points.yaml`、`policies.yaml`（#121）：
 快燒、慢燒都寄到同一個信箱，同一條規則的告警合成一封，沒修好每 4 小時再提醒一次。
 嚴重度用同一套值：快燒 `severity=critical`（Workbook 說的 page）、慢燒 `severity=warning`（ticket），之後要分流（例如快燒另外推手機）時 policy 比對這個標籤就好。
-沒設 SMTP 時不寄信，規則照樣評估、狀態在 Grafana 的 **Alerting → Alert rules** 和 SLO 儀表板最下面看得到。
+沒設 SMTP 時不寄信，規則照樣評估、狀態在 Grafana 的 Alerting → Alert rules 和 SLO 儀表板最下面看得到。
 
 ## 驗證：故障讓告警響、正常時不響
 
@@ -124,12 +124,12 @@ burn rate 是比例。一個小時只有 10 個請求、其中 1 個 502，比�
 
 | 時段 | 做了什麼 | 結果 |
 |------|----------|------|
-| 00:33–00:45 | 只有平常流量 | 四個 SLO 的 burn rate（5m、1h、1d）都是 0，budget 100%，兩條告警都是 Normal。**正常流量不觸發** |
-| 00:45 | **模型斷線**：把 app 從 deploy/ 的網路拔掉，找不到 llm-chat，助理一律 502 | 00:50 快燒 `assistant-availability` 進 firing（約 5 分鐘）；`calendar-*` 的 burn rate 維持 0，**行程 API 沒被誤判** |
-| 00:51 | 接回網路 | 5m 的 burn rate 回到 0，1h 還有 23.7，`1h/5m` 那組在 01:00 解除：**事情結束，短視窗讓告警跟著停**，不必等 1 小時的平均降下來 |
-| 01:01–01:08 | **資料庫斷續卡住**：每 5 秒 `docker pause` postgres 2 秒 | 約三成行程請求超過 300 ms（5m burn 28.8、1h 4.3）：只有慢燒 `calendar-latency` 進 firing，**沒到快燒門檻**；`calendar-availability` 維持 0（慢但沒失敗） |
-| 01:08–01:16 | **資料庫停掉**：`docker stop` postgres | 行程 API 全部 502（5m burn 200 = 100% 失敗），01:15 快燒 `calendar-availability` 進 firing；助理也要讀資料庫，`assistant-availability` 跟著燒 |
-| 01:16–01:50 | 重新啟動 postgres，只剩平常流量 | 01:50 快燒全部解除：5m、30m 的 burn rate 都回到 0，但 1h（`calendar-availability` 8.3）、6h（6.5）還很高，**故障結束後告警不會因為長視窗還沒降下來就一直響** |
+| 00:33–00:45 | 只有平常流量 | 四個 SLO 的 burn rate（5m、1h、1d）都是 0，budget 100%，兩條告警都是 Normal。正常流量不觸發 |
+| 00:45 | 模型斷線：把 app 從 deploy/ 的網路拔掉，找不到 llm-chat，助理一律 502 | 00:50 快燒 `assistant-availability` 進 firing（約 5 分鐘）；`calendar-*` 的 burn rate 維持 0，行程 API 沒被誤判 |
+| 00:51 | 接回網路 | 5m 的 burn rate 回到 0，1h 還有 23.7，`1h/5m` 那組在 01:00 解除：事情結束，短視窗讓告警跟著停，不必等 1 小時的平均降下來 |
+| 01:01–01:08 | 資料庫斷續卡住：每 5 秒 `docker pause` postgres 2 秒 | 約三成行程請求超過 300 ms（5m burn 28.8、1h 4.3）：只有慢燒 `calendar-latency` 進 firing，沒到快燒門檻；`calendar-availability` 維持 0（慢但沒失敗） |
+| 01:08–01:16 | 資料庫停掉：`docker stop` postgres | 行程 API 全部 502（5m burn 200 = 100% 失敗），01:15 快燒 `calendar-availability` 進 firing；助理也要讀資料庫，`assistant-availability` 跟著燒 |
+| 01:16–01:50 | 重新啟動 postgres，只剩平常流量 | 01:50 快燒全部解除：5m、30m 的 burn rate 都回到 0，但 1h（`calendar-availability` 8.3）、6h（6.5）還很高，故障結束後告警不會因為長視窗還沒降下來就一直響 |
 
 ![平常流量：budget 100%、burn rate 0](images/2026-10-19-slo-dashboard-normal.jpg)
 

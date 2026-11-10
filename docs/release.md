@@ -1,6 +1,6 @@
 # 版本與 release tag
 
-回答一個問題：**線上現在跑的是哪個 commit？** rollback（[#19](https://github.com/Anderson-chen/talkcal/issues/19)）
+回答一個問題：線上現在跑的是哪個 commit？rollback（[#19](https://github.com/Anderson-chen/talkcal/issues/19)）
 和 hotfix（[#26](https://github.com/Anderson-chen/talkcal/issues/26)）都從這裡起步：
 要退回去或從線上那一版開分支，得先說得出線上是哪一版。
 
@@ -30,7 +30,7 @@ GitHub Deployments 記的是「watcher 想部署哪個 commit」，不是「容�
 | `:latest` 或環境名（`:prod`） | ✗ | ✗ | ✓ | 同上，會被下一次 build 蓋掉 |
 | 只用 commit SHA | ✓ | ✓ | ✓ | 可以，但「這一版是確認過、可以退回來的」沒地方標 |
 | 只用 semver tag | ✗：CD 每個綠燈 commit 都部署，不會每個都打 tag | 要查 | ✓ | 兩次 release 之間的部署全部沒名字 |
-| `git describe`（`v0.2.0-3-g3f9c2ab`） | ✓ | ✓ | **✗**：EC2 是 `--depth 1` 淺 clone，算不出「離 tag 幾個 commit」 | 同一個 commit 在兩台機器名字不同 |
+| `git describe`（`v0.2.0-3-g3f9c2ab`） | ✓ | ✓ | ✗：EC2 是 `--depth 1` 淺 clone，算不出「離 tag 幾個 commit」 | 同一個 commit 在兩台機器名字不同 |
 | CalVer（`2026.10.16`） | 一天多次部署要再加序號 | ✗ | 要另外存「今天第幾次」 | 版本號本身不帶 commit |
 | tag 有就用 tag，沒有用 SHA（選這個） | ✓ | ✓（tag 也是指著一個 commit） | ✓：只看「指著 HEAD 的 tag」，淺 clone 也拉得到 | 每次部署都有名字，確認過的那幾個另外有好記的名字 |
 
@@ -63,7 +63,7 @@ git（tag、HEAD）
 
 ### 怎麼查線上是哪一版
 
-查**容器**，不是查映像檔的 tag 名稱：容器建立時就帶著映像檔的 label，看到的是正在跑的那一個。
+查容器，不是查映像檔的 tag 名稱：容器建立時就帶著映像檔的 label，看到的是正在跑的那一個。
 
 ```bash
 docker inspect talkcal-app --format '{{index .Config.Labels "org.opencontainers.image.version"}} {{index .Config.Labels "org.opencontainers.image.revision"}}'
@@ -72,7 +72,7 @@ docker inspect talkcal-app --format '{{index .Config.Labels "org.opencontainers.
 # EC2：先用 SSM 連進去（infra/envs/1-ec2/README.md），在機器上跑同一行（要 sudo）
 ```
 
-這比 GitHub Deployments 準：Deployments 記的是 watcher「想部署」的 commit，這裡是容器**實際在跑**的。
+這比 GitHub Deployments 準：Deployments 記的是 watcher「想部署」的 commit，這裡是容器實際在跑的。
 
 ### 為什麼不讓 app 自己回報版本（`/actuator/info`）
 
@@ -95,7 +95,7 @@ cd/release.sh v0.2.0             # 打在 origin/master 最新的 commit
 cd/release.sh v0.2.0 3f9c2ab     # 打在 master 上比較早、確認過的那個 commit
 ```
 
-[cd/release.sh](../cd/release.sh) 先檢查，過了才在**本機**建 annotated tag，最後印出推上去和開 GitHub Release 的指令：
+[cd/release.sh](../cd/release.sh) 先檢查，過了才在本機建 annotated tag，最後印出推上去和開 GitHub Release 的指令：
 
 ```bash
 git push origin v0.2.0
@@ -114,7 +114,7 @@ gh release create v0.2.0 --verify-tag --generate-notes   # 依合併的 PR 自�
 
 ### 什麼時候打、打在哪
 
-- 打在**已經部署、確認過**的 commit 上：tag 的意思是「這一版是好的，出事可以退回這裡」。
+- 打在已經部署、確認過的 commit 上：tag 的意思是「這一版是好的，出事可以退回這裡」。
   CD 照樣每個綠燈 commit 都部署，不是每個都要打 tag
 - 版號怎麼跳：加功能跳次版號（`v0.2.0` → `v0.3.0`），只有修正跳修補號（`v0.2.0` → `v0.2.1`）。
   還沒到 1.0：介面和資料表都還可能大改

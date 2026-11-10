@@ -24,11 +24,11 @@
 
 | 種類 | 何時開 | 分組 |
 |---|---|---|
-| 安全修補（OSV 資料庫查到漏洞） | 不等週一，修補版發佈**滿 14 天**就開；HIGH、CRITICAL 要更早見下面 | 單獨一個 PR，label `security` |
+| 安全修補（OSV 資料庫查到漏洞） | 不等週一，修補版發佈滿 14 天就開；HIGH、CRITICAL 要更早見下面 | 單獨一個 PR，label `security` |
 | minor、patch | 週一早上（台灣時間 9 點前），新版發佈滿 14 天 | 依生態系各一個：後端、前端、映像檔、觀測堆疊、Terraform |
 | 要對齊的 | 同上 | Gradle（wrapper＋映像檔）、JDK（各處 temurin）、Node（各處 node） |
 | GitHub Actions | 同上 | 全部一個 PR（含 major） |
-| major | **不自動開**，列在 Dependency Dashboard | 勾了才開，一個套件一個 PR，label `major` |
+| major | 不自動開，列在 Dependency Dashboard | 勾了才開，一個套件一個 PR，label `major` |
 | 鎖檔整理（間接依賴） | 每月 1 號 | 一個 PR，只動鎖檔 |
 
 同時最多 5 個 PR、每小時最多 2 個；超過的排在 Dependency Dashboard（Renovate 開的一個 issue）上。
@@ -92,7 +92,7 @@ Renovate 的 PR 如果被 AI 接手改了程式碼（例如 major 要配合改�
 
 1. 到 [github.com/apps/renovate](https://github.com/apps/renovate) 安裝，只選 `talkcal` 這個 repo。
 2. repo 裡已經有 `.github/renovate.json5`，Renovate 不會再開 onboarding PR，直接照設定跑；第一次會開 Dependency Dashboard issue。
-3. （選擇性）repo 設定裡開 Dependabot **alerts**（不是 Dependabot 的 PR）：漏洞會多一個來源，Renovate 也讀得到。
+3. （選擇性）repo 設定裡開 Dependabot alerts（不是 Dependabot 的 PR）：漏洞會多一個來源，Renovate 也讀得到。
 
 ## 怎麼驗證設定
 
@@ -109,8 +109,8 @@ npx --yes --package renovate@44.167.5 -- renovate-config-validator --strict
 | 這份設定 | `Config validated successfully`，exit 0 |
 | 反例：`prConcurrentLimit` 拼成 `prConcurentLimit` | `Invalid configuration option: prConcurentLimit`，exit 1 |
 | 反例：`automerge: 'no'` | ``Configuration option `automerge` should be boolean``，exit 1 |
-| 反例：`matchUpdateTypes: ['minr', …]` | **沒擋**，exit 0 |
-| 反例：regex 的 `(?<currentValue>…)` 拼成 `currentValu` | **沒擋**，exit 0 |
+| 反例：`matchUpdateTypes: ['minr', …]` | 沒擋，exit 0 |
+| 反例：regex 的 `(?<currentValue>…)` 拼成 `currentValu` | 沒擋，exit 0 |
 
 validator 只看欄位名稱和型別，值對不對、regex 抓不抓得到東西它不管：所以還要第二道。
 
@@ -161,7 +161,7 @@ C、E、F 想放行 HIGH 都沒成功，結果跟 D 一樣：漏洞的設定是 
 
 | 套件 | 在哪 | 目前 | 可升到 | 進哪個 PR |
 |---|---|---|---|---|
-| **vite**（有漏洞，GHSA-587h-7wmj-h5pm 等） | `web/package.json` | 8.3.2 | 8.3.3 | `renovate/npm-vite-vulnerability`（安全修補，單獨一個） |
+| vite（有漏洞，GHSA-587h-7wmj-h5pm 等） | `web/package.json` | 8.3.2 | 8.3.3 | `renovate/npm-vite-vulnerability`（安全修補，單獨一個） |
 | Gradle | wrapper、`backend/Dockerfile` | 9.2.1 | 9.8.1（9.8.2 還不滿 14 天） | `renovate/gradle` |
 | Jackson 3 BOM、ArchUnit | `build.gradle` | 3.1.7、1.4.1 | 3.2.3、1.5.1 | `renovate/backend-minor-patch` |
 | Spring Boot、Spring AI、springdoc、Error Prone、Jackson 2 BOM | `build.gradle` | 4.1.1、2.0.1、3.1.1、2.50.0、2.22.3 | 4.1.2、2.0.2、3.2.0、2.51.0、2.22.4（等待中） | 同上 |

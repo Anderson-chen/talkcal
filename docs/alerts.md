@@ -1,11 +1,11 @@
 # 告警總表
 
 出事時有人被叫起來，不是等使用者來說（[#39](https://github.com/Anderson-chen/talkcal/issues/39)）。
-這份表列出**所有**告警：在哪個檔案、怎麼算、多久才叫人、叫誰，以及為什麼要有它。新增或改門檻時一起改這裡。
+這份表列出所有告警：在哪個檔案、怎麼算、多久才叫人、叫誰，以及為什麼要有它。新增或改門檻時一起改這裡。
 
 規則都用 provisioning 管（`ops/grafana/provisioning/alerting/`），Grafana 一啟動就建好、UI 上唯讀。
 每條門檻的完整理由寫在規則檔的註解，這裡只寫一句話。
-告警響了怎麼處理：每一條都有一份 runbook，檔名就是 uid（[docs/runbooks/](runbooks/README.md)），告警信裡的 **View runbook** 直接連過去。
+告警響了怎麼處理：每一條都有一份 runbook，檔名就是 uid（[docs/runbooks/](runbooks/README.md)），告警信裡的 View runbook 直接連過去。
 
 ## 怎麼分工
 
@@ -20,7 +20,7 @@
                      → 上面全部都靠它，它停了要另外發現（#40）
 ```
 
-Google SRE 的原則是**對症狀告警、不對原因告警**：原因有一百種，症狀只有「使用者用不了、變慢」幾種。
+Google SRE 的原則是對症狀告警、不對原因告警：原因有一百種，症狀只有「使用者用不了、變慢」幾種。
 原因類的告警（`respond.yaml`）只在兩種情況加：
 
 1. 低流量時症狀看不到：半夜沒人用，資料庫掛了也不會有 5xx、SLO 也不會燒，第一個早上打開的使用者才發現。
@@ -84,7 +84,7 @@ node_exporter 的 textfile collector（工作結束時寫一個 `.prom` 檔）�
 | 模型伺服器（llama-server）抓不到 | 只有本機有（雲端是 Bedrock）。有人在用時熔斷會打開、SLO 會燒；沒人用時模型掛了也沒有人受影響 |
 | JVM heap、GC 時間 | 原因類、而且不指出處理方向；真的撐不住會變成 p95 變慢或 OOM 重啟（app 掛了） |
 | 連線池 pending 偏高（還沒逾時） | #32 實測鎖表 20 秒時 pending 衝到 40、但全部成功，使用者只是等了一下；逾時才是「有人失敗」 |
-| 主機磁碟快滿 | **應該要有**：磁碟滿了 PostgreSQL 寫不進去、Mimir 停止收資料。但 Alloy 在容器裡量到的檔案系統不一定是主機的，要在主機上另外裝 node_exporter（雲端 user_data），範圍比這次大，另開 issue |
+| 主機磁碟快滿 | 應該要有：磁碟滿了 PostgreSQL 寫不進去、Mimir 停止收資料。但 Alloy 在容器裡量到的檔案系統不一定是主機的，要在主機上另外裝 node_exporter（雲端 user_data），範圍比這次大，另開 issue |
 | Bedrock 被限流 | 會變成模型呼叫失敗或變慢，由熔斷、SLO 涵蓋 |
 
 ## 怎麼驗證的

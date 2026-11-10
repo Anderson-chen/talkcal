@@ -32,8 +32,8 @@ AI 助理一個請求（`POST /api/calendar/assistant`）是一段 agent loop：
 
 兩種部署方式就是 [infra/envs/1-ec2](../infra/envs/1-ec2/README.md) 的 `model_backend`：
 
-- `bedrock`：m7i-flex.large 跑 app、資料庫、觀測，模型叫 Bedrock，**按 token 付錢**。
-- `gpu`：g6.xlarge 全部自己跑（模型是 Qwen3-8B），**按小時付錢，跟 token 數無關**。
+- `bedrock`：m7i-flex.large 跑 app、資料庫、觀測，模型叫 Bedrock，按 token 付錢。
+- `gpu`：g6.xlarge 全部自己跑（模型是 Qwen3-8B），按小時付錢，跟 token 數無關。
 
 Bedrock 東京沒有 Qwen3 8B，所以兩邊跑的不是同一顆模型（32B vs 8B）。這裡比的是「現在 repo 裡兩種部署實際的帳單」，不是同一顆模型的兩種託管方式。
 
@@ -87,7 +87,7 @@ input 佔九成費用：system prompt 或工具定義變長、對話記憶留得
 
 ## 4. 怎麼在 Grafana 上看
 
-儀表板 **`talkcal — 成本（token 與費用）`**（[`ops/grafana/provisioning/dashboards/talkcal-cost.json`](../ops/grafana/provisioning/dashboards/talkcal-cost.json)）：
+儀表板 `talkcal — 成本（token 與費用）`（[`ops/grafana/provisioning/dashboards/talkcal-cost.json`](../ops/grafana/provisioning/dashboards/talkcal-cost.json)）：
 
 | 面板 | 看什麼 |
 |---|---|
