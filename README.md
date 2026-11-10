@@ -2,24 +2,20 @@
 
 [![CI](https://github.com/Anderson-chen/talkcal/actions/workflows/ci.yml/badge.svg)](https://github.com/Anderson-chen/talkcal/actions/workflows/ci.yml)
 
-個人行事曆功能，可透過對話方式來建立行程。
+行事曆系統，可透過對話方式來建立行程。 [主架構圖](docs/architecture.md#總覽)
 
-## 使用技術
+
+## 技術
 
 | 類別 | 技術 |
 |---|---|
 | 後端 | Java 25、Spring Boot 4.1 |
-| 跟模型講話 | Spring AI 2.0（OpenAI 相容協定） |
 | 模型 | 本機：llama.cpp + Qwen3-8B；雲端：Bedrock 的 Qwen3 32B |
 | 資料庫 | PostgreSQL 18 + Flyway |
 | 前端 | Vue 3 + TypeScript + Vite |
 | 觀測 | Grafana Alloy → Mimir、Loki、Tempo → Grafana |
 | 壓測 | k6 |
 | 部署 | Docker Compose；雲端用 Terraform 開 AWS EC2 |
-
-## 架構
-
-本機和雲端的架構圖在 [docs/architecture.md](docs/architecture.md#總覽)。
 
 ## 專案結構
 
@@ -33,7 +29,8 @@
 | [`ci/`](ci/README.md) | CI 要檢查什麼、在什麼環境檢查 |
 | [`cd/`](cd/README.md) | 部署、退版、版本號 |
 | [`infra/`](infra/README.md) | 搬上 AWS 的 Terraform |
-| [`docs/`](docs/README.md) | 跨資料夾的文件：架構圖、ADR、issue 分類依據、腳本地圖、SLO、告警、runbook、演練紀錄 |
+| [`docs/`](docs/README.md) | 跨資料夾的文件：架構圖、ADR、issue 分類依據、腳本地圖、測試、SLO、告警、runbook、演練紀錄 |
+
 
 ## 快速開始
 
@@ -46,14 +43,6 @@ cd backend && ./gradlew deploy                                  # 跑測試，bu
 
 開 <http://localhost:18080>。Swagger UI 在 <http://localhost:18090/swagger-ui.html>。
 
-要看 Grafana（<http://localhost:3000>）再起觀測：
-
-```bash
-docker compose --env-file deploy/.env -f ops/compose.yaml up -d
-```
-
-`--env-file` 帶的是告警寄信用的 SMTP。沒帶的話 Grafana 會被重建成不寄信的設定。
-
 不進容器、直接開發：
 
 ```bash
@@ -65,13 +54,12 @@ pnpm --dir web run dev           # 前端在 5173，/api 轉給 8090；在 repo 
 
 ## 測試
 
-在 `backend/` 裡跑：
+前後端的單元測試、後端整合測試、前端 E2E 可以一次跑完，跟 GitHub 上一樣在乾淨的容器裡跑（在 repo 根目錄）：
 
 ```bash
-./gradlew test               # 單元測試和架構規則，不用起任何服務
-./gradlew integrationTest    # 接真的 PostgreSQL 和模型；模型沒開的那幾支會跳過
-./gradlew test integrationTest jacocoTestReport   # 再加上覆蓋率報告，見 docs/test-coverage.md
-../ci/run.sh                 # 跟 CI 一樣，在乾淨的容器裡全部跑一遍
+ci/run.sh
 ```
 
-push 之前 pre-push hook 會先掃祕密（`ci/secrets.sh`）、再跑 `ci/run.sh`（`git config core.hooksPath .githooks` 開啟）。GitHub 上沒有 GPU，模型相關的測試只有本機會跑。細節見 [ci/README.md](ci/README.md)。
+push 之前 pre-push hook 會先掃祕密（`ci/secrets.sh`）、再跑 `ci/run.sh`（`git config core.hooksPath .githooks` 開啟）。CI 另外還有 lint、祕密和漏洞掃描、SLO 錄製規則的檢查，細節見 [ci/README.md](ci/README.md)。
+
+有哪些測試、各測什麼、怎麼單獨跑（包括 AI eval、壓力測試、雲端的冒煙測試），見 [docs/testing.md](docs/testing.md)。

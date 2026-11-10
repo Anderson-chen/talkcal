@@ -20,6 +20,7 @@
 |---|---|
 | issue 貼哪個 `stage:`、`product:` label：上線準備的五段、產品範圍的八個面向怎麼分 | [classification.md](classification.md) |
 | 每支自動化腳本什麼時候跑、誰叫它、對應哪個 `just` 指令 | [automation.md](automation.md) |
+| 有哪些測試、各測什麼、怎麼單獨跑、要先起什麼 | [testing.md](testing.md) |
 | 測試覆蓋率怎麼看、為什麼不設門檻 | [test-coverage.md](test-coverage.md) |
 | 套件怎麼自動升級、升級 PR 怎麼審 | [dependency-updates.md](dependency-updates.md) |
 | 版本號怎麼算、release tag 怎麼打 | [release.md](release.md) |
