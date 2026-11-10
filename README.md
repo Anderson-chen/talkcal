@@ -24,7 +24,11 @@
 | [`infra/`](infra/README.md) | 搬上 AWS 的 Terraform |
 | `docs/` | 架構圖、ADR、runbook、演練紀錄、設計稿 |
 
+## 自動化腳本
+
 每支自動化腳本什麼時候跑、誰叫它，見[腳本地圖](docs/automation.md)。
+
+## 給 AI 工具的規則
 
 給 AI 工具的指令和規則入口在 [AGENTS.md](AGENTS.md)；commit、PR、issue 的寫法在 [`.claude/rules/`](.claude/rules/)。
 
