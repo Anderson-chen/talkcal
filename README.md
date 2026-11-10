@@ -6,9 +6,30 @@
 
 ## 架構
 
+### 本機
+
+開發和驗證都在本機：[deploy/](deploy/README.md) 起服務、[ops/](ops/README.md) 起觀測，兩組 Docker Compose，埠全部只綁 `127.0.0.1`：
+
+```mermaid
+flowchart LR
+    browser[瀏覽器] -- "http://localhost:18080" --> web
+    subgraph local[本機 · Docker Compose]
+        web[web<br/>nginx + Vue 3] -- /api --> app[app<br/>Spring Boot]
+        app -- OpenAI 相容協定 --> llm[llm-chat<br/>llama.cpp · Qwen3-8B]
+        app --> pg[(PostgreSQL<br/>行程 · 對話記憶)]
+        app -- 舊行程、舊對話歸檔 --> rustfs[(RustFS)]
+        app -. 指標 · log · trace .-> alloy[Alloy]
+        alloy --> mimir[Mimir] & loki[Loki] & tempo[Tempo]
+        mimir & loki & tempo --> grafana[Grafana<br/>localhost:3000]
+    end
+```
+
+兩組 compose 怎麼接見 [docs/architecture.md](docs/architecture.md)。
+
 ### 雲端
 
-線上版跑在 AWS 東京區（[階段一](infra/envs/1-ec2/README.md)：一台 EC2 + Docker Compose，平常關機、展示前開機）：
+線上版跑在 AWS 東京區（[階段一](infra/envs/1-ec2/README.md)：一台 EC2 + Docker Compose，平常關機、展示前開機）。
+跑的是同一份 compose，差在前面多了 Caddy 處理 HTTPS、模型改呼叫 Bedrock、歸檔和備份放 S3：
 
 ```mermaid
 flowchart LR
@@ -31,27 +52,6 @@ flowchart LR
 ```
 
 對外只開 80/443，Grafana 不對外，登入機器走 SSM、不開 22。每個元件由哪個檔案哪幾行決定，見[互動架構圖](https://anderson-chen.github.io/talkcal/)。
-
-### 本機
-
-本機跑的是同一份 compose（[deploy/](deploy/README.md)、[ops/](ops/README.md)），差在沒有 Caddy、模型用本機 GPU 自己跑、歸檔放 RustFS（S3 相容），
-埠全部只綁 `127.0.0.1`：
-
-```mermaid
-flowchart LR
-    browser[瀏覽器] -- "http://localhost:18080" --> web
-    subgraph local[本機 · Docker Compose]
-        web[web<br/>nginx + Vue 3] -- /api --> app[app<br/>Spring Boot]
-        app -- OpenAI 相容協定 --> llm[llm-chat<br/>llama.cpp · Qwen3-8B]
-        app --> pg[(PostgreSQL<br/>行程 · 對話記憶)]
-        app -- 舊行程、舊對話歸檔 --> rustfs[(RustFS)]
-        app -. 指標 · log · trace .-> alloy[Alloy]
-        alloy --> mimir[Mimir] & loki[Loki] & tempo[Tempo]
-        mimir & loki & tempo --> grafana[Grafana<br/>localhost:3000]
-    end
-```
-
-兩組 compose 怎麼接見 [docs/architecture.md](docs/architecture.md)。
 
 ### AI 助理
 
