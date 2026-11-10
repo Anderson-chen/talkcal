@@ -3,7 +3,7 @@
 每支腳本什麼時候跑、誰叫它。順序照一個改動從 push 到上線、再到出事。
 參數和設計理由看腳本開頭的註解。
 
-「just」那欄是 [justfile](../justfile) 裡對應的指令；空白的不是給人直接跑的。
+「just」那欄是 [justfile](../justfile) 裡對應的指令；空白的不是給人直接跑的。`just` 會列出全部，要裝什麼寫在 justfile 開頭；VS Code 裡也能從「Tasks: Run Task」選（[.vscode/tasks.json](../.vscode/tasks.json)）。
 
 ```mermaid
 flowchart LR

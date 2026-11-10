@@ -14,37 +14,78 @@
 
 ## 前端
 
-在 repo 根目錄跑，要先裝好依賴（`corepack enable`、`pnpm --dir web install`）：
+在 repo 根目錄跑，要先裝好依賴（`corepack enable`、`pnpm --dir web install`）。
+
+單元測試（Vitest），不到 1 秒：
 
 ```bash
-pnpm --dir web test                               # 單元測試（Vitest），不到 1 秒
-pnpm --dir web exec playwright install chromium   # E2E 要的 Chromium，只要裝一次
-pnpm --dir web run e2e                            # E2E（Playwright）
-pnpm --dir web run e2e:ui                         # 同上，開視窗一步一步看每個動作前後的畫面
+pnpm --dir web test
+```
+
+E2E 要的 Chromium，只要裝一次：
+
+```bash
+pnpm --dir web exec playwright install chromium
+```
+
+E2E（Playwright）：
+
+```bash
+pnpm --dir web run e2e
+```
+
+同上，開視窗一步一步看每個動作前後的畫面：
+
+```bash
+pnpm --dir web run e2e:ui
 ```
 
 寫測試的約定、為什麼要用 `pnpm` 不用 `npx`，見 [web/README.md](../web/README.md#測試)。
 
 ## 後端
 
-在 `backend/` 裡跑：
+在 `backend/` 裡跑。
+
+單元測試和架構規則，不用起任何服務：
 
 ```bash
-./gradlew test               # 單元測試和架構規則，不用起任何服務
-./gradlew integrationTest    # 整合測試：要開 Docker；模型（快速開始的 llm-chat）沒開的那幾支會跳過
-./gradlew eval               # AI eval：要開模型，報告在 build/eval/report.md
-./gradlew test integrationTest jacocoTestReport   # 再加上覆蓋率報告，見 docs/test-coverage.md
+./gradlew test
+```
+
+整合測試，要開 Docker；模型（快速開始的 `llm-chat`）沒開的那幾支會跳過：
+
+```bash
+./gradlew integrationTest
+```
+
+AI eval，要開模型，報告在 `build/eval/report.md`：
+
+```bash
+./gradlew eval
+```
+
+單元測試、整合測試再加上覆蓋率報告（見 [test-coverage.md](test-coverage.md)）：
+
+```bash
+./gradlew test integrationTest jacocoTestReport
 ```
 
 AI eval 沒設定時評本機的 Qwen3-8B；要評雲端的模型，設 `SPRING_AI_OPENAI_CHAT_BASEURL`、`SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL`、`SPRING_AI_OPENAI_APIKEY` 再跑。
 
 ## 壓力測試
 
-在 repo 根目錄跑。壓的是真的那條路，沒有 mock，所以 PostgreSQL、模型、app 都要先起來：
+在 repo 根目錄跑。壓的是真的那條路，沒有 mock，所以 PostgreSQL、模型、app 都要先起來。
+
+先確認打得到 AI 助理、契約對，預設打 bootRun 的 app（8090）：
 
 ```bash
-k6 run perf/smoke.js   # 先確認打得到 AI 助理、契約對；預設打 bootRun 的 app（8090）
-k6 run perf/knee.js    # 同時數一階一階往上加，找臨界值；預設打 docker 那台 app（18090）
+k6 run perf/smoke.js
+```
+
+同時數一階一階往上加，找臨界值，預設打 docker 那台 app（18090）：
+
+```bash
+k6 run perf/knee.js
 ```
 
 k6 的裝法、其他腳本（尖峰、邊壓邊部署、模型掛掉演練、SLO 基準、連線池、token 成本）各量什麼、怎麼把指標疊進 Grafana，見 [perf/README.md](../perf/README.md)。
@@ -53,7 +94,13 @@ k6 的裝法、其他腳本（尖峰、邊壓邊部署、模型掛掉演練、SL
 
 雲端（EC2 + Bedrock）上跑的是部署的冒煙測試 [smoke.sh](../infra/envs/1-ec2/smoke.sh)。`deploy.sh` 會呼叫它兩次：起容器之前查 `.env`，全部起來之後查網站、觀測、Bedrock、告警寄信；任一項沒過，部署就失敗並印出是哪一項。
 
-機器平常關機，先 `just ec2-start` 開機。不部署、只重跑部署後那一輪，連進機器（`aws ssm start-session`）之後：
+機器平常關機，先在本機的 repo 根目錄開機：
+
+```bash
+just ec2-start
+```
+
+不部署、只重跑部署後那一輪，連進機器（`aws ssm start-session`）之後：
 
 ```bash
 cd /opt/talkcal/repo && sudo bash infra/envs/1-ec2/smoke.sh services deploy/.env

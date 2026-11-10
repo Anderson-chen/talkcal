@@ -21,45 +21,95 @@
 
 | 資料夾 | 說明 |
 |---|---|
-| [`backend/`](backend/README.md) | Spring Boot app：程式碼、Gradle、Dockerfile |
-| [`web/`](web/README.md) | Vue 3 前端：程式碼、pnpm、Dockerfile、nginx 設定 |
-| [`deploy/`](deploy/README.md) | 把 app、前端、模型、資料庫跑起來的 Docker Compose |
-| [`ops/`](ops/README.md) | 觀測：Alloy → Mimir / Loki / Tempo → Grafana |
-| [`perf/`](perf/README.md) | k6 壓測 |
-| [`ci/`](ci/README.md) | CI 要檢查什麼、在什麼環境檢查 |
-| [`cd/`](cd/README.md) | 部署、退版、版本號 |
-| [`infra/`](infra/README.md) | 搬上 AWS 的 Terraform |
-| [`docs/`](docs/README.md) | 跨資料夾的文件：架構圖、ADR、issue 分類依據、腳本地圖、測試、SLO、告警、runbook、演練紀錄 |
+| [backend](backend/README.md) | Spring Boot app：程式碼、Gradle、Dockerfile |
+| [web](web/README.md) | Vue 3 前端：程式碼、pnpm、Dockerfile、nginx 設定 |
+| [deploy](deploy/README.md) | 把 app、前端、模型、資料庫跑起來的 Docker Compose |
+| [ops](ops/README.md) | 觀測：Alloy → Mimir / Loki / Tempo → Grafana |
+| [perf](perf/README.md) | k6 壓測 |
+| [ci](ci/README.md) | CI 要檢查什麼、在什麼環境檢查 |
+| [cd](cd/README.md) | 部署、退版、版本號 |
+| [infra](infra/README.md) | 搬上 AWS 的 Terraform |
+| [docs](docs/README.md) | 跨資料夾的文件：架構圖、ADR、issue 分類依據、腳本地圖、測試、SLO、告警、runbook、演練紀錄 |
 
 
 ## 快速開始
 
-需要 Docker（要能用 NVIDIA GPU）和 JDK 25。模型檔目前寫死從 `C:\llm\models` 複製（`deploy/compose.yaml`），所以只能在 Windows 上跑，先把 `Qwen3-8B-Q4_K_M.gguf` 放進去。改成可設定的路徑還沒做。
+| 環境需求 | 條件 |
+|---|---|
+| Windows | 模型檔路徑寫死 `C:\llm\models`，改成可設定的路徑還沒做 |
+| NVIDIA 顯卡 | RTX 40 系列、驅動 580 以上；其他代的顯卡要改 `deploy/llama-server/Dockerfile` 的 `CUDA_ARCH` |
+| Docker Desktop | WSL 2 後端 |
+| JDK | 25 |
+| Git Bash | 下面的指令都在這裡、repo 根目錄打 |
+| Node.js | 22，只有不進容器開發時需要 |
+| just | 選用，`just` 列出常用腳本：`winget install Casey.Just` |
+
+1. 下載模型（約 5 GB，來源 [Qwen/Qwen3-8B-GGUF](https://huggingface.co/Qwen/Qwen3-8B-GGUF)）：
+
+   ```bash
+   curl -L --create-dirs -o C:/llm/models/Qwen3-8B-Q4_K_M.gguf https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf
+   ```
+
+2. 寫校驗檔，模型複製進容器時照它驗內容：
+
+   ```bash
+   echo "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785  Qwen3-8B-Q4_K_M.gguf" > C:/llm/models/SHA256SUMS
+   ```
+
+3. 建 `deploy/.env`，打開來填 `DB_PASSWORD`、`ARCHIVE_ACCESS_KEY`、`ARCHIVE_SECRET_KEY`（secret 至少 8 個字）：
+
+   ```bash
+   cp deploy/.env.example deploy/.env
+   ```
+
+4. 起資料庫和模型（第一次要 build 映像檔，約 10 分鐘）：
+
+   ```bash
+   docker compose -f deploy/compose.yaml up -d postgres llm-chat
+   ```
+
+   `llm-chat` 起不來時，確認容器拿得到顯卡，要印出 `GPU 0: NVIDIA ...`：
+
+   ```bash
+   docker compose -f deploy/compose.yaml run --rm --no-deps --entrypoint nvidia-smi llm-chat -L
+   ```
+
+5. 跑測試，部署 app 和前端：
+
+   ```bash
+   cd backend && ./gradlew deploy
+   ```
+
+6. 開 <http://localhost:18080>。Swagger UI 在 <http://localhost:18090/swagger-ui.html>。
+
+不進容器、直接開發，各開一個終端機（從 repo 根目錄開始）。後端在 8090：
 
 ```bash
-docker compose -f deploy/compose.yaml up -d postgres llm-chat   # 第一次要等模型複製、載入
-cd backend && ./gradlew deploy                                  # 跑測試，build 並部署 app 和前端
+cd backend && ./gradlew bootRun
 ```
 
-開 <http://localhost:18080>。Swagger UI 在 <http://localhost:18090/swagger-ui.html>。
-
-不進容器、直接開發：
+前端在 5173，`/api` 轉給 8090。第一次先裝依賴：
 
 ```bash
-cd backend && ./gradlew bootRun  # app 在 8090，連 deploy/ 的 PostgreSQL 和模型
-pnpm --dir web run dev           # 前端在 5173，/api 轉給 8090；在 repo 根目錄跑
+corepack enable && pnpm --dir web install
 ```
 
-常用的腳本都可以用 [justfile](justfile) 叫，`just` 會列出全部，例如 `just deploy local web` 等於 `cd/apply.sh local web`。要裝什麼寫在 justfile 開頭；VS Code 裡也能從「Tasks: Run Task」選（[.vscode/tasks.json](.vscode/tasks.json)）。
+```bash
+pnpm --dir web run dev
+```
 
 ## 測試
 
-前後端的單元測試、後端整合測試、前端 E2E 可以一次跑完，跟 GitHub 上一樣在乾淨的容器裡跑（在 repo 根目錄）：
+跑前後端單元測試、後端整合測試、前端 E2E，跟 CI 同一個容器。需要 Docker；模型沒開時，要模型的那幾支會跳過：
 
 ```bash
 ci/run.sh
 ```
 
-push 之前 pre-push hook 會先掃祕密（`ci/secrets.sh`）、再跑 `ci/run.sh`（`git config core.hooksPath .githooks` 開啟）。CI 另外還有 lint、祕密和漏洞掃描、SLO 錄製規則的檢查，細節見 [ci/README.md](ci/README.md)。
+只有第一次：開啟 pre-push hook，之後每次 push 前先掃祕密、再跑 `ci/run.sh`：
 
-有哪些測試、各測什麼、怎麼單獨跑（包括 AI eval、壓力測試、雲端的冒煙測試），見 [docs/testing.md](docs/testing.md)。
+```bash
+git config core.hooksPath .githooks
+```
+
+每種測試怎麼單獨跑（含 AI eval、壓力測試、雲端冒煙測試）見 [docs/testing.md](docs/testing.md)，CI 檢查什麼見 [ci/README.md](ci/README.md)。
