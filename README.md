@@ -2,8 +2,7 @@
 
 [![CI](https://github.com/Anderson-chen/talkcal/actions/workflows/ci.yml/badge.svg)](https://github.com/Anderson-chen/talkcal/actions/workflows/ci.yml)
 
-行事曆系統，可透過對話方式來建立行程。 [主架構圖](docs/architecture.md#總覽)
-
+行事曆系統，可透過對話方式來建立行程。[主架構圖](docs/architecture.md#總覽)
 
 ## 技術
 
@@ -31,17 +30,16 @@
 | [infra](infra/README.md) | 搬上 AWS 的 Terraform |
 | [docs](docs/README.md) | 跨資料夾的文件：架構圖、ADR、issue 分類依據、腳本地圖、測試、SLO、告警、runbook、演練紀錄 |
 
-
 ## 快速開始
 
 | 環境需求 | 條件 |
 |---|---|
 | Windows | 模型檔路徑寫死 `C:\llm\models`，改成可設定的路徑還沒做 |
-| NVIDIA 顯卡 | RTX 40 系列、驅動 580 以上；其他代的顯卡要改 `deploy/llama-server/Dockerfile` 的 `CUDA_ARCH` |
+| NVIDIA 顯卡 | RTX 40 系列、驅動 580 以上；比 RTX 40 舊的顯卡要改 `deploy/llama-server/Dockerfile` 的 `CUDA_ARCH` |
 | Docker Desktop | WSL 2 後端 |
 | JDK | 25 |
 | Git Bash | 下面的指令都在這裡、repo 根目錄打 |
-| Node.js | 22，只有不進容器開發時需要 |
+| Node.js | 22，只有不進容器開發、單獨跑前端測試時需要 |
 | just | 選用，`just` 列出常用腳本：`winget install Casey.Just` |
 
 1. 下載模型（約 5 GB，來源 [Qwen/Qwen3-8B-GGUF](https://huggingface.co/Qwen/Qwen3-8B-GGUF)）：
@@ -50,7 +48,7 @@
    curl -L --create-dirs -o C:/llm/models/Qwen3-8B-Q4_K_M.gguf https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf
    ```
 
-2. 寫校驗檔，模型複製進容器時照它驗內容：
+2. 寫校驗檔，模型複製進容器時照它驗內容（已經有這個檔案的話，改成手動加這一行，不然會整份蓋掉）：
 
    ```bash
    echo "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785  Qwen3-8B-Q4_K_M.gguf" > C:/llm/models/SHA256SUMS
