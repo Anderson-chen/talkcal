@@ -54,7 +54,7 @@ flowchart LR
 
 VPC 跨兩個可用區，每一層的子網兩區各一個。
 
-| 子網 | 放什麼 | 誰連得到 |
+| 子網 | 內容 | 誰連得到 |
 |---|---|---|
 | 公有 | ALB、NAT Gateway | ALB 只收 CloudFront 來的流量 |
 | 私有（EKS） | app、llm-chat、Alloy、觀測三件套、Grafana | 只有 ALB 進得來；往外連經 NAT。ECR、S3 改走 VPC endpoint，拉映像檔和模型不必繞 NAT、也省 NAT 流量費 |

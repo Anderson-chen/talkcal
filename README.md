@@ -6,7 +6,7 @@
 
 ## 使用技術
 
-| 層 | 用什麼 |
+| 類別 | 技術 |
 |---|---|
 | 後端 | Java 25、Spring Boot 4.1 |
 | 跟模型講話 | Spring AI 2.0（OpenAI 相容協定） |
@@ -23,7 +23,7 @@
 
 ## 專案結構
 
-| 資料夾 | 放什麼 |
+| 資料夾 | 說明 |
 |---|---|
 | [`backend/`](backend/README.md) | Spring Boot app：程式碼、Gradle、Dockerfile |
 | [`web/`](web/README.md) | Vue 3 前端：程式碼、pnpm、Dockerfile、nginx 設定 |

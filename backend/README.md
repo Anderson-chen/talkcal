@@ -33,7 +33,7 @@ io.github.andersonchen.talkcal
 
 ## 技術選型
 
-| 用什麼 | 為什麼 |
+| 技術 | 選用理由 |
 |---|---|
 | Java 25、Spring Boot 4.1、Spring MVC | |
 | Spring AI 2.0（OpenAI 相容協定）跟模型講話 | 本機的 llama-server 和雲端的 Bedrock 都講 OpenAI 的協定，換模型只要改設定 |

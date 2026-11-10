@@ -55,7 +55,7 @@ flowchart LR
 
 ## 檔案
 
-| 檔案 | 做什麼 |
+| 檔案 | 用途 |
 |---|---|
 | `backend.tf`、`backend.hcl.example` | state 放 bootstrap 建的 S3 bucket；bucket 名稱帶帳號 ID，放在 gitignore 掉的 `backend.hcl` |
 | `variables.tf` | `model_backend` 和依它決定預設值的機型、磁碟；Google、GitHub 登入的 client id／secret（`sensitive`） |

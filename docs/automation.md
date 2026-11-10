@@ -19,7 +19,7 @@ flowchart LR
 
 [.githooks/pre-push](../.githooks/pre-push) 在每次 `git push` 前跑。每個 clone 要先開一次：`git config core.hooksPath .githooks`。
 
-| 腳本 | 做什麼 | 誰叫 | just |
+| 腳本 | 用途 | 觸發方式 | just |
 |---|---|---|---|
 | [ci/secrets.sh](../ci/secrets.sh) | gitleaks 掃要推出去的 commit 有沒有 key | pre-push（只掃還沒推的）、CI（整個歷史） | `just secrets` |
 | [ci/run.sh](../ci/run.sh) | 在乾淨的容器裡跑 `ci/checks.sh`；改到 prompt、模型相關檔案時加跑 AI eval | pre-push、CI 的 `checks`、手動 | `just ci` |
@@ -36,7 +36,7 @@ flowchart LR
 | [pr-issue.yml](../.github/workflows/pr-issue.yml) | PR 開啟、編輯、更新 | 沒有腳本：檢查描述有沒有 `Closes #N` |
 | [pages.yml](../.github/workflows/pages.yml) | push 到 master 且改到 `docs/architecture/` | 沒有腳本：把互動架構圖發到 GitHub Pages |
 
-| 腳本 | 做什麼 | just |
+| 腳本 | 用途 | just |
 |---|---|---|
 | [ci/migrations.sh](../ci/migrations.sh) | 舊的 migration 不能改；新的過 squawk，新舊版本同時在線不會壞 | `just migrations` |
 | [ci/rules.sh](../ci/rules.sh) | promtool 檢查 Mimir 錄製規則的語法，並用假資料驗算 SLO、burn rate | `just rules` |
@@ -50,7 +50,7 @@ flowchart LR
 
 本機每 5 分鐘自己去看 master 有沒有新的綠燈版本（為什麼見 [cd/README.md](../cd/README.md)）。EC2 還是手動部署。
 
-| 腳本 | 做什麼 | 誰叫 | just |
+| 腳本 | 用途 | 觸發方式 | just |
 |---|---|---|---|
 | [cd/triggers/install-local.ps1](../cd/triggers/install-local.ps1) | 在 Windows 工作排程登記 watcher，每 5 分鐘一輪 | 手動跑一次 | |
 | [cd/triggers/watch.sh](../cd/triggers/watch.sh) | master 有新的綠燈 commit 就 checkout、部署，結果寫回 GitHub Deployments | 工作排程、手動 | `just watch` |
@@ -63,7 +63,7 @@ flowchart LR
 
 細節見 [infra/envs/1-ec2/README.md](../infra/envs/1-ec2/README.md)。
 
-| 腳本 | 做什麼 | 誰叫 | just |
+| 腳本 | 用途 | 觸發方式 | just |
 |---|---|---|---|
 | [power.sh](../infra/envs/1-ec2/power.sh) | 開機、關機；關機前先暫停 Healthchecks，免得被當成掛掉 | 自己的電腦上手動 | `just ec2-start`、`just ec2-stop` |
 | [user-data.sh.tftpl](../infra/envs/1-ec2/user-data.sh.tftpl) | 第一次開機：裝 Docker、clone、寫部署設定，再叫 `deploy.sh` | EC2 第一次開機 | |
@@ -75,7 +75,7 @@ flowchart LR
 
 步驟和 RPO／RTO 見 [docs/runbooks/backup-restore.md](runbooks/backup-restore.md)。
 
-| 腳本 | 做什麼 | 誰叫 | just |
+| 腳本 | 用途 | 觸發方式 | just |
 |---|---|---|---|
 | [deploy/backup/pg-backup.sh](../deploy/backup/pg-backup.sh) | pg_dump、驗完整性、清掉過期的舊檔 | 手動（本機）；EC2 上由 `backup-to-s3.sh` 叫 | `just backup` |
 | [deploy/backup/pg-restore.sh](../deploy/backup/pg-restore.sh) | 先還原到暫存庫驗過，才換掉線上的資料庫 | 手動 | `just restore-verify`、`just restore` |
