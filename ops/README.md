@@ -63,7 +63,7 @@ Prometheus 其實同時做兩件事：抓和存。抓的工作交給 Alloy 之�
 | 很多團隊共用 | 每團隊各架一台 | 一套系統用租戶隔開 |
 | 兩台收集器互為備援 | 收到兩份就存兩份 | HA tracker 去重，只留一份 |
 
-它比較重，因為 Mimir 是為上面那些需求設計的分散式系統，拆成 distributor、ingester、querier、store-gateway、compactor 等元件。單機用 `-target=all` 把它們塞進同一個行程，`mimir/mimir.yaml` 大半是在關掉分散式功能（多租戶、複製、物件儲存）。`loki/loki-config.yaml` 也是同樣的做法，因為 Mimir、Loki、Tempo 是 Grafana 用同一套骨架做的。
+它比較重，因為 Mimir 是為上面那些需求設計的分散式系統，拆成 distributor、ingester、querier、store-gateway、compactor 等元件。單機用 `-target=all` 把它們塞進同一個 process，`mimir/mimir.yaml` 大半是在關掉分散式功能（多租戶、複製、物件儲存）。`loki/loki-config.yaml` 也是同樣的做法，因為 Mimir、Loki、Tempo 是 Grafana 用同一套骨架做的。
 
 ### 為什麼 trace 要另外一個資料庫（Tempo）
 
@@ -135,7 +135,7 @@ Alloy 透過 Docker 的 API（`docker.sock`）自動找到 `deploy/` 那組容�
 
 trace id 不放進標籤，因為每個請求都不同，放進去會讓索引爆掉。它在 log 內容的 `traceId` 欄位裡。
 
-本機開發的 bootRun 是直接跑在 Windows 上的處理程序，不在 Docker 裡，它的 log 不會進 Loki，照常看終端機。
+本機開發的 bootRun 直接跑在 Windows 上，不在 Docker 裡，它的 log 不會進 Loki，照常看終端機。
 
 ### 在 Grafana 查
 
