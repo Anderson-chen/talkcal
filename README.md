@@ -6,24 +6,23 @@
 
 ## 架構
 
-本機用兩組 Docker Compose 跑起整套（`deploy/` 是服務、`ops/` 是觀測）；線上版把同一套搬上 AWS 東京區的一台 EC2，前面加 Caddy 處理 HTTPS，模型改呼叫 Bedrock。
-
 - 本機、雲端的總覽圖和本機細節：[docs/architecture.md](docs/architecture.md#總覽)
-- AWS 階段一的互動架構圖（點元件看由哪個檔案哪幾行決定）：<https://anderson-chen.github.io/talkcal/>
 
 ## 目錄
 
-每個資料夾是一個關注點，各自有 README 說明設計理由：
+每個資料夾是一個關注點，有 README 的點進去看設計理由：
 
-```
-backend/   Spring Boot app：程式碼、Gradle、Dockerfile
-web/       Vue 3 前端：程式碼、pnpm、Dockerfile、nginx 設定
-deploy/    把 app、前端、模型、資料庫跑起來的 Docker Compose
-ops/       觀測：Alloy → Mimir / Loki / Tempo → Grafana
-perf/      k6 壓測
-ci/        CI 要檢查什麼、在什麼環境檢查
-docs/      設計稿
-```
+| 資料夾 | 放什麼 |
+|---|---|
+| `backend/` | Spring Boot app：程式碼、Gradle、Dockerfile |
+| [`web/`](web/README.md) | Vue 3 前端：程式碼、pnpm、Dockerfile、nginx 設定 |
+| [`deploy/`](deploy/README.md) | 把 app、前端、模型、資料庫跑起來的 Docker Compose |
+| [`ops/`](ops/README.md) | 觀測：Alloy → Mimir / Loki / Tempo → Grafana |
+| [`perf/`](perf/README.md) | k6 壓測 |
+| [`ci/`](ci/README.md) | CI 要檢查什麼、在什麼環境檢查 |
+| [`cd/`](cd/README.md) | 部署、退版、版本號 |
+| [`infra/`](infra/README.md) | 搬上 AWS 的 Terraform |
+| `docs/` | 架構圖、ADR、runbook、演練紀錄、設計稿 |
 
 給 AI 工具的指令和規則入口在 [AGENTS.md](AGENTS.md)；commit、PR、issue 的寫法在 [`.claude/rules/`](.claude/rules/)。
 
