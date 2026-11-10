@@ -17,12 +17,12 @@
 
   | 種類 | label | 每張 issue | 怎麼選 |
   |---|---|---|---|
-  | 放在哪 | `stage: …` 或 `product: …` | 剛好一個，兩種擇一 | `stage:` 照 [docs/classification.md](../../docs/classification.md) 的「分段的依據」、`product:` 照 README 的「面向的依據」判斷；子 issue 跟它的 epic 用同一個 |
+  | 放在哪 | `stage: …` 或 `product: …` | 剛好一個，兩種擇一 | 照 [docs/classification.md](../../docs/classification.md) 的「分段的依據」「面向的依據」判斷；子 issue 跟它的 epic 用同一個 |
   | 優先度 | `p0`、`p1` | 剛好一個 | `p0`：這一輪要做完；`p1`：先記下來，`p0` 做完再排 |
   | 改到哪塊 | `area: …` | 零到多個 | 會動到的技術領域，可以疊；都沒有就不貼 |
   | 特殊種類 | `epic`、`bug` | 是才貼 | Epic、Bug 模板會自動帶 |
 
-  - 「放在哪」選不出來，先回頭看 README 的「跟上線準備怎麼分」：要問工程才能決定的放 `stage:`，要問使用者才能決定的放 `product:`；兩邊都有的拆成兩張，互相連結。
+  - 「放在哪」選不出來，先回頭看 docs/classification.md 的「跟上線準備怎麼分」：要問工程才能決定的放 `stage:`，要問使用者才能決定的放 `product:`；兩邊都有的拆成兩張，互相連結。
   - 表格以外的 label（GitHub 預設的 `enhancement`、`question`、`wontfix`…，和舊的 `product`）不要貼：決定不做的用 close as not planned，理由寫在 epic。
-  - 要新的 label 時，先確認現有的真的放不下；新增時說明（description）寫判斷用的問句或範圍，跟 README 用同一個名字。
+  - 要新的 label 時，先確認現有的真的放不下；新增時說明（description）寫判斷用的問句或範圍，跟 docs/classification.md 用同一個名字。
   - 做到一半發現放錯段，直接改 label，sub-issue 也搬到對的 epic 底下。

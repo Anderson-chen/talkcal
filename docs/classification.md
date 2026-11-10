@@ -1,6 +1,8 @@
-# 上線準備怎麼分類
+# issue 怎麼分類
 
-開 issue 時貼哪個 `stage:` label 照這份判斷（規則見 [.claude/rules/issue.md](../.claude/rules/issue.md)）。產品範圍的 `product:` label 怎麼選見 [README 的「產品範圍怎麼分類」](../README.md#產品範圍怎麼分類)。
+開 issue 時「放在哪」的 label 照這份判斷（規則見 [.claude/rules/issue.md](../.claude/rules/issue.md)）：工程怎麼做到的貼 `stage:`，看[上線準備怎麼分類](#上線準備怎麼分類)；產品要做到什麼的貼 `product:`，看[產品範圍怎麼分類](#產品範圍怎麼分類)。PR 不貼 label，跟著它 `Closes` 的 issue。
+
+## 上線準備怎麼分類
 
 上線之後要顧慮的事照產品的生命週期分成五段，每一段是一個 epic issue，裡面是所有面向的總表：
 還沒做完的面向各有子 issue（sub-issue），現況、做法和證據寫在子 issue 裡，狀態以子 issue 的開關為準；已經完成的面向，說明留在 epic。
@@ -21,7 +23,7 @@
 | ④ 出事的時候（Respond） | [#38](https://github.com/Anderson-chen/talkcal/issues/38) |
 | ⑤ 長期活下去（Evolve） | [#46](https://github.com/Anderson-chen/talkcal/issues/46) |
 
-## 分段的依據
+### 分段的依據
 
 五段照**什麼時候最需要它**來切，不照哪個團隊負責、也不照用了哪種技術。這條時間軸跟兩個業界框架的分段對得上，這裡只是把每一段寫成一個問句，判斷時比較好用：
 
@@ -46,7 +48,7 @@ ITIL 4 已經把 v3 的五段改成不分先後的價值鏈，這裡對照 v3，
 
 下面這幾份清單不是用來切段，是用來檢查項目有沒有漏：逐條對照過（2026-10-08），對方有、這裡沒有的都補進來了。
 
-## 參考資料
+### 參考資料
 
 - [AWS Well-Architected：Operational Excellence Pillar](https://docs.aws.amazon.com/wellarchitected/latest/operational-excellence-pillar/welcome.html)：營運分成 Prepare、Operate、Evolve，Operate 底下再分平常看健康和處理事件，是五段分法的主要對照
 - [ITIL v3 服務生命週期](https://en.wikipedia.org/wiki/ITIL)：Strategy、Design、Transition、Operation、Continual Improvement 五段（ITIL 4 已改成價值鏈）
@@ -60,3 +62,57 @@ ITIL 4 已經把 v3 的五段改成不分先後的價值鏈，這裡對照 v3，
 - [Atlassian：Integrate Jira with GitHub](https://support.atlassian.com/jira-cloud-administration/docs/integrate-with-github/)：issue key 寫進分支、commit、PR，Jira 就會把開發進度連回 issue（原本的規劃，後來改用 GitHub Issues）
 - [HikariCP：Dropwizard / Micrometer metrics](https://github.com/brettwooldridge/HikariCP/wiki/Dropwizard-Metrics)、[Spring Boot：Supported metrics（DataSource）](https://docs.spring.io/spring-boot/reference/actuator/metrics.html)：連線池有哪些指標可以看
 - [Grafana：Trace correlations](https://grafana.com/docs/grafana/latest/datasources/tempo/configure-tempo-data-source/)、[Tempo：metrics-generator（service graph）](https://grafana.com/docs/tempo/latest/metrics-generator/service_graphs/)：在 Grafana 裡把指標、log、trace 串起來
+
+## 產品範圍怎麼分類
+
+[上線準備的五段](#上線準備怎麼分類)回答「怎麼做到」；產品範圍回答「要做到什麼」：只有行事曆加 AI 助理才會這樣問、要看使用者要什麼才能決定的事。
+分成八個面向，每個面向是一個 epic issue（標 `epic` 和 `product: 面向`），裡面列細項的現況；決定要做的才拆成子 issue，決定不做的在 epic 裡寫理由。
+
+| 面向 | 要回答的問題 | 對應的機制（上線準備） | epic |
+|---|---|---|---|
+| 時間解讀 | 使用者說的時間、看到的時間，在各種情境下都是同一個意思嗎 | #46 時區（儲存） | [#189](https://github.com/Anderson-chen/talkcal/issues/189) |
+| 同時操作 | 同時操作時，使用者看到的結果合理嗎 | #50 並行修改、#51 冪等寫入、#187 排程工作只執行一次 | [#190](https://github.com/Anderson-chen/talkcal/issues/190) |
+| 行程管理 | 行程從建立、修改、提醒到刪除，使用者需要的每一步都有嗎 | | [#191](https://github.com/Anderson-chen/talkcal/issues/191) |
+| 資料互通 | 資料進得來、出得去、能跟別人和其他行事曆共用嗎 | #11 認證與授權 | [#192](https://github.com/Anderson-chen/talkcal/issues/192) |
+| 多語系 | 換一種語言、換一個地方的人還能用嗎 | | [#193](https://github.com/Anderson-chen/talkcal/issues/193) |
+| AI 助理使用規則 | 使用者能信任它、成本控制得住、答錯時有回饋管道嗎 | #12 濫用防護、#35 成本、#36 產品指標 | [#194](https://github.com/Anderson-chen/talkcal/issues/194) |
+| 帳號與個資 | 使用者能完整掌控自己的帳號和資料，也符合法規嗎 | #52 隱私 | [#195](https://github.com/Anderson-chen/talkcal/issues/195) |
+| 回應速度 | 使用者覺得快嗎，而不只是後端的數字 | #34 SLO、③ Run 的壓測與容量 | [#196](https://github.com/Anderson-chen/talkcal/issues/196) |
+
+### 面向的依據
+
+八個面向是從「用行事曆加 AI 助理的人會問什麼」整理出來的，再拿 [ISO/IEC 25010:2023](https://quality.arc42.org/articles/iso-25010-update-2023) 的九個產品品質特性對照，確認沒有整塊漏掉：
+
+| ISO 25010 特性 | 對到的面向 |
+|---|---|
+| Functional suitability（功能完整、正確） | 時間解讀、行程管理 |
+| Performance efficiency | 回應速度 |
+| Compatibility（互通） | 資料互通 |
+| Interaction capability（好不好用、包容性） | 多語系、AI 助理使用規則 |
+| Reliability | 同時操作 |
+| Security | 帳號與個資 |
+| Flexibility（可攜、擴展） | 資料互通 |
+| Safety | AI 助理使用規則（答錯時的回饋管道） |
+| Maintainability | 沒有：要問工程才能決定，放上線準備的 ⑤ Evolve |
+
+判斷一個新問題放哪個面向：
+
+1. 看它回答的是表格裡哪個「要回答的問題」，一張 issue 只貼一個 `product:` label。
+2. 哪個都回答不了，而且已經想得到三件以上的細項，才開新的面向（新的 epic 和 `product:` label，這份的表格、label 說明、epic 標題用同一個名字）；不到三件就先放進最接近的面向，免得 epic 底下只有一兩件、只是多一層。
+
+### 跟上線準備怎麼分
+
+兩者是看同一個產品的兩個角度，不是第六段：
+
+| | 上線準備（五段） | 產品範圍（八個面向） |
+|---|---|---|
+| 角度 | 工程與營運面 | 產品面 |
+| 回答 | 怎麼做到：怎麼把它做穩、顧好 | 要做到什麼 |
+| 誰決定 | 工程，有業界標準做法 | 產品，看使用者要什麼 |
+| 換一個產品 | 大部分照搬 | 幾乎全部重想 |
+
+新的面向放哪邊，只問一句：**這件事要問誰才能決定？** 兩邊都沾到的不選邊，拆成兩項：機制放上線準備、規則放產品範圍，互相連結。
+例如時區：「存下來不會被資料庫偷偷換算」是機制，在 #46；「要支援哪些時區、出國時顯示哪裡的時間」是規則，在 #189。
+同理，限流（擋濫用）和方案配額（免費一天幾次）、量出成本和依成本定價，都是一邊一項。
+
+這條線不等於「非功能需求」和「功能需求」：「使用者能接受等多久」是效能、算非功能需求，但要問使用者才能決定，所以放產品範圍。

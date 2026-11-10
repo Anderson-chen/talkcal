@@ -1,4 +1,4 @@
-# epic：上線準備的一段，或產品範圍的一個面向，底下掛子 issue（上線準備的分法見 docs/classification.md，產品範圍見 README）。
+# epic：上線準備的一段，或產品範圍的一個面向，底下掛子 issue（分法見 docs/classification.md）。
 # 欄位照現有 epic 的寫法（例如 #30、#189）：要回答的問題（Goal）、細項（Scope）。
 # 表單上看得到的文字（欄位名稱、說明、表格欄名）用英文，填的內容用中文。
 name: Epic
