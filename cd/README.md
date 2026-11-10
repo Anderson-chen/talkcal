@@ -4,7 +4,7 @@
 跟 [ci/](../ci/README.md) 同一個分法：做什麼只寫一次，平台和環境只是外面那一層。
 
 整條 CI → CD 的流程圖和每一關擋什麼，見 [docs/architecture.md](../docs/architecture.md#cicd從-commit-到線上)。
-每支腳本（CI、CD，以及備份、EC2、壓測）什麼時候跑、誰叫它、對應哪個 `just` 指令，見[腳本地圖](../docs/automation.md)。
+每支腳本（CI、CD，以及備份、EC2）什麼時候跑、誰叫它、對應哪個 `just` 指令，見[腳本地圖](../docs/automation.md)。
 
 ## 怎麼跑
 

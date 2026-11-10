@@ -4,7 +4,7 @@
 本機（push 之前）和 GitHub（push 之後）跑的是**同一支 script、同一個映像檔**，所以本機綠就代表 GitHub 綠。
 
 整條 CI → CD 的流程圖和每一關擋什麼，見 [docs/architecture.md](../docs/architecture.md#cicd從-commit-到線上)。
-每支腳本（CI、CD，以及備份、EC2、壓測）什麼時候跑、誰叫它、對應哪個 `just` 指令，見[腳本地圖](../docs/automation.md)。
+每支腳本（CI、CD，以及備份、EC2）什麼時候跑、誰叫它、對應哪個 `just` 指令，見[腳本地圖](../docs/automation.md)。
 
 ## 怎麼跑
 

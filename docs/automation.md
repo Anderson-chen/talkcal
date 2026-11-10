@@ -83,13 +83,8 @@ flowchart LR
 | [deploy/backup/pg-diff.sh](../deploy/backup/pg-diff.sh) | 比兩個資料庫多了、少了、改了哪些列（只讀） | 手動 | `just pg-diff` |
 | [deploy/backup/drill.sh](../deploy/backup/drill.sh) | 還原演練：獨立的容器上跑備份 → 誤刪 → 還原，量時間 | 手動 | `just drill` |
 
-## 6. 壓測
-
-| 腳本 | 做什麼 | 誰叫 | just |
-|---|---|---|---|
-| [perf/run-to-grafana.sh](../perf/run-to-grafana.sh) | 跑 k6，指標送進 `ops/` 的 Grafana，跟 app、模型的指標疊在同一條時間軸 | 手動 | `just perf <腳本>` |
-
 ## 不在這張表上的
 
+- k6 壓測（`perf/run-to-grafana.sh`、`just perf`）：只會手動跑，用法見 [perf/README.md](../perf/README.md)。
 - Gradle 的 task（`./gradlew deploy`、`test`、`integrationTest`…）：見 README 的「怎麼跑」「測試」。
 - 演練時一次性的腳本（例如 `docs/drills/` 底下截圖用的 `shoot.mjs`）：只為了重現那次演練，跟著演練紀錄放。
