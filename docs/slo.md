@@ -6,7 +6,7 @@ dashboard 看得到數字，但數字要跟一條線比才知道該不該處理�
 | 東西 | 做什麼 | 在哪 |
 |------|--------|------|
 | 錄製規則 | Mimir 的 ruler 每分鐘算好 SLI、burn rate、budget，寫回成 `slo:*` 序列 | [ops/mimir/rules/anonymous/slo.yaml](../ops/mimir/rules/anonymous/slo.yaml) |
-| 告警規則 | 讀 `slo:burn_rate:*`，長短兩個視窗都超過門檻才叫人 | [ops/grafana/provisioning/alerting/slo-burn-rate.yaml](../ops/grafana/provisioning/alerting/slo-burn-rate.yaml) |
+| 告警規則 | 讀 `slo:burn_rate:*`，長短兩個視窗都超過門檻才觸發 | [ops/grafana/provisioning/alerting/slo-burn-rate.yaml](../ops/grafana/provisioning/alerting/slo-burn-rate.yaml) |
 | 儀表板 talkcal — SLO | budget 還剩多少、燒多快、告警狀態 | [ops/grafana/provisioning/dashboards/talkcal-slo.json](../ops/grafana/provisioning/dashboards/talkcal-slo.json)，<http://localhost:3000/d/talkcal-slo> |
 | 延遲門檻的 bucket | 多兩個剛好落在門檻上的 bucket（300 ms、8 秒） | [application.properties](../backend/src/main/resources/application.properties) 的 `management.metrics.distribution.slo.http.server.requests` |
 | 平常流量的腳本 | 送平常流量，量 SLO 的基準、驗 burn-rate 告警 | [perf/slo.js](../perf/slo.js) |

@@ -126,7 +126,7 @@ gh release create v0.2.0 --verify-tag --generate-notes   # 依合併的 PR 自�
 | | workflow 自動打（semantic-release、release-please） | 手動跑 cd/release.sh（選這個） |
 |---|---|---|
 | 版號怎麼決定 | 從 commit 標題推（Conventional Commits 的 `feat:`、`fix:`） | 人決定 |
-| 「這一版確認過」 | 做不到：兩個都在合併當下打 tag（release-please 是合併它的 release PR 時），那時還沒部署、沒人看過 | 部署、看過之後才打 |
+| 「這一版確認過」 | 做不到：兩個都在合併後、部署前就打 tag（release-please 是合併它的 release PR 之後），那時還沒人看過 | 部署、看過之後才打 |
 | 要的權限 | workflow 要能推 tag（`contents: write`） | 用自己的 `gh` 登入 |
 | 要另外設定的 | release-please 的 PR 沒連 issue，[`pr-issue`](../.github/workflows/pr-issue.yml) 檢查要像 Renovate 一樣開例外 | 不用 |
 | 適合 | 發佈套件、release 很頻繁的團隊 | 一個人、偶爾 release 的服務 |
