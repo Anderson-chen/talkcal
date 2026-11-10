@@ -6,54 +6,12 @@
 
 ## 架構
 
-### 本機
+本機用兩組 Docker Compose 跑起整套（`deploy/` 是服務、`ops/` 是觀測）；線上版把同一套搬上 AWS 東京區的一台 EC2，前面加 Caddy 處理 HTTPS，模型改呼叫 Bedrock。
 
-開發和驗證都在本機：[deploy/](deploy/README.md) 起服務、[ops/](ops/README.md) 起觀測，兩組 Docker Compose，埠全部只綁 `127.0.0.1`：
+- 本機、雲端的總覽圖和本機細節：[docs/architecture.md](docs/architecture.md#總覽)
+- AWS 階段一的互動架構圖（點元件看由哪個檔案哪幾行決定）：<https://anderson-chen.github.io/talkcal/>
 
-```mermaid
-flowchart LR
-    browser[瀏覽器] -- "http://localhost:18080" --> web
-    subgraph local[本機 · Docker Compose]
-        web[web<br/>nginx + Vue 3] -- /api --> app[app<br/>Spring Boot]
-        app -- OpenAI 相容協定 --> llm[llm-chat<br/>llama.cpp · Qwen3-8B]
-        app --> pg[(PostgreSQL<br/>行程 · 對話記憶)]
-        app -- 舊行程、舊對話歸檔 --> rustfs[(RustFS)]
-        app -. 指標 · log · trace .-> alloy[Alloy]
-        alloy --> mimir[Mimir] & loki[Loki] & tempo[Tempo]
-        mimir & loki & tempo --> grafana[Grafana<br/>localhost:3000]
-    end
-```
-
-兩組 compose 怎麼接見 [docs/architecture.md](docs/architecture.md)。
-
-### 雲端
-
-線上版跑在 AWS 東京區（[階段一](infra/envs/1-ec2/README.md)：一台 EC2 + Docker Compose，平常關機、展示前開機）。
-跑的是同一份 compose，差在前面多了 Caddy 處理 HTTPS、模型改呼叫 Bedrock、歸檔和備份放 S3：
-
-```mermaid
-flowchart LR
-    browser[瀏覽器] -- HTTPS --> caddy
-    subgraph aws[AWS 東京區]
-        subgraph ec2[EC2 · Docker Compose]
-            caddy[Caddy<br/>Let's Encrypt 憑證] --> web[web<br/>nginx + Vue 3]
-            web -- /api --> app[app<br/>Spring Boot]
-            app --> pg[(PostgreSQL<br/>行程 · 對話記憶)]
-            app -. 指標 · log · trace .-> alloy[Alloy]
-            alloy --> mimir[Mimir] & loki[Loki] & tempo[Tempo]
-            mimir & loki & tempo --> grafana[Grafana]
-        end
-        app -- OpenAI 相容協定 --> bedrock[Bedrock<br/>Qwen3 32B]
-        app -- 舊行程、舊對話歸檔 --> archive[(S3 歸檔)]
-        pg -. 每小時、關機前 pg_dump .-> backups[(S3 備份)]
-        ssm[SSM Parameter Store<br/>DB 密碼 · API key] -. 部署時讀 .-> ec2
-    end
-    operator[維運者] -. SSM port forwarding .-> grafana
-```
-
-對外只開 80/443，Grafana 不對外，登入機器走 SSM、不開 22。每個元件由哪個檔案哪幾行決定，見[互動架構圖](https://anderson-chen.github.io/talkcal/)。
-
-### AI 助理
+## AI 助理
 
 AI 助理是自己寫的 agent loop：每一輪把對話歷史和三個工具交給模型，模型決定要不要呼叫工具，
 工具背後是行事曆的 use case。
@@ -285,7 +243,7 @@ ITIL 4 已經把 v3 的五段改成不分先後的價值鏈，這裡對照 v3，
 | 想知道 | 看哪裡 |
 |---|---|
 | 為什麼選 Spring AI、llama.cpp、JdbcClient、Alloy…：每個重大決定的選項和代價 | [docs/adr/](docs/adr/README.md) |
-| 整體架構圖：本機兩組 compose 怎麼接 | [docs/architecture.md](docs/architecture.md) |
+| 整體架構圖：本機、雲端的總覽，本機兩組 compose 怎麼接 | [docs/architecture.md](docs/architecture.md) |
 | AWS 階段一互動架構圖：每個元件由哪個檔案哪幾行決定、為什麼這樣選、業界怎麼做 | [https://anderson-chen.github.io/talkcal/](https://anderson-chen.github.io/talkcal/)（原始檔 [docs/architecture/index.html](docs/architecture/index.html)） |
 | 搬上 AWS 的兩個階段（EC2、EKS） | [infra/README.md](infra/README.md) |
 | 怎麼部署、容器之間怎麼溝通、對照雲端是什麼 | [deploy/README.md](deploy/README.md) |
