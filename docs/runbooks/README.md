@@ -16,7 +16,7 @@
 | Mimir 查不到（#40） | critical | [meta-mimir-down](meta-mimir-down.md) |
 | Loki 或 Tempo 抓不到（#40） | warning | [meta-backend-down](meta-backend-down.md) |
 
-不是告警觸發、而是要主動做的：[備份與還原](backup-restore.md)；剛部署的新版壞了，要退回上一版：[cd/rollback.md](../../cd/rollback.md)。
+不是告警觸發的：[備份與還原](backup-restore.md)、[退版](../../cd/rollback.md)。
 
 ## 每一份都長一樣
 

@@ -4,7 +4,7 @@
 
 整條 CI → CD 的流程圖和每一關擋什麼，見 [docs/architecture.md](../docs/architecture.md#cicd從-commit-到線上)。每支腳本（CI、CD，以及備份、EC2）什麼時候跑、誰叫它、對應哪個 `just` 指令，見[腳本地圖](../docs/automation.md)。
 
-退版和版本號各有一份說明：[rollback.md](rollback.md) 是新版壞了怎麼退回上一版（runbook、選型、驗證紀錄），[release.md](release.md) 是版本號怎麼算、怎麼查線上是哪一版、release tag 怎麼打。
+退版見 [rollback.md](rollback.md)，版本號和 release tag 見 [release.md](release.md)。
 
 ## 使用方式
 
