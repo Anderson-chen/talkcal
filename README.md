@@ -72,23 +72,4 @@ CI 在每次 push、PR 時於 GitHub 上跑，本機則由 pre-push hook 在推�
 
 ## 文件地圖
 
-| 想知道 | 看哪裡 |
-|---|---|
-| issue 貼哪個 `stage:`、`product:` label：上線準備的五段、產品範圍的八個面向怎麼分 | [docs/classification.md](docs/classification.md) |
-| 為什麼選 Spring AI、llama.cpp、JdbcClient、Alloy…：每個重大決定的選項和代價 | [docs/adr/](docs/adr/README.md) |
-| 整體架構圖：本機、雲端的總覽，本機兩組 compose 怎麼接 | [docs/architecture.md](docs/architecture.md) |
-| AWS 階段一互動架構圖：每個元件由哪個檔案哪幾行決定、為什麼這樣選、業界怎麼做 | [https://anderson-chen.github.io/talkcal/](https://anderson-chen.github.io/talkcal/)（原始檔 [docs/architecture/index.html](docs/architecture/index.html)） |
-| 搬上 AWS 的兩個階段（EC2、EKS） | [infra/README.md](infra/README.md) |
-| 怎麼部署、容器之間怎麼溝通、對照雲端是什麼 | [deploy/README.md](deploy/README.md) |
-| 怎麼觀測、三種訊號怎麼互跳 | [ops/README.md](ops/README.md) |
-| 怎麼壓測、怎麼讀結果 | [perf/README.md](perf/README.md) |
-| 每個請求花多少錢、自架 GPU 和 Bedrock 在哪裡交叉 | [docs/cost.md](docs/cost.md) |
-| 每支自動化腳本什麼時候跑、誰叫它、對應哪個 `just` 指令 | [docs/automation.md](docs/automation.md) |
-| CI 怎麼跑、為什麼在容器裡跑 | [ci/README.md](ci/README.md) |
-| 用到的模型、套件、映像檔能不能這樣用，CI 怎麼擋 GPL／AGPL；本專案為什麼是 MIT | [docs/licenses.md](docs/licenses.md) |
-| 套件怎麼自動升級、升級 PR 怎麼審 | [docs/dependency-updates.md](docs/dependency-updates.md) |
-| 測試覆蓋率怎麼看、為什麼不設門檻 | [docs/test-coverage.md](docs/test-coverage.md) |
-| 後端怎麼分層、ArchUnit 守哪些規則 | [backend/README.md](backend/README.md) |
-| 前端怎麼組成 | [web/README.md](web/README.md) |
-| 畫面設計稿和實作的差異 | [docs/design/calendar/README.md](docs/design/calendar/README.md) |
-| 資料表為什麼長這樣 | [backend/src/main/resources/db/migration](backend/src/main/resources/db/migration)（每支 SQL 開頭都寫了理由） |
+架構圖、ADR、issue 分類依據、腳本地圖、SLO、告警、runbook、演練紀錄等跨資料夾的文件，索引在 [docs/README.md](docs/README.md)。
