@@ -14,7 +14,7 @@
 
 | 資料夾 | 放什麼 |
 |---|---|
-| `backend/` | Spring Boot app：程式碼、Gradle、Dockerfile |
+| [`backend/`](backend/README.md) | Spring Boot app：程式碼、Gradle、Dockerfile |
 | [`web/`](web/README.md) | Vue 3 前端：程式碼、pnpm、Dockerfile、nginx 設定 |
 | [`deploy/`](deploy/README.md) | 把 app、前端、模型、資料庫跑起來的 Docker Compose |
 | [`ops/`](ops/README.md) | 觀測：Alloy → Mimir / Loki / Tempo → Grafana |
@@ -27,31 +27,6 @@
 每支自動化腳本什麼時候跑、誰叫它，見[腳本地圖](docs/automation.md)。
 
 給 AI 工具的指令和規則入口在 [AGENTS.md](AGENTS.md)；commit、PR、issue 的寫法在 [`.claude/rules/`](.claude/rules/)。
-
-## 程式結構
-
-後端（`backend/`）是六角架構（Hexagonal / Ports & Adapters），目錄照 BuckPal 的慣例：
-
-```
-io.github.andersonchen.talkcal
-├── Application            只負責啟動（留在根 package，元件掃描和測試都從這裡找起）
-├── app                    組裝根，代表整個應用程式：業務模組不知道自己被怎麼組起來
-│   ├── config             所有 @Configuration，唯一認識具體實作的地方
-│   ├── job                排程工作（每天清舊對話）
-│   └── observability      全站共用的 access log
-└── calendar               行事曆這門業務，一個模組
-    ├── application
-    │   ├── domain.model     業務規則（CalendarEvent、FreeSlots…），純 Java，不認識 Spring
-    │   ├── domain.service   use case 的實作，只呼叫 model 和 port
-    │   ├── port.in          use case 介面（外面怎麼使喚核心）
-    │   └── port.out         核心需要的外部能力（存取行程、抽行程）
-    └── adapter
-        ├── in               HTTP controller、AI 助理與它的工具
-        └── out              PostgreSQL、Spring AI
-```
-
-分層規則寫成 [ArchitectureTest](backend/src/test/java/io/github/andersonchen/talkcal/ArchitectureTest.java)（ArchUnit）：
-依賴只能由外往內、core 不准依賴 Spring 和 Jackson、只有組裝根（app.config、app.job）能認識 adapter 的具體類別、模組之間互不 import。違反就紅燈，不靠 code review 記得。
 
 ## 技術選型
 
@@ -245,6 +220,7 @@ ITIL 4 已經把 v3 的五段改成不分先後的價值鏈，這裡對照 v3，
 | 用到的模型、套件、映像檔能不能這樣用，CI 怎麼擋 GPL／AGPL；本專案為什麼是 MIT | [docs/licenses.md](docs/licenses.md) |
 | 套件怎麼自動升級、升級 PR 怎麼審 | [docs/dependency-updates.md](docs/dependency-updates.md) |
 | 測試覆蓋率怎麼看、為什麼不設門檻 | [docs/test-coverage.md](docs/test-coverage.md) |
+| 後端怎麼分層、ArchUnit 守哪些規則 | [backend/README.md](backend/README.md) |
 | 前端怎麼組成 | [web/README.md](web/README.md) |
 | 畫面設計稿和實作的差異 | [docs/design/calendar/README.md](docs/design/calendar/README.md) |
 | 資料表為什麼長這樣 | [backend/src/main/resources/db/migration](backend/src/main/resources/db/migration)（每支 SQL 開頭都寫了理由） |

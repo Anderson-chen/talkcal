@@ -51,5 +51,5 @@ Java 的 package 沒有依賴方向的概念：core 直接 import 並 new 一個
 ## 證據
 
 - [ArchitectureTest](../../backend/src/test/java/io/github/andersonchen/talkcal/ArchitectureTest.java)：每條規則和理由
-- [README.md 的程式結構](../../README.md#程式結構)：目錄樹
+- [backend/README.md 的程式結構](../../backend/README.md#程式結構)：目錄樹
 - [ci/README.md](../../ci/README.md#架構檢查內容只寫一次平台只是入口)：CI 也照同一個道理分（`checks.sh` 是核心、各平台設定檔是 adapter）
