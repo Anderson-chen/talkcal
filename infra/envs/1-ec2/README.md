@@ -1,10 +1,8 @@
-# 1-ec2 — 階段一：單台 EC2 + Docker Compose
+# 1-ec2（階段一）：單台 EC2 + Docker Compose
 
-狀態：**2026-10-14 部署上線**（`model_backend=bedrock`），從外部經 HTTPS 打 AI 助理、Grafana 看到三種訊號都驗證過。
-機器平常關機，展示前開機。追蹤在 [#57](https://github.com/Anderson-chen/talkcal/issues/57)；整體的階段怎麼分見 [infra/README.md](../../README.md)。
-第一次部署遇到的三個問題寫在「疑難排解」最前面。
+狀態：2026-10-14 部署上線（`model_backend=bedrock`），從外部經 HTTPS 打 AI 助理、在 Grafana 看到三種訊號都驗證過。機器平常關機，展示前才開。追蹤在 [#57](https://github.com/Anderson-chen/talkcal/issues/57)；整體的階段怎麼分見 [infra/README.md](../../README.md)。第一次部署遇到的問題寫在「疑難排解」最前面。
 
-**互動架構圖**：[https://anderson-chen.github.io/talkcal/](https://anderson-chen.github.io/talkcal/)——點任一元件看它由這個資料夾哪個檔案、哪幾行決定，選擇理由、業界做法和查證來源。
+互動架構圖在 [https://anderson-chen.github.io/talkcal/](https://anderson-chen.github.io/talkcal/)，點任一元件可以看它由這個資料夾的哪個檔案、哪幾行決定，以及選擇理由、業界做法和查證來源。
 
 一台 EC2，`deploy/` 和 `ops/` 兩組 compose 搬上去，前面加一個 Caddy 處理 HTTPS。
 模型在哪裡跑由變數 `model_backend` 決定，其他（VPC、Caddy、DB、觀測）兩種共用：
@@ -19,11 +17,11 @@
 2026-10-13 申請東京區 G 系列配額（新帳號預設 0）被拒，AWS 要新帳號「逐步增加用量」。一般機型的配額已經有 32 vCPU，
 Bedrock 也不受 EC2 GPU 配額限制，所以先把模型換成代管的 API：
 
-- **程式不用改**：app 用 Spring AI 的 OpenAI client，本機打 llama-server、雲端打 Bedrock 的 `bedrock-mantle` 端點，
+- 程式不用改。app 用 Spring AI 的 OpenAI client，本機打 llama-server、雲端打 Bedrock 的 `bedrock-mantle` 端點，
   只換位址、key、模型名稱（`compose.bedrock.yaml` 用環境變數蓋掉）。
   2026-10-13 在東京實測過 mantle 上 Qwen3 32B 的 `json_schema` 輸出（抽行程用）和工具呼叫（AI 助理用）都能動。
-- **便宜**：m7i-flex.large 約 0.1 USD/h（符合免費方案資格），g6.xlarge 約 0.8–1 USD/h；展示用的量，token 費用很少。
-- **代價**：雲端跟本機跑的不是同一顆模型（32B vs 8B），少了「同一份 compose 原樣搬上去」；
+- 便宜。m7i-flex.large 約 0.1 USD/h（符合免費方案資格），g6.xlarge 約 0.8–1 USD/h；展示用的量，token 費用很少。
+- 代價是雲端跟本機跑的不是同一顆模型（32B vs 8B），少了「同一份 compose 原樣搬上去」；
   多了一把要保管的 API key（見 `bedrock.tf`）。
 
 GPU 配額下來後：`terraform apply -var model_backend=gpu`，再照下面「首次部署」的 gpu 步驟傳模型。
@@ -99,7 +97,7 @@ flowchart LR
 
 ## 首次部署
 
-前提：AWS CLI 的 `DEV` profile 登入得了。`gpu` 還要 **GPU 配額已經申請下來**（「Running On-Demand G and VT instances」預設是 0，2026-10-13 申請被拒；g6.xlarge 要 4 vCPU）。
+前提：AWS CLI 的 `DEV` profile 登入得了。`gpu` 還要先有 GPU 配額：「Running On-Demand G and VT instances」預設是 0，g6.xlarge 要 4 vCPU，2026-10-13 申請被拒。
 
 在 Git Bash 裡跑 AWS CLI 時，參數裡以 `/` 開頭的字串（例如 SSM 參數名稱 `/aws/service/...`）會被轉成 Windows 路徑，回 `ParameterNotFound`。前面加 `MSYS_NO_PATHCONV=1` 就好。
 
@@ -123,15 +121,14 @@ aws s3 cp C:/llm/models/Qwen3-8B-Q4_K_M.gguf "s3://$(terraform output -raw model
 aws s3 cp C:/llm/models/SHA256SUMS            "s3://$(terraform output -raw models_bucket)/" --profile DEV
 ```
 
-機器開機後 user_data 會自動跑第一次部署。gpu 時如果模型檔是在機器開機**之後**才傳上去，第一次部署會停在「S3 裡沒有 .gguf」，傳好之後手動重跑一次：
+機器開機後，user_data 會自動跑第一次部署。gpu 時如果模型檔在機器開機之後才傳上去，第一次部署會停在「S3 裡沒有 .gguf」，傳好之後手動重跑一次：
 
 ```bash
 aws ssm start-session --target "$(terraform output -raw instance_id)" --region ap-northeast-1 --profile DEV
 sudo bash /opt/talkcal/repo/infra/envs/1-ec2/deploy.sh
 ```
 
-第一次要裝 Docker、build app、拉映像檔，會跑一陣子（gpu 還要編 llama-server 的 CUDA，十幾分鐘），進度看 `sudo tail -f /var/log/user-data.log`。
-好了之後開 `terraform output -raw app_url`。
+第一次要裝 Docker、build app、拉映像檔，會跑一陣子；gpu 還要編 llama-server 的 CUDA，要十幾分鐘。進度用 `sudo tail -f /var/log/user-data.log` 看，好了之後開 `terraform output -raw app_url`。
 
 ## 日常操作
 
@@ -169,8 +166,7 @@ terraform output -raw grafana_tunnel
 
 ## 省錢
 
-機器按小時計費（bedrock 的 m7i-flex.large 約 0.1 USD/h，gpu 的 g6.xlarge 約 0.8–1 USD/h），平常關機、展示時才開。
-關機時還在收費的只有 EBS（bedrock 30 GB、gpu 150 GB 的 gp3）和沒掛在執行中機器上的 Elastic IP。Bedrock 按 token 計費，不叫就不收。
+機器按小時計費，bedrock 的 m7i-flex.large 約 0.1 USD/h，gpu 的 g6.xlarge 約 0.8–1 USD/h，所以平常關機、展示時才開。關機時還在收費的只有 EBS（bedrock 30 GB、gpu 150 GB 的 gp3）和沒掛在執行中機器上的 Elastic IP。Bedrock 按 token 計費，不叫就不收錢。
 
 ```bash
 export HEALTHCHECKS_API_KEY=...   # 有設 heartbeat_url 才需要；#40 做完之前不要設，見下面
@@ -178,22 +174,15 @@ export HEALTHCHECKS_API_KEY=...   # 有設 heartbeat_url 才需要；#40 做完�
 ./power.sh start                  # 開機，等到 Healthchecks 收到 heartbeat、恢復監控
 ```
 
-為什麼不直接 `aws ec2 stop-instances`：關機後 Grafana 的 heartbeat 也停了（#40），不先暫停的話 Healthchecks 約 6 分鐘後
-會寄一封「掛了」的信，關一次響一次。`power.sh stop` 先用 Healthchecks 的 API 暫停，再關機；
-暫停中的 check 收到 Grafana 的第一個 heartbeat 就自己回到監控（本機實測過）。但 Grafana 開機後沒起來的話，
-它會一直停在暫停、不會寄信，所以 `power.sh start` 開機後會等到 check 回到 up；10 分鐘還沒恢復就報錯，要自己連進去看。
+不直接用 `aws ec2 stop-instances`，是因為關機後 Grafana 的 heartbeat 也停了（#40），不先暫停的話 Healthchecks 約 6 分鐘後會寄一封「掛了」的信，關一次響一次。`power.sh stop` 先用 Healthchecks 的 API 暫停，再關機。暫停中的 check 收到 Grafana 的第一個 heartbeat 就會自己回到監控，這在本機實測過。但如果 Grafana 開機後沒起來，check 會一直停在暫停、不會寄信，所以 `power.sh start` 開機後會等到 check 回到 up；10 分鐘還沒恢復就報錯，要自己連進去看。
 
-**現在不要設 `heartbeat_url`**：Watchdog 先拿掉了（#243），沒有東西會打 heartbeat，設了的話 `power.sh start` 會等滿 10 分鐘報錯、
-Healthchecks 也會寄 DOWN 的信。#40 做完再設。已經設過的，部署 #243 之前先到 Healthchecks.io 把 check 按 Pause。
+**現在不要設 `heartbeat_url`。** Watchdog 先拿掉了（#243），沒有東西會打 heartbeat；設了的話 `power.sh start` 會等滿 10 分鐘報錯，Healthchecks 也會寄 DOWN 的信。#40 做完再設。已經設過的，部署 #243 之前先到 Healthchecks.io 把 check 按 Pause。
 
-`HEALTHCHECKS_API_KEY` 在 Healthchecks.io 的 Project Settings → API Access 產生，要能寫的那種（read-only 不能暫停）。
-只有這支腳本用得到、機器上不需要，所以不放 SSM、不進 git，用環境變數給。沒給的話照樣關機，只是會收到那封信。
+`HEALTHCHECKS_API_KEY` 在 Healthchecks.io 的 Project Settings → API Access 產生，要能寫的那種，read-only 的不能暫停。只有這支腳本用得到，機器上不需要，所以不放 SSM、不進 git，用環境變數給。沒給的話照樣關機，只是會收到那封信。
 
-容器都設了 `restart: unless-stopped`，開機後會自己起來，不必重跑 deploy.sh；gpu 時模型要重新載入，第一個請求會等比較久。
-關機前 systemd 會先把資料庫備份到 S3（`talkcal-backup-on-shutdown`），所以關機這段時間的 RPO 是 0；關機要等它跑完（幾秒）。
+容器都設了 `restart: unless-stopped`，開機後會自己起來，不用重跑 deploy.sh；gpu 時模型要重新載入，第一個請求會等比較久。關機前 systemd 會先把資料庫備份到 S3（`talkcal-backup-on-shutdown`），所以關機這段時間的 RPO 是 0，代價是關機要等它跑完，大約幾秒。
 
-徹底收攤用 `terraform destroy`：IP 釋出、網址跟著換，機器上的資料庫也一起消失。
-備份 bucket 有東西時 destroy 會停在那裡（`force_destroy = false`，刻意的）：先決定要不要把備份下載回來，再清空 bucket 重跑。
+徹底收攤用 `terraform destroy`：IP 釋出、網址跟著換，機器上的資料庫也一起消失。備份 bucket 裡有東西時 destroy 會停下來（`force_destroy = false`，故意這樣設），要先決定要不要把備份下載回來，再清空 bucket 重跑。
 
 ## 代價
 
@@ -223,7 +212,7 @@ Healthchecks 也會寄 DOWN 的信。#40 做完再設。已經設過的，部署
 
 ## 疑難排解
 
-**第一次部署（2026-10-14）真的遇到的**，都已經修掉；重建一台全新的機器驗證過，開機到部署完約 4 分鐘：
+第一次部署（2026-10-14）遇到的問題都已經修掉，也重建一台全新的機器驗證過，開機到部署完約 4 分鐘：
 
 | 症狀 | 原因 | 修正 |
 |---|---|---|
