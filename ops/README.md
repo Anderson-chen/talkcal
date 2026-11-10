@@ -292,14 +292,7 @@ k6 跑完就結束，沒有 `/metrics` 可以等 Alloy 來抓，所以跟 trace 
 
 ## SLO：怎樣才算「夠好」
 
-有四個 SLO，一般 API 和跟助理說話各有一個可用性、一個延遲，滾動 28 天。目標、數字怎麼從壓測推出來、告警門檻怎麼算，都寫在 [docs/slo.md](../docs/slo.md)。這裡只記它在觀測堆疊裡怎麼接：
-
-| 誰 | 做什麼 | 檔案 |
-|----|--------|------|
-| app | 延遲直方圖多兩個剛好在門檻上的 bucket（300 ms、8s） | `backend/.../application.properties` |
-| Mimir 的 ruler | 每分鐘把 SLI、burn rate、error budget 算好，寫回成新的序列（`slo:*`） | `mimir/rules/anonymous/slo.yaml` |
-| Grafana 告警 | 讀 `slo:burn_rate:*`，長短兩個視窗都超過門檻就進 firing（multi-window, multi-burn-rate） | `grafana/provisioning/alerting/slo-burn-rate.yaml` |
-| Grafana 儀表板 | talkcal — SLO：budget 還剩多少、燒多快、告警狀態 | `grafana/provisioning/dashboards/talkcal-slo.json` |
+有四個 SLO，一般 API 和跟助理說話各有一個可用性、一個延遲，滾動 28 天。目標、數字怎麼從壓測推出來、告警門檻怎麼算，都寫在 [docs/slo.md](../docs/slo.md)；每一段在哪個檔案，列在那份開頭的表。這裡只記觀測堆疊這一側為什麼這樣分、改了怎麼生效。
 
 錄製規則放 Mimir，告警規則放 Grafana。錄製是在算數字，放在存資料的地方算最省，不用每次把原始資料拉出來；告警要接通知管道（contact point、policy），那些都在 Grafana，規則放在一起才看得出哪條規則送去哪。Mimir 的 ruler 也能發告警，但那樣要再架一個 Alertmanager，通知設定會分散在兩個地方。
 
