@@ -36,5 +36,5 @@
 
 - [JdbcCalendarEventAdapter](../../backend/src/main/java/io/github/andersonchen/talkcal/calendar/adapter/out/persistence/postgres/JdbcCalendarEventAdapter.java)：類別註解（JdbcClient、TransactionTemplate、一個類別實作三個 port）
 - [CalendarConfiguration](../../backend/src/main/java/io/github/andersonchen/talkcal/app/config/CalendarConfiguration.java)：組裝根把 `JdbcClient` 和 `TransactionTemplate` 交給 adapter
-- [README.md 的技術選型](../../README.md#技術選型)
+- [backend/README.md 的技術選型](../../backend/README.md#技術選型)
 - [db/migration](../../backend/src/main/resources/db/migration)：每支 SQL 開頭寫了理由

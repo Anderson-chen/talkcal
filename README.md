@@ -24,23 +24,6 @@
 | [`infra/`](infra/README.md) | 搬上 AWS 的 Terraform |
 | `docs/` | 架構圖、ADR、runbook、演練紀錄、設計稿 |
 
-## 給 AI 工具的規則
-
-給 AI 工具的指令和規則入口在 [AGENTS.md](AGENTS.md)；commit、PR、issue 的寫法在 [`.claude/rules/`](.claude/rules/)。
-
-## 技術選型
-
-| 層 | 用什麼 | 為什麼（細節在各目錄的 README 和程式碼註解） |
-|---|---|---|
-| 後端 | Java 25、Spring Boot 4.1、Spring MVC | |
-| 跟模型講話 | Spring AI 2.0（OpenAI 相容協定） | llama-server 講 OpenAI 的協定；哪天換成雲端模型，改設定不改程式 |
-| 模型 | llama.cpp + Qwen3-8B（Q4_K_M） | 自架：資料不出機器、沒有 token 費用 |
-| 資料庫 | PostgreSQL 18 + Flyway，用 JdbcClient 不用 JPA | 只有兩張表，手寫 SQL 一眼看得懂，domain 物件不必為了 ORM 加註解 |
-| 前端 | Vue 3 + TypeScript + Vite | 見 [web/README.md](web/README.md) |
-| 觀測 | Grafana Alloy → Mimir / Loki / Tempo → Grafana | 指標、log、trace 三種訊號，互相點得過去。見 [ops/README.md](ops/README.md) |
-| 壓測 | k6 | 見 [perf/README.md](perf/README.md) |
-| 部署 | Docker Compose（在本機模擬雲端部署） | 見 [deploy/README.md](deploy/README.md) |
-
 ## 怎麼跑
 
 需要：Docker（含 NVIDIA GPU 支援）、JDK 25。
