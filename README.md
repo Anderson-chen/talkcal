@@ -4,7 +4,7 @@
 
 個人行事曆功能，可透過對話方式來建立行程。
 
-## 技術
+## 使用技術
 
 | 層 | 用什麼 |
 |---|---|
@@ -21,7 +21,7 @@
 
 本機和雲端的架構圖在 [docs/architecture.md](docs/architecture.md#總覽)。
 
-## 目錄
+## 專案結構
 
 | 資料夾 | 放什麼 |
 |---|---|
@@ -35,7 +35,7 @@
 | [`infra/`](infra/README.md) | 搬上 AWS 的 Terraform |
 | [`docs/`](docs/README.md) | 跨資料夾的文件：架構圖、ADR、issue 分類依據、腳本地圖、SLO、告警、runbook、演練紀錄 |
 
-## 怎麼跑
+## 快速開始
 
 需要 Docker（要能用 NVIDIA GPU）和 JDK 25。模型檔目前寫死從 `C:\llm\models` 複製（`deploy/compose.yaml`），所以只能在 Windows 上跑，先把 `Qwen3-8B-Q4_K_M.gguf` 放進去。改成可設定的路徑還沒做。
 

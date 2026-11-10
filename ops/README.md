@@ -69,7 +69,7 @@ Prometheus 其實同時做兩件事：抓和存。抓的工作交給 Alloy 之�
 
 trace 是一棵 span 樹。每個 span 有自己的 id 和父 span，靠 trace id 串成一個請求。Mimir 只放得下「標籤 + 一個數字」，Loki 放的是一行一行的文字，都裝不下這種樹。
 
-## 怎麼跑
+## 使用方式
 
 ```bash
 cd deploy && docker compose up -d   # 先起被觀測的那組：它會建立 Alloy 要加入的網路

@@ -85,5 +85,5 @@ flowchart LR
 ## 不在這張表上的
 
 - k6 壓測：看 [perf/README.md](../perf/README.md)。
-- Gradle 的 task：看根目錄 README 的「怎麼跑」「測試」。
+- Gradle 的 task：看根目錄 README 的「快速開始」「測試」。
 - `docs/drills/` 底下演練用的一次性腳本。

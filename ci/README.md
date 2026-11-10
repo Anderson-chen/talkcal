@@ -6,7 +6,7 @@
 
 整條 CI → CD 的流程圖和每一關擋什麼，見 [docs/architecture.md](../docs/architecture.md#cicd從-commit-到線上)。每支腳本（CI、CD，以及備份、EC2）什麼時候跑、誰叫它、對應哪個 `just` 指令，見[腳本地圖](../docs/automation.md)。
 
-## 怎麼跑
+## 使用方式
 
 ```bash
 ci/run.sh                               # 手動跑一次，測 HEAD

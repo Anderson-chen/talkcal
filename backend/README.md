@@ -1,6 +1,6 @@
 # backend：Spring Boot app
 
-後端的程式碼、Gradle 設定和 Dockerfile。怎麼跑、怎麼測見根目錄的 [README.md](../README.md#怎麼跑)。
+後端的程式碼、Gradle 設定和 Dockerfile。安裝、執行和測試見根目錄的 [README.md](../README.md#快速開始)。
 
 ## 程式結構
 
