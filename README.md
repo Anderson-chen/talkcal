@@ -2,21 +2,58 @@
 
 [![CI](https://github.com/Anderson-chen/talkcal/actions/workflows/ci.yml/badge.svg)](https://github.com/Anderson-chen/talkcal/actions/workflows/ci.yml)
 
-用自然語言管行事曆的 AI 助理。跟它說「明天晚上七點和 Amy 吃飯」，它會提議一張行程卡片，你確認後才存；
-也能問「這週末有空嗎？」「下週一早上有哪些空檔？」。模型自己架（llama.cpp + Qwen3-8B），不呼叫雲端 API。
+個人行事曆功能，可透過對話方式來建立行程。
 
 ## 架構
 
+### 雲端
+
+線上版跑在 AWS 東京區（[階段一](infra/envs/1-ec2/README.md)：一台 EC2 + Docker Compose，平常關機、展示前開機）：
+
 ```mermaid
 flowchart LR
-    browser[瀏覽器] --> web[web<br/>nginx + Vue 3]
-    web -- /api --> app[app<br/>Spring Boot]
-    app -- OpenAI 相容協定 --> llm[llm-chat<br/>llama.cpp · Qwen3-8B]
-    app --> pg[(PostgreSQL<br/>行程 · 對話記憶)]
-    app -. 指標 · log · trace .-> alloy[Alloy]
-    alloy --> mimir[Mimir] & loki[Loki] & tempo[Tempo]
-    mimir & loki & tempo --> grafana[Grafana]
+    browser[瀏覽器] -- HTTPS --> caddy
+    subgraph aws[AWS 東京區]
+        subgraph ec2[EC2 · Docker Compose]
+            caddy[Caddy<br/>Let's Encrypt 憑證] --> web[web<br/>nginx + Vue 3]
+            web -- /api --> app[app<br/>Spring Boot]
+            app --> pg[(PostgreSQL<br/>行程 · 對話記憶)]
+            app -. 指標 · log · trace .-> alloy[Alloy]
+            alloy --> mimir[Mimir] & loki[Loki] & tempo[Tempo]
+            mimir & loki & tempo --> grafana[Grafana]
+        end
+        app -- OpenAI 相容協定 --> bedrock[Bedrock<br/>Qwen3 32B]
+        app -- 舊行程、舊對話歸檔 --> archive[(S3 歸檔)]
+        pg -. 每小時、關機前 pg_dump .-> backups[(S3 備份)]
+        ssm[SSM Parameter Store<br/>DB 密碼 · API key] -. 部署時讀 .-> ec2
+    end
+    operator[維運者] -. SSM port forwarding .-> grafana
 ```
+
+對外只開 80/443，Grafana 不對外，登入機器走 SSM、不開 22。每個元件由哪個檔案哪幾行決定，見[互動架構圖](https://anderson-chen.github.io/talkcal/)。
+
+### 本機
+
+本機跑的是同一份 compose（[deploy/](deploy/README.md)、[ops/](ops/README.md)），差在沒有 Caddy、模型用本機 GPU 自己跑、歸檔放 RustFS（S3 相容），
+埠全部只綁 `127.0.0.1`：
+
+```mermaid
+flowchart LR
+    browser[瀏覽器] -- "http://localhost:18080" --> web
+    subgraph local[本機 · Docker Compose]
+        web[web<br/>nginx + Vue 3] -- /api --> app[app<br/>Spring Boot]
+        app -- OpenAI 相容協定 --> llm[llm-chat<br/>llama.cpp · Qwen3-8B]
+        app --> pg[(PostgreSQL<br/>行程 · 對話記憶)]
+        app -- 舊行程、舊對話歸檔 --> rustfs[(RustFS)]
+        app -. 指標 · log · trace .-> alloy[Alloy]
+        alloy --> mimir[Mimir] & loki[Loki] & tempo[Tempo]
+        mimir & loki & tempo --> grafana[Grafana<br/>localhost:3000]
+    end
+```
+
+兩組 compose 怎麼接見 [docs/architecture.md](docs/architecture.md)。
+
+### AI 助理
 
 AI 助理是自己寫的 agent loop：每一輪把對話歷史和三個工具交給模型，模型決定要不要呼叫工具，
 工具背後是行事曆的 use case。
