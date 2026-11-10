@@ -38,6 +38,6 @@ io.github.andersonchen.talkcal
 | Java 25、Spring Boot 4.1、Spring MVC | |
 | Spring AI 2.0（OpenAI 相容協定）跟模型講話 | 本機的 llama-server 和雲端的 Bedrock 都講 OpenAI 的協定，換模型只要改設定 |
 | 模型：本機 llama.cpp + Qwen3-8B（Q4_K_M）；雲端 Bedrock 的 Qwen3 32B | 本機自架，資料不出機器，也沒有 token 費用。雲端的 GPU 配額被拒，所以先用 Bedrock，見 [infra/envs/1-ec2](../infra/envs/1-ec2/README.md#為什麼先走-bedrock) |
-| PostgreSQL 18 + Flyway，用 JdbcClient 不用 JPA | 表不多、查詢單純，手寫 SQL 一看就懂，domain 物件也不用為了 ORM 加註解。見 [ADR 0004](../docs/adr/0004-jdbc-client-not-jpa.md) |
+| PostgreSQL 18 + Flyway，用 JdbcClient 不用 JPA | 表不多、查詢單純，手寫 SQL 一看就懂，domain 物件也不用為了 ORM 加註解。見 [ADR 0004](../docs/adr/0004-jdbc-client-not-jpa.md)。每張表為什麼長這樣，寫在 [db/migration](src/main/resources/db/migration) 每支 SQL 的開頭 |
 
 前端、觀測、壓測、部署怎麼選的，寫在各自的 README：[web/](../web/README.md#為什麼這樣選)、[ops/](../ops/README.md#選型理由)、[perf/](../perf/README.md)、[deploy/](../deploy/README.md)。每個重大決定的選項和代價在 [docs/adr/](../docs/adr/README.md)。

@@ -10,7 +10,7 @@ GitHub Deployments 記的是「watcher 想部署哪個 commit」，不是「容�
 
 ## 版本號長什麼樣
 
-規則寫在 [cd/version.sh](../cd/version.sh)，只有這一份：
+規則寫在 [cd/version.sh](version.sh)，只有這一份：
 
 | 情況 | 版本號 | 例子 |
 |---|---|---|
@@ -95,7 +95,7 @@ cd/release.sh v0.2.0             # 打在 origin/master 最新的 commit
 cd/release.sh v0.2.0 3f9c2ab     # 打在 master 上比較早、確認過的那個 commit
 ```
 
-[cd/release.sh](../cd/release.sh) 先檢查，過了才在本機建 annotated tag，最後印出推上去和開 GitHub Release 的指令：
+[cd/release.sh](release.sh) 先檢查，過了才在本機建 annotated tag，最後印出推上去和開 GitHub Release 的指令：
 
 ```bash
 git push origin v0.2.0
@@ -135,7 +135,7 @@ commit 訊息用的是這個 repo 自己的 `[feat]`、`[fix]`（見 CLAUDE.md�
 
 ## 給 rollback（#19）的介面
 
-這次只做到「每個版本有自己的映像檔 tag，舊的留在機器上」，rollback 本身在 [docs/rollback.md](rollback.md)（#19）：
+這次只做到「每個版本有自己的映像檔 tag，舊的留在機器上」，rollback 本身在 [rollback.md](rollback.md)（#19）：
 
 - `deploy/compose.yaml` 的 `image: talkcal/app:${APP_VERSION}`：設好 `APP_VERSION` 再 `up --no-build`，
   就是換回機器上已經有的那個版本，不用重 build
