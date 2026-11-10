@@ -74,4 +74,4 @@ pnpm --dir web run dev           # 前端在 5173，/api 轉給 8090；在 repo 
 ../ci/run.sh                 # 跟 CI 一樣，在乾淨的容器裡全部跑一遍
 ```
 
-push 之前 pre-push hook 會先跑 `ci/run.sh`（`git config core.hooksPath .githooks` 開啟）。GitHub 上沒有 GPU，模型相關的測試只有本機會跑。細節見 [ci/README.md](ci/README.md)。
+push 之前 pre-push hook 會先掃祕密（`ci/secrets.sh`）、再跑 `ci/run.sh`（`git config core.hooksPath .githooks` 開啟）。GitHub 上沒有 GPU，模型相關的測試只有本機會跑。細節見 [ci/README.md](ci/README.md)。

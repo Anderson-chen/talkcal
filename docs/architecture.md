@@ -51,7 +51,7 @@ flowchart LR
         end
         app -- OpenAI 相容協定 --> bedrock[Bedrock<br/>Qwen3 32B]
         app -- 舊行程、舊對話歸檔 --> archive[(S3 歸檔)]
-        pg -. 每小時、關機前 pg_dump .-> backups[(S3 備份)]
+        pg -. 每小時、關機前、部署前 pg_dump .-> backups[(S3 備份)]
         ssm[SSM Parameter Store<br/>DB 密碼 · API key] -. 部署時讀 .-> ec2
     end
     operator[維運者] -. SSM port forwarding .-> grafana
