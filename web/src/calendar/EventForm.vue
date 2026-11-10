@@ -7,7 +7,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { CATEGORIES } from '../calendar'
 import { timeOf } from '../monthGrid'
-import { isOvernight, toDraft, type FormFields } from './eventDraft'
+import { daysApart, endDayOffset, isOvernight, toDraft, type FormFields } from './eventDraft'
 import { oneAtATime, retryKey } from './submitOnce'
 import Icon from './Icon.vue'
 import { message, useCalendarState } from './useCalendar'
@@ -27,7 +27,17 @@ const form = reactive<FormFields>({
   category: initial.category,
   location: initial.location ?? '',
   note: initial.note ?? '',
+  endDays: keptEndDays(),
 })
+
+// 修改跨天的行程（#259）：記住原本跨幾天，只有一個日期欄也不會把結束日改掉。
+// 一般的跨夜（22:00–01:00）不必記，照「結束早於開始算隔天」就對；記了反而改成白天時段時還停在隔天
+function keptEndDays(): number | undefined {
+  if (!request.editing) return undefined
+  const days = daysApart(initial.start, initial.end)
+  const plainOvernight = days === 1 && isOvernight(timeOf(initial.start), timeOf(initial.end))
+  return days > 0 && !plainOvernight ? days : undefined
+}
 const error = ref<string | null>(null)
 const saving = ref(false)
 // 這個表單的冪等鍵（#51）：存失敗後再按「儲存」，內容沒改就帶同一把，上次其實存好了也不會多一筆
@@ -37,7 +47,10 @@ const heading = request.editing ? '修改行程' : '新增行程'
 
 onMounted(() => titleInput.value?.focus())
 
-const overnight = computed(() => isOvernight(form.start, form.end))
+const endHint = computed(() => {
+  const offset = endDayOffset(form)
+  return offset === 0 ? '' : offset === 1 ? '（隔天）' : `（${offset} 天後）`
+})
 
 function close() {
   calendar.form.value = null
@@ -102,7 +115,7 @@ function fail(text: string) {
           <input id="ev-start" v-model="form.start" type="time" />
         </div>
         <div class="field">
-          <label for="ev-end">結束<span v-if="overnight" class="hint">（隔天）</span></label>
+          <label for="ev-end">結束<span v-if="endHint" class="hint">{{ endHint }}</span></label>
           <input id="ev-end" v-model="form.end" type="time" />
         </div>
       </div>

@@ -473,14 +473,14 @@ class CalendarAssistantTest {
         CalendarAssistant.Reply reply = assistant(scripted(
                 calls("propose_change", "{\"eventId\":\"" + SAVED.id() + "\",\"description\":\"明天晚上七點喝咖啡\"}"),
                 calls("propose_removal", "{\"eventId\":\"" + SAVED.id() + "\"}"),
-                says("已顯示卡片，請確認。")))
+                says("已顯示卡片，請按卡片確認。")))
                 .reply(OWNER, ID, "晚上的吃飯改成喝咖啡，然後刪掉");
 
         assertEquals(1, reply.changes().size());
         assertEquals(SAVED, reply.changes().getFirst().before());
         assertEquals(List.of(SAVED), reply.removals());
         assertTrue(reply.proposals().isEmpty());
-        assertEquals("已顯示卡片，請確認。", reply.text());
+        assertEquals("已顯示卡片，請按卡片確認。", reply.text());
         assertEquals(3, prompts.size(), "有卡片就不算說謊，不必提醒");
     }
 
@@ -494,6 +494,38 @@ class CalendarAssistantTest {
             assertEquals(CalendarAssistant.HONEST_FALLBACK, reply.text(), text);
             assertEquals(2, prompts.size(), text);
         }
+    }
+
+    @Test
+    @DisplayName("#259 查完行事曆、沒呼叫 propose_removal 就說「已刪除」：照樣抓到（改、刪一定先查，不能因為查過就放過）")
+    void falseRemovalAfterListingIsCaught() {
+        AssistantMessage lists = calls("list_events", "{\"from\":\"2026-10-07\",\"to\":\"2026-10-08\"}");
+        CalendarAssistant.Reply reply = assistant(scripted(lists, says("已刪除明天的開會。"))).reply(OWNER, ID, "刪除明天的開會");
+
+        assertEquals(CalendarAssistant.HONEST_FALLBACK, reply.text());
+        assertTrue(prompts.get(2).getInstructions().stream().anyMatch(m -> CalendarAssistant.CORRECTION_DONE.equals(m.getText())));
+    }
+
+    @Test
+    @DisplayName("#259 提議了修改卡片卻說「已修改」：使用者還沒確認，提醒過還是一樣就換成「請按卡片確認」")
+    void doneClaimWithCardsIsCaught() {
+        CalendarAssistant.Reply reply = assistant(scripted(
+                calls("propose_change", "{\"eventId\":\"" + SAVED.id() + "\",\"description\":\"明天晚上七點喝咖啡\"}"),
+                says("好的，已修改成喝咖啡。")))
+                .reply(OWNER, ID, "晚上的開會改成喝咖啡");
+
+        assertEquals(CalendarAssistant.CONFIRM_CARDS_FALLBACK, reply.text());
+        assertEquals(1, reply.changes().size(), "卡片還是要交回畫面");
+    }
+
+    @Test
+    @DisplayName("#259 反例：查完行事曆照實說「行事曆上已經沒有」不是宣稱刪除，不提醒")
+    void describingCalendarIsFine() {
+        AssistantMessage lists = calls("list_events", "{\"from\":\"2026-10-07\",\"to\":\"2026-10-08\"}");
+        CalendarAssistant.Reply reply = assistant(scripted(lists, says("行事曆上已經沒有明天的開會了。"))).reply(OWNER, ID, "刪掉了嗎？");
+
+        assertEquals("行事曆上已經沒有明天的開會了。", reply.text());
+        assertEquals(2, prompts.size());
     }
 
     @Test

@@ -103,6 +103,31 @@ class AuthSystemTest {
     }
 
     @Test
+    @DisplayName("#259 修改（PUT）也要登入、也要 CSRF：沒登入 401、沒帶 X-XSRF-TOKEN 403，那筆沒被改；反例：本人帶了就 200")
+    void updateNeedsLoginAndCsrf() throws Exception {
+        String before = """
+                {"title": "牙醫回診", "start": "2030-01-15T10:00:00", "end": "2030-01-15T11:00:00"}""";
+        String update = """
+                {"expected": %s, "event": {"title": "洗牙", "start": "2030-01-15T10:00:00", "end": "2030-01-15T11:00:00"}}"""
+                .formatted(before);
+        BrowserSession amy = browser().signUpAndLogIn("amy", PASSWORD);
+        HttpResponse<String> saved = amy.postJson("/api/calendar/events", "{\"events\": [" + before + "]}");
+        String path = "/api/calendar/events/" + JSON.readTree(saved.body()).at("/events/0/id").asString();
+
+        assertEquals(401, browser().putJson(path, update).statusCode());
+        HttpResponse<String> forged = amy.withoutCsrfHeader().putJson(path, update);
+        assertEquals(403, forged.statusCode(), forged.body());
+        assertEquals("牙醫回診", jdbc.sql("SELECT title FROM calendar_event").query(String.class).single());
+
+        // withoutCsrfHeader 會改到 amy 那一份，換一個新的瀏覽器登入同一個帳號
+        BrowserSession honest = browser();
+        assertEquals(204, honest.login("amy", PASSWORD).statusCode());
+        HttpResponse<String> updated = honest.putJson(path, update);
+        assertEquals(200, updated.statusCode(), updated.body());
+        assertEquals("洗牙", jdbc.sql("SELECT title FROM calendar_event").query(String.class).single());
+    }
+
+    @Test
     @DisplayName("密碼錯、沒有這個帳號：都是 401「帳號或密碼錯誤」，分不出是哪一個（不透露帳號存不存在）")
     void wrongCredentials() throws Exception {
         browser().register("amy", PASSWORD);

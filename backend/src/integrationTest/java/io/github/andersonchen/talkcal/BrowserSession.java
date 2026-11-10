@@ -48,6 +48,10 @@ final class BrowserSession {
         return send(request(path).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(json)), true);
     }
 
+    HttpResponse<String> putJson(String path, String json) throws Exception {
+        return send(request(path).header("Content-Type", "application/json").PUT(HttpRequest.BodyPublishers.ofString(json)), true);
+    }
+
     HttpResponse<String> delete(String path) throws Exception {
         return send(request(path).DELETE(), true);
     }

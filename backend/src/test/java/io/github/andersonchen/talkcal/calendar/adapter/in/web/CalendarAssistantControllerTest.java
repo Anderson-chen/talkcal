@@ -13,6 +13,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.CalendarAssistant;
 import io.github.andersonchen.talkcal.calendar.adapter.shared.ModelUnavailableException;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventOrigin;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.InMemoryProposals;
@@ -66,6 +68,9 @@ class CalendarAssistantControllerTest {
     // 另一個登入的人（預設的請求是 ...0001）
     private static final String ME = "3f1c8a2e-0000-4000-8000-000000000001";
     private static final String OTHER = "3f1c8a2e-0000-4000-8000-000000000002";
+    // 行事曆上已經有的那筆（#259）：假的助理說「改」「刪」時拿它的編號呼叫工具
+    static final ScheduledEvent LUNCH = new ScheduledEvent(EventId.of("3f1c8a2e-6b0d-4d7e-9a51-2c4e8f7b9d99"),
+            CalendarEvent.startingAt("午餐", LocalDateTime.of(2026, 10, 7, 12, 0)).withDetails("拉麵店", null));
     private static final String UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
     @Autowired
@@ -116,6 +121,34 @@ class CalendarAssistantControllerTest {
                         .content("{\"message\":\"晚上\",\"conversationId\":\"" + id + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.conversationId").value(id));
+    }
+
+    @Test
+    @DisplayName("#259 助理提議修改：changes 帶著行程 id、現在的樣子（before）、要改成的樣子（after），不算新增提議")
+    void changesCarryBeforeAndAfter() throws Exception {
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"午餐改成下午三點開會\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.proposals").isEmpty())
+                .andExpect(jsonPath("$.removals").isEmpty())
+                .andExpect(jsonPath("$.changes[0].eventId").value(LUNCH.id().toString()))
+                .andExpect(jsonPath("$.changes[0].before.title").value("午餐"))
+                .andExpect(jsonPath("$.changes[0].before.start").value("2026-10-07T12:00:00"))
+                .andExpect(jsonPath("$.changes[0].before.proposalId").doesNotExist())
+                .andExpect(jsonPath("$.changes[0].after.title").value("開會"))
+                .andExpect(jsonPath("$.changes[0].after.start").value("2026-10-07T15:00:00"))
+                .andExpect(jsonPath("$.changes[0].after.location").value("拉麵店"));
+        assertEquals(List.of(), usage.events, "修改卡片不算進新增提議的採納率");
+    }
+
+    @Test
+    @DisplayName("#259 助理提議刪除：removals 是那一筆行程（帶 id），跟 GET /events 回的同一個形狀")
+    void removalsAreSavedEvents() throws Exception {
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"刪掉午餐\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.changes").isEmpty())
+                .andExpect(jsonPath("$.removals[0].id").value(LUNCH.id().toString()))
+                .andExpect(jsonPath("$.removals[0].title").value("午餐"))
+                .andExpect(jsonPath("$.removals[0].location").value("拉麵店"));
     }
 
     @Test
@@ -330,6 +363,12 @@ class CalendarAssistantControllerTest {
                     if (last.getMessageType() == MessageType.TOOL) {
                         return new ChatResponse(List.of(new Generation(new AssistantMessage("請確認卡片。"))));
                     }
+                    if (last.getText().contains("改成")) {
+                        return toolCall("propose_change", "{\"eventId\":\"" + LUNCH.id() + "\",\"description\":\"明天下午三點開會\"}");
+                    }
+                    if (last.getText().contains("刪掉")) {
+                        return toolCall("propose_removal", "{\"eventId\":\"" + LUNCH.id() + "\"}");
+                    }
                     if (last.getText().contains("開會")) {
                         return new ChatResponse(List.of(new Generation(AssistantMessage.builder().content("")
                                 .toolCalls(List.of(new AssistantMessage.ToolCall("call-1", "function", "propose_events",
@@ -343,9 +382,15 @@ class CalendarAssistantControllerTest {
             Map<OwnerId, ChatMemory> memories = new ConcurrentHashMap<>();
             return new CalendarAssistant(model, owner -> memories.computeIfAbsent(owner, o -> MessageWindowChatMemory.builder().maxMessages(Integer.MAX_VALUE).build()),
                     description -> List.of(CalendarEvent.startingAt("開會", LocalDateTime.of(2026, 10, 7, 15, 0))),
-                    (owner, start, end) -> List.of(), (owner, id) -> Optional.empty(), (owner, start, end, period, minimum) -> List.of(),
+                    (owner, start, end) -> List.of(), (owner, id) -> id.equals(LUNCH.id()) ? Optional.of(LUNCH) : Optional.empty(), (owner, start, end, period, minimum) -> List.of(),
                     Clock.systemDefaultZone());
         }
+    }
+
+    private static ChatResponse toolCall(String tool, String arguments) {
+        return new ChatResponse(List.of(new Generation(AssistantMessage.builder().content("")
+                .toolCalls(List.of(new AssistantMessage.ToolCall("call-" + tool, "function", tool, arguments)))
+                .build())));
     }
 
     /** 記下每一筆用量，寫成「shown 1」這種字串，比對時一眼看得懂。 */
