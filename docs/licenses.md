@@ -6,7 +6,7 @@
 
 ## 結論
 
-| 對象 | 授權 | 商用 | 再散布 | 我們有沒有散布它 |
+| 項目 | 授權 | 商用 | 再散布 | 我們有沒有散布它 |
 |---|---|---|---|---|
 | talkcal 本身 | MIT（[LICENSE](../LICENSE)） | 可 | 可 | 原始碼公開在 GitHub |
 | Qwen3-8B（本機 llama.cpp 用的 GGUF） | Apache-2.0 | 可 | 可，要附授權全文、保留聲明、標出改了什麼 | 沒有：模型檔不進 git，只在自己的機器和私有 S3 |
@@ -108,7 +108,7 @@ CI 的規則因此是：**前端、後端會打包的依賴都不能是 GPL、AG
 
 Java、JavaScript 套件以外，還有這些會被執行或跟著 repo 走的東西。都是「拿來用、沒有散布」或寬鬆授權，所以不放進 CI 的檢查，記在這裡：
 
-| 對象 | 授權 | 我們怎麼用 | 結論 |
+| 項目 | 授權 | 我們怎麼用 | 結論 |
 |---|---|---|---|
 | 映像檔裡的作業系統套件（apt、apk 裝的 curl、libgomp1、busybox…） | 大多是 GPL、LGPL | 跑在自己的機器上 | 不散布就沒有義務（見上一節）。目前沒有逐一列出的清單 |
 | llama.cpp 內附的 C／C++ 函式庫（`vendor/`：cpp-httplib、nlohmann/json、miniaudio、stb、subprocess.h、xxhash…） | MIT、BSD、Public Domain、Unlicense | 跟 llama.cpp 一起編進 llama-server | 都是寬鬆授權；映像檔要公開時跟 llama.cpp 的 LICENSE 一起附上 |
@@ -135,7 +135,7 @@ Java、JavaScript 套件以外，還有這些會被執行或跟著 repo 走的�
 
 要抓的是兩件事：我們升到的新版本換了授權，和現在用的服務條款被改了。
 
-| 對象 | 授權綁在哪裡 | 怎麼發現它變了 |
+| 項目 | 授權綁在哪裡 | 怎麼發現它變了 |
 |---|---|---|
 | Java、npm 套件 | 每一個版本各自宣告 | 自動。升版一定會改 `build.gradle` 或 lockfile，CI 的 `checkLicense`、`ci/licenses.sh` 就會用新版本宣告的授權重新判斷；Renovate 開的升版 PR 也一樣（docs/dependency-updates.md） |
 | 模型權重（Qwen3-8B） | 下載的那一份檔案 | 換模型、換尺寸、換量化來源時，照[模型](#模型)一節重看。原本那份檔案的授權不會因為上游改了而失效 |
