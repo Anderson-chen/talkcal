@@ -4,6 +4,8 @@
 
 整條 CI → CD 的流程圖和每一關擋什麼，見 [docs/architecture.md](../docs/architecture.md#cicd從-commit-到線上)。每支腳本（CI、CD，以及備份、EC2）什麼時候跑、誰叫它、對應哪個 `just` 指令，見[腳本地圖](../docs/automation.md)。
 
+退版見 [rollback.md](rollback.md)，版本號和 release tag 見 [release.md](release.md)。
+
 ## 使用方式
 
 在 repo 根目錄（Git Bash）：
@@ -15,7 +17,7 @@ cd/apply.sh local llm-chat               # 只換模型
 WAIT_TIMEOUT=600 cd/apply.sh local app   # 拉長等待
 ```
 
-映像檔的 tag 是 `cd/version.sh` 算出來的版本號：有 release tag 就用 tag，沒有就用 commit 前 7 碼。部署完用 `docker inspect talkcal-app` 看 label 就知道是哪一版。規則和怎麼打 release tag（`cd/release.sh`）見 [docs/release.md](../docs/release.md)。
+映像檔的 tag 是 `cd/version.sh` 算出來的版本號：有 release tag 就用 tag，沒有就用 commit 前 7 碼。部署完用 `docker inspect talkcal-app` 看 label 就知道是哪一版。規則和怎麼打 release tag（`cd/release.sh`）見 [release.md](release.md)。
 
 平常在 `backend/` 用 Gradle 的捷徑就好：`./gradlew deploy`、`deployApp`、`deployWeb`、`deployModels`。它們呼叫的就是上面這支，只多了 `deployApp` 會先跑測試。用法見 [deploy/README.md](../deploy/README.md)。
 
@@ -80,7 +82,7 @@ Windows 預設不讓 `.ps1` 執行，被擋的話改用 `powershell -ExecutionPo
 | 看部署了什麼 | GitHub repo 頁面的 Deployments，或 `C:/talkcal-deploy/.git/cd-local.log` |
 | 立刻跑一輪，不等排程 | `/c/talkcal-deploy/.git/cd-watch.sh local`（Git Bash），或 `Start-ScheduledTask talkcal-cd-local` |
 | 失敗的版本修好了要重試 | 刪掉 `.git/cd-local.last` 再跑一輪。同一個 commit 只自動試一次：失敗要人來看，不該每 5 分鐘重 build |
-| 新版壞了，退回上一版 | `cd/rollback.sh local --previous`（或指定版本；`--list` 看有哪些）。會順便釘住，watcher 不再自動部署，修好後 `--unpin`。見 [docs/rollback.md](../docs/rollback.md) |
+| 新版壞了，退回上一版 | `cd/rollback.sh local --previous`（或指定版本；`--list` 看有哪些）。會順便釘住，watcher 不再自動部署，修好後 `--unpin`。見 [rollback.md](rollback.md) |
 | 暫停 | `Disable-ScheduledTask talkcal-cd-local`（恢復：`Enable-`；整個拿掉：`Unregister-`） |
 | watcher 本身有 bug（log 不再有新的一輪） | 副本會跟著部署換成新版，壞掉的 watcher 部署不到修好的版本，自己救不回來。修好、合併後手動放回：`cp cd/triggers/watch.sh .git/cd-watch.sh`（#70 就是這樣救回來的） |
 | 關機、重開機 | 不用管。排程登記在 Windows 裡，登入後自己恢復，關機時錯過的那輪會補跑。Docker Desktop 還沒起來的那幾輪會跳過、不記成試過 |
@@ -105,7 +107,7 @@ Windows 預設不讓 `.ps1` 執行，被擋的話改用 `powershell -ExecutionPo
 
 - `verify.sh`：部署後打一次 health 和 `/api`，不只看容器的 healthcheck。EC2 上已經有 [infra/envs/1-ec2/smoke.sh](../infra/envs/1-ec2/smoke.sh)（[#225](https://github.com/Anderson-chen/talkcal/issues/225)），收進 `apply.sh` 時直接搬過來。
 - `envs/ec2.env`：把 [infra/envs/1-ec2/deploy.sh](../infra/envs/1-ec2/deploy.sh) 收進來，讓 EC2 也跑 `apply.sh` 和同一支 watcher。
-- build once：現在部署的是 checkout 下來的程式碼，在機器上 `--build`。映像檔已經帶版本號（[docs/release.md](../docs/release.md)），但沒有推到 registry，本機和 EC2 各自 build。換回機器上舊 tag 的做法見 [docs/rollback.md](../docs/rollback.md)。
+- build once：現在部署的是 checkout 下來的程式碼，在機器上 `--build`。映像檔已經帶版本號（[release.md](release.md)），但沒有推到 registry，本機和 EC2 各自 build。換回機器上舊 tag 的做法見 [rollback.md](rollback.md)。
 
 ## 已知限制，決定不做
 

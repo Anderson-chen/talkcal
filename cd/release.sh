@@ -4,7 +4,7 @@
 #   cd/release.sh v0.2.0              # 打在 origin/master 最新的 commit
 #   cd/release.sh v0.2.0 3f9c2ab      # 打在 master 上比較早的某個 commit（例如確認過的那一版）
 #
-# 流程和為什麼是手動，見 docs/release.md。
+# 流程和為什麼是手動，見 cd/release.md。
 #
 # 擋下來的情況（每一條都是打錯之後很難收回的）：
 #   1. 名字不是 v<主>.<次>.<修>：cd/version.sh 不會把它當成版本

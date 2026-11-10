@@ -58,7 +58,7 @@ vulns +images:
 alerting:
     ci/alerting.sh
 
-# ── CD：部署、發版、退版（cd/README.md、docs/release.md、docs/rollback.md）──
+# ── CD：部署、發版、退版（cd/README.md、cd/release.md、cd/rollback.md）──
 
 # 把這台機器的服務換成目前 checkout 的版本，不先跑測試（要先跑測試用 ./gradlew deployApp）；不給服務就部署 app、web
 [group('cd')]

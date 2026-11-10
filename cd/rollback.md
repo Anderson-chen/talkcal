@@ -13,7 +13,7 @@ cd/rollback.sh local --unpin         # 修好了：解除釘住，watcher 下一
 
 退版是「換回某個 tag 的映像檔」，靠的是 [#25](https://github.com/Anderson-chen/talkcal/issues/25)：每個版本一個 tag
 （`talkcal/app:<版本號>`），label `org.opencontainers.image.revision` 帶完整 commit。#25 之前的映像檔都叫 `:local`、沒有 label，
-不知道裡面是哪個 commit，`rollback.sh` 不會退到它們；能退的範圍從 #25 合併後的第一次部署開始。版本號的規則見 [docs/release.md](release.md)。
+不知道裡面是哪個 commit，`rollback.sh` 不會退到它們；能退的範圍從 #25 合併後的第一次部署開始。版本號的規則見 [release.md](release.md)。
 
 ## Runbook
 
@@ -66,7 +66,7 @@ docker inspect talkcal-app --format '{{index .Config.Labels "org.opencontainers.
 docker compose -f deploy/compose.yaml logs --since 5m app | grep -i error
 ```
 
-容器 healthy 不代表功能正常（`compose up --wait` 擋不住的，見 [docs/architecture.md](architecture.md#每一關擋什麼擋不住什麼)）：
+容器 healthy 不代表功能正常（`compose up --wait` 擋不住的，見 [docs/architecture.md](../docs/architecture.md#每一關擋什麼擋不住什麼)）：
 登入、看月曆、新增一筆行程都走一次。
 
 ### 5. 修好之後
@@ -157,7 +157,7 @@ cd/apply.sh local
 
 ## EC2
 
-EC2 還沒有 `cd/envs/ec2.env`（[cd/README.md](../cd/README.md#還沒做的)），`rollback.sh` 還不能直接用。
+EC2 還沒有 `cd/envs/ec2.env`（[cd/README.md](README.md#還沒做的)），`rollback.sh` 還不能直接用。
 在機器上（SSM 連進去）手動做一樣的事：
 
 ```bash

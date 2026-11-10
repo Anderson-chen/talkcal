@@ -2,11 +2,11 @@
 # 把這台機器上的 app、web 退回某個已經部署過的版本（#19），並釘住，watcher 不會自己再部署新的上來。
 #
 #   cd/rollback.sh local --list          機器上有哪些版本退得回去、現在跑哪個、有沒有釘住
-#   cd/rollback.sh local 3f9c2ab         退到指定版本（版本號就是映像檔的 tag，見 docs/release.md）
+#   cd/rollback.sh local 3f9c2ab         退到指定版本（版本號就是映像檔的 tag，見 cd/release.md）
 #   cd/rollback.sh local --previous      退到 GitHub Deployments 上一個成功、機器上也還有映像檔的版本
 #   cd/rollback.sh local --unpin         解除釘住，watcher 下一輪照常部署最新的綠燈版本
 #
-# 為什麼 --no-build --pull never、為什麼先換 web、起不來為什麼換回：docs/rollback.md「選型」。
+# 為什麼 --no-build --pull never、為什麼先換 web、起不來為什麼換回：cd/rollback.md「選型」。
 # 鎖和釘住的檔名（.git/cd-<env>.lock、.pin）跟 cd/triggers/watch.sh 是同一組，改名要兩邊一起改。
 
 set -euo pipefail
@@ -114,7 +114,7 @@ previous_version() {
   return 1
 }
 
-# 把 web、app 各換成指定的版本，等 healthy。先換 web 再換 app，跟 apply.sh 相反（理由見 docs/rollback.md）。
+# 把 web、app 各換成指定的版本，等 healthy。先換 web 再換 app，跟 apply.sh 相反（理由見 cd/rollback.md）。
 # 兩個版本分開給：換回原本的時候，web 和 app 原本不一定是同一版（例如只用 apply.sh 換過 web）
 switch_to() {
   local web_version="$1" app_version="$2" svc version timeout now
@@ -202,7 +202,7 @@ fi
 # 1. 退得回去才開始。這一步之前什麼都還沒動
 if ! target_rev="$(deployable "$target")"; then
   echo "$target 退不回去（talkcal/app:$target 要帶 commit label、talkcal/web:$target 也要在），什麼都沒動。" >&2
-  echo "要部署機器上沒有的舊版本，見 docs/rollback.md「映像檔不在了」。" >&2
+  echo "要部署機器上沒有的舊版本，見 cd/rollback.md「映像檔不在了」。" >&2
   list_versions >&2
   exit 1
 fi
@@ -224,7 +224,7 @@ shown_from="${from:-（沒在跑）}"   # 只用在訊息和紀錄；判斷能�
 if ! git cat-file -e "$target_rev^{commit}" 2>/dev/null; then
   echo "注意：這個 clone 沒有 ${target_rev:0:7} 這個 commit，比對不了兩版的 compose 設定"
 elif ! git diff --quiet "$target_rev" HEAD -- $COMPOSE_FILES; then
-  echo "注意：${target_rev:0:7} 之後 compose 設定改過，舊映像檔會配上目前的設定（見 docs/rollback.md「compose 設定」）："
+  echo "注意：${target_rev:0:7} 之後 compose 設定改過，舊映像檔會配上目前的設定（見 cd/rollback.md「compose 設定」）："
   git diff --stat "$target_rev" HEAD -- $COMPOSE_FILES
 fi
 
@@ -248,7 +248,7 @@ if switch_to "$target" "$target"; then
   echo "✅ 退回 $target。watcher 已釘住，修好之後：cd/rollback.sh $env_name --unpin"
   if [ ! -f "$git_dir/cd-watch.sh" ]; then
     echo "注意：這個 clone 沒有 watcher（$git_dir/cd-watch.sh）。釘住只對同一個 clone 的 watcher 有效，"
-    echo "      watcher 在部署用的 clone 的話，rollback 要在那裡跑（見 docs/rollback.md）"
+    echo "      watcher 在部署用的 clone 的話，rollback 要在那裡跑（見 cd/rollback.md）"
   fi
   record_github "$target" "$shown_from"
   exit 0

@@ -5,7 +5,7 @@
 #
 # 只印版本號；完整的 commit 由呼叫的一方直接 git rev-parse HEAD。
 #
-# 規則（為什麼這樣選見 docs/release.md）：
+# 規則（為什麼這樣選見 cd/release.md）：
 #   1. HEAD 上有 release tag（v<主>.<次>.<修>）→ 那個 tag
 #   2. 沒有 → commit 的前 7 碼（跟 GitHub 頁面、watcher 的 log 同樣長度）
 #   3. 有沒 commit 的改動或新檔案 → 後面加 -dirty：映像檔裡的東西不等於那個 commit，不能假裝是

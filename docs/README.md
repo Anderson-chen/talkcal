@@ -10,7 +10,6 @@
 | 整體架構圖：本機、雲端的總覽，本機兩組 compose 怎麼接，CI/CD 每一關擋什麼 | [architecture.md](architecture.md) |
 | AWS 階段一互動架構圖：每個元件由哪個檔案哪幾行決定、為什麼這樣選、業界怎麼做 | <https://anderson-chen.github.io/talkcal/>（原始檔 [architecture/index.html](architecture/index.html)） |
 | 畫面設計稿和實作的差異 | [design/calendar/](design/calendar/README.md) |
-| 資料表為什麼長這樣 | [backend/src/main/resources/db/migration](../backend/src/main/resources/db/migration)（每支 SQL 開頭都寫了理由） |
 | 每個請求花多少錢、自架 GPU 和 Bedrock 在哪裡交叉 | [cost.md](cost.md) |
 | 用到的模型、套件、映像檔能不能這樣用，CI 怎麼擋 GPL／AGPL；本專案為什麼是 MIT | [licenses.md](licenses.md) |
 
@@ -23,7 +22,6 @@
 | 有哪些測試、各測什麼、怎麼單獨跑、要先起什麼 | [testing.md](testing.md) |
 | 測試覆蓋率怎麼看、為什麼不設門檻 | [test-coverage.md](test-coverage.md) |
 | 套件怎麼自動升級、升級 PR 怎麼審 | [dependency-updates.md](dependency-updates.md) |
-| 版本號怎麼算、release tag 怎麼打 | [release.md](release.md) |
 
 ## 上線之後
 
@@ -32,6 +30,5 @@
 | 怎樣才算「夠好」：SLI、SLO、錯誤預算 | [slo.md](slo.md) |
 | 有哪些告警、各自什麼時候響 | [alerts.md](alerts.md) |
 | 收到告警之後一步一步怎麼處理 | [runbooks/](runbooks/README.md) |
-| 新版壞了怎麼退回上一版 | [rollback.md](rollback.md) |
 | 出過的事故和事後檢討 | [postmortems/](postmortems/) |
 | 故障、還原演練的紀錄和截圖 | [drills/](drills/) |
