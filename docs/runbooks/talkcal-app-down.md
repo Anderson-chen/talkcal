@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| severity | **critical** —— 現在就處理 |
+| severity | **critical**，現在就處理 |
 | 規則 | [`rules.yaml`](../../ops/grafana/provisioning/alerting/rules.yaml) 第 1 條，總表見 [alerts.md](../alerts.md) |
 | 條件 | `max(up{job="talkcal-app"}) < 1`，持續 1 分鐘；**查不到資料也算出事** |
 
@@ -107,7 +107,7 @@ SSM 連不進去、網址打不開。AWS Console 看 instance 狀態和 status c
 
 ## 事後要不要寫 postmortem
 
-**要**，只要使用者真的連不上（原因 1 超過幾分鐘、2、3、5）。原因 4（只有監控）照 meta 那幾條的規則。
+要，只要使用者真的連不上（原因 1 超過幾分鐘、2、3、5）。原因 4（只有監控）照 meta 那幾條的規則。
 
 ## 紀錄
 

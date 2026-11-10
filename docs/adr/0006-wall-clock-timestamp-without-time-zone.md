@@ -18,7 +18,7 @@
 
 ## 決定
 
-**行程的 `start_at`、`end_at` 用 `TIMESTAMP`，對應 domain 的 `LocalDateTime`；「這筆什麼時候寫進來」的 `created_at` 是真實時間點，用 `TIMESTAMPTZ`。**
+行程的 `start_at`、`end_at` 用 `TIMESTAMP`，對應 domain 的 `LocalDateTime`；「這筆什麼時候寫進來」的 `created_at` 是真實時間點，用 `TIMESTAMPTZ`。
 
 「現在」的時鐘時區寫明：`calendar.zone=Asia/Taipei`，用 `Clock.system(zone)`，不用 `Clock.systemDefaultZone()`。
 不寫明的話，一部署到 Docker，早上九點就變成凌晨一點，「今天晚上」會被算到錯的那天。

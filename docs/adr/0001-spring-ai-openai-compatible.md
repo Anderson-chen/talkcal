@@ -21,7 +21,7 @@ llama-server 講的是 OpenAI 的 Chat Completions 協定，雲端的託管模�
 
 ## 決定
 
-**用 Spring AI 2.0 的 `spring-ai-starter-model-openai`，`base-url` 指向 llama-server 的 `/v1`。**
+用 Spring AI 2.0 的 `spring-ai-starter-model-openai`，`base-url` 指向 llama-server 的 `/v1`。
 
 行事曆的抽取改用 `ChatModel`（`SpringAiExtractEventsAdapter`），AI 助理用 `ChatModel` + `ToolCallingManager`。
 連到哪、用哪顆模型全在 [application.properties](../../backend/src/main/resources/application.properties)，程式不知道對面是誰。

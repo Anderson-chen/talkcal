@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| severity | **critical** —— 現在就處理 |
+| severity | **critical**，現在就處理 |
 | 規則 | `meta-monitoring.yaml` 第 2 條（PR #175，#40），總表見 [alerts.md](../alerts.md) |
 | 條件 | Grafana 查 Mimir 失敗（連不上、逾時），持續 2 分鐘 |
 
@@ -13,7 +13,7 @@ Alloy 會先把指標留在自己的 WAL，Mimir 回來後補送，短時間停�
 
 ## 對使用者的影響
 
-**沒有直接影響**。影響的是：這段時間 app、資料庫、SLO 出事都不會寄信，dashboard 一片空白。
+沒有直接影響。影響的是：這段時間 app、資料庫、SLO 出事都不會寄信，dashboard 一片空白。
 
 ## 怎麼確認
 
@@ -53,7 +53,7 @@ curl -s 'http://127.0.0.1:9009/prometheus/api/v1/status/tsdb' | head -c 2000
 
 - `/ready` 回 ready；Grafana 的 Explore 查得到 `up`
 - 2～3 分鐘內收到 `[RESOLVED]`；其他告警恢復正常評估（Alerting 頁不再有 Error）
-- 這段時間如果有其他事，回來後告警會照常響 —— 看一下 Alerting 頁有沒有新的 Firing
+- 這段時間如果有其他事，回來後告警會照常響：看一下 Alerting 頁有沒有新的 Firing
 
 ## 什麼時候往上升級
 

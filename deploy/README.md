@@ -1,60 +1,56 @@
-# deploy —— 在本機模擬雲端部署
+# deploy：在本機模擬雲端部署
 
-把原本用 `.bat` 跑在 Windows 上的服務，**一次一個**搬進容器。之後上雲端，跑的就是這裡的定義。
-跟 `ops/` 分開：`ops/` 是觀測（看別人），這裡是被部署的服務本身（被看的那些）。
+原本用 `.bat` 跑在 Windows 上的服務，一次搬一個進容器。之後上雲端，跑的就是這裡的定義。
+
+這裡放被部署的服務本身；看它們的觀測工具在 `ops/`，兩邊分開。
 
 ## 現在搬到哪
 
 | 服務 | 在哪跑 | 埠 |
 |------|--------|----|
-| Qwen3-8B 生成模型 | **容器**（`llm-chat`） | 8080 |
-| talkcal app | **容器**（`app`） | 18090 |
-| PostgreSQL（行程、AI 助理的對話記憶） | **容器**（`postgres`） | 5432（只綁 127.0.0.1） |
-| 前端（nginx + Vue） | **容器**（`web`） | 18080 —— 用瀏覽器開這個 |
+| Qwen3-8B 生成模型 | 容器（`llm-chat`） | 8080 |
+| talkcal app | 容器（`app`） | 18090 |
+| PostgreSQL（行程、AI 助理的對話記憶） | 容器（`postgres`） | 5432（只綁 127.0.0.1） |
+| 前端（nginx + Vue） | 容器（`web`） | 18080，用瀏覽器開這個 |
 
-本機開發的 app（`backend/` 裡 `./gradlew bootRun`，8090）可以同時開著：它打主機上發佈出來的 8080，
-用的是同一個模型容器。兩個 app 埠不同，可以並排比對。
+本機開發的 app（`backend/` 裡 `./gradlew bootRun`，8090）可以同時開著。它打主機上發佈出來的 8080，用的是同一個模型容器；兩個 app 的埠不同，可以並排比對。
 
-瀏覽器開 http://localhost:18080：nginx 送前端的靜態檔，`/api` 轉給 `app:8090`（設定在 `web/nginx.conf`）。
-app 的 18090 仍然開著，給 k6 和 curl 直接打，不多經過一層 nginx。
+瀏覽器開 http://localhost:18080：nginx 送前端的靜態檔，`/api` 轉給 `app:8090`，設定在 `web/nginx.conf`。app 的 18090 也開著，給 k6 和 curl 直接打，不用多經過一層 nginx。
 
 ## 第一次跑之前：建 `.env`
 
-密碼和 key 不寫在程式碼裡（[#123](https://github.com/Anderson-chen/talkcal/issues/123)），放在這個資料夾的 `.env`，不進 git：
+密碼和 key 不寫進程式碼（[#123](https://github.com/Anderson-chen/talkcal/issues/123)），放在這個資料夾的 `.env`，不進 git：
 
 ```bash
 cp deploy/.env.example deploy/.env   # 再打開來填值
 ```
 
-- `docker compose`、`./gradlew bootRun` 讀的都是這一份；雲端的 `deploy.sh` 也是把 SSM 裡的值寫到同一個位置
-- 沒填 `DB_PASSWORD` 時兩邊都直接拒絕啟動，訊息會說要補什麼
-- 已經有舊的 `postgres-data` volume（以前密碼寫死成 `talkcal`）：PostgreSQL 只在第一次初始化時讀密碼，`DB_PASSWORD` 要填 `talkcal`。
-  想換成別的密碼，先改資料庫裡的，再改 `.env`：
+- `docker compose`、`./gradlew bootRun` 讀的都是這一份；雲端的 `deploy.sh` 也是把 SSM 裡的值寫到同一個位置。
+- 沒填 `DB_PASSWORD` 時兩邊都會拒絕啟動，訊息會說要補什麼。
+- 如果已經有舊的 `postgres-data` volume（以前密碼寫死成 `talkcal`），`DB_PASSWORD` 要填 `talkcal`，因為 PostgreSQL 只在第一次初始化時讀密碼。想換密碼的話，先改資料庫裡的，再改 `.env`：
 
   ```bash
   docker exec -it talkcal-postgres psql -U talkcal -d talkcal -c "ALTER ROLE talkcal PASSWORD '新密碼'"
   ```
-- Google、GitHub 的 client id／secret 也填在這裡；沒填就只有帳密登入
-- `.gitignore` 擋掉 `.env`，pre-push 的祕密掃描（gitleaks）再擋一次
+- Google、GitHub 的 client id／secret 也填在這裡，沒填就只有帳密登入。
+- `.gitignore` 擋掉 `.env`，pre-push 的祕密掃描（gitleaks）會再擋一次。
 
 ## 一鍵部署
 
-Gradle 指令都在 `backend/` 裡跑。它們只是快捷鍵：部署步驟寫在 [cd/apply.sh](../cd/README.md)，本機和 AWS 共用同一支，
-Gradle 只多做一件事 —— `deployApp` 先跑測試。
+Gradle 指令都在 `backend/` 裡跑。它們只是捷徑，部署步驟寫在 [cd/apply.sh](../cd/README.md)，本機和 AWS 共用同一支；Gradle 只多做一件事：`deployApp` 會先跑測試。
 
 ```bash
 ./gradlew deploy                                 # 前後端都部署：先 deployApp，再 deployWeb
 ./gradlew deployWeb                              # 只部署前端（型別檢查在映像檔 build 裡做）
 ```
 
-模型另外部署，**不在 `deploy` 裡**——很少改、換一次又貴（重 build 約十分鐘，換的期間所有請求都會失敗）：
+模型另外部署，不在 `deploy` 裡。它很少改，換一次又貴：重 build 要十分鐘左右，換的期間所有請求都會失敗。
 
 ```bash
 ./gradlew deployModels                           # 升級 llama.cpp、改了 compose 裡的模型參數之後用（預設等 600 秒）
 ```
 
-每個服務分開換、都帶 `--no-deps`：不帶的話 `--build` 會沿著 `depends_on` 把別的服務也重 build、換掉
-（部署 web 卻換上沒跑過測試的 app、部署 app 卻重啟模型）。理由見 [cd/README.md](../cd/README.md#為什麼每個服務分開換)。
+每個服務分開換，都帶 `--no-deps`。不帶的話 `--build` 會沿著 `depends_on` 把別的服務也重 build、換掉，結果部署 web 卻換上沒跑過測試的 app，部署 app 卻重啟模型。理由見 [cd/README.md](../cd/README.md#為什麼每個服務分開換)。
 
 ## 一鍵部署 app
 
@@ -66,13 +62,11 @@ Gradle 只多做一件事 —— `deployApp` 先跑測試。
 ./gradlew deployApp -PdeployWaitTimeout=600      # 模型第一次載入比較慢時，拉長等待（預設 300 秒）
 ```
 
-只動 app，不碰模型和資料庫，所以第一次部署前要先 `docker compose up -d postgres llm-chat`。
-前端也一樣：app 沒在跑的話，nginx 找不到 `app` 這個 upstream，web 起不來、會報 unhealthy。
+這只動 app，不碰模型和資料庫，所以第一次部署前要先 `docker compose up -d postgres llm-chat`。前端也一樣：app 沒在跑的話，nginx 找不到 `app` 這個 upstream，web 起不來、會報 unhealthy。
 
 ## 兩種環境怎麼分
 
-同一份程式，靠 Spring profile 分環境。`application.properties` 是本機開發的預設值，
-`application-docker.properties` 只覆蓋容器裡不一樣的那幾行（compose 用 `SPRING_PROFILES_ACTIVE=docker` 打開）：
+同一份程式用 Spring profile 分環境。`application.properties` 是本機開發的預設值，`application-docker.properties` 只覆蓋容器裡不一樣的那幾行，compose 用 `SPRING_PROFILES_ACTIVE=docker` 打開：
 
 | | 本機開發（預設） | 容器（`docker` profile） |
 |---|---|---|
@@ -83,52 +77,47 @@ Gradle 只多做一件事 —— `deployApp` 先跑測試。
 | 資料庫位址 | `127.0.0.1:5432`（用 deploy/ 這個 postgres） | `postgres:5432` |
 | log 格式 | 給人看的彩色文字 | 一行一個 JSON（ECS），方便 Loki 拆欄位 |
 
-臨時要指到別的模型位址，不必改檔案：`-Dspring.ai.openai.chat.base-url=...` 或環境變數 `SPRING_AI_OPENAI_CHAT_BASEURL` 都比設定檔優先。
+臨時要指到別的模型位址，不用改檔案：`-Dspring.ai.openai.chat.base-url=...` 或環境變數 `SPRING_AI_OPENAI_CHAT_BASEURL` 都比設定檔優先。
 
 ## 容器之間怎麼溝通
 
-同一個 compose 的服務自動在同一個網路（`talkcal-deploy_default`）上，Docker 內建 DNS 把服務名稱解析成容器 IP：
+同一個 compose 的服務會自動在同一個網路（`talkcal-deploy_default`）上，Docker 內建的 DNS 會把服務名稱解析成容器 IP：
 
 ```bash
 docker exec talkcal-app getent hosts llm-chat     # → 172.22.0.x  llm-chat
 ```
 
-IP 每次重建容器都可能變，服務名稱不會——所以設定檔只寫名字。容器間走的是**容器內部的埠**，
-跟 `ports:` 發佈到主機成幾號無關；`ports:` 只是給容器外面（你的瀏覽器、本機 bootRun）用的。
-ops/ 的 Alloy 也不靠它：Alloy 加入了這組的網路，跟 app 一樣用服務名稱找人；app 送 trace 也是直接找 `alloy:4318`。
+每次重建容器 IP 都可能變，服務名稱不會，所以設定檔只寫名稱。容器之間走的是容器內部的埠，跟 `ports:` 發佈到主機的號碼無關；`ports:` 只給容器外面用，例如你的瀏覽器、本機 bootRun。
+
+ops/ 的 Alloy 也不靠 `ports:`。它加入了這組的網路，跟 app 一樣用服務名稱找人；app 送 trace 也是直接找 `alloy:4318`。
 
 ## 映像檔從哪來
 
-**app**：`backend/Dockerfile`，build 用 Docker Hub 的 `gradle:9.2.1-jdk25`，執行用 `eclipse-temurin:25-jre`。
-不用 `./gradlew`：Gradle 本體的下載點轉到 GitHub，本機實測 0.17 MB/s。第一次 build 約 1.5 分鐘，映像檔約 500MB。
+app 用 `backend/Dockerfile`，build 階段用 Docker Hub 的 `gradle:9.2.1-jdk25`，執行階段用 `eclipse-temurin:25-jre`。不用 `./gradlew`，因為 Gradle 本體的下載點會轉到 GitHub，本機實測只有 0.17 MB/s。第一次 build 約 1.5 分鐘，映像檔約 500 MB。
 
-**模型**：用一個**自己 build** 的映像檔 `talkcal/llama-server:b10964-cuda13.0.1`（`llama-server/Dockerfile`）。
+模型用自己 build 的映像檔 `talkcal/llama-server:b10964-cuda13.0.1`（`llama-server/Dockerfile`）。
 
-為什麼不能直接拿 `C:\llm\llama.cpp` 用：容器裡是 Linux，`.exe` 和 `.dll` 是 Windows 格式，跑不了。
-要的是 Linux 版 llama-server + Linux 版 CUDA 函式庫。模型檔（`.gguf`）是純資料，不用重新下載（見下一節）。
+`C:\llm\llama.cpp` 不能直接拿來用：容器裡是 Linux，`.exe` 和 `.dll` 是 Windows 格式，跑不了，要的是 Linux 版 llama-server 加上 Linux 版 CUDA 函式庫。模型檔（`.gguf`）是純資料，不用重新下載，見下一節。
 
-為什麼不拉官方的 `ghcr.io/ggml-org/llama.cpp:server-cuda`：本機連 ghcr 實測 0.17 MB/s，
-Docker Hub 10 MB/s——從 Docker Hub 拉 CUDA 當底、自己編 llama.cpp 反而快。這也是上雲端的標準做法。
+也不拉官方的 `ghcr.io/ggml-org/llama.cpp:server-cuda`。本機連 ghcr 實測 0.17 MB/s，連 Docker Hub 有 10 MB/s，所以從 Docker Hub 拉 CUDA 當底、自己編 llama.cpp 反而比較快。上雲端時一般也是這樣做。
 
 ```bash
 docker compose build        # 第一次或改了 Dockerfile 才需要；compose up 發現沒有 image 也會自動 build
 docker compose build app    # 改了 app 的程式碼後，只重 build app
 ```
 
-實測：拉 CUDA 底 ~6 分鐘 + 編譯 3.5 分鐘（只編 sm_89），共約 10 分鐘。映像檔 4.3GB。
+實測拉 CUDA 底 ~6 分鐘，加上編譯 3.5 分鐘（只編 sm_89），總共約 10 分鐘。映像檔 4.3 GB。
 
 ## 模型檔怎麼進容器
 
-`model-seed` 先把 `C:\llm\models` 的 `.gguf` 複製進具名 volume `models`，跑完就結束；模型服務等它成功才啟動，
-從 volume 唯讀讀取。已經複製過的（大小相同）會跳過，所以只有第一次慢；有列在 `SHA256SUMS` 的會驗證內容。
+`model-seed` 先把 `C:\llm\models` 的 `.gguf` 複製進具名 volume `models`，跑完就結束。模型服務等它成功才啟動，從 volume 唯讀讀取。已經複製過的（大小相同）會跳過，所以只有第一次慢；有列在 `SHA256SUMS` 裡的會驗證內容。
 
-為什麼不直接掛 `C:\llm\models`：實測 Windows → WSL2 檔案通道循序讀只有約 20 MB/s，
-llama.cpp 預設的 mmap 零碎讀更慢——Qwen 5GB 載了 5 分鐘還卡在 275MB。
+不直接掛 `C:\llm\models`，是因為 Windows → WSL2 的檔案通道實測循序讀只有約 20 MB/s，llama.cpp 預設用 mmap 零碎讀更慢：Qwen 5 GB 載了 5 分鐘還卡在 275 MB。
 
 | | 直接掛 Windows 資料夾 | volume（現在） |
 |---|---|---|
-| Qwen 載入 | 5 分鐘以上沒載完 | **2.2 秒**（跟原生一樣） |
-| 代價 | — | 第一次啟動多一次複製（約 2 分鐘），磁碟多存一份 5.6GB |
+| Qwen 載入 | 5 分鐘以上沒載完 | 2.2 秒（跟原生一樣） |
+| 代價 | — | 第一次啟動多一次複製（約 2 分鐘），磁碟多存一份 5.6 GB |
 
 ## 怎麼切換
 
@@ -178,15 +167,13 @@ docker compose down -v      # 連模型 volume 一起清掉，下次啟動重新
 
 ## 故障演練（Toxiproxy）
 
-想看「模型或資料庫壞了，app 會怎樣」時，疊上 `compose.chaos.yaml` 起：
+想看模型或資料庫壞了 app 會怎樣，就疊上 `compose.chaos.yaml` 起：
 
 ```bash
 docker compose -f compose.yaml -f compose.chaos.yaml up -d
 ```
 
-app 跟模型、跟資料庫之間各插一段 [Toxiproxy](https://github.com/Shopify/toxiproxy)（`toxiproxy.json` 裡的 `llm`、`postgres`），
-平常原樣轉發；要弄壞哪一段就對它下指令，其他段照常。比 `docker stop`、`docker pause` 整個容器多了「變慢」「時好時壞」可以模擬，
-而且只壞 app 這一條連線，其他也連著模型的東西（例如 Alloy 抓模型的指標）不受影響。
+app 跟模型、app 跟資料庫之間各插一段 [Toxiproxy](https://github.com/Shopify/toxiproxy)（`toxiproxy.json` 裡的 `llm`、`postgres`）。平常原樣轉發，要弄壞哪一段就對它下指令，其他段照常。跟 `docker stop`、`docker pause` 整個容器比，它還能模擬變慢、時好時壞，而且只壞 app 這一條連線，其他也連著模型的東西不受影響，例如 Alloy 抓模型的指標。
 
 | 想模擬 | 指令 |
 |---|---|
@@ -196,18 +183,13 @@ app 跟模型、跟資料庫之間各插一段 [Toxiproxy](https://github.com/Sh
 | 拿掉某個毒 | `docker exec talkcal-toxiproxy /toxiproxy-cli toxic remove -n slow llm` |
 | 現在的狀態 | `docker exec talkcal-toxiproxy /toxiproxy-cli list` |
 
-「卡住」用超長的延遲，不用 Toxiproxy 的 timeout 毒：timeout 毒擋得住資料、擋不住「關連線」——
-擋回來的方向，模型回完就關連線；擋送出去的方向，llama-server 對閒置 5 秒的連線也會關掉。
-兩種 app 都會在幾秒內收到連線中斷，等於斷線而不是卡住。延遲會把回應連同關連線一起延後，app 才是真的一直等。
+「卡住」用超長的延遲做，不用 Toxiproxy 的 timeout 毒。timeout 毒擋得住資料，擋不住關連線：擋回來的方向時，模型回完就關連線；擋送出去的方向時，llama-server 會把閒置 5 秒的連線關掉。兩種情況 app 都會在幾秒內收到連線中斷，變成斷線，不是卡住。延遲會把回應連同關連線一起往後推，app 才會真的一直等。
 
-按時弄壞、恢復、同時量 app 的反應，用 `perf/outage.js`（見 [perf/README.md](../perf/README.md)）。
-演練完不疊這份再 `up -d` 一次，app 就直接連回模型和資料庫。正式環境（EC2 的 `deploy.sh`）不疊它。
+要按時弄壞、恢復，同時量 app 的反應，用 `perf/outage.js`（見 [perf/README.md](../perf/README.md)）。演練完不疊這份再 `up -d` 一次，app 就直接連回模型和資料庫。正式環境（EC2 的 `deploy.sh`）不疊它。
 
 ## 行程與對話記憶（PostgreSQL）
 
-app 把行程（`calendar_event`）和 AI 助理的對話記憶（`calendar_assistant_message`，一則訊息一列、連工具呼叫一起存）
-存進 `postgres` 容器，資料表由 Flyway 在 app 啟動時自動建（`backend/src/main/resources/db/migration`）。
-本機 bootRun 的 app 也連同一個資料庫（`127.0.0.1:5432`），所以要先 `docker compose up -d postgres`。
+app 把行程（`calendar_event`）和 AI 助理的對話記憶（`calendar_assistant_message`，一則訊息一列，連工具呼叫一起存）存在 `postgres` 容器裡。資料表由 Flyway 在 app 啟動時自動建（`backend/src/main/resources/db/migration`）。本機 bootRun 的 app 也連同一個資料庫（`127.0.0.1:5432`），所以要先 `docker compose up -d postgres`。
 
 直接看資料：
 
@@ -222,11 +204,11 @@ FROM calendar_assistant_message
 ORDER BY created_at DESC, position;
 ```
 
-`docker compose down` 不會刪資料；`down -v` 會連 `postgres-data` 一起清掉（模型的 volume 也會清，下次要重新播種）。
+`docker compose down` 不會刪資料，`down -v` 會連 `postgres-data` 一起清掉；模型的 volume 也會被清，下次要重新播種。
 
 ### 備份與還原
 
-`down -v` 之前、或要動資料之前，先備份一份（[#45](https://github.com/Anderson-chen/talkcal/issues/45)）：
+`down -v` 之前，或要動資料之前，先備份一份（[#45](https://github.com/Anderson-chen/talkcal/issues/45)）：
 
 ```bash
 bash deploy/backup/pg-backup.sh                                             # 寫到 ~/talkcal-backups（repo 外、volume 外）
@@ -235,4 +217,4 @@ bash deploy/backup/pg-restore.sh ~/talkcal-backups/<檔>.dump                 # 
 bash deploy/backup/drill.sh                                                 # 在獨立容器上演練整輪（含反例）
 ```
 
-雲端每小時、關機前、部署前會自動備份到 S3。完整步驟、RPO／RTO 和選型理由：[docs/runbooks/backup-restore.md](../docs/runbooks/backup-restore.md)。
+雲端會在每小時、關機前、部署前自動備份到 S3。完整步驟、RPO／RTO 和選型理由見 [docs/runbooks/backup-restore.md](../docs/runbooks/backup-restore.md)。

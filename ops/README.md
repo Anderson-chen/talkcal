@@ -1,11 +1,10 @@
-# ops —— 觀測環境（Observability）
+# ops：觀測環境（Observability）
 
-用 Docker 一次拉起 **Alloy + Mimir + Loki + Tempo + Grafana**，跟被觀測的服務分開。
-被觀測的是 `deploy/` 那組容器（app、模型、資料庫、前端），以及本機開發時在 `backend/` 裡用 `./gradlew bootRun` 跑的 app。
+用 Docker 一次拉起 Alloy、Mimir、Loki、Tempo、Grafana，跟被觀測的服務分開。被觀測的是 `deploy/` 那組容器（app、模型、資料庫、前端），以及本機開發時在 `backend/` 裡用 `./gradlew bootRun` 跑的 app。
 
 ## 整條流程
 
-每種訊號都走「產生 → 收集 → 儲存 → 查詢/畫圖」四段。收集器只有一個，資料庫一種訊號一個：
+每種訊號都經過產生、收集、儲存、查詢／畫圖四段。收集器只有一個，資料庫一種訊號一個：
 
 ```
               產生                          收集             儲存          查詢/畫圖
@@ -20,44 +19,42 @@
 
 | 訊號 | 一筆資料長什麼樣 | 回答的問題 | 收集方式 | 存在 | 查詢語言 |
 |------|------------------|------------|----------|------|----------|
-| 指標 | 標籤 + 一個數字 | 有沒有問題、多嚴重（p95 變慢了） | Alloy **拉**（k6 例外，由它**推**） | Mimir | PromQL |
-| 日誌 | 一行文字（JSON） | 發生了什麼事（那個請求問了什麼） | Alloy **讀** stdout | Loki | LogQL |
-| 追蹤 | 一棵 span 樹 | 時間花在哪一段（助理叫了幾次模型、各多久） | app **推**給 Alloy | Tempo | TraceQL |
+| 指標 | 標籤 + 一個數字 | 有沒有問題、多嚴重（p95 變慢了） | Alloy 拉（k6 例外，由它推） | Mimir | PromQL |
+| 日誌 | 一行文字（JSON） | 發生了什麼事（那個請求問了什麼） | Alloy 讀 stdout | Loki | LogQL |
+| 追蹤 | 一棵 span 樹 | 時間花在哪一段（助理叫了幾次模型、各多久） | app 推給 Alloy | Tempo | TraceQL |
 
 ## 五個角色
 
 | 服務 | 做什麼 | 對外埠 | 看它 |
 |------|--------|--------|------|
-| **Alloy** | 唯一的收集器：抓指標、讀容器 log、接 app 推來的 trace 和 k6 推來的指標，分送給下面三個 | 12345、4318 | <http://localhost:12345>（管線圖）|
-| **Mimir** | 存**指標**，講 Prometheus 的查詢 API（PromQL） | 9009（只開本機） | 靠 Grafana 查 |
-| **Loki** | 存**日誌**，只替標籤建索引 | 3100 | 靠 Grafana 查 |
-| **Tempo** | 存**追蹤**，靠 trace id 找 | 不對外 | 靠 Grafana 查 |
-| **Grafana** | 畫圖前台，自己不存資料；三種訊號互相跳轉 | 3000 | <http://localhost:3000> |
+| Alloy | 唯一的收集器：抓指標、讀容器 log、接 app 推來的 trace 和 k6 推來的指標，分送給下面三個 | 12345、4318 | <http://localhost:12345>（管線圖）|
+| Mimir | 存指標，講 Prometheus 的查詢 API（PromQL） | 9009（只開本機） | 靠 Grafana 查 |
+| Loki | 存日誌，只替標籤建索引 | 3100 | 靠 Grafana 查 |
+| Tempo | 存追蹤，靠 trace id 找 | 不對外 | 靠 Grafana 查 |
+| Grafana | 畫圖的前台，自己不存資料；三種訊號互相跳轉 | 3000 | <http://localhost:3000> |
 
-Grafana 一啟動就自動接好 Mimir、Loki、Tempo 三個資料源和它們之間的跳轉（見 `grafana/provisioning/`），
-開網頁不必登入，直接是 Admin（純本機學習用，刻意關掉登入）。
+Grafana 一啟動就自動接好 Mimir、Loki、Tempo 三個資料源和它們之間的跳轉（見 `grafana/provisioning/`）。開網頁不用登入，直接是 Admin：這是純本機學習用的，所以把登入關掉了。
 
 ## 選型理由
 
 ### 為什麼收集器只有 Alloy 一個
 
-- **找來源、加標籤、送出去是同一種工作**：三種訊號用同一套標籤（`service`、`env`），換儲存只改 Alloy 的出口，
-  app 和被抓的服務都不用動。
-- **不用 Promtail**：Loki 舊的 log 收集器，官方已停止開發。
-- **不讓 app 直接送 Tempo**：app 只認得 OTLP 這個標準協定、只知道 Alloy 在哪。之後 Tempo 換別家，app 不必重新部署。
-- **代價：Alloy 是單點**。但兩種訊號斷掉的後果不同——
-  - log 只會**延遲**：Docker 照樣把 stdout 寫進自己的 log 檔，Alloy 回來後依位置檔接著讀。
-  - 指標會**缺一段**：拉取只拿得到「當下」的值，Alloy 停了的那段時間補不回來。
-  - 單機上多起幾台 Alloy 也救不了「整台機器掛掉」，所以目前只靠 `restart: unless-stopped` 自動拉回來。
-    正式環境的做法見下面「下一步」。
+- 找來源、加標籤、送出去是同一種工作。三種訊號用同一套標籤（`service`、`env`），換儲存只要改 Alloy 的出口，app 和被抓的服務都不用動。
+- 不用 Promtail。它是 Loki 舊的 log 收集器，官方已經停止開發。
+- app 不直接送 Tempo。app 只認得 OTLP 這個標準協定，也只知道 Alloy 在哪，之後 Tempo 換成別家，app 不用重新部署。
+
+代價是 Alloy 成了單點，但兩種訊號斷掉的後果不一樣：
+
+- log 只會延遲。Docker 照樣把 stdout 寫進自己的 log 檔，Alloy 回來後照位置檔接著讀。
+- 指標會缺一段。拉取只拿得到當下的值，Alloy 停掉的那段時間補不回來。
+
+在單機上多起幾台 Alloy，也救不了整台機器掛掉，所以目前只靠 `restart: unless-stopped` 自動拉回來。正式環境的做法見下面的「下一步」。
 
 ### 為什麼存指標用 Mimir 而不是 Prometheus
 
-Prometheus 其實是「抓 + 存」兩份工作。抓的工作交給 Alloy 之後，剩下的只有「存」。
-Mimir 存的就是 Prometheus 格式的資料、查詢也用 PromQL——對 Grafana 來說它就是「一台很大的 Prometheus」，
-所以儀表板的查詢一個字都沒改，資料源 type 也仍然是 `prometheus`。
+Prometheus 其實同時做兩件事：抓和存。抓的工作交給 Alloy 之後，剩下的只有存。Mimir 存的就是 Prometheus 格式的資料，查詢也用 PromQL，對 Grafana 來說它就像一台很大的 Prometheus，所以儀表板的查詢一個字都沒改，資料源的 type 也還是 `prometheus`。
 
-選 Mimir 不是因為現在的量需要它，而是為了學正式環境的形狀：
+現在的量其實用不到 Mimir，選它是為了學正式環境的樣子：
 
 | 需求 | Prometheus | Mimir |
 |------|-----------|-------|
@@ -66,17 +63,13 @@ Mimir 存的就是 Prometheus 格式的資料、查詢也用 PromQL——對 Gra
 | 很多團隊共用 | 每團隊各架一台 | 一套系統用租戶隔開 |
 | 兩台收集器互為備援 | 收到兩份就存兩份 | HA tracker 去重，只留一份 |
 
-**為什麼比較重**：Mimir 是給上面那些需求設計的分散式系統，拆成 distributor、ingester、querier、
-store-gateway、compactor 等元件。單機用 `-target=all` 把它們塞進同一個程序，
-`mimir/mimir.yaml` 大半都在把分散式功能關掉（多租戶、複製、物件儲存）——跟 `loki/loki-config.yaml` 是同一個思路，
-因為 Mimir、Loki、Tempo 是 Grafana 用同一套骨架做出來的。
+它比較重，因為 Mimir 是為上面那些需求設計的分散式系統，拆成 distributor、ingester、querier、store-gateway、compactor 等元件。單機用 `-target=all` 把它們塞進同一個 process，`mimir/mimir.yaml` 大半是在關掉分散式功能（多租戶、複製、物件儲存）。`loki/loki-config.yaml` 也是同樣的做法，因為 Mimir、Loki、Tempo 是 Grafana 用同一套骨架做的。
 
 ### 為什麼 trace 要另外一個資料庫（Tempo）
 
-trace 是一棵 span 樹，每個 span 有自己的 id 和父 span，靠 trace id 串成一個請求。
-Mimir 只放得下「標籤 + 一個數字」，Loki 放的是一行一行文字，都裝不下這種樹。
+trace 是一棵 span 樹。每個 span 有自己的 id 和父 span，靠 trace id 串成一個請求。Mimir 只放得下「標籤 + 一個數字」，Loki 放的是一行一行的文字，都裝不下這種樹。
 
-## 怎麼跑
+## 使用方式
 
 ```bash
 cd deploy && docker compose up -d   # 先起被觀測的那組：它會建立 Alloy 要加入的網路
@@ -87,8 +80,7 @@ docker compose down                 # 關掉（資料留著）
 docker compose down -v              # 關掉並清空資料，整組重來
 ```
 
-Alloy 加入了 deploy/ 的網路（`talkcal-deploy_default`）：用服務名稱抓指標，app 也用 `alloy:4318` 送 trace。
-代價是**要先起 deploy/ 再起 ops/**，網路不存在時 Alloy 起不來。
+Alloy 加入了 deploy/ 的網路（`talkcal-deploy_default`），用服務名稱抓指標，app 也用 `alloy:4318` 送 trace。代價是要先起 deploy/ 再起 ops/，網路不存在時 Alloy 起不來。
 
 ## 指標：Alloy 抓誰、送去哪
 
@@ -102,8 +94,7 @@ Alloy 加入了 deploy/ 的網路（`talkcal-deploy_default`）：用服務名�
 
 每 15 秒抓一次，用 `remote_write` 推進 Mimir。本機 bootRun 的 app 不在 deploy/ 的網路裡，不會被抓。
 
-抓不抓得到，看 <http://localhost:12345> 的 `prometheus.scrape.*` 元件，或在 Grafana 查 `up`（1 = 抓得到）。
-想不透過 Grafana 直接查：
+有沒有抓到，看 <http://localhost:12345> 的 `prometheus.scrape.*` 元件，或在 Grafana 查 `up`（1 表示抓得到）。也可以不透過 Grafana 直接查：
 
 ```bash
 curl 'localhost:9009/prometheus/api/v1/query?query=up'
@@ -111,8 +102,7 @@ curl 'localhost:9009/prometheus/api/v1/query?query=up'
 
 ### 資料庫連線：app 那頭和資料庫那頭各看一次（#32）
 
-「API 變慢」常見的原因之一是在排隊等資料庫連線，只看 API 延遲分不出來。
-talkcal-app dashboard 的「資料庫連線池」那一排把兩頭放在一起：
+API 變慢，常見的原因之一是在排隊等資料庫連線，只看 API 延遲分不出來。talkcal-app dashboard 的「資料庫連線池」那一排把兩頭放在一起：
 
 | 哪一頭 | 指標 | 回答 |
 |--------|------|------|
@@ -123,23 +113,17 @@ talkcal-app dashboard 的「資料庫連線池」那一排把兩頭放在一起�
 | 資料庫（postgres_exporter） | `pg_settings_max_connections` | 資料庫最多收幾條（預設 100） |
 | | `pg_stat_activity_count{state=...}` | 實際開著的連線各在做什麼（active / idle / idle in transaction） |
 
-兩頭要分開看的理由：app 的池開多大，都不能超過資料庫的上限扣掉保留的；而資料庫那頭看到的是**所有** app 的池加起來
-（例如本機 bootRun 和容器版 app 同時開著，就是 10 + 10 條）。
+兩頭要分開看。app 的池開多大，都不能超過資料庫的上限扣掉保留的；而資料庫那頭看到的是所有 app 的池加起來，例如本機 bootRun 和容器版 app 同時開著，就是 10 + 10 條。
 
-exporter 關掉了逐表統計（`--no-collector.stat_user_tables`）：實測有人鎖住一張表時，那個查詢會跟著卡住，
-整次抓取逾時、連 `pg_stat_activity` 都抓不到 —— 偏偏是資料庫出事的時候。原因和實測寫在 `deploy/compose.yaml`。
+exporter 關掉了逐表統計（`--no-collector.stat_user_tables`）。實測有人鎖住一張表時，那個查詢會跟著卡住，整次抓取逾時，連 `pg_stat_activity` 都抓不到，偏偏就是在資料庫出事的時候。原因和實測寫在 `deploy/compose.yaml`。
 
 怎麼壓出「池子不夠用」的畫面，見 [perf/README.md](../perf/README.md) 的 db-pool 那一段。
 
-app 打給模型的呼叫，原本有一組 `http_client_requests_seconds`（RestClient 自動產生）。
-改用 Spring AI 之後沒有了：Spring AI 的 OpenAI 模組底層是官方 openai-java SDK（OkHttp），不走 RestClient。
-取而代之的是 Spring AI 自己的觀測（`gen_ai.*` 系列，含 token 用量），見下面「追蹤」一節。
+app 呼叫模型原本有一組 `http_client_requests_seconds`（RestClient 自動產生），改用 Spring AI 之後就沒了：Spring AI 的 OpenAI 模組底層是官方的 openai-java SDK（OkHttp），不走 RestClient。取代它的是 Spring AI 自己的觀測（`gen_ai.*` 系列，含 token 用量），見下面的「追蹤」。
 
 ## 日誌：Loki 收什麼
 
-Alloy 透過 Docker 的 API（`docker.sock`）自動發現 `deploy/` 那組容器（compose 專案 `talkcal-deploy`），
-讀它們的 stdout 送進 Loki。新容器起來不必改設定；其他專案的容器、ops 自己的容器都不收。
-管線怎麼接、為什麼這樣選標籤，見 `alloy/config.alloy` 的註解。
+Alloy 透過 Docker 的 API（`docker.sock`）自動找到 `deploy/` 那組容器（compose 專案 `talkcal-deploy`），讀它們的 stdout 送進 Loki。新容器起來不用改設定；其他專案的容器和 ops 自己的容器都不收。管線怎麼接、標籤為什麼這樣選，見 `alloy/config.alloy` 的註解。
 
 每筆 log 帶的標籤：
 
@@ -149,13 +133,13 @@ Alloy 透過 Docker 的 API（`docker.sock`）自動發現 `deploy/` 那組容�
 | `container` | `talkcal-app` | 容器名 |
 | `env` | `docker` | 環境。之後別的環境的 log 也送進來時用它分開 |
 
-trace id **不是**標籤（每個請求都不同，放進標籤會讓索引爆掉），它在 log 內容的 `traceId` 欄位裡。
+trace id 不放進標籤，因為每個請求都不同，放進去會讓索引爆掉。它在 log 內容的 `traceId` 欄位裡。
 
-本機開發的 bootRun 是跑在 Windows 上的程序、不在 Docker 裡，它的 log **不會**進 Loki，照常看終端機。
+本機開發的 bootRun 直接跑在 Windows 上，不在 Docker 裡，它的 log 不會進 Loki，照常看終端機。
 
 ### 在 Grafana 查
 
-左側 **Explore** → 資料源選 **Loki** → 切到 **Code** 模式貼查詢：
+左側 Explore → 資料源選 Loki → 切到 Code 模式貼查詢：
 
 ```logql
 # deploy/ 的服務一起看，照時間排——跟助理說一句話，會看到 app 的 access log 和 llm-chat 的一次或好幾次生成
@@ -182,8 +166,7 @@ sum by (service) (count_over_time({env="docker"} | json | log_level=~"WARN|ERROR
 
 ## 追蹤：一個請求的時間花在哪
 
-app 對每個請求開一個 trace、全部送出（`management.tracing.sampling.probability=1.0`），
-用 OTLP 推給 Alloy 的 4318，Alloy 決定留哪些（見下面「Trace 取樣」）再轉給 Tempo。
+app 對每個請求開一個 trace、全部送出（`management.tracing.sampling.probability=1.0`），用 OTLP 推給 Alloy 的 4318。Alloy 決定留哪些（見下面的「Trace 取樣」），再轉給 Tempo。
 
 一個助理請求實際的樹（2026-10-19 量的，截圖在 [docs/images/2026-10-19-request-trace.png](../docs/images/2026-10-19-request-trace.png)）：
 
@@ -206,36 +189,28 @@ talkcal-web  POST /api                          ← nginx（web/nginx.conf 的 o
 | 跟模型的往返 | Spring AI（ChatModel 內建的 Micrometer Observation） | 不必寫觀測程式碼；比 HTTP span 多了 token 用量 |
 | 每條 SQL、每次拿連線 | datasource-micrometer（把 DataSource 包一層） | JDBC 本身沒有 Observation；分得出慢在模型還是資料庫。不在請求裡的 SQL（健康檢查、Flyway）不記，見 `JdbcTracingConfiguration` |
 
-曾經用 AOP 在 outbound port 外面多包一層 span（名稱是 `retrievePassages`、`generateReply`），
-後來拿掉了。Spring AI 自己的 span 本來就是照「叫一次模型」這種動作切的，更用不著了（實際名稱同樣等部署後確認）。
-llama.cpp、PostgreSQL 本身不產生 span，所以樹只到 app 呼叫出去的那一層。
+以前曾經用 AOP 在 outbound port 外面多包一層 span（名稱是 `retrievePassages`、`generateReply`），後來拿掉了。Spring AI 自己的 span 本來就是照「叫一次模型」這種動作切的，更用不著（實際名稱同樣等部署後確認）。llama.cpp 和 PostgreSQL 本身不產生 span，所以樹只到 app 呼叫出去的那一層。
 
-想在 trace 上看到送給模型的完整 prompt（下一步第 1 項），Spring AI 有現成的開關：
-`spring.ai.chat.client.observations.log-prompt=true`。prompt 裡可能有使用者的私人內容，所以預設關著，要開再想清楚。
+想在 trace 上看到送給模型的完整 prompt（下一步第 1 項），Spring AI 有現成的開關 `spring.ai.chat.client.observations.log-prompt=true`。prompt 裡可能有使用者的私人內容，所以預設關著，要開之前先想清楚。
 
-在 Grafana 看 trace 有兩個地方：
+在 Grafana 看 trace 有三個地方：
 
-- **儀表板 `talkcal — Traces (Tempo)`**：全部用 TraceQL 查 Tempo。上排是從 trace 算出來的數字（助理請求速率、
-  各段的 p95、沒成功的 span 數），下排是請求清單（最近的、超過 5 秒的、沒成功的），點 Trace ID 就打開瀑布圖。
-  查詢只挑 `/api/calendar/assistant`，只看跟助理的對話。（actuator 的抓取與健康檢查走 management 埠 8091，那個埠上的請求本來就不產生 trace。）
-- **儀表板 `talkcal — 單一請求`**（#31）：變數 `traceId` 貼一個 trace id，一個畫面看完這個請求：
-  ① service map（經過哪些服務）→ ② 瀑布圖（每段多久）→ ③ 這個請求的 log → ④ 當時 app、連線池、llama 的狀態。
-  沒有 trace id 時，最下面的表格點一筆，時間範圍會自動對齊成那個請求前後各 5 分鐘。
-- **Explore** → 資料源選 **Tempo** → **Search** 分頁，Service Name 選 `talkcal`：自己下條件找。
+- 儀表板「talkcal — Traces (Tempo)」：全部用 TraceQL 查 Tempo。上排是從 trace 算出來的數字（助理請求速率、各段的 p95、沒成功的 span 數），下排是請求清單（最近的、超過 5 秒的、沒成功的），點 Trace ID 就打開瀑布圖。查詢只挑 `/api/calendar/assistant`，只看跟助理的對話。actuator 的抓取和健康檢查走 management 埠 8091，那個埠上的請求本來就不產生 trace。
+- 儀表板「talkcal — 單一請求」（#31）：在變數 `traceId` 貼一個 trace id，一個畫面看完這個請求，由上到下是 service map（經過哪些服務）、瀑布圖（每段多久）、這個請求的 log、當時 app 和連線池和 llama 的狀態。沒有 trace id 時，在最下面的表格點一筆，時間範圍會自動對齊成那個請求前後各 5 分鐘。
+- Explore → 資料源選 Tempo → Search 分頁，Service Name 選 `talkcal`，自己下條件找。
 
-儀表板上排用的是 **TraceQL metrics**（`| rate()`、`| quantile_over_time()`）：Tempo 直接從存下來的 span 算出時間序列，
-代價是分位數用 2 的次方分桶估（0.5s、1s、2s…），只適合看「慢在哪一段」的量級，精準的 p95 看 talkcal-app 儀表板（指標那條線）。
+儀表板上排用的是 TraceQL metrics（`| rate()`、`| quantile_over_time()`），Tempo 直接從存下來的 span 算出時間序列。代價是分位數用 2 的次方分桶估（0.5s、1s、2s…），只適合看慢在哪一段的量級；精準的 p95 看 talkcal-app 儀表板，那是指標那條線。
 
-**service map 靠的是 Tempo 的 metrics-generator**（`tempo/tempo.yaml`）：它把收到的 span 加總成
-`traces_service_graph_*`（哪兩個服務之間有流量、多慢、錯多少）和 `traces_spanmetrics_*`，直接寫進 Mimir。
-這種「誰叫誰」的邊要兩頭的 span 放在一起才算得出來，只有收齊 span 的這一端做得到。
-為了讓圖對得上真的架構，Alloy 送進 Tempo 前改兩個屬性（`alloy/config.alloy` 的 `otelcol.processor.transform`）：
-nginx 只開一個 server span、沒有「轉給 app」的 client span，改標成 client 才配得出 talkcal-web → talkcal 這條邊；
-SQL span 的 `peer.service` 原本是資料庫名稱 talkcal（會畫成自己連自己），換成 postgresql。
-限制：metrics-generator 看到的是**取樣後**的 span，取樣率低於 100% 時圖上的請求數會少算。
+service map 靠 Tempo 的 metrics-generator（`tempo/tempo.yaml`）。它把收到的 span 加總成 `traces_service_graph_*`（哪兩個服務之間有流量、多慢、錯多少）和 `traces_spanmetrics_*`，直接寫進 Mimir。「誰叫誰」這種邊要兩頭的 span 放在一起才算得出來，只有收齊 span 的這一端做得到。
 
-本機 bootRun 的 app 也會送 trace（走主機的 `127.0.0.1:4318`），只要 ops/ 有起來。
-ops/ 沒起時 trace 送不出去，app 只會在 log 印 warning，請求照常處理。
+為了讓圖跟真的架構對得上，Alloy 送進 Tempo 前會改兩個屬性（`alloy/config.alloy` 的 `otelcol.processor.transform`）：
+
+- nginx 只開一個 server span，沒有「轉給 app」的 client span，要改標成 client 才配得出 talkcal-web → talkcal 這條邊。
+- SQL span 的 `peer.service` 原本是資料庫名稱 talkcal，會畫成自己連自己，換成 postgresql。
+
+限制：metrics-generator 看到的是取樣後的 span，取樣率低於 100% 時，圖上的請求數會少算。
+
+本機 bootRun 的 app 也會送 trace（走主機的 `127.0.0.1:4318`），只要 ops/ 有起來。ops/ 沒起時 trace 送不出去，app 只會在 log 印 warning，請求照常處理。
 
 ### Trace 取樣：錯的、慢的全留，其餘抽樣（#37）
 
@@ -244,89 +219,67 @@ ops/ 沒起時 trace 送不出去，app 只會在 log 印 warning，請求照常
 | 本機 | 100 | 5 秒 | `alloy/config.alloy` 的預設值（不設環境變數） |
 | 雲端（EC2） | 10 | 125 秒 | [`infra/envs/1-ec2/compose.ops.yaml`](../infra/envs/1-ec2/compose.ops.yaml)，`deploy.sh` 疊上去 |
 
-不論比例多少，下面三種**一律留**：span 狀態是 ERROR、回 5xx（`outcome=SERVER_ERROR`）、整個 trace 超過 5 秒。
+不論比例多少，這三種一律留：span 狀態是 ERROR、回 5xx（`outcome=SERVER_ERROR`）、整個 trace 超過 5 秒。
 
-**為什麼是 tail（在 Alloy）而不是 head（在 app）**
+#### 為什麼在 Alloy 做 tail sampling，不在 app 做 head sampling
 
 | | head：app 端 `management.tracing.sampling.probability=0.1` | tail：Alloy 的 `otelcol.processor.tail_sampling` |
 |---|---|---|
 | 什麼時候決定 | 請求一進來就擲骰子 | 一個 trace 的 span 到齊後看整棵樹 |
-| 錯誤、慢請求 | 跟一般請求一樣只留 10%——最想看的那幾筆九成找不到 | 依規則全留 |
+| 錯誤、慢請求 | 跟一般請求一樣只留 10%，最想看的那幾筆九成找不到 | 依規則全留 |
 | 省到哪 | app 少產生 span、少送網路 | app 照樣全送（同一台機器的內部網路，便宜），省的是 Tempo 的儲存和查詢 |
 | 代價 | 幾乎沒有 | Alloy 記憶體要放「還沒決定」的 trace；一個 trace 的 span 必須進同一個 Alloy |
 
-這個專案的 trace 成本在 Tempo 那頭（EC2 的磁碟、查詢），app 送出去的那段是同機器的內部網路；
-而 #37 的目標「關鍵請求留得住」head 做不到，所以選 tail。代價那欄目前都不是問題：只有一個 Alloy，
-一般流量下等決定的 trace 只有幾千個。哪天 Alloy 要變成多個，前面得加一層照 trace id 分流的（`otelcol.exporter.loadbalancing`）。
+這個專案的 trace 成本在 Tempo 那頭（EC2 的磁碟和查詢），app 送出去的那段只是同機器的內部網路。#37 的目標是關鍵請求要留得住，head 做不到，所以選 tail。代價那欄目前都不是問題：只有一個 Alloy，一般流量下等著決定的 trace 只有幾千個。哪天 Alloy 要變成多個，前面得加一層照 trace id 分流（`otelcol.exporter.loadbalancing`）。
 
-app 端因此**必須**維持 1.0：app 先丟掉的 trace，Alloy 根本看不到，錯誤再多也撈不回來。
+因此 app 端**必須**維持 1.0。app 先丟掉的 trace，Alloy 根本看不到，錯誤再多也撈不回來。
 
-**規則怎麼定的**
+#### 規則怎麼定的
 
-- **5xx 要另外一條規則**：實測 Spring 的 HTTP span 回 500 時狀態是空的（UNSET），只有 `outcome` 屬性記著 `SERVER_ERROR`。
-  只靠「狀態是 ERROR」會漏掉 500。4xx 不全留：未登入、找不到是使用者那邊的事，量大又不代表系統出問題。
-- **慢 = 超過 5 秒**：AI 助理正常一次約 2–3 秒，行程 API 幾十毫秒。等 #34 定了 SLO 改成跟延遲目標對齊。
-- **等 125 秒才決定（雲端）**：span 是「結束時」才送，根 span 最後到。等不夠久，慢請求的根 span 還沒到就被決定，
-  看起來不慢而被抽掉（下面反例 3）。叫模型的逾時是 2 分鐘，所以等 125 秒。代價是雲端的 trace 晚兩分鐘才查得到。
-  本機 100% 怎麼決定都是留，只等 5 秒。
+- 5xx 要另外一條規則。實測 Spring 的 HTTP span 回 500 時狀態是空的（UNSET），只有 `outcome` 屬性記著 `SERVER_ERROR`，只靠「狀態是 ERROR」會漏掉 500。4xx 不全留：未登入、找不到是使用者那邊的事，量大又不代表系統出問題。
+- 慢的定義是超過 5 秒。AI 助理正常一次約 2–3 秒，行程 API 幾十毫秒。等 #34 定了 SLO，再改成跟延遲目標對齊。
+- 雲端等 125 秒才決定。span 是在結束時才送，根 span 最後才到；等得不夠久的話，慢請求的根 span 還沒到就被決定，看起來不慢而被抽掉（下面的反例 3）。叫模型的逾時是 2 分鐘，所以等 125 秒，代價是雲端的 trace 要晚兩分鐘才查得到。本機是 100%，怎麼決定都會留，只等 5 秒。
 
-**證據**：另起一組 Alloy（就是這份 `config.alloy`）＋ Tempo，送合成 trace（形狀照 app 的真實 span：
-`outcome`、`uri` 屬性、根 span 加一個 jdbc 子 span），再用 TraceQL 數每組有根 span 的 trace 有幾個。
+#### 證據
+
+另起一組 Alloy（用的就是這份 `config.alloy`）和 Tempo，送合成的 trace，形狀照 app 真實的 span：`outcome`、`uri` 屬性，根 span 底下一個 jdbc 子 span。再用 TraceQL 數每一組有根 span 的 trace 有幾個。
 
 | 組別 | 送幾個 | 雲端設定（10%）留下 | 本機設定（100%）留下 |
 |------|------:|------:|------:|
-| 一般（40ms、200） | 200 | **19** | 200 |
-| 4xx（`CLIENT_ERROR`） | 40 | **6** | 40 |
-| 接近門檻（4.5 秒） | 40 | **2** | 40 |
-| 慢（6 秒） | 20 | **20** | 20 |
-| span 狀態 ERROR | 20 | **20** | 20 |
-| 5xx、狀態空的（Spring 真實的樣子） | 20 | **20** | 20 |
+| 一般（40 ms、200） | 200 | 19 | 200 |
+| 4xx（`CLIENT_ERROR`） | 40 | 6 | 40 |
+| 接近門檻（4.5 秒） | 40 | 2 | 40 |
+| 慢（6 秒） | 20 | 20 | 20 |
+| span 狀態 ERROR | 20 | 20 | 20 |
+| 5xx、狀態空的（Spring 真實的樣子） | 20 | 20 | 20 |
 
 反例：
 
-1. **只有「狀態是 ERROR」這條規則會漏 5xx**：Alloy 的 `otelcol_processor_tail_sampling_count_traces_sampled_total`
-   上，`errors` 規則只判了 20 個留（狀態 ERROR 那組），5xx 那組 20 個全靠 `server-errors` 規則才留下。
-2. **不是什麼都留**：接近門檻的 4.5 秒、4xx 都只按比例留（2/40、6/40），規則沒有寬到把它們全收。
-   丟掉的 trace 連子 span 都沒進 Tempo（不帶根 span 的條件查也是 19），沒有留下半截。
-3. **等太短會漏慢請求**：模擬慢請求真實的到達順序——子 span 先到、根 span 8 秒後才到。
-   等 5 秒：20 個慢請求留下 **0** 個（決定時只看到 5ms 的子 span）；等 20 秒：**20** 個全留。
+1. 只有「狀態是 ERROR」這條規則會漏掉 5xx。Alloy 的 `otelcol_processor_tail_sampling_count_traces_sampled_total` 上，`errors` 規則只判了 20 個留下（狀態 ERROR 那組），5xx 那組的 20 個全靠 `server-errors` 規則才留下。
+2. 規則沒有寬到什麼都留。接近門檻的 4.5 秒和 4xx 都只照比例留（2/40、6/40）。丟掉的 trace 連子 span 都沒進 Tempo，不帶根 span 的條件去查也是 19 個，沒有留下半截的。
+3. 等太短會漏掉慢請求。模擬慢請求真實的到達順序，子 span 先到，根 span 8 秒後才到。等 5 秒時，20 個慢請求留下 0 個，因為決定時只看到 5 ms 的子 span；等 20 秒時，20 個全留。
 
-**對從 trace 算出來的數字的影響**
+#### 對從 trace 算出來的數字的影響
 
-抽樣之後，Tempo 裡的 trace 不再是全部請求，而且是**有偏的**：錯的、慢的 100% 在，一般的只有 10%。
+抽樣之後，Tempo 裡的 trace 不再是全部的請求，而且是有偏的：錯的、慢的 100% 都在，一般的只有 10%。
 
-- **`talkcal — Traces (Tempo)` 儀表板的 TraceQL metrics**（請求速率、各段 p95、失敗 span 數）：
-  雲端上速率會少算（約剩一成多），p95 和錯誤比例會**高估**（慢的、錯的都在，快的被抽掉）。
-  這幾張圖在雲端只拿來找「哪一段慢」、點進 trace，**數字以 talkcal-app 儀表板為準**——那是 app 的 Micrometer 指標，
-  每個請求都算到，跟取樣無關。
-- **Tempo metrics-generator（#31）**：它在 Tempo 收到 span 時才算 span metrics／service graph，
-  位置在 Alloy 的取樣**之後**，看到的是抽樣後的 trace——service graph 上的請求數會少算、錯誤率會高估，跟上面同一個偏差。
-  Tempo 的 `span_multiplier_key` 只適用「每個 span 帶著固定抽樣比例」的 head sampling，tail 的比例依規則而不同，套不上。
-  要準的話，把 span metrics／service graph 改在 Alloy 裡、取樣**之前**算（`otelcol.connector.spanmetrics`、
-  `otelcol.connector.servicegraph`），再寫進 Mimir。本機 100% 不受影響；雲端要不要搬，看 #31 的圖拿來做什麼。
-- **exemplar**：talkcal-app 圖上的 exemplar（指標點掛的 trace id）由 app 決定，可能指到被抽掉的 trace，點進去會找不到。
-  通常會去點的是延遲尖峰、錯誤那幾個點——那些剛好是全留的。
+- 「talkcal — Traces (Tempo)」儀表板的 TraceQL metrics（請求速率、各段 p95、失敗 span 數）：雲端上速率會少算，大約只剩一成多；p95 和錯誤比例會高估，因為慢的、錯的都在，快的被抽掉了。這幾張圖在雲端只拿來找哪一段慢、點進 trace，**數字以 talkcal-app 儀表板為準**。那是 app 的 Micrometer 指標，每個請求都算到，跟取樣無關。
+- Tempo 的 metrics-generator（#31）：它在 Tempo 收到 span 時才算 span metrics 和 service graph，位置在 Alloy 取樣之後，看到的是抽樣後的 trace。service graph 上的請求數會少算、錯誤率會高估，偏差跟上一點一樣。Tempo 的 `span_multiplier_key` 只適用每個 span 帶著固定抽樣比例的 head sampling，tail 的比例照規則而不同，套不上。要準的話，就把 span metrics 和 service graph 改在 Alloy 裡、取樣之前算（`otelcol.connector.spanmetrics`、`otelcol.connector.servicegraph`），再寫進 Mimir。本機是 100%，不受影響；雲端要不要搬，看 #31 的圖拿來做什麼。
+- exemplar：talkcal-app 圖上的 exemplar（指標點上掛的 trace id）由 app 決定，可能指到被抽掉的 trace，點進去會找不到。不過通常會去點的是延遲尖峰和錯誤那幾個點，那些剛好都是全留的。
 
 ## 成本：token 用量和費用
 
-app 每叫一次模型，Spring AI 把回應裡的 `usage` 記成 `gen_ai_client_token_usage_total`（`gen_ai_token_type` 分 input / output / total），
-標著模型名稱和 `model_backend`（`llama-cpp` 或 `bedrock`，從設定 `talkcal.ai.backend` 來）。
+app 每叫一次模型，Spring AI 會把回應裡的 `usage` 記成 `gen_ai_client_token_usage_total`，`gen_ai_token_type` 分成 input、output、total，並標上模型名稱和 `model_backend`（`llama-cpp` 或 `bedrock`，來自設定 `talkcal.ai.backend`）。
 
-儀表板 **`talkcal — 成本（token 與費用）`**：token/s、每個請求平均 token、每個請求叫幾次模型、照 Bedrock 單價換算的每個請求費用，
-以及請求速率離「自架 GPU 比較划算」的交叉點還有多遠。單價是 dashboard 上方的變數。
-算法、單價來源、交叉點怎麼來的見 [docs/cost.md](../docs/cost.md)。
+儀表板「talkcal — 成本（token 與費用）」顯示 token/s、每個請求平均 token、每個請求叫幾次模型、照 Bedrock 單價換算的每個請求費用，以及請求速率離「自架 GPU 比較划算」的交叉點還有多遠。單價是 dashboard 上方的變數。算法、單價來源、交叉點怎麼來的，見 [docs/cost.md](../docs/cost.md)。
 
 ## 壓測：k6 的指標也進 Mimir
 
-k6 跑完就結束，沒有 `/metrics` 可以等 Alloy 來抓，所以跟 trace 一樣由它用 OTLP 推給 Alloy 的 4318，
-Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](../perf/README.md)（`perf/run-to-grafana.sh`）。
+k6 跑完就結束，沒有 `/metrics` 可以等 Alloy 來抓，所以跟 trace 一樣，由它用 OTLP 推給 Alloy 的 4318，Alloy 翻成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](../perf/README.md)（`perf/run-to-grafana.sh`）。
 
-儀表板 **`talkcal — 壓測（k6）`**：上排是 k6 看到的（VU、請求速率、延遲、失敗率），下排是同一段時間 server 那頭的
-（app 和 k6 的 p95 疊在同一張、模型處理中 vs 排隊中、5xx、生成速度）。人數一加，哪一條先動、動多少，對照著看。
+儀表板「talkcal — 壓測（k6）」的上排是 k6 看到的（VU、請求速率、延遲、失敗率），下排是同一段時間 server 那頭的狀況：app 和 k6 的 p95 疊在同一張圖、模型處理中和排隊中的數量、5xx、生成速度。人數一加，哪一條先動、動了多少，可以對照著看。
 
-部署時間點畫成直線（annotation），k6 和 talkcal-app 兩個儀表板都有：從 Loki 裡 app 自己印的 log 抓，紅線是收到 SIGTERM
-（`Commencing graceful shutdown`）、紫線是關機時還有請求沒做完（`Graceful shutdown aborted`）、綠線是新版起好（`Started Application`）。
-不另外記部署事件：app 本來就會印這幾行，用它最不會漏。
+部署的時間點畫成直線（annotation），k6 和 talkcal-app 兩個儀表板都有。資料從 Loki 裡 app 自己印的 log 抓：紅線是收到 SIGTERM（`Commencing graceful shutdown`），紫線是關機時還有請求沒做完（`Graceful shutdown aborted`），綠線是新版起好（`Started Application`）。不另外記部署事件，因為 app 本來就會印這幾行，用它最不會漏。
 
 | 選擇 | 為什麼 |
 |------|--------|
@@ -335,29 +288,26 @@ Alloy 翻譯成 Prometheus 格式再寫進 Mimir。跑法見 [perf/README.md](..
 | 延遲用 exponential histogram（Mimir 存成 native histogram） | 預設的固定 bucket 最大 10 秒，模型一塞車 p95 就被壓在 10 秒。要 Alloy 的 remote_write 開 `send_native_histograms`，不開會整批被丟掉、不報錯 |
 | 名稱加 `k6_` 前綴 | k6 預設不加，會出現 `checks_total`、`vus` 這種跟別的服務分不清的名字 |
 
-驗過準不準：同一次 knee 壓測，Grafana 算出的 p95（792ms → 1572ms → 3360ms）跟 k6 收工印的表一致。
+驗過準不準：同一次 knee 壓測，Grafana 算出的 p95（792 ms → 1572 ms → 3360 ms）跟 k6 跑完印的表一致。
 
 ## SLO：怎樣才算「夠好」
 
-四個 SLO（一般 API 與跟助理說話，各一個可用性、一個延遲），滾動 28 天。目標、數字怎麼從壓測推出來、
-告警門檻怎麼算，都寫在 [docs/slo.md](../docs/slo.md)。這裡只記它在觀測堆疊裡怎麼接：
+有四個 SLO，一般 API 和跟助理說話各有一個可用性、一個延遲，滾動 28 天。目標、數字怎麼從壓測推出來、告警門檻怎麼算，都寫在 [docs/slo.md](../docs/slo.md)。這裡只記它在觀測堆疊裡怎麼接：
 
 | 誰 | 做什麼 | 檔案 |
 |----|--------|------|
-| app | 延遲直方圖多兩個剛好在門檻上的 bucket（300ms、8s） | `backend/.../application.properties` |
+| app | 延遲直方圖多兩個剛好在門檻上的 bucket（300 ms、8s） | `backend/.../application.properties` |
 | Mimir 的 ruler | 每分鐘把 SLI、burn rate、error budget 算好，寫回成新的序列（`slo:*`） | `mimir/rules/anonymous/slo.yaml` |
 | Grafana 告警 | 讀 `slo:burn_rate:*`，長短兩個視窗都超過門檻就進 firing（multi-window, multi-burn-rate） | `grafana/provisioning/alerting/slo-burn-rate.yaml` |
-| Grafana 儀表板 | **talkcal — SLO**：budget 還剩多少、燒多快、告警狀態 | `grafana/provisioning/dashboards/talkcal-slo.json` |
+| Grafana 儀表板 | talkcal — SLO：budget 還剩多少、燒多快、告警狀態 | `grafana/provisioning/dashboards/talkcal-slo.json` |
 
-為什麼錄製規則放 Mimir、告警規則放 Grafana：錄製是「算數字」，放在存資料的地方算最省（不必每次把原始資料拉出來）；
-告警要接通知管道（contact point、policy），那些都在 Grafana，規則放一起才看得到「哪條規則送去哪」。
-Mimir 的 ruler 也能發告警，但那樣要再架一個 Alertmanager，通知設定就分散在兩個地方。
+錄製規則放 Mimir，告警規則放 Grafana。錄製是在算數字，放在存資料的地方算最省，不用每次把原始資料拉出來；告警要接通知管道（contact point、policy），那些都在 Grafana，規則放在一起才看得出哪條規則送去哪。Mimir 的 ruler 也能發告警，但那樣要再架一個 Alertmanager，通知設定會分散在兩個地方。
 
-改了 `slo.yaml`，ruler 10 分鐘內會自己重讀（要馬上生效就 `docker compose restart mimir`），改之前先跑 `ci/rules.sh`；Grafana 的告警規則檔要重啟 grafana 才會重讀。
+改了 `slo.yaml` 之後，ruler 10 分鐘內會自己重讀，要馬上生效就 `docker compose restart mimir`；改之前先跑 `ci/rules.sh`。Grafana 的告警規則檔要重啟 grafana 才會重讀。
 
 ## 產品指標：功能有沒有人用、有沒有用處
 
-上面那些指標回答「系統健不健康」；這一段回答「功能有沒有人用」（#36）。儀表板 **`talkcal — 產品指標`**（`talkcal-product.json`）。
+上面那些指標回答系統健不健康，這一段回答功能有沒有人用（#36）。儀表板是「talkcal — 產品指標」（`talkcal-product.json`）。
 
 | 問題 | 指標 | 從哪來、為什麼這樣定 |
 |------|------|------|
@@ -378,33 +328,26 @@ Mimir 的 ruler 也能發告警，但那樣要再架一個 Alertmanager，通知
 
 ## 監控本身掛掉：誰來發現
 
-Alloy 或 Mimir 停了，dashboard 只會一片空白，看起來跟「半夜沒流量」一樣（Google SRE 說的 monitoring the monitoring）。
-所以 ops/ 自己的每個元件也被抓指標，再加三條告警（`grafana/provisioning/alerting/meta-monitoring.yaml`）：
+Alloy 或 Mimir 停了，dashboard 只會一片空白，看起來跟半夜沒流量一樣，這就是 Google SRE 說的 monitoring the monitoring。所以 ops/ 自己的每個元件也會被抓指標，再加上三條告警（`grafana/provisioning/alerting/meta-monitoring.yaml`）：
 
 | 停掉的 | 怎麼看出來 | 誰通知 | 多久 |
 |--------|-----------|--------|------|
 | Loki、Tempo | Alloy 還在，`up{job="loki"}` = 0 | Grafana 寄信（warning） | 約 3 分鐘 |
 | Alloy | 最後一筆 `up{job="alloy"}` 離現在超過 60 秒 | Grafana 寄信（critical） | 約 3～4 分鐘 |
 | Mimir | Grafana 的查詢直接失敗（規則的 `execErrState: Alerting`） | Grafana 寄信（critical） | 約 3 分鐘 |
-| **Grafana 自己**、整台機器 | 還沒做（#40），設計見下面 | — | — |
+| Grafana 自己、整台機器 | 還沒做（#40），設計見下面 | — | — |
 
-Alloy 不能用 `up < 1`：它死掉時不會再寫 up，Mimir 查詢往回找 5 分鐘、一直拿到最後那個 1。改看「最後一個點有多舊」，停掉一分鐘就看得出來。
-Alloy 只重啟一下（幾秒）不會響：要連續 60 秒沒資料、再持續 2 分鐘才寄。
+Alloy 不能用 `up < 1` 判斷。它死掉時不會再寫 up，Mimir 查詢會往回找 5 分鐘，一直拿到最後那個 1。所以改看最後一個點有多舊，停掉一分鐘就看得出來。Alloy 只重啟一下（幾秒）不會響：要連續 60 秒沒資料，再持續 2 分鐘才寄。
 
 ### 為什麼需要監控系統外面的東西（設計，還沒啟用）
 
-**狀態**：這一段到「為什麼不是別的做法」是 #40 的設計，**現在沒有在跑**。Watchdog 曾經跟著 #177 提前進了 master，
-但它會寄 email（全新的 Grafana 起 3 次有 2 次在約 52 秒寄出，通知政策已經套用了，子路由還是沒擋住），
-讓告警 CI 的「正常流量 0 封」不穩定，所以先拿掉（#243），等 #40 把這個 bug 一起解掉再加回來。
-heartbeat 的基礎設施（`HEARTBEAT_URL`、terraform 的 `heartbeat_url`、`power.sh` 暫停 check）留著，沒設時不做任何事。
+這一段到「為什麼不是別的做法」都是 #40 的設計，**現在沒有在跑**。Watchdog 曾經跟著 #177 提前進了 master，但它會寄 email：全新的 Grafana 起 3 次，有 2 次在約 52 秒時寄出，通知政策已經套用，子路由還是沒擋住。這讓告警 CI 的「正常流量 0 封」不穩定，所以先拿掉了（#243），等 #40 把這個 bug 一起解決再加回來。heartbeat 的基礎設施（`HEARTBEAT_URL`、terraform 的 `heartbeat_url`、`power.sh` 暫停 check）留著，沒設時什麼都不做。
 
-負責寄信的是 Grafana。Grafana 掛了、機器整台斷線，就沒有人寄信 —— 監控系統沒辦法回報「我自己死了」。
-做法是反過來（dead man's switch）：一條**永遠在響**的 Watchdog 告警，每分鐘打一次外部服務的網址；
-外部服務超過寬限時間沒收到，就自己寄信。它不靠我們這台機器上的任何東西，所以 Grafana 怎麼死都會被發現。
+寄信的是 Grafana。Grafana 掛了、機器整台斷線，就沒有人寄信，監控系統沒辦法回報自己死了。做法是反過來的 dead man's switch：一條永遠在響的 Watchdog 告警，每分鐘打一次外部服務的網址；外部服務超過寬限時間沒收到，就自己寄信。它不靠我們這台機器上的任何東西，所以 Grafana 不管怎麼死都會被發現。
 
-PR #175 試過兩種讓 Watchdog 只送 heartbeat、不混進 email 的做法：規則的 `notification_settings`，和 `policies.yaml` 裡比對
-`alert_type=watchdog` 的子路由。兩種都還是會寄出 email（#41 的演練、告警 CI、#243 的重現都收到），#40 要先查出原因。Mimir 掛掉時 Watchdog 照樣響（它不查任何資料源，只算一個常數 1），
-因為那個情況上面那條已經寄信了，heartbeat 只負責「Grafana 和它的通知管線還活著」，不重複吵同一件事。
+PR #175 試過兩種做法，讓 Watchdog 只送 heartbeat、不混進 email：規則的 `notification_settings`，和在 `policies.yaml` 裡比對 `alert_type=watchdog` 的子路由。兩種都還是寄出了 email，#41 的演練、告警 CI、#243 的重現都收到了，所以 #40 要先查出原因。
+
+Mimir 掛掉時 Watchdog 照樣會響，因為它不查任何資料源，只算一個常數 1。那種情況上面那條已經寄信了，heartbeat 只負責證明 Grafana 和它的通知管線還活著，不重複吵同一件事。
 
 ### 外部服務選 Healthchecks.io
 
@@ -412,35 +355,26 @@ PR #175 試過兩種讓 Watchdog 只送 heartbeat、不混進 email 的做法：
 |---|---|---|---|
 | 免費額度 | 20 個 check，每個留 100 筆 ping 紀錄 | 10 個 heartbeat（另含網站監控） | 免費版很小或沒有（各家比較表說法不一，2026） |
 | 通知方式（免費） | email、Slack、Discord、Telegram、webhook… | email、Slack… | email |
-| 開源、可自架 | **是**（BSD） | 否 | 否 |
+| 開源、可自架 | 是（BSD） | 否 | 否 |
 | 只要一個網址 | 是（`https://hc-ping.com/<uuid>`，GET/POST 都收） | 是 | 是 |
 
-選 Healthchecks.io：我們只要 1 個 check，免費額度綽綽有餘；**開源可自架**，所以本機驗證用的是同一套軟體的 docker 映像
-（`healthchecks/healthchecks`），證據不是拿假的接收端湊的；以後不想依賴它的雲端，也能搬到另一台機器自己跑。
-Better Stack 也夠用，但它是整套觀測平台，只為一個 heartbeat 註冊、多一套 UI 不划算。
+選 Healthchecks.io 的理由：我們只要 1 個 check，免費額度綽綽有餘；它開源、可以自架，所以本機驗證用的是同一套軟體的 docker 映像（`healthchecks/healthchecks`），證據不是拿假的接收端湊出來的，以後不想依賴它的雲端，也能搬到另一台機器自己跑。Better Stack 也夠用，但它是整套觀測平台，只為一個 heartbeat 註冊、多學一套 UI 不划算。
 
-設定（使用者自己註冊，repo 裡沒有任何帳號或 token）：
+設定方式（要自己註冊，repo 裡沒有任何帳號或 token）：
 
-1. 到 <https://healthchecks.io> 註冊、新增一個 check：**Period 1 minute、Grace 5 minutes**
-   （Grafana 重啟、拉新映像約 30 秒，5 分鐘寬限不會誤報；真的停了 6 分鐘內寄信）
-2. 把 Ping URL 填進 `deploy/.env` 的 `HEARTBEAT_URL`（雲端填 `infra/envs/1-ec2` 的 `heartbeat_url`）
+1. 到 <https://healthchecks.io> 註冊，新增一個 check，Period 設 1 minute、Grace 設 5 minutes。Grafana 重啟、拉新映像約 30 秒，5 分鐘的寬限不會誤報；真的停了，6 分鐘內會寄信。
+2. 把 Ping URL 填進 `deploy/.env` 的 `HEARTBEAT_URL`；雲端填 `infra/envs/1-ec2` 的 `heartbeat_url`。
 3. `cd ops && docker compose --env-file ../deploy/.env up -d`
 
-這串網址本身就是祕密：拿到的人可以一直替我們打 heartbeat，讓「Grafana 掛了」永遠不會被發現，所以跟密碼一樣不進 git。
-沒設時 compose 給 `.invalid` 的位址，Grafana 照常啟動，只是 heartbeat 打不出去。（現在 Watchdog 拿掉了，這個變數沒人讀，#40 做完之前留空。）
+這串網址本身就是祕密。拿到的人可以一直替我們打 heartbeat，讓「Grafana 掛了」永遠不會被發現，所以跟密碼一樣不進 git。沒設時 compose 給一個 `.invalid` 的位址，Grafana 照常啟動，只是 heartbeat 打不出去。現在 Watchdog 拿掉了，這個變數沒人讀，#40 做完之前先留空。
 
-**排程關機**（雲端平常關機）：用 `infra/envs/1-ec2/power.sh stop` 關機，它會先呼叫 Healthchecks 的 API 暫停 check，
-不然 6 分鐘後會收到「掛了」的信。開機後 Grafana 的第一個 heartbeat 會讓 check 自動恢復監控（本機實測過）；
-`power.sh start` 會等到恢復為止，Grafana 開機後沒起來時，暫停中的 check 不會寄信，要靠這一步發現。
+雲端平常是關機的。關機要用 `infra/envs/1-ec2/power.sh stop`，它會先呼叫 Healthchecks 的 API 暫停 check，不然 6 分鐘後會收到「掛了」的信。開機後 Grafana 的第一個 heartbeat 會讓 check 自動恢復監控，這在本機實測過；`power.sh start` 會等到恢復為止，因為 Grafana 開機後如果沒起來，暫停中的 check 不會寄信，只能靠這一步發現。
 
-**本機和雲端用不同的 check**：共用一個的話，本機的 Grafana 一直在打，雲端的停了也看不出來。
-本機的電腦也常關，所以平常 `HEARTBEAT_URL` 留空，要試的時候才填一個本機專用的 check。
+本機和雲端用不同的 check。共用一個的話，本機的 Grafana 一直在打，雲端停了也看不出來。本機的電腦也常關，所以平常 `HEARTBEAT_URL` 留空，要試的時候才填一個本機專用的 check。
 
 ### 為什麼不是別的做法
 
-業界的標準配方就是上面這套：一條永遠在響的 `Watchdog`（kube-prometheus-stack 預設就帶這條，`vector(1)`），
-送到**監控系統外面**的 heartbeat 服務。差別只在外面那端放哪裡：有值班平台的團隊用平台自己的 heartbeat
-（PagerDuty 的 Dead Man's Snitch 整合這類），沒有的用 Healthchecks.io 這種專門服務，也有人自己寫一支跑在 Cloudflare Workers 上。
+業界一般就是上面這套：一條永遠在響的 `Watchdog`（kube-prometheus-stack 預設就帶這條，`vector(1)`），送到監控系統外面的 heartbeat 服務。差別只在外面那端放哪裡：有值班平台的團隊用平台自己的 heartbeat（例如 PagerDuty 的 Dead Man's Snitch 整合），沒有的就用 Healthchecks.io 這類專門服務，也有人自己寫一支放在 Cloudflare Workers 上。
 
 | 做法 | 為什麼不選 |
 |------|-----------|
@@ -452,24 +386,23 @@ Better Stack 也夠用，但它是整套觀測平台，只為一個 heartbeat �
 
 ### 還沒蓋到的
 
-- **寄信本身壞了**（SMTP 帳密過期）：Grafana 活著、heartbeat 照打，但 email 寄不出去。要蓋到得讓 heartbeat 也走 email（例如寄到外部服務的收信位址），目前不做。
-- **Alloy 活著但送不出去**（remote_write 一直失敗）：跟 Alloy 停了一樣是「最後一個點越來越舊」，同一條會響。
-  log、trace 那兩條送不出去（Loki、Tempo 活著但拒收）目前只看得到 Alloy 自己的指標（`loki_write_dropped_entries_total` 這類），沒有告警。
-- Alloy 停掉時 app 那條「抓不到指標」（#121）也會一起響：Grafana 管理的告警沒有 inhibit（抑制）規則，同一件事會收到兩封。
+- 寄信本身壞了（例如 SMTP 帳密過期）：Grafana 活著、heartbeat 照打，但 email 寄不出去。要蓋到得讓 heartbeat 也走 email，例如寄到外部服務的收信位址，目前不做。
+- Alloy 活著但送不出去（remote_write 一直失敗）：跟 Alloy 停了一樣，是最後一個點越來越舊，會由同一條告警響。log 和 trace 送不出去（Loki、Tempo 活著但拒收）目前只看得到 Alloy 自己的指標，例如 `loki_write_dropped_entries_total`，沒有告警。
+- Alloy 停掉時，app 那條「抓不到指標」（#121）也會一起響。Grafana 管理的告警沒有 inhibit（抑制）規則，同一件事會收到兩封。
 
 ## 三種訊號之間怎麼跳
 
 | 從 | 到 | 怎麼點 | 靠什麼接起來 |
 |----|----|--------|--------------|
 | 指標（talkcal-app 儀表板的 p95 圖） | trace | 圖上的小菱形（exemplar）→ 點 trace_id | app 吐指標時在 histogram 的點上附 trace id，Mimir 存下來（`max_global_exemplars_per_user`） |
-| log（Loki 的 access log） | trace | 展開一行 → **到 Tempo 看這個請求** | Loki 資料源的 derived field 從內容抓出 `traceId` |
-| trace（Tempo） | log | span 旁的 **Logs for this span** | Tempo 資料源用 trace id 去 Loki 搜內容 |
+| log（Loki 的 access log） | trace | 展開一行 →「到 Tempo 看這個請求」 | Loki 資料源的 derived field 從內容抓出 `traceId` |
+| trace（Tempo） | log | span 旁的 Logs for this span | Tempo 資料源用 trace id 去 Loki 搜內容 |
 | trace（Tempo） | 指標 | span 名稱旁的連結圖示 → 選一條：延遲 p95、5xx 比例、連線池、同一種 span 的 p95 | Tempo 資料源的 `tracesToMetrics`，時間是 span 前後各 5 分鐘 |
-| log（Loki） | 單一請求儀表板 | 展開一行 → **用「單一請求」dashboard 看** | 同一個 derived field 的第二個連結 |
+| log（Loki） | 單一請求儀表板 | 展開一行 →「用『單一請求』dashboard 看」 | 同一個 derived field 的第二個連結 |
 
 ## 告警：出事寄信
 
-規則、收件人、寄信節奏都用 provisioning 管（`grafana/provisioning/alerting/`），Grafana 一啟動就建好，UI 上唯讀。
+規則、收件人、寄信節奏都用 provisioning 管（`grafana/provisioning/alerting/`），Grafana 一啟動就建好，UI 上是唯讀的。
 
 | 規則 | 檔案 | 什麼時候響 | 嚴重度 |
 |------|------|------|------|
@@ -477,19 +410,13 @@ Better Stack 也夠用，但它是整套觀測平台，只為一個 heartbeat �
 | SLO 快燒 | `slo-burn-rate.yaml` | 照這速度幾天內就燒光 error budget（[docs/slo.md](../docs/slo.md)） | critical |
 | SLO 慢燒 | `slo-burn-rate.yaml` | 照這速度這個月會不達標 | warning |
 
-錯誤、延遲只看 SLO 的 burn rate，不另外設「5xx > 5%」「p95 > 1 秒」這種固定門檻：兩邊都設的話同一件事會寄兩封、門檻還不一樣。
-SLO 管不到的是「根本沒資料」：app 掛掉時沒有請求，SLO 是沒資料（當正常），所以 `up` 這條另外留著。
-全部告警都寄到同一個信箱（`policies.yaml`）；要分流時比對 `severity` 標籤。
+錯誤和延遲只看 SLO 的 burn rate，不另外設「5xx > 5%」「p95 > 1 秒」這種固定門檻。兩邊都設的話，同一件事會寄兩封，門檻還不一樣。SLO 管不到的是根本沒資料的情況：app 掛掉時沒有請求，SLO 沒資料會被當成正常，所以 `up` 這條另外留著。全部告警都寄到同一個信箱（`policies.yaml`），要分流時比對 `severity` 標籤。
 
-上面這幾條之外，還有資料庫／連線池／模型熔斷／備份的告警（`respond.yaml`），
-**所有告警的總表**（式子、門檻、severity、為什麼要有）在 [docs/alerts.md](../docs/alerts.md)。
+除了上面這幾條，還有資料庫、連線池、模型熔斷、備份的告警（`respond.yaml`）。所有告警的總表（式子、門檻、severity、為什麼要有）在 [docs/alerts.md](../docs/alerts.md)。
 
-備份太久沒成功那條要的指標，是 `infra/envs/1-ec2/backup-to-s3.sh` 成功時寫的 `.prom` 檔，
-Alloy 用 textfile collector 讀（`config.alloy` 的 (4)）。雲端由 `infra/envs/1-ec2/compose.ops.yaml` 把那個資料夾掛給 Alloy；
-本機沒有備份排程，掛的是一個空的 volume，那條告警的查詢是空的、維持正常。
+「備份太久沒成功」那條用到的指標，是 `infra/envs/1-ec2/backup-to-s3.sh` 成功時寫的 `.prom` 檔，由 Alloy 用 textfile collector 讀（`config.alloy` 的 (4)）。雲端由 `infra/envs/1-ec2/compose.ops.yaml` 把那個資料夾掛給 Alloy；本機沒有備份排程，掛的是一個空的 volume，那條告警的查詢是空的，會維持正常。
 
-寄信走 Grafana 內建的 SMTP，設定在不進 git 的 `deploy/.env`（`ALERT_SMTP_*`、`ALERT_EMAIL_TO`，範本 `deploy/.env.example`），
-所以起這組要帶 `--env-file ../deploy/.env`。雲端由 Terraform 寫進 SSM 的同一份 `.env`（`infra/envs/1-ec2/alerting.auto.tfvars.example`）。
+寄信走 Grafana 內建的 SMTP，設定在不進 git 的 `deploy/.env`（`ALERT_SMTP_*`、`ALERT_EMAIL_TO`，範本是 `deploy/.env.example`），所以起這組要帶 `--env-file ../deploy/.env`。雲端用的是 Terraform 寫進 SSM 的同一份 `.env`（`infra/envs/1-ec2/alerting.auto.tfvars.example`）。
 
 想試寄信、又不想動真的信箱：
 
@@ -499,27 +426,16 @@ docker compose --env-file ../deploy/.env --profile mailtest up -d   # 多起一�
 # 收件匣：http://localhost:8025
 ```
 
-Grafana 的 **Alerting → Alert rules** 看每條規則現在是 Normal / Pending / Firing；
-**Contact points** 那一頁的 **Test** 可以不等規則觸發，直接寄一封測試信。
+在 Grafana 的 Alerting → Alert rules 可以看每條規則現在是 Normal、Pending 還是 Firing；Contact points 那一頁的 Test 可以不等規則觸發，直接寄一封測試信。
 
-改了告警相關的設定（`grafana/provisioning/alerting/`、`grafana/provisioning/datasources/`、`mimir/`、`alloy/`、這份 `compose.yaml`），
-PR 上的 `Alerting` workflow 會另起一組全新的觀測、假 app、Mailpit，真的造出 5xx、停掉 app，確認快燒、app 掛了、恢復三封信都寄得到。
-本機也能跑 `ci/alerting.sh`（約 15 分鐘，跟正在跑的這組分開，不互相干擾），做法見 [ci/README.md](../ci/README.md#告警端到端測試)。
+改了告警相關的設定（`grafana/provisioning/alerting/`、`grafana/provisioning/datasources/`、`mimir/`、`alloy/`、這份 `compose.yaml`），PR 上的 `Alerting` workflow 會另起一組全新的觀測、假 app 和 Mailpit，真的造出 5xx、停掉 app，確認快燒、app 掛了、恢復三封信都寄得到。本機也能跑 `ci/alerting.sh`，約 15 分鐘，跟正在跑的這組分開、不互相干擾，做法見 [ci/README.md](../ci/README.md#告警端到端測試)。
 
-寄到 Gmail 會進垃圾郵件（2026-10-29 在 AWS 上用 Gmail SMTP 實測：三封都寄出、SMTP 沒報錯，但都在 Spam，
-Gmail 的理由是「跟以前的垃圾信相似」——Grafana 預設模板人人在用）。收件人要自己在 Gmail 按「不是垃圾郵件」、
-再建一個篩選器（寄件人名稱 `talkcal Grafana`）設成「一律不要傳送到垃圾郵件」，不然告警寄出去了也沒人看到。
-Mailpit 什麼都收，測不到這件事。
+寄到 Gmail 會進垃圾郵件。2026-10-29 在 AWS 上用 Gmail SMTP 實測：三封都寄出了、SMTP 沒報錯，但全部在 Spam，Gmail 給的理由是「跟以前的垃圾信相似」，因為 Grafana 的預設模板人人在用。收件人要自己在 Gmail 按「不是垃圾郵件」，再建一個篩選器（寄件人名稱 `talkcal Grafana`）設成「一律不要傳送到垃圾郵件」，不然告警寄出去了也沒人看到。Mailpit 什麼都收，測不到這件事。
 
 ## 下一步（一次一件）
 
-1. **app 記錄送給模型的完整 prompt**：access log 已經記了使用者說了什麼（請求 body），
-   但還看不到最後組出來送給 llm-chat 的 prompt（system 指示、日期表、工具結果）長什麼樣。
-   補上之後（帶著 traceId）就能從 trace 一路點到那次的 prompt，
-   也補回原生 `.bat` 的 `--log-prompts-dir` 拿掉後少掉的 prompt 紀錄。
-2. **收集器備援練習**：起兩台 Alloy 抓同一批 target（HA pair），各帶 `__replica__` 標籤，
-   開 Mimir 的 HA tracker，親眼看「兩台送一樣的資料、Mimir 只留一份、關掉一台自動切換」。
-   這個練習只有 Mimir 做得出來（Prometheus 收到兩份就存兩份）。
+1. app 記錄送給模型的完整 prompt。access log 已經記了使用者說了什麼（請求 body），但還看不到最後組出來送給 llm-chat 的 prompt（system 指示、日期表、工具結果）長什麼樣。補上之後（帶著 traceId），就能從 trace 一路點到那次的 prompt，也補回原生 `.bat` 拿掉 `--log-prompts-dir` 之後少掉的 prompt 紀錄。
+2. 收集器備援練習。起兩台 Alloy 抓同一批 target（HA pair），各帶 `__replica__` 標籤，開 Mimir 的 HA tracker，親眼看兩台送一樣的資料、Mimir 只留一份、關掉一台會自動切換。這個練習只有 Mimir 做得出來，Prometheus 收到兩份就會存兩份。
 
 ## 檔案結構
 

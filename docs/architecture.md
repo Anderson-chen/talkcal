@@ -1,6 +1,6 @@
 # 架構圖
 
-這份畫的是本機架構，和一個改動怎麼一路到線上（[CI/CD](#cicd從-commit-到線上)）。AWS 各階段的架構圖放在 `infra/` 各階段的資料夾裡，跟部署設定放在一起：
+這份先畫本機、雲端各一張[總覽](#總覽)，再拆本機細節，和一個改動怎麼一路到線上（[CI/CD](#cicd從-commit-到線上)）。AWS 各階段的細節圖放在 `infra/` 各階段的資料夾裡，跟部署設定放在一起：
 
 | | 跑在哪 | 追蹤 | 換來什麼 |
 |---|---|---|---|
@@ -10,9 +10,58 @@
 
 為什麼分兩個階段見 [infra/README.md](../infra/README.md)。階段一另有一張可以點的互動圖：[https://anderson-chen.github.io/talkcal/](https://anderson-chen.github.io/talkcal/)（原始檔在 [architecture/index.html](architecture/index.html)）。
 
+## 總覽
+
+### 本機
+
+開發和驗證都在本機：[deploy/](../deploy/README.md) 起服務、[ops/](../ops/README.md) 起觀測，兩組 Docker Compose，埠全部只綁 `127.0.0.1`：
+
+```mermaid
+flowchart LR
+    browser[瀏覽器] -- "http://localhost:18080" --> web
+    subgraph local[本機 · Docker Compose]
+        web[web<br/>nginx + Vue 3] -- /api --> app[app<br/>Spring Boot]
+        app -- OpenAI 相容協定 --> llm[llm-chat<br/>llama.cpp · Qwen3-8B]
+        app --> pg[(PostgreSQL<br/>行程 · 對話記憶)]
+        app -- 舊行程、舊對話歸檔 --> rustfs[(RustFS)]
+        app -. 指標 · log · trace .-> alloy[Alloy]
+        alloy --> mimir[Mimir] & loki[Loki] & tempo[Tempo]
+        mimir & loki & tempo --> grafana[Grafana<br/>localhost:3000]
+    end
+```
+
+兩組 compose 怎麼接、模型檔怎麼進容器、啟動順序，見下面的[本機](#本機兩組-docker-compose)。
+
+### 雲端（AWS 階段一）
+
+線上版跑在 AWS 東京區（[階段一](../infra/envs/1-ec2/README.md)：一台 EC2 + Docker Compose，平常關機、展示前開機）。
+跑的是同一份 compose，差在前面多了 Caddy 處理 HTTPS、模型改呼叫 Bedrock、歸檔和備份放 S3：
+
+```mermaid
+flowchart LR
+    browser[瀏覽器] -- HTTPS --> caddy
+    subgraph aws[AWS 東京區]
+        subgraph ec2[EC2 · Docker Compose]
+            caddy[Caddy<br/>Let's Encrypt 憑證] --> web[web<br/>nginx + Vue 3]
+            web -- /api --> app[app<br/>Spring Boot]
+            app --> pg[(PostgreSQL<br/>行程 · 對話記憶)]
+            app -. 指標 · log · trace .-> alloy[Alloy]
+            alloy --> mimir[Mimir] & loki[Loki] & tempo[Tempo]
+            mimir & loki & tempo --> grafana[Grafana]
+        end
+        app -- OpenAI 相容協定 --> bedrock[Bedrock<br/>Qwen3 32B]
+        app -- 舊行程、舊對話歸檔 --> archive[(S3 歸檔)]
+        pg -. 每小時、關機前、部署前 pg_dump .-> backups[(S3 備份)]
+        ssm[SSM Parameter Store<br/>DB 密碼 · API key] -. 部署時讀 .-> ec2
+    end
+    operator[維運者] -. SSM port forwarding .-> grafana
+```
+
+對外只開 80/443，Grafana 不對外，登入機器走 SSM、不開 22。每個元件由哪個檔案哪幾行決定，見上面的互動圖；部署細節見 [infra/envs/1-ec2](../infra/envs/1-ec2/README.md)。
+
 ## 本機：兩組 Docker Compose
 
-本機用兩組 compose 分開管：`deploy/` 是**被觀測的服務**，`ops/` 是**觀測工具**。
+本機用兩組 compose 分開管：`deploy/` 是被觀測的服務，`ops/` 是觀測工具。
 兩組各有自己的網路，Alloy 額外加入 `deploy/` 的網路，才能用服務名稱直接抓 `app:8090`、`llm-chat:8080`。
 
 下面拆成三張小圖，每張只講一件事。
@@ -38,7 +87,7 @@ flowchart LR
 
 ### 3. 觀測資料怎麼流
 
-箭頭是**資料流向**。指標其實是 Alloy 去抓（拉），trace 和 k6 的指標是對方推過來，但資料都是往右流。
+箭頭是資料流向。指標其實是 Alloy 去抓（拉），trace 和 k6 的指標是對方推過來，但資料都是往右流。
 
 ```mermaid
 flowchart LR
@@ -107,7 +156,7 @@ flowchart TB
     green -.->|"SSM 連進去手動重跑"| ec2["EC2：deploy.sh<br/>compose.ec2.yaml + compose.bedrock.yaml"]
 ```
 
-本機是 **pull**：GitHub 不必有任何連進這台電腦的權限，機器自己去看 CI 綠了沒（理由見 [cd/README.md](../cd/README.md#為什麼是-pull)）。
+本機是 pull：GitHub 不必有任何連進這台電腦的權限，機器自己去看 CI 綠了沒（理由見 [cd/README.md](../cd/README.md#為什麼是-pull)）。
 EC2 目前是手動部署：機器平常關機，展示前開機、需要時用 SSM 重跑 `deploy.sh`。
 
 ### 每一關擋什麼、擋不住什麼
@@ -140,4 +189,4 @@ EC2 目前是手動部署：機器平常關機，展示前開機、需要時用 
 | 退版 | 怎麼回到上一版 | `cd/rollback.sh`（本機；EC2 手動，見 [docs/rollback.md](rollback.md#ec2)） |
 | 生機器 | 機器從哪來 | `infra/`（Terraform） |
 
-原則只有一條：**做什麼只寫一次，入口可以很多個**。CI 和 CD 都是這樣分。
+原則只有一條：做什麼只寫一次，入口可以很多個。CI 和 CD 都是這樣分。

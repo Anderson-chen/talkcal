@@ -1,6 +1,6 @@
-# infra —— 搬上 AWS 的基礎設施
+# infra：搬上 AWS 的基礎設施
 
-狀態：階段一的 Terraform 寫好了、還沒 apply 過；階段二還在規劃。本機現在怎麼跑見 [docs/architecture.md](../docs/architecture.md)。
+狀態：階段一 2026-10-14 部署上線，機器平常關機；階段二還在規劃。本機現在怎麼跑見 [docs/architecture.md](../docs/architecture.md)。
 
 ## 兩個階段，一個資料夾一個
 
@@ -18,7 +18,7 @@ infra/
 | 一 | [envs/1-ec2](envs/1-ec2/README.md) | [#57](https://github.com/Anderson-chen/talkcal/issues/57) | 服務真的在線上，別人連得到；compose 幾乎不用改 | 只有一台，掛了就停，換版時有空窗 |
 | 二 | [envs/2-eks](envs/2-eks/README.md) | [#58](https://github.com/Anderson-chen/talkcal/issues/58) | 換版不停機、一台掛了不會全停，staging / rollback / canary 有地方練 | 元件多、要先學 k8s（[#56](https://github.com/Anderson-chen/talkcal/issues/56) 本機 kind） |
 
-**為什麼先做階段一**：上去的就是本機驗證過的那一套，要補的只有對外的入口和祕密。一次把 k8s、EKS、RDS、CloudFront 全換掉，出問題時分不出是哪一層。
+先做階段一，是因為上去的就是本機驗證過的那一套，要補的只有對外的入口和祕密。一次把 k8s、EKS、RDS、CloudFront 全換掉，出問題時分不出是哪一層。
 
 ## 慣例
 

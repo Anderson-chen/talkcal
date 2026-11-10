@@ -2,14 +2,14 @@
 
 | | |
 |---|---|
-| severity | warning —— 上班時間處理；同時 SLO 快燒或 5xx 也響的話，照那條的 critical 處理 |
+| severity | warning，上班時間處理；同時 SLO 快燒或 5xx 也響的話，照那條的 critical 處理 |
 | 規則 | [`respond.yaml`](../../ops/grafana/provisioning/alerting/respond.yaml) 第 2 條，總表見 [alerts.md](../alerts.md) |
 | 條件 | 近 5 分鐘 `hikaricp_connections_timeout_total` 增加了（> 0.5），一成立就寄 |
 
 ## 代表什麼
 
 app 的連線池（HikariCP，預設 10 條）全部被借走，新的請求排隊等了 `connectionTimeout`（30 秒）還是借不到，放棄。
-正常情況這個數字一直是 0（#32 實測：只壓讀取時連線平均只借 3.6ms，池子遠遠用不滿）。
+正常情況這個數字一直是 0（#32 實測：只壓讀取時連線平均只借 3.6 ms，池子遠遠用不滿）。
 
 連線池滿 **幾乎都是資料庫那頭變慢**：每條連線借出去後還不回來（在等鎖、查詢變慢），不是池子太小。
 #32 的結論：「app 的 pending 高、資料庫 active = 池子大小」→ 問題在資料庫，加大池子只會讓更多連線一起卡住。
@@ -21,7 +21,7 @@ app 的連線池（HikariCP，預設 10 條）全部被借走，新的請求排�
 
 ## 怎麼確認
 
-1. **talkcal-app dashboard 的「資料庫連線池」那一排**（#32）：
+1. talkcal-app dashboard 的「資料庫連線池」那一排（#32）：
    - active 貼著 max（紅虛線）、pending 衝高 → 池子被占滿
    - acquire（借連線花多久）衝到秒級
 2. 同一排的 **PostgreSQL 連線狀態**（`pg_stat_activity`）：

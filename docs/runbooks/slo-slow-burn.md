@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| severity | warning —— 開 issue，上班時間處理 |
+| severity | warning，開 issue，上班時間處理 |
 | 規則 | [`slo-burn-rate.yaml`](../../ops/grafana/provisioning/alerting/slo-burn-rate.yaml) 第 2 條；SLO 的定義與門檻見 [docs/slo.md](../slo.md) |
 | 條件 | 任一 SLO：`1d` 和 `2h` 的 burn rate 都 > 2.8，或 `3d` 和 `6h` 都 > 0.933 |
 
@@ -17,7 +17,7 @@
 
 ## 怎麼確認
 
-1. **talkcal — SLO** 儀表板：哪個 SLO、從哪天開始往下掉
+1. talkcal — SLO 儀表板：哪個 SLO、從哪天開始往下掉
 2. 這段時間壞的請求集中在哪：
 
    ```promql

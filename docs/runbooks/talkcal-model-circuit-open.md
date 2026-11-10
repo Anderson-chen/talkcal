@@ -2,24 +2,24 @@
 
 | | |
 |---|---|
-| severity | warning —— 上班時間處理；SLO 快燒（`assistant-availability`）同時響的話照 critical 處理 |
+| severity | warning，上班時間處理；SLO 快燒（`assistant-availability`）同時響的話照 critical 處理 |
 | 規則 | [`respond.yaml`](../../ops/grafana/provisioning/alerting/respond.yaml) 第 3 條，總表見 [alerts.md](../alerts.md) |
 | 條件 | 近 5 分鐘熔斷擋下了請求（`resilience4j_circuitbreaker_not_permitted_calls_total` 有增加），**而且**這 5 分鐘一次都沒關回來（`state="closed"` 一直是 0） |
 
 ## 代表什麼
 
 app 叫模型（本機 llama-server、雲端 Bedrock）最近 10 次裡有一半以上失敗或超過 30 秒，熔斷打開（#44）。
-打開後 30 秒放 2 個請求去試，試失敗又打開 —— 這條響代表**至少 5 分鐘都沒試成功**，而且這段時間有使用者被擋下。
+打開後 30 秒放 2 個請求去試，試失敗又打開：這條響代表**至少 5 分鐘都沒試成功**，而且這段時間有使用者被擋下。
 
 ## 對使用者的影響
 
-- **AI 助理不能用**：送出去馬上拿到 503 `MODEL_UNAVAILABLE`，畫面說「AI 助理暫時無法使用，行事曆的其他功能照常可用」，並倒數 `Retry-After`（#43）
-- **行程的增刪改查、登入照常**（#44 演練過：模型斷線、卡住時行程 API 全部 200）
+- AI 助理不能用：送出去馬上拿到 503 `MODEL_UNAVAILABLE`，畫面說「AI 助理暫時無法使用，行事曆的其他功能照常可用」，並倒數 `Retry-After`（#43）
+- 行程的增刪改查、登入照常（#44 演練過：模型斷線、卡住時行程 API 全部 200）
 - 使用者打的字不會不見，倒數完可以按「再試一次」
 
 ## 怎麼確認
 
-1. **talkcal-app dashboard 最下面「模型熔斷」那一排**：
+1. talkcal-app dashboard 最下面「模型熔斷」那一排：
    - 熔斷狀態（state timeline）：一直在 open／half_open，沒有回到 closed
    - 沒叫模型就擋下的請求：在增加
    - 失敗率／慢呼叫率：哪一個超過 50%？**失敗率高 = 模型連不上或回錯誤；慢呼叫率高 = 模型卡住**
@@ -94,7 +94,7 @@ ERROR log 有 `404`、`ValidationException ... model identifier is invalid`。�
 
 ## 怎麼確認已經恢復
 
-- 熔斷狀態回到 **closed**（第一個 half_open 的試探成功就會關回來；log 會有一行 `State transition from HALF_OPEN to CLOSED`）。沒人在用的時候它會一直停在 open／half_open 等試探 —— 自己送一句話給助理就會觸發
+- 熔斷狀態回到 **closed**（第一個 half_open 的試探成功就會關回來；log 會有一行 `State transition from HALF_OPEN to CLOSED`）。沒人在用的時候它會一直停在 open／half_open 等試探：自己送一句話給助理就會觸發
 - 告警解除、收到 `[RESOLVED]`（closed 出現後下一次評估就解除）
 - 助理回得了話；`assistant-latency` 沒有因為剛恢復而一直超過 8 秒
 

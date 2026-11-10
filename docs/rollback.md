@@ -9,7 +9,7 @@ cd/rollback.sh local 3f9c2ab         # 退到指定版本（版本號 = 映像�
 cd/rollback.sh local --unpin         # 修好了：解除釘住，watcher 下一輪照常部署
 ```
 
-在**部署用的 clone**（`C:/talkcal-deploy`）跑，跟 watcher 同一份：釘住和鎖都放在那個 clone 的 `.git` 裡（見[釘住](#退完之後watcher-不會把新版部署回來)）。
+在部署用的 clone（`C:/talkcal-deploy`）跑，跟 watcher 同一份：釘住和鎖都放在那個 clone 的 `.git` 裡（見[釘住](#退完之後watcher-不會把新版部署回來)）。
 
 退版是「換回某個 tag 的映像檔」，靠的是 [#25](https://github.com/Anderson-chen/talkcal/issues/25)：每個版本一個 tag
 （`talkcal/app:<版本號>`），label `org.opencontainers.image.revision` 帶完整 commit。#25 之前的映像檔都叫 `:local`、沒有 label，
@@ -21,10 +21,10 @@ cd/rollback.sh local --unpin         # 修好了：解除釘住，watcher 下一
 
 | 情況 | 做法 | 理由 |
 |---|---|---|
-| 剛部署完就壞了，上一版是好的，兩版之間**沒有** migration | **退**（`--previous`） | 最快止血：不用 build、不用等 CI，幾十秒 |
-| 兩版之間有 migration，但照 expand/contract 寫（上一版讀寫得了新 schema） | **退** | 這就是 expand/contract 要保證的事（見[資料庫](#資料庫schema-不退)） |
+| 剛部署完就壞了，上一版是好的，兩版之間沒有 migration | 退（`--previous`） | 最快止血：不用 build、不用等 CI，幾十秒 |
+| 兩版之間有 migration，但照 expand/contract 寫（上一版讀寫得了新 schema） | 退 | 這就是 expand/contract 要保證的事（見[資料庫](#資料庫schema-不退)） |
 | 兩版之間有**不相容**的 migration（例如 V11：加了 NOT NULL 欄位、沒有預設值） | **往前修**：在 master 上修（或 `git revert` 壞掉的 commit），照一般流程發 PR，合併後 `--unpin` | 退回去容器會 healthy，但寫入全部失敗（下面的驗證 N 真的發生了） |
-| 兩版之間有**安全、權限**的修正 | **往前修** | 退回去等於把漏洞放回來。驗證 N：退到 #104 之前，新註冊的人讀得到別人的行程 |
+| 兩版之間有安全、權限的修正 | 往前修 | 退回去等於把漏洞放回來。驗證 N：退到 #104 之前，新註冊的人讀得到別人的行程 |
 | 只有一小塊功能壞了，其他正常 | 看影響，多半往前修 | 退版會把同一版其他的修正也一起退掉 |
 
 看兩版之間有沒有 migration：
@@ -52,11 +52,11 @@ cd/rollback.sh local --previous   # 或指定版本
 它會依序做：
 
 1. 檢查版本號格式；`talkcal/app:<版本>` 的 label 要有 40 碼的 commit（沒有 label、或沒經過 `apply.sh` 直接 build 出來的 `unknown` 都不算），
-   `talkcal/web:<版本>` 也要在 —— 不符合就結束，**什麼都沒動**。
+   `talkcal/web:<版本>` 也要在：不符合就結束，什麼都沒動。
    `-dirty` 的版本（從有沒 commit 改動的 clone 部署的）可以指定，但會提醒內容不等於那個 commit
 2. 拿 watcher 的鎖（`.git/cd-local.lock`）：watcher 正在部署就不退，退的途中 watcher 也不會插進來
 3. 先換 web、再換 app，每個都 `--no-build --pull never --no-deps --wait`，換完確認容器跑的真的是那個 tag
-4. 任何一個起不來 → **換回原本在跑的版本**，結束碼 1
+4. 任何一個起不來 → 換回原本在跑的版本，結束碼 1
 5. 成功 → 寫下釘住（`.git/cd-local.pin`）、記進 `.git/cd-local.history`，並在 GitHub Deployments 記一筆（連不上 GitHub 不算失敗）
 
 ### 4. 確認
@@ -78,8 +78,8 @@ docker compose -f deploy/compose.yaml logs --since 5m app | grep -i error
 
 | 來源 | 回答什麼 | 用在哪 |
 |---|---|---|
-| 機器上的映像檔（`docker images talkcal/app`，label `org.opencontainers.image.revision`） | **退得回去**的版本：映像檔在才退得了 | `--list`；所有退版前的檢查 |
-| GitHub Deployments（watcher、rollback 寫的） | 哪個 commit 部署**成功**過、順序 | `--previous`：從新到舊找第一個「成功、不是現在這版、機器上有映像檔」的；同一個 commit 有好幾個映像檔時先挑 release tag（`v0.1.0`）再挑 commit 前 7 碼，不挑 `-dirty` |
+| 機器上的映像檔（`docker images talkcal/app`，label `org.opencontainers.image.revision`） | 退得回去的版本：映像檔在才退得了 | `--list`；所有退版前的檢查 |
+| GitHub Deployments（watcher、rollback 寫的） | 哪個 commit 部署成功過、順序 | `--previous`：從新到舊找第一個「成功、不是現在這版、機器上有映像檔」的；同一個 commit 有好幾個映像檔時先挑 release tag（`v0.1.0`）再挑 commit 前 7 碼，不挑 `-dirty` |
 | `.git/cd-<env>.history` | 這台機器上退過哪些版本、什麼時候 | 事後查；GitHub 連不上時唯一的紀錄 |
 | release tag（`v0.2.0`，#25） | 人確認過、值得留名字的版本 | 指定版本時好記；`--list` 會列出 tag 名 |
 
@@ -91,19 +91,19 @@ docker compose -f deploy/compose.yaml logs --since 5m app | grep -i error
 
 ## 資料庫：schema 不退
 
-程式退得回去，資料庫退不回去，也**不該**退：
+程式退得回去，資料庫退不回去，也不該退：
 
 - Flyway 社群版沒有 undo；就算有，退 schema 就是丟掉新欄位裡的資料
 - Flyway 預設 `ignoreMigrationPatterns=*:future`：資料庫的版本比程式新時，只記一行警告就照常啟動
   （驗證 N 的 log：`Schema "public" has a version (11) that is newer than the latest available migration (10) !`）
 
-所以能不能退，取決於**上一版的程式在新的 schema 上能不能正常讀寫**。這正是 expand/contract 的規則：
+所以能不能退，取決於上一版的程式在新的 schema 上能不能正常讀寫。這正是 expand/contract 的規則：
 每一支 migration 跑完，上一版照樣要能用，contract（刪舊欄位）要等到「不會再被退回去」才做。
 CI 的 `ci/migrations.sh`（#18）用 squawk 擋下會讓上一版壞掉的寫法（刪欄位、改名、加 NOT NULL 沒預設值…），
 真的要 contract 時要在那一句加 `squawk-ignore` 和理由：規則見 [ci/README.md「DB migration 檢查」](../ci/README.md#db-migration-檢查)。
 V11 是在這道檢查之前寫的，所以驗證 N 才退得到一個不相容的版本。
 
-能退的範圍因此是有限的：**往前每 contract 一次，能退回的範圍就縮一格**。退之前看第 1 步的表。
+能退的範圍因此是有限的：往前每 contract 一次，能退回的範圍就縮一格。退之前看第 1 步的表。
 
 真的退到了不相容的版本（驗證 N 那樣）：馬上再退回新版（`cd/rollback.sh local <新版>`），改成往前修。
 
@@ -111,15 +111,15 @@ V11 是在這道檢查之前寫的，所以驗證 N 才退得到一個不相容�
 
 watcher（`cd/triggers/watch.sh`）只部署「master 最新的綠燈 commit、而且沒試過的」：
 
-- **剛才壞掉的那個 commit** 已經試過，不會再自動部署 —— 這本來就成立
-- **但下一個綠燈的 commit** 一出現就會部署。如果修正還沒進去（例如中間合併了別的 PR），壞掉的程式又上線了
+- 剛才壞掉的那個 commit 已經試過，不會再自動部署：這本來就成立
+- 但下一個綠燈的 commit 一出現就會部署。如果修正還沒進去（例如中間合併了別的 PR），壞掉的程式又上線了
 
-所以 rollback 會**釘住**：寫一個 `.git/cd-<env>.pin`，watcher 每一輪先看它，在就不部署、log 寫「釘在 X」。
+所以 rollback 會釘住：寫一個 `.git/cd-<env>.pin`，watcher 每一輪先看它，在就不部署、log 寫「釘在 X」。
 `--unpin` 才解除。手動部署（`./gradlew deploy`、`cd/apply.sh`）不看釘住：人自己決定要部署的，不擋。
 
 | 做法 | 選了嗎 | 理由 |
 |---|---|---|
-| **釘住檔（`.git/cd-<env>.pin`）** | ✅ | 跨平台（EC2 之後也跑同一支 watcher）；檔案內容寫著釘在哪版、什麼時候、從哪版退的；rollback 自動釘，忘不了 |
+| 釘住檔（`.git/cd-<env>.pin`） | ✅ | 跨平台（EC2 之後也跑同一支 watcher）；檔案內容寫著釘在哪版、什麼時候、從哪版退的；rollback 自動釘，忘不了 |
 | 停掉排程（`Disable-ScheduledTask talkcal-cd-local`） | 留著當緊急開關 | 只有 Windows；要另外記得；看不出為什麼被停 |
 | 在 master 上 `git revert` 壞掉的 commit | 修正的正道，但不是止血 | 要開 PR、等 CI、等 watcher，十幾分鐘；釘住之後慢慢做 |
 
@@ -127,7 +127,7 @@ watcher（`cd/triggers/watch.sh`）只部署「master 最新的綠燈 commit、�
 要先關掉自動同步，不然它馬上把叢集同步回 Git 上的最新版。2026 年有提案讓 auto-sync 認得 rollback
 （[argo-cd#29926](https://github.com/argoproj/argo-cd/pull/29926)），但預設仍然是關的。
 
-釘住只對**同一個 clone 的 watcher** 有效。在開發用的 clone 跑 rollback 時，`.git` 裡沒有 `cd-watch.sh`，腳本會提醒你換到部署用的 clone。
+釘住只對同一個 clone 的 watcher 有效。在開發用的 clone 跑 rollback 時，`.git` 裡沒有 `cd-watch.sh`，腳本會提醒你換到部署用的 clone。
 
 釘住也要 watcher 本身認得它：排程跑的是 `.git/cd-watch.sh` 這份副本，只在部署成功後才換成新版。
 這個功能合併後，watcher 要先成功部署過一次（副本換成有釘住檢查的版本），釘住才有效。確認：`grep -c '.pin' .git/cd-watch.sh` 不是 0；
@@ -138,7 +138,7 @@ watcher（`cd/triggers/watch.sh`）只部署「master 最新的綠燈 commit、�
 退的只有映像檔。`docker compose` 讀的還是目前 checkout（通常就是壞掉那版）的 `deploy/compose.yaml`：
 兩版之間 compose 檔改過的話（例如改了環境變數的名字），舊映像檔配上的是新的設定。
 
-`rollback.sh` 換之前會比對兩版的 compose 檔，有差異就列出來（驗證 S），**不會擋**：多半是無關的改動（註解、別的服務）。
+`rollback.sh` 換之前會比對兩版的 compose 檔，有差異就列出來（驗證 S），不會擋：多半是無關的改動（註解、別的服務）。
 看到差異且跟 app、web 有關時，改走「映像檔不在了」那一段：checkout 舊版本、用那一版的 compose 重新部署。
 不自動拿舊版的 compose 檔來用：相對路徑（`../backend`、`.env`）都綁在 checkout 上，拿出來單獨用反而容易錯。
 
@@ -177,18 +177,18 @@ EC2 沒有 watcher（手動部署），不用釘住。等 `ec2.env` 有了，換
 
 | 做法 | 多快 | 退回的是不是「當時那個東西」 | 選了嗎 |
 |---|---|---|---|
-| **換回機器上舊 tag 的映像檔** | 幾十秒（只等 healthcheck） | 是：同一個映像檔 | ✅ |
+| 換回機器上舊 tag 的映像檔 | 幾十秒（只等 healthcheck） | 是：同一個映像檔 | ✅ |
 | checkout 舊 commit、重 build | 幾分鐘 | 不一定：base image、依賴可能變了 | 映像檔不在時的退路 |
 | `git revert`、走一般流程 | 十幾分鐘（PR、CI、watcher） | 是新的 commit | 修正的正道，不是止血 |
 | 推到 registry（ECR）、用 digest 部署 | 跟第一個一樣 | 是，而且換機器也在 | 還沒有 registry；上 EKS（#58）時一起做 |
 
-業界的共識是：rollback 要能指到**不可變的**映像檔（commit tag 或 digest），`latest`、`local` 這種會被覆蓋的 tag，
+業界的共識是：rollback 要能指到不可變的映像檔（commit tag 或 digest），`latest`、`local` 這種會被覆蓋的 tag，
 「退回」拉到的可能還是壞掉的那個（[2026-09 的案例](https://oneuptime.com/blog/post/2026-09-26-rollout-undo-mutable-image-tag-bad-build/view)）。
 #25 之前的 `talkcal/app:local` 就是這個問題：每次部署都覆蓋同一個 tag，舊版本不存在。
 
 ### 為什麼 `--no-build --pull never`
 
-- 不帶 `--no-build`：compose 會拿**目前 checkout 的程式碼** build、貼上舊版本的 tag —— 名字是舊的，內容是新的，等於沒退
+- 不帶 `--no-build`：compose 會拿**目前 checkout 的程式碼** build、貼上舊版本的 tag，名字是舊的，內容是新的，等於沒退
 - 不帶 `--pull never`：機器上沒有的版本，compose 會去 Docker Hub 找 `talkcal/app`，那不是這個專案的 namespace
 - 兩個都帶了，又先檢查映像檔在不在：不在就在動任何東西之前結束（驗證 B、C）
 
@@ -219,7 +219,7 @@ GitHub 的 token 故意給壞的，不寫真的 Deployments；`--previous` 用�
 ### 2026-10-27：#25 合併後（master `3b28b34`）重驗
 
 映像檔：`c354003`（這個分支，照 `apply.sh` 的做法 build，label 帶 commit）、`3b28b34` 和 `v0.1.0`（#25 的 session 部署過的，
-**同一個 commit 兩個映像檔**）；另外造了 `3b28b34-dirty`（同一個 commit label）、只有 app 的 `halfonly`、healthcheck 永遠不過的 `broken`。
+同一個 commit 兩個映像檔）；另外造了 `3b28b34-dirty`（同一個 commit label）、只有 app 的 `halfonly`、healthcheck 永遠不過的 `broken`。
 機器上本來就有沒 label 的 `local`、`issue33`、`lic`。
 
 | | 情況 | 結果 |
@@ -237,7 +237,7 @@ GitHub 的 token 故意給壞的，不寫真的 Deployments；`--previous` 用�
 | K | `v0.1.0` → `c354003` | 成功；容器 label 的 revision 是 `c354003…` |
 | L | 釘住時，排程跑的 `.git/cd-watch.sh` | 「釘在 c354003 …，不自動部署」，結束碼 0 |
 | M | `--unpin` 後 watcher | 越過釘住，往下去問 GitHub |
-| P | `--previous`，假的 Deployments：現在這版、機器上沒有的 commit、`3b28b34`，都成功 | 選 **`v0.1.0`**（`3b28b34` 有三個映像檔：release tag 優先、`-dirty` 不挑）；寫一筆 Deployment 和 success 狀態 |
+| P | `--previous`，假的 Deployments：現在這版、機器上沒有的 commit、`3b28b34`，都成功 | 選 `v0.1.0`（`3b28b34` 有三個映像檔：release tag 優先、`-dirty` 不挑）；寫一筆 Deployment 和 success 狀態 |
 | Q | 反例：`--previous` 但 gh 連不上 | 擋下，結束碼 1，什麼都沒動 |
 | R | 指定 `3b28b34-dirty` | 允許，先印「內容不等於 3b28b34 這個 commit」 |
 | T | 反例：web、app 原本不同版（web `v0.1.0`、app `c354003`），退到 `broken` 失敗 | 各自換回原本的版本（`/code-review` 抓到：之前兩個都換成 app 的版本） |
@@ -249,7 +249,7 @@ GitHub 的 token 故意給壞的，不寫真的 Deployments；`--previous` 用�
 
 | | 情況 | 結果 |
 |---|---|---|
-| N | 跨 migration：`ae12882`（資料庫 V11）→ `aee2252`（程式到 V10） | 退成功、容器 healthy，Flyway 只警告 schema 比較新；**但新增行程 502**（`null value in column "owner_id"`），而且列表**讀得到別人的行程**（#104 之前沒有依使用者分開）—— 第 1 步那張表的兩列就是從這裡來的。這次的改動只動挑版本的邏輯，不影響這個結果，沒有重做 |
+| N | 跨 migration：`ae12882`（資料庫 V11）→ `aee2252`（程式到 V10） | 退成功、容器 healthy，Flyway 只警告 schema 比較新；**但新增行程 502**（`null value in column "owner_id"`），而且列表**讀得到別人的行程**（#104 之前沒有依使用者分開），第 1 步那張表的兩列就是從這裡來的。這次的改動只動挑版本的邏輯，不影響這個結果，沒有重做 |
 
 那次也抓到一個 bug：`--previous` 在 gh 連不上時沒停，拿空的 repo 一路往下查（Q 就是在驗它）。
 

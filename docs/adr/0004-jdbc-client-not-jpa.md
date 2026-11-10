@@ -18,7 +18,7 @@
 
 ## 決定
 
-**adapter 用 Spring 的 `JdbcClient` 手寫 SQL；交易用 `TransactionTemplate`。**
+adapter 用 Spring 的 `JdbcClient` 手寫 SQL；交易用 `TransactionTemplate`。
 
 `TransactionTemplate` 而不是 `@Transactional`：adapter 是 `final` 類別，CGLIB 代理包不了。
 一個 adapter 實作同一張表的讀、存、刪幾個 port，「這張表長什麼樣」的知識只在一個地方。
@@ -36,5 +36,5 @@
 
 - [JdbcCalendarEventAdapter](../../backend/src/main/java/io/github/andersonchen/talkcal/calendar/adapter/out/persistence/postgres/JdbcCalendarEventAdapter.java)：類別註解（JdbcClient、TransactionTemplate、一個類別實作三個 port）
 - [CalendarConfiguration](../../backend/src/main/java/io/github/andersonchen/talkcal/app/config/CalendarConfiguration.java)：組裝根把 `JdbcClient` 和 `TransactionTemplate` 交給 adapter
-- [README.md 的技術選型](../../README.md#技術選型)
+- [backend/README.md 的技術選型](../../backend/README.md#技術選型)
 - [db/migration](../../backend/src/main/resources/db/migration)：每支 SQL 開頭寫了理由

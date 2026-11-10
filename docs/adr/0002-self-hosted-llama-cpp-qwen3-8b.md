@@ -7,7 +7,7 @@
 ## 背景
 
 這個專案要學的是「LLM 串進一個產品之後，上線要顧慮什麼」，模型本身也要能觀測、壓測、部署。
-手上有一張 12GB VRAM 的顯卡（[deploy/compose.yaml](../../deploy/compose.yaml) 的註解）。
+手上有一張 12 GB VRAM 的顯卡（[deploy/compose.yaml](../../deploy/compose.yaml) 的註解）。
 
 ## 選項
 
@@ -21,14 +21,14 @@
 
 | 選項 | 實測 |
 |---|---|
-| 官方 `ghcr.io/ggml-org/llama.cpp:server-cuda` | 本機連 ghcr 0.17 MB/s，2.6GB 要 3.5 小時 |
+| 官方 `ghcr.io/ggml-org/llama.cpp:server-cuda` | 本機連 ghcr 0.17 MB/s，2.6 GB 要 3.5 小時 |
 | Docker Hub 的 `nvidia/cuda` 當底、自己編 | Docker Hub 10 MB/s，編約 10 分鐘 |
 
 ## 決定
 
-**llama.cpp 的 llama-server，模型 Qwen3-8B Q4_K_M，全部層放 GPU（`-ngl 99`）；映像檔兩段式自己 build，llama.cpp 釘版本、tarball 驗 SHA256。**
+llama.cpp 的 llama-server，模型 Qwen3-8B Q4_K_M，全部層放 GPU（`-ngl 99`）；映像檔兩段式自己 build，llama.cpp 釘版本、tarball 驗 SHA256。
 
-模型檔不直接 bind mount Windows 資料夾：實測只有約 20 MB/s，Qwen 載了 5 分鐘還卡在 275MB；
+模型檔不直接 bind mount Windows 資料夾：實測只有約 20 MB/s，Qwen 載了 5 分鐘還卡在 275 MB；
 改由一次性的 `model-seed` 複製進 volume，從 volume 讀約 1.8 GB/s，載入回到 2.2 秒（[deploy/README.md](../../deploy/README.md)）。
 
 ## 代價
