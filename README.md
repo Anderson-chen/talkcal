@@ -75,7 +75,7 @@
 5. 跑測試，部署 app 和前端：
 
    ```bash
-   cd backend && ./gradlew deploy
+   backend/gradlew -p backend deploy
    ```
 
 6. 開 <http://localhost:18080>。Swagger UI 在 <http://localhost:18090/swagger-ui.html>。
@@ -83,7 +83,7 @@
 不進容器、直接開發，各開一個終端機（從 repo 根目錄開始）。後端在 8090：
 
 ```bash
-cd backend && ./gradlew bootRun
+backend/gradlew -p backend bootRun
 ```
 
 前端在 5173，`/api` 轉給 8090。第一次先裝依賴：

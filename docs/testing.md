@@ -44,30 +44,30 @@ pnpm --dir web run e2e:ui
 
 ## 後端
 
-在 `backend/` 裡跑。
+在 repo 根目錄跑，PowerShell、Git Bash 都可以。
 
 單元測試和架構規則，不用起任何服務：
 
 ```bash
-./gradlew test
+backend/gradlew -p backend test
 ```
 
 整合測試，要開 Docker；模型（快速開始的 `llm-chat`）沒開的那幾支會跳過：
 
 ```bash
-./gradlew integrationTest
+backend/gradlew -p backend integrationTest
 ```
 
-AI eval，要開模型，報告在 `build/eval/report.md`：
+AI eval，要開模型，報告在 `backend/build/eval/report.md`：
 
 ```bash
-./gradlew eval
+backend/gradlew -p backend eval
 ```
 
 單元測試、整合測試再加上覆蓋率報告（見 [test-coverage.md](test-coverage.md)）：
 
 ```bash
-./gradlew test integrationTest jacocoTestReport
+backend/gradlew -p backend test integrationTest jacocoTestReport
 ```
 
 AI eval 沒設定時評本機的 Qwen3-8B；要評雲端的模型，設 `SPRING_AI_OPENAI_CHAT_BASEURL`、`SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL`、`SPRING_AI_OPENAI_APIKEY` 再跑。
