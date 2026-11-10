@@ -57,7 +57,7 @@ import java.util.stream.Collectors;
  * 歸檔（#54）要的三個 port 也在這裡：找出舊的、歸檔好之後刪掉、從歸檔還原回來 —— 一樣是這張表。
  *
  * 修改（UPDATE，#259）用樂觀鎖，不然晚存的分頁會把先存的改動蓋回去，兩邊還都看到「儲存成功」：
- * WHERE 除了 id、owner_id，每個欄位都要跟呼叫端「改之前看到的樣子」一樣（跟 deleteArchived 同一個寫法），
+ * WHERE 除了 id、owner_id，每個欄位都要跟呼叫端「改之前看到的樣子」一樣（SAME_CONTENT，跟 deleteArchived 共用），
  * 更新 0 列就是被改過了（或不存在），由 UpdateEventService 分成 409、404。
  * 不加 version 欄位的理由見 UpdateEventService。
  */
@@ -241,32 +241,20 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, SaveEvent
 
     @Override
     public boolean update(OwnerId owner, ScheduledEvent expected, CalendarEvent replacement) {
-        CalendarEvent before = expected.event();
         try {
-            // 比對和修改在同一句：兩個請求同時改同一筆時，後到的那句會等先到的 commit，再拿改過的那一版比對，比不上就改 0 列。
-            // location、note 可以是 NULL，用 IS NOT DISTINCT FROM（理由同 deleteArchived）
-            return jdbc.sql("""
+            // 比對和修改在同一句：兩個請求同時改同一筆時，後到的那句會等先到的 commit，再拿改過的那一版比對，比不上就改 0 列
+            return sameContent(jdbc.sql("""
                             UPDATE calendar_event
                             SET title = :title, start_at = :start, end_at = :end, category = :category,
                                 location = :location, note = :note
-                            WHERE owner_id = :owner AND id = :id
-                              AND title = :oldTitle AND start_at = :oldStart AND end_at = :oldEnd AND category = :oldCategory
-                              AND location IS NOT DISTINCT FROM :oldLocation AND note IS NOT DISTINCT FROM :oldNote
-                            """)
-                    .param("owner", owner.value())
-                    .param("id", expected.id().value())
+                            WHERE
+                            """ + SAME_CONTENT), owner, expected)
                     .param("title", replacement.title())
                     .param("start", replacement.start())
                     .param("end", replacement.end())
                     .param("category", replacement.category().name())
                     .param("location", replacement.location().orElse(null), Types.VARCHAR)
                     .param("note", replacement.note().orElse(null), Types.VARCHAR)
-                    .param("oldTitle", before.title())
-                    .param("oldStart", before.start())
-                    .param("oldEnd", before.end())
-                    .param("oldCategory", before.category().name())
-                    .param("oldLocation", before.location().orElse(null), Types.VARCHAR)
-                    .param("oldNote", before.note().orElse(null), Types.VARCHAR)
                     .update() > 0;
         } catch (DataAccessException e) {
             throw new IllegalStateException("修改行程失敗：" + expected.id(), e);
@@ -305,23 +293,10 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, SaveEvent
     public int deleteArchived(OwnerId owner, List<ScheduledEvent> archived) {
         try {
             // 每一欄都要跟歸檔那份一樣才刪（DeleteArchivedEventsPort 的約定）：讀出來到現在之間被改過的那筆，
-            // 歸檔裡存的不是它現在的樣子，刪了就丟掉這次修改。一筆一句：一天一次、一包幾十筆，不值得為它組一句大 SQL。
-            // location、note 可以是 NULL，用 IS NOT DISTINCT FROM（NULL = NULL 在 SQL 裡不成立）
-            return archived.stream().mapToInt(event -> jdbc.sql("""
-                            DELETE FROM calendar_event
-                            WHERE owner_id = :owner AND id = :id
-                              AND title = :title AND start_at = :start AND end_at = :end AND category = :category
-                              AND location IS NOT DISTINCT FROM :location AND note IS NOT DISTINCT FROM :note
-                            """)
-                    .param("owner", owner.value())
-                    .param("id", event.id().value())
-                    .param("title", event.event().title())
-                    .param("start", event.event().start())
-                    .param("end", event.event().end())
-                    .param("category", event.event().category().name())
-                    .param("location", event.event().location().orElse(null), Types.VARCHAR)
-                    .param("note", event.event().note().orElse(null), Types.VARCHAR)
-                    .update()).sum();
+            // 歸檔裡存的不是它現在的樣子，刪了就丟掉這次修改。一筆一句：一天一次、一包幾十筆，不值得為它組一句大 SQL
+            return archived.stream()
+                    .mapToInt(event -> sameContent(jdbc.sql("DELETE FROM calendar_event WHERE " + SAME_CONTENT), owner, event).update())
+                    .sum();
         } catch (DataAccessException e) {
             throw new IllegalStateException("刪除已歸檔的行程失敗（" + archived.size() + " 筆）", e);
         }
@@ -342,6 +317,29 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, SaveEvent
     }
 
     private record OwnedRow(OwnerId owner, Row row) {
+    }
+
+    /**
+     * 「這個人的這一筆，而且每個欄位都還是 expected 的樣子」：修改（樂觀鎖）和刪除已歸檔的都靠它，欄位清單只寫一份。
+     * 加欄位時加在這裡，兩邊一起有保護。location、note 可以是 NULL，用 IS NOT DISTINCT FROM（NULL = NULL 在 SQL 裡不成立）。
+     * 參數名帶 old 前綴，不跟 UPDATE 的 SET 撞名；值由 sameContent 綁上。
+     */
+    private static final String SAME_CONTENT = """
+            owner_id = :owner AND id = :id
+              AND title = :oldTitle AND start_at = :oldStart AND end_at = :oldEnd AND category = :oldCategory
+              AND location IS NOT DISTINCT FROM :oldLocation AND note IS NOT DISTINCT FROM :oldNote
+            """;
+
+    private static JdbcClient.StatementSpec sameContent(JdbcClient.StatementSpec sql, OwnerId owner, ScheduledEvent expected) {
+        CalendarEvent event = expected.event();
+        return sql.param("owner", owner.value())
+                .param("id", expected.id().value())
+                .param("oldTitle", event.title())
+                .param("oldStart", event.start())
+                .param("oldEnd", event.end())
+                .param("oldCategory", event.category().name())
+                .param("oldLocation", event.location().orElse(null), Types.VARCHAR)
+                .param("oldNote", event.note().orElse(null), Types.VARCHAR);
     }
 
     /**

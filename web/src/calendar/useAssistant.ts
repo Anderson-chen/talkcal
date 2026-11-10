@@ -35,17 +35,18 @@ export interface Proposal {
 /** 修改、刪除卡片的狀態：還沒決定、已經改（刪）好了、使用者按了取消 */
 export type ActionStatus = 'pending' | 'done' | 'dismissed'
 
-export interface ChangeCard {
-  change: AssistantChange
+interface ActionCard {
   status: ActionStatus
   // 送出失敗的原因（例如 409：卡片出現之後那筆被改過了），顯示在卡片下面
   error: string | null
 }
 
-export interface RemovalCard {
+export interface ChangeCard extends ActionCard {
+  change: AssistantChange
+}
+
+export interface RemovalCard extends ActionCard {
   event: SavedEvent
-  status: ActionStatus
-  error: string | null
 }
 
 export interface ChatMessage {
@@ -295,17 +296,22 @@ export function useAssistant(calendar: CalendarState) {
   // ── 修改、刪除卡片（#259）──────────────────────────────
   // 送出中再按不會送第二次（跟「加入行事曆」共用 saving：同一時間只做一件事，畫面上的按鈕一起停用）
 
-  /** 照卡片改。卡片出現之後那筆被改過（409）或已經不在了（404），顯示原因、卡片留著；不自動重試，重試等於拿舊的樣子再蓋一次 */
-  const confirmChange = oneAtATime(saving, async (card: ChangeCard) => {
+  // 照卡片做一件事：成功就標成 done；失敗把原因寫在卡片上、卡片留著。不自動重試：
+  // 修改失敗多半是卡片出現之後那筆被改過（409），重試等於拿舊的樣子再蓋一次
+  async function act(card: ActionCard, action: () => Promise<unknown>) {
     if (card.status !== 'pending') return
     card.error = null
     try {
-      await calendar.update(card.change.eventId, card.change.before, card.change.after)
+      await action()
       card.status = 'done'
     } catch (e) {
       card.error = message(e)
     }
-  })
+  }
+
+  /** 照卡片改 */
+  const confirmChange = oneAtATime(saving, (card: ChangeCard) =>
+    act(card, () => calendar.update(card.change.eventId, card.change.before, card.change.after)))
 
   /** 帶著「要改成的樣子」打開表單，使用者自己調；存好了這張卡片就算「已修改」 */
   function editChange(card: ChangeCard) {
@@ -316,18 +322,9 @@ export function useAssistant(calendar: CalendarState) {
   }
 
   /** 照卡片刪。已經不在了也算刪好了（calendar.remove 的規則） */
-  const confirmRemoval = oneAtATime(saving, async (card: RemovalCard) => {
-    if (card.status !== 'pending') return
-    card.error = null
-    try {
-      await calendar.remove(card.event.id)
-      card.status = 'done'
-    } catch (e) {
-      card.error = message(e)
-    }
-  })
+  const confirmRemoval = oneAtATime(saving, (card: RemovalCard) => act(card, () => calendar.remove(card.event.id)))
 
-  function dismiss(card: ChangeCard | RemovalCard) {
+  function dismiss(card: ActionCard) {
     if (card.status === 'pending') card.status = 'dismissed'
   }
 

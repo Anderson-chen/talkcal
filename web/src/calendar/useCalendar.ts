@@ -127,20 +127,23 @@ export function useCalendar() {
    */
   async function add(drafts: EventFields[], idempotencyKey?: string): Promise<SavedEvent[]> {
     const saved = await addEvents(drafts, idempotencyKey)
+    showSaved(saved)
+    return saved
+  }
+
+  // 存好之後（新增、修改共用）：跳到第一筆那天、打開被篩掉的分類、重讀這一頁
+  function showSaved(saved: SavedEvent[]) {
     const shownAgain = { ...hidden.value }
     for (const e of saved) delete shownAgain[e.category]
     hidden.value = shownAgain
     if (saved.length) pickDate(saved[0].start.slice(0, 10))
     reload()
-    return saved
   }
 
-  /** 改成 event 的樣子（#259）。跟新增一樣：跳到那天、改進去的分類被篩掉了就打開它、重讀這一頁 */
+  /** 改成 event 的樣子（#259）。存好之後跟新增一樣（showSaved） */
   async function update(id: string, expected: EventFields, event: EventFields): Promise<SavedEvent> {
     const saved = await updateEvent(id, expected, event)
-    if (hidden.value[saved.category]) hidden.value = { ...hidden.value, [saved.category]: false }
-    pickDate(saved.start.slice(0, 10))
-    reload()
+    showSaved([saved])
     return saved
   }
 
