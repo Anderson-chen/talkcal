@@ -52,7 +52,7 @@ README 的段落標題用中文專案常見的說法，不要從英文直譯：�
 - 跨好幾個資料夾的放 `docs/`，例如 SLO、告警、架構圖；成套的也放 `docs/`：`adr/`、`runbooks/`、`postmortems/`、`drills/`。
 - 一份文件只由它所在資料夾的 README 列進索引，其他文件在句子裡連過去：`docs/README.md` 只列 `docs/` 底下的文件。
 - runbook 例外：事故當下不要叫人跳頁，指令可以每份都寫。
-- 設計稿例外：畫面設計稿只對應 `web/`，但原檔放 `docs/design/`。`web/` 整個是前端映像檔的 build context，`prototype.html` 有 9 MB。
+- 外部匯出的原檔例外：從別的工具匯出、不是這個專案寫的檔案（例如畫面設計稿），就算只對應一個資料夾，也放 `docs/design/`。放進程式的資料夾的話，build context、CodeQL 掃描都要另外排除它。
 
 ## 改寫舊文字時
 
