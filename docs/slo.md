@@ -3,13 +3,13 @@
 dashboard 看得到數字，但數字要跟一條線比才知道該不該處理。這份文件定那條線：量什麼（SLI）、目標多少（SLO）、
 可以壞多少（error budget）、燒太快時怎麼叫人（burn-rate 告警）。數字都是從 `perf/` 的實測推出來的，推法寫在每一條旁邊。
 
-| 東西 | 在哪 |
-|------|------|
-| 錄製規則（算 SLI、burn rate、budget） | [ops/mimir/rules/anonymous/slo.yaml](../ops/mimir/rules/anonymous/slo.yaml) |
-| 告警規則（burn rate 太高就叫人） | [ops/grafana/provisioning/alerting/slo-burn-rate.yaml](../ops/grafana/provisioning/alerting/slo-burn-rate.yaml) |
-| 儀表板 talkcal — SLO | [ops/grafana/provisioning/dashboards/talkcal-slo.json](../ops/grafana/provisioning/dashboards/talkcal-slo.json)，<http://localhost:3000/d/talkcal-slo> |
-| 延遲門檻的 bucket | [application.properties](../backend/src/main/resources/application.properties) 的 `management.metrics.distribution.slo.http.server.requests` |
-| 平常流量／量基準的腳本 | [perf/slo.js](../perf/slo.js) |
+| 東西 | 做什麼 | 在哪 |
+|------|--------|------|
+| 錄製規則 | Mimir 的 ruler 每分鐘算好 SLI、burn rate、budget，寫回成 `slo:*` 序列 | [ops/mimir/rules/anonymous/slo.yaml](../ops/mimir/rules/anonymous/slo.yaml) |
+| 告警規則 | 讀 `slo:burn_rate:*`，長短兩個視窗都超過門檻才觸發 | [ops/grafana/provisioning/alerting/slo-burn-rate.yaml](../ops/grafana/provisioning/alerting/slo-burn-rate.yaml) |
+| 儀表板 talkcal — SLO | budget 還剩多少、燒多快、告警狀態 | [ops/grafana/provisioning/dashboards/talkcal-slo.json](../ops/grafana/provisioning/dashboards/talkcal-slo.json)，<http://localhost:3000/d/talkcal-slo> |
+| 延遲門檻的 bucket | 多兩個剛好落在門檻上的 bucket（300 ms、8 秒） | [application.properties](../backend/src/main/resources/application.properties) 的 `management.metrics.distribution.slo.http.server.requests` |
+| 平常流量的腳本 | 送平常流量，量 SLO 的基準、驗 burn-rate 告警 | [perf/slo.js](../perf/slo.js) |
 
 ## 四個 SLO
 
@@ -108,9 +108,7 @@ burn rate 是比例。一個小時只有 10 個請求、其中 1 個 502，比�
 
 ### 通知送去哪
 
-這份只寫規則。送 email 的 contact point 和 notification policy 在同一個資料夾的 `contact-points.yaml`、`policies.yaml`（#121）：
-快燒、慢燒都寄到同一個信箱，同一條規則的告警合成一封，沒修好每 4 小時再提醒一次。
-嚴重度用同一套值：快燒 `severity=critical`（Workbook 說的 page）、慢燒 `severity=warning`（ticket），之後要分流（例如快燒另外推手機）時 policy 比對這個標籤就好。
+這份只寫規則。快燒是 `critical`、慢燒是 `warning`，兩種怎麼寄、多久提醒一次、之後怎麼分流，見 [docs/alerts.md](alerts.md#通知)。
 沒設 SMTP 時不寄信，規則照樣評估、狀態在 Grafana 的 Alerting → Alert rules 和 SLO 儀表板最下面看得到。
 
 ## 驗證：故障讓告警響、正常時不響

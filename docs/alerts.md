@@ -33,7 +33,7 @@ Google SRE 的原則是對症狀告警、不對原因告警：原因有一百種
 | `critical` | 現在就要處理（Workbook 說的 page） | email（`policies.yaml`） |
 | `warning` | 上班時間處理（Workbook 說的 ticket） | email（`policies.yaml`） |
 
-兩種 severity 現在都寄同一個信箱：只有一個人、一個管道，分流沒有意義。
+兩種 severity 現在都寄同一個信箱（`contact-points.yaml`）：只有一個人、一個管道，分流沒有意義。
 規則都已經帶好 `severity`，之後要讓 `critical` 打電話（PagerDuty、Grafana OnCall）時，只要在 `policies.yaml` 加一條比對 `severity=critical` 的子 policy，規則不必動。
 寄信節奏：同一條規則的告警合成一封、第一次等 30 秒湊批、新告警加入最快 5 分鐘再寄、沒修好每 4 小時提醒（`policies.yaml`）；恢復時也寄一封。
 

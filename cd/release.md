@@ -123,15 +123,16 @@ gh release create v0.2.0 --verify-tag --generate-notes   # 依合併的 PR 自�
 
 ### 為什麼是手動，不是 workflow 自動打
 
-| | 每次合併自動打（semantic-release、release-please） | 手動跑 cd/release.sh（選這個） |
+| | workflow 自動打（semantic-release、release-please） | 手動跑 cd/release.sh（選這個） |
 |---|---|---|
-| 版號怎麼決定 | 從 commit 訊息推（要 Conventional Commits 的 `feat:`、`fix:`） | 人決定 |
-| 「這一版確認過」 | 做不到：合併當下還沒部署 | 部署、看過之後才打 |
+| 版號怎麼決定 | 從 commit 標題推（Conventional Commits 的 `feat:`、`fix:`） | 人決定 |
+| 「這一版確認過」 | 做不到：兩個都在合併後、部署前就打 tag（release-please 是合併它的 release PR 之後），那時還沒人看過 | 部署、看過之後才打 |
 | 要的權限 | workflow 要能推 tag（`contents: write`） | 用自己的 `gh` 登入 |
+| 要另外設定的 | release-please 的 PR 沒連 issue，[`pr-issue`](../.github/workflows/pr-issue.yml) 檢查要像 Renovate 一樣開例外 | 不用 |
 | 適合 | 發佈套件、release 很頻繁的團隊 | 一個人、偶爾 release 的服務 |
 
-commit 訊息用的是這個 repo 自己的 `[feat]`、`[fix]`（見 CLAUDE.md），不是 Conventional Commits，自動工具也推不出版號。
-檢查交給腳本，按下去的時機留給人。
+commit 標題照 `.claude/rules/commit.md` 寫成 `類型(範圍):`，跟 Conventional Commits 同一個格式，自動工具推得出版號。
+不用它們是因為 tag 要打在確認過的 commit 上：檢查交給腳本，按下去的時機留給人。
 
 ## 給 rollback（#19）的介面
 
