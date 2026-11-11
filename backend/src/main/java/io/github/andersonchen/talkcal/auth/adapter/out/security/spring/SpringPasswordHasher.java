@@ -1,4 +1,4 @@
-package io.github.andersonchen.talkcal.auth.adapter.out.security;
+package io.github.andersonchen.talkcal.auth.adapter.out.security.spring;
 
 import io.github.andersonchen.talkcal.auth.application.port.out.HashPasswordPort;
 

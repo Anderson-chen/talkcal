@@ -19,7 +19,7 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
  * 但擋不住 ParseEventsService 去 import 一個 Spring AI 的 Adapter ——
  * 那樣寫編譯器一聲不吭，測試照樣全綠，架構就是這樣一點一點爛掉的。
  *
- * 規則全部寫成 noClasses(...)，也就是「不准出現」的形式。
+ * 規則大多寫成 noClasses(...)，也就是「不准出現」的形式。
  * 每條都帶 because(...)，違規時錯誤訊息會直接說出理由，
  * 不必回來翻這個檔案才知道為什麼不行。
  *
@@ -63,6 +63,8 @@ class ArchitectureTest {
     /**
      * 兩側的 adapter 互不認識。
      * 入口那側（目前是 HTTP 的 controller 和 AI 助理的工具）換成別的、模型換成別家，都不該牽動另一側。
+     *
+     * onlyTheCompositionRootMayKnowOutboundAdapters 也擋得到同一種 import；這條另外留著，錯誤訊息才會講 inbound 該怎麼做。
      */
     @ArchTest
     static final ArchRule inboundAdaptersMustNotDependOnOutboundAdapters =
@@ -71,45 +73,49 @@ class ArchitectureTest {
                     .because("inbound 只該透過 port 使喚 core，core 才決定要不要呼叫 outbound");
 
     /**
-     * 只有組裝根裡的 app.config、app.job 可以認識具體的實作。下面兩條是同一句話套在 adapter.out 的兩個子樹上。
-     *
-     * adapter.out 底下每個 package 就是「某一種往外的實作們」：
-     * persistence 放 Save / Load / DeleteEventPort 的（和助理的對話記憶）、extraction 放 ExtractEventsPort 的，
-     * 供應商一律再往下一層（persistence.postgres、extraction.springai）。
-     *
+     * 只有組裝根裡的 app.config、app.job 可以認識 adapter.out 的具體類別。
      * 守住的是「換一行 new 就能換掉實作」這個承諾 —— 一旦有第二個地方 import 它，那個承諾就破了。
+     *
+     * adapter.out 底下每個 package 是「某一種往外的實作們」，例如 persistence 放 Save / Load / DeleteEventPort 的。
+     * 這條不點名子樹，新加的子樹不用另外寫規則就被守住；一個子樹寫一條的時候，auth 的 security 就漏掉了（#268）。
+     *
+     * adapter.out 裡的類別互相依賴不受這條管，子樹之間互不認識由 outboundAdapterSubtreesMustNotDependOnEachOther 管。
+     * app.job 的 AssistantMemoryArchive 也用 archive 的零件（ArchiveBucket、JsonLinesGzip）：它在組裝根裡，所以可以。
      */
     @ArchTest
-    static final ArchRule onlyTheCompositionRootMayKnowThePersistenceAdapters =
-            noClasses().that().resideOutsideOfPackages(CONFIG, JOB, "..adapter.out.persistence..")
-                    .should().dependOnClassesThat().resideInAPackage("..adapter.out.persistence..")
-                    .because("存在哪（PostgreSQL、別的資料庫、記憶體）是組裝時的決定；"
-                            + "SQL 和表的長相只該出現在 persistence 這一包");
+    static final ArchRule onlyTheCompositionRootMayKnowOutboundAdapters =
+            noClasses().that().resideOutsideOfPackages(CONFIG, JOB, "..adapter.out..")
+                    .should().dependOnClassesThat().resideInAPackage("..adapter.out..")
+                    .because("用哪一家的實作（PostgreSQL、哪顆模型、S3、哪套密碼雜湊）是組裝時的決定；"
+                            + "別的地方一認識具體類別，換實作就不只是改 app.config");
 
-    // ExtractEventsPort 的實作們（目前只有 Spring AI 那個）
+    /**
+     * adapter.out 的子樹之間互不認識。
+     *
+     * 每個子樹的細節只該出現在自己那一包，例如 SQL 和表的長相只在 persistence，
+     * 日期表、JSON Schema 這些只對某顆模型有效的手法只在 extraction。
+     * 要兩個子樹合作，由 core 的 use case 分別呼叫兩個 port。
+     *
+     * ROOT.(*).adapter.out.(*).. 把每個模組的每個子樹各切成一片，calendar 的 persistence 和 auth 的 persistence 是兩片。
+     */
     @ArchTest
-    static final ArchRule onlyTheCompositionRootMayKnowTheExtractionAdapters =
-            noClasses().that().resideOutsideOfPackages(CONFIG, JOB, "..adapter.out.extraction..")
-                    .should().dependOnClassesThat().resideInAPackage("..adapter.out.extraction..")
-                    .because("用哪個模型解析行程是組裝時的決定；日期表、JSON Schema 這些只對某顆模型有效的手法，"
-                            + "只該出現在 extraction 這一包");
+    static final ArchRule outboundAdapterSubtreesMustNotDependOnEachOther =
+            slices().matching(ROOT + ".(*).adapter.out.(*)..")
+                    .should().notDependOnEachOther()
+                    .because("一個子樹的細節漏進另一個子樹，換掉其中一家就得改兩包");
 
-    // EventArchivePort 的實作們（目前只有 S3 那個，#54）和它的零件（ArchiveBucket、JsonLinesGzip）。
-    // app.job 的 AssistantMemoryArchive 也用這兩個零件：它在組裝根裡，所以可以
+    /**
+     * adapter.out 的類別一律放在「子樹.供應商」這一層，例如 persistence.postgres、security.spring。
+     * 第二家供應商來的時候放在隔壁，不用先搬動第一家。
+     *
+     * 這條也補上一道縫：直接放在 adapter.out 底下的類別不屬於任何子樹，
+     * onlyTheCompositionRootMayKnowOutboundAdapters 放過它，outboundAdapterSubtreesMustNotDependOnEachOther 也切不到它。
+     */
     @ArchTest
-    static final ArchRule onlyTheCompositionRootMayKnowTheArchiveAdapters =
-            noClasses().that().resideOutsideOfPackages(CONFIG, JOB, "..adapter.out.archive..")
-                    .should().dependOnClassesThat().resideInAPackage("..adapter.out.archive..")
-                    .because("歸檔放在哪（S3、別家的物件儲存）、壓成什麼格式是組裝時的決定；"
-                            + "bucket、key 的排法只該出現在 archive 這一包");
-
-    // RecordUsagePort 的實作們（目前只有 Micrometer 那個，#36）
-    @ArchTest
-    static final ArchRule onlyTheCompositionRootMayKnowTheMetricsAdapters =
-            noClasses().that().resideOutsideOfPackages(CONFIG, JOB, "..adapter.out.metrics..")
-                    .should().dependOnClassesThat().resideInAPackage("..adapter.out.metrics..")
-                    .because("用量記到哪（Micrometer、別的分析系統）是組裝時的決定；"
-                            + "指標名稱和標籤只該出現在 metrics 這一包");
+    static final ArchRule outboundAdaptersSitUnderAVendorPackage =
+            classes().that().resideInAPackage("..adapter.out..")
+                    .should().resideInAPackage("..adapter.out.*.*..")
+                    .because("供應商各自一包，換一家只動一包；放在子樹或 adapter.out 底下的類別看不出是哪一家的");
 
     /**
      * Adapter 這個字尾是有意義的，不是隨手加的裝飾。
