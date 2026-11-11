@@ -49,7 +49,7 @@ class ArchiveControllerTest {
 
     MockMvc mockMvc;
 
-    // 跟 CalendarControllerTest 一樣：每個請求預設已登入、帶著 CSRF token；認證本身在 SecurityTest 測
+    // 跟 CalendarControllerTest 一樣：每個請求預設已登入、帶著 CSRF token
     @BeforeEach
     void signedIn() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context)
