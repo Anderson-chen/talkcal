@@ -86,7 +86,7 @@ class ArchitectureTest {
     static final ArchRule onlyTheCompositionRootMayKnowOutboundAdapters =
             noClasses().that().resideOutsideOfPackages(CONFIG, JOB, "..adapter.out..")
                     .should().dependOnClassesThat().resideInAPackage("..adapter.out..")
-                    .because("用哪一家的實作（PostgreSQL、哪顆模型、S3）是組裝時的決定；"
+                    .because("用哪一家的實作（PostgreSQL、哪顆模型、S3、哪套密碼雜湊）是組裝時的決定；"
                             + "別的地方一認識具體類別，換實作就不只是改 app.config");
 
     /**
