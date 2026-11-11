@@ -7,6 +7,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.FreeSlot;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.SessionPlanner;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindEventUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlotsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
@@ -32,7 +33,7 @@ import java.util.stream.Collectors;
  * 在架構上，這個類別是 inbound adapter —— 跟 CalendarController 同一個角色，只是呼叫端從瀏覽器換成了模型。
  * 它只認得 use case（port.in），不認得資料庫、不認得抽取的實作；規則一條都不在這裡。
  *
- * 每個請求建一份新的：propose_events、propose_change、propose_removal 提議的新增、修改、刪除收在這裡，
+ * 每個請求建一份新的：propose_events、plan_events、propose_change、propose_removal 提議的新增、修改、刪除收在這裡，
  * 請求結束後交給畫面顯示成卡片。
  * 擁有者也跟著這一份走，不是模型給的參數：查誰的行事曆由登入者決定，模型再怎麼被誘導也查不到、改不到別人的（#104）。
  * 提議不等於動手 —— 存檔、修改、刪除一定是使用者在畫面上按確認（走 POST、PUT、DELETE /events）。
@@ -52,6 +53,8 @@ public final class CalendarTools {
     private final List<Change> changes = new ArrayList<>();
     private final List<ScheduledEvent> removals = new ArrayList<>();
     private boolean checkedCalendar;
+    // 這一輪排過了沒（plan_events）：模型排完會再叫一次、把日期往後挪，同一天就排出兩張（實測）
+    private boolean planned;
 
     // 使用者講過的話裡，表示時段的寫法：早上、上午、中午、下午、晚上、傍晚、清晨、凌晨、半夜、宵夜、早餐、晚餐、晨跑……
     // 都至少有其中一個字；或是 AM/PM；或是 13～23 點的 24 小時制（「19點」「19:00」）
@@ -254,6 +257,53 @@ public final class CalendarTools {
                 return "這段期間的這個時段沒有空檔。";
             }
             return lines(slots.stream().map(CalendarTools::describe).toList());
+        } catch (DateTimeParseException | IllegalArgumentException e) {
+            return "參數不對（" + e.getMessage() + "）。日期格式是 yyyy-MM-dd、to 要晚於 from、分鐘數要是正的。";
+        }
+    }
+
+    // plan_events 一次最多排幾天：「這學期每天都幫我排」這種會一次出上百張卡片
+    static final int MAX_PLAN_DAYS = 14;
+
+    /**
+     * 使用者叫助理排時間（#261）：查空檔、由 SessionPlanner 挑時段、出新增卡片，一次做完。
+     *
+     * 為什麼不讓模型自己挑：原本要它 find_free_slots → 自己挑 → propose_events，qwen3-8b 常停在中間，
+     * 用文字列出時段再問「要新增嗎？」，使用者回「好」又反問幾點。加規則、加範例、加提醒都只修好一半，還弄壞別的題目。
+     * 模型只要決定「做什麼、哪幾天、多長」，幾點由程式挑，這一個工具它叫得穩。每天一段，理由見 SessionPlanner。
+     *
+     * 時間是程式從空檔裡挑的，所以不經過 propose_events 的「沒講早晚就先問」：使用者沒講幾點，沒有早晚可以問。
+     */
+    @Tool(name = "plan_events", description = "使用者叫你幫忙排時間（幫我排、幫我規劃、幫我找時間做某件事）時用："
+            + "行事曆會在空檔裡挑時段，畫面顯示卡片讓使用者確認（不會存檔）。")
+    public String planEvents(
+            @ToolParam(description = "要做的事，例如「讀書」") String title,
+            @ToolParam(description = "開始日期（含），格式 yyyy-MM-dd") String from,
+            @ToolParam(description = "結束日期（不含），格式 yyyy-MM-dd；排明天一天就填後天，排明天、後天兩天就填大後天") String to,
+            @ToolParam(description = "每段幾分鐘，沒講就填 120") Integer minutes,
+            @ToolParam(description = "時段：MORNING 早上 08–12、AFTERNOON 下午 12–18、EVENING 晚上 18–22、ANYTIME 不限 08–22；沒講就填 ANYTIME") DayPeriod period) {
+        if (title == null || title.isBlank()) {
+            return "沒有收到要做的事，請問使用者要排什麼。";
+        }
+        if (planned) {
+            return "這一輪已經排過了，卡片已經顯示，不要再排一次。請使用者看卡片，不合意可以在卡片上改或取消。";
+        }
+        try {
+            LocalDate start = LocalDate.parse(from);
+            LocalDate end = LocalDate.parse(to);
+            if (end.isAfter(start.plusDays(MAX_PLAN_DAYS))) {
+                return "一次最多排 " + MAX_PLAN_DAYS + " 天，請縮短日期範圍，或請使用者分幾次排。";
+            }
+            Duration length = Duration.ofMinutes(minutes == null ? 120 : minutes);
+            List<FreeSlot> free = findFreeSlots.findFreeSlots(owner, start, end, period == null ? DayPeriod.ANYTIME : period, length);
+            List<CalendarEvent> sessions = SessionPlanner.plan(free, length).stream()
+                    .map(s -> new CalendarEvent(title.strip(), s.start(), s.end())).toList();
+            if (sessions.isEmpty()) {
+                return "這段期間沒有夠長的空檔，沒有提議。請照實告訴使用者，問他要不要換日期、換時段或縮短時間。";
+            }
+            proposals.addAll(sessions);
+            planned = true;
+            return "已顯示 " + sessions.size() + " 張卡片，等使用者確認：\n" + lines(sessions.stream().map(CalendarTools::describe).toList());
         } catch (DateTimeParseException | IllegalArgumentException e) {
             return "參數不對（" + e.getMessage() + "）。日期格式是 yyyy-MM-dd、to 要晚於 from、分鐘數要是正的。";
         }

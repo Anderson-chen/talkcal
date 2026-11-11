@@ -326,6 +326,83 @@ class CalendarToolsTest {
     }
 
     @Nested
+    @DisplayName("plan_events（#261）：在空檔裡挑時段、出新增卡片")
+    class PlanTool {
+
+        @Test
+        @DisplayName("查登入者的空檔（長度就是每段的長度），挑出的時段變成新增卡片，標題是要做的事")
+        void plansIntoFreeSlots() {
+            free = (owner, start, end, period, minimum) -> {
+                freeSlotCalls.add(new Object[] {owner, start, end, period, minimum});
+                return List.of(new FreeSlot(LocalDateTime.of(2026, 10, 7, 10, 0), LocalDateTime.of(2026, 10, 7, 18, 0)),
+                        new FreeSlot(LocalDateTime.of(2026, 10, 8, 8, 0), LocalDateTime.of(2026, 10, 8, 22, 0)));
+            };
+            userSaid = List.of("明天和後天要讀書，幫我規劃一下兩天的空檔", "好");
+            CalendarTools tools = tools();
+
+            String said = tools.planEvents(" 讀書 ", "2026-10-07", "2026-10-09", null, null);
+
+            assertEquals(List.of(new CalendarEvent("讀書", LocalDateTime.of(2026, 10, 7, 10, 0), LocalDateTime.of(2026, 10, 7, 12, 0)),
+                    new CalendarEvent("讀書", LocalDateTime.of(2026, 10, 8, 8, 0), LocalDateTime.of(2026, 10, 8, 10, 0))), tools.proposals());
+            assertTrue(said.startsWith("已顯示 2 張卡片"), said);
+            assertEquals(1, freeSlotCalls.size());
+            Object[] call = freeSlotCalls.getFirst();
+            assertEquals(OWNER, call[0]);
+            assertEquals(DayPeriod.ANYTIME, call[3]);
+            assertEquals(Duration.ofMinutes(120), call[4], "沒講多長就排兩小時，空檔也要至少這麼長");
+        }
+
+        @Test
+        @DisplayName("同一輪叫第二次（模型把日期往後挪又排一次）：不再加卡片，同一天不會出現兩張")
+        void secondPlanInSameTurnIsIgnored() {
+            CalendarTools tools = tools();
+
+            tools.planEvents("讀書", "2026-10-07", "2026-10-09", 120, null);
+            String said = tools.planEvents("讀書", "2026-10-08", "2026-10-10", 120, null);
+
+            assertEquals(1, tools.proposals().size());
+            assertTrue(said.contains("已經排過了"), said);
+        }
+
+        @Test
+        @DisplayName("反例：沒有夠長的空檔 → 不提議，請模型照實說")
+        void noRoomProposesNothing() {
+            free = (owner, start, end, period, minimum) -> List.of();
+            CalendarTools tools = tools();
+
+            String said = tools.planEvents("讀書", "2026-10-07", "2026-10-09", 120, DayPeriod.AFTERNOON);
+
+            assertTrue(tools.proposals().isEmpty());
+            assertTrue(said.contains("沒有夠長的空檔"), said);
+        }
+
+        @Test
+        @DisplayName("反例：超過 14 天、沒講要做什麼、日期格式錯 → 不查也不提議")
+        void rejectsOutOfRangeRequests() {
+            CalendarTools tools = tools();
+
+            assertTrue(tools.planEvents("讀書", "2026-10-07", "2026-10-22", 60, null).contains("最多排 14 天"));
+            assertTrue(tools.planEvents(" ", "2026-10-07", "2026-10-09", 60, null).contains("要排什麼"));
+            assertTrue(tools.planEvents("讀書", "下週三", "2026-10-09", 60, null).contains("參數不對"));
+            assertTrue(tools.proposals().isEmpty());
+            assertTrue(freeSlotCalls.isEmpty());
+        }
+
+        @Test
+        @DisplayName("使用者沒講幾點，程式挑的 09:00 不經過「沒講早晚就先問」：照常出卡片")
+        void plannedTimesSkipMorningOrEveningCheck() {
+            free = (owner, start, end, period, minimum) -> List.of(
+                    new FreeSlot(LocalDateTime.of(2026, 10, 7, 9, 0), LocalDateTime.of(2026, 10, 7, 12, 0)));
+            userSaid = List.of("明天要讀書，幫我排");
+            CalendarTools tools = tools();
+
+            tools.planEvents("讀書", "2026-10-07", "2026-10-08", 120, null);
+
+            assertEquals(1, tools.proposals().size());
+        }
+    }
+
+    @Nested
     @DisplayName("propose_events：沒講早上還是晚上就不提議")
     class MorningOrEvening {
 
