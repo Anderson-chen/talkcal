@@ -121,7 +121,7 @@ public final class AssistantMemoryArchive {
      */
     public int restore(OwnerId owner, MonthRange months) {
         int restored = 0;
-        for (String key : bucket.keys(ROOT, owner, months)) {
+        for (String key : bucket.keys(ROOT, owner, months.from(), months.to())) {
             StoredConversation conversation =
                     MessageLine.toConversation(owner, JsonLinesGzip.decode(bucket.get(key), MessageLine.class), key);
             if (memory.restore(conversation)) {

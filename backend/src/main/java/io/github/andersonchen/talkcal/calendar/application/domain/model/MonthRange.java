@@ -4,13 +4,12 @@ import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 
 /**
- * 從歸檔找回資料時的一段月份（#54）：from 到 to，兩端都含。
+ * 從歸檔把 AI 助理的對話放回來時的一段月份（#54）：from 到 to，兩端都含。
  *
- * 規則在建構時就檢查，不靠呼叫順序：行程和 AI 助理對話的還原都收這個型別，
- * 哪一邊先呼叫、以後多一個呼叫的地方，都不會有人拿到一段沒檢查過的範圍。
+ * 規則在建構時就檢查，不靠呼叫順序：以後多一個呼叫的地方，也不會有人拿到一段沒檢查過的範圍。
+ * 對話歸檔本來就一個人一個月一包，用月份講最直接。
  *
- * 跟 DateRange 分開：月曆一頁是「日期、to 不含」，還原是「月份、兩端都含」，
- * 歸檔本來就一個人一個月一包，用月份講最直接。
+ * 行程不放回來，改成照日期查看（#274），範圍用 ArchivePeriod；上限沿用這裡的 MAX_MONTHS。
  */
 public record MonthRange(YearMonth from, YearMonth to) {
 
@@ -27,9 +26,5 @@ public record MonthRange(YearMonth from, YearMonth to) {
         if (ChronoUnit.MONTHS.between(from, to) + 1 > MAX_MONTHS) {
             throw new IllegalArgumentException("一次最多 " + MAX_MONTHS + " 個月：" + from + " ~ " + to);
         }
-    }
-
-    public boolean contains(YearMonth month) {
-        return !month.isBefore(from) && !month.isAfter(to);
     }
 }

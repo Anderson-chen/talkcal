@@ -3,7 +3,6 @@ package io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
-import io.github.andersonchen.talkcal.calendar.application.domain.model.MonthRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.out.EventArchivePort;
@@ -52,10 +51,10 @@ public final class S3EventArchiveAdapter implements EventArchivePort {
     }
 
     @Override
-    public List<ScheduledEvent> load(OwnerId owner, MonthRange months) {
+    public List<ScheduledEvent> load(OwnerId owner, YearMonth firstMonth, YearMonth lastMonth) {
         // 依 id 收：同一筆出現好幾次只留一筆（同一個月的 key 依存的時間排，後讀到的比較新）
         Map<UUID, ScheduledEvent> events = new LinkedHashMap<>();
-        for (String key : bucket.keys(ROOT, owner, months)) {
+        for (String key : bucket.keys(ROOT, owner, firstMonth, lastMonth)) {
             for (EventLine line : JsonLinesGzip.decode(bucket.get(key), EventLine.class)) {
                 events.put(line.id(), line.toScheduledEvent(key));
             }
@@ -84,7 +83,7 @@ public final class S3EventArchiveAdapter implements EventArchivePort {
                     e.category().name(), e.location().orElse(null), e.note().orElse(null));
         }
 
-        // 讀回來的每一筆重新走一次 domain 的規則，跟從資料庫讀出來一樣：壞掉的歸檔在這裡擋下，不會放回行事曆
+        // 讀回來的每一筆重新走一次 domain 的規則，跟從資料庫讀出來一樣：壞掉的歸檔在這裡擋下，不會顯示給使用者
         ScheduledEvent toScheduledEvent(String key) {
             if (v != VERSION) {
                 throw new IllegalStateException("不認得的歸檔格式版本 " + v + "：" + key);

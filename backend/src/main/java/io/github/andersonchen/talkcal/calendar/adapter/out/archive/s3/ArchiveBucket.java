@@ -1,6 +1,5 @@
 package io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3;
 
-import io.github.andersonchen.talkcal.calendar.application.domain.model.MonthRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -31,7 +30,7 @@ import java.util.Objects;
  * AI 助理的對話（app.job.AssistantMemoryArchive）共用同一個 bucket、同一套讀寫。
  *
  * key 的排法也只在這裡：&lt;root&gt;owner=&lt;擁有者&gt;/month=&lt;yyyy-MM&gt;/&lt;檔名&gt;（root 是 calendar-event/、assistant-conversation/）。
- * - 擁有者在最前面：一個人的全部歸檔就是一個前綴，還原只列自己的前綴、刪帳號（#52）整個前綴刪掉，列不到、也刪不到別人的
+ * - 擁有者在最前面：一個人的全部歸檔就是一個前綴，查看、還原只列自己的前綴，刪帳號（#52）整個前綴刪掉，列不到、也刪不到別人的
  * - owner=、month= 是 Hive 的分區慣例：哪天要用 Athena 直接查歸檔，不必搬資料就能依人、依月份過濾
  * 行程和對話共用這一套，刪帳號時兩邊的前綴長一樣，不會有一邊漏刪。
  *
@@ -108,14 +107,17 @@ public final class ArchiveBucket {
     }
 
     /**
-     * owner 在 months 這幾個月的全部 key，依字典順序（= 月份、再依檔名）。
+     * owner 在 first～last 這幾個月（兩端都含）的全部 key，依字典順序（= 月份、再依檔名）。
      * 列一次這個人的前綴、再依 key 裡的月份挑，不是一個月列一次：24 個月就是 1 次而不是 24 次 LIST。
-     * 一個人一個月通常只有一兩包，整個前綴列出來也不多。
+     * 行程每天的排程各存一包，一個人一個月最多三十幾包；整個前綴列出來，十年也才幾頁（一頁 1000 個 key）。
      */
-    public List<String> keys(String root, OwnerId owner, MonthRange months) {
+    public List<String> keys(String root, OwnerId owner, YearMonth first, YearMonth last) {
         String prefix = ownerPrefix(root, owner);
         return list(prefix).stream()
-                .filter(key -> months.contains(monthOf(key, prefix)))
+                .filter(key -> {
+                    YearMonth month = monthOf(key, prefix);
+                    return !month.isBefore(first) && !month.isAfter(last);
+                })
                 .toList();
     }
 
