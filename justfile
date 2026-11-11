@@ -58,6 +58,12 @@ vulns +images:
 alerting:
     ci/alerting.sh
 
+# 檢查架構圖的錨點都對得上檔案；給資料夾就寫出換成行號的頁面，開裡面的 index.html 預覽
+[group('ci')]
+[no-cd]
+arch *out:
+    if [ $# -eq 0 ]; then node "{{repo}}/docs/architecture/lines.mjs" --check; else node "{{repo}}/docs/architecture/lines.mjs" --out "$1"; fi
+
 # ── CD：部署、發版、退版（cd/README.md、cd/release.md、cd/rollback.md）──
 
 # 把這台機器的服務換成目前 checkout 的版本，不先跑測試（要先跑測試用 ./gradlew deployApp）；不給服務就部署 app、web

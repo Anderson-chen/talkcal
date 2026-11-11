@@ -19,6 +19,12 @@ echo "── shell 腳本：ShellCheck ──"
 # 刻意的寫法在那一行上面加 # shellcheck disable=SCxxxx 並寫理由（例子見 cd/triggers/watch.sh 的 trap）
 find . \( -name '*.sh' -o -path './.githooks/*' \) -type f -print0 | xargs -0 shellcheck || status=1
 
+echo "── 架構圖：每個錨點都對得上檔案 ──"
+# docs/architecture/index.html 的 F、L 表記錨點不記行號（#275），檔案多一行、少一行都不用改那頁。
+# 錨點那一行被改名、刪掉，或多了一行長得一樣的，這裡就紅燈並列出是哪一個，不會等發佈後才連到錯的行。
+# 只用 Node 內建模組，不必先 pnpm install，一秒內跑完
+node docs/architecture/lines.mjs --check || status=1
+
 echo "── 後端：單元測試、架構規則、整合測試（編譯時 Error Prone 一起跑）──"
 # 整合測試裡要 PostgreSQL 的那幾支用 Testcontainers 開在旁邊（run.sh 把主機的 Docker 接進來了）；
 # 要真模型的那幾支，連不到 llama-server 就自動跳過（Assumptions），下面的摘要會列出來

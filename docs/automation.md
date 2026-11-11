@@ -23,7 +23,8 @@ flowchart LR
 |---|---|---|---|
 | [ci/secrets.sh](../ci/secrets.sh) | gitleaks 掃要推出去的 commit 有沒有 key | pre-push（只掃還沒推的）、CI（整個歷史） | `just secrets` |
 | [ci/run.sh](../ci/run.sh) | 在乾淨的容器裡跑 `ci/checks.sh`；改到 prompt、模型相關檔案時加跑 AI eval | pre-push、CI 的 `checks`、手動 | `just ci` |
-| [ci/checks.sh](../ci/checks.sh) | CI 的檢查項目都寫在這：ShellCheck、後端測試、前端 lint 和測試、打包、E2E | `ci/run.sh`（在容器裡） | |
+| [ci/checks.sh](../ci/checks.sh) | CI 的檢查項目都寫在這：ShellCheck、架構圖的錨點、後端測試、前端 lint 和測試、打包、E2E | `ci/run.sh`（在容器裡） | |
+| [docs/architecture/lines.mjs](architecture/lines.mjs) | 架構圖的錨點換成行號；`--check` 只檢查每個都對得上 | `ci/checks.sh`、`pages.yml`、手動預覽 | `just arch`、`just arch <資料夾>` |
 | [ci/licenses.sh](../ci/licenses.sh) | 前端會打包出去的套件不能是 GPL、AGPL | `ci/checks.sh` | |
 
 ## 2. PR、master（GitHub Actions）
@@ -34,7 +35,7 @@ flowchart LR
 | ci.yml（排程） | 每天台灣 09:00 | 只跑 `vulns`，抓新公布的 CVE |
 | [alerting.yml](../.github/workflows/alerting.yml) | PR 改到告警規則、Mimir、Alloy、`ops/compose.yaml`；或手動 | `ci/alerting.sh` |
 | [pr-issue.yml](../.github/workflows/pr-issue.yml) | PR 開啟、編輯、更新 | 沒有腳本：檢查描述有沒有 `Closes #N` |
-| [pages.yml](../.github/workflows/pages.yml) | push 到 master 且改到 `docs/architecture/` | 沒有腳本：把互動架構圖發到 GitHub Pages |
+| [pages.yml](../.github/workflows/pages.yml) | 每次 push 到 master | `docs/architecture/lines.mjs --out`：錨點換成行號，再把互動架構圖發到 GitHub Pages |
 
 | 腳本 | 用途 | just |
 |---|---|---|

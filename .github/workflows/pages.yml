@@ -5,15 +5,14 @@
 #
 # 為什麼要 Pages：GitHub 在 repo 裡點開 .html 只會顯示原始碼，要能互動得有地方把它當網頁送出去。
 #
-# 改了 infra/、deploy/、ops/、web/nginx.conf 要不要重新發佈：不用。這頁不讀那些檔案，行號是寫死在 index.html 裡的，
-# 有變就改 index.html（規則寫在 CLAUDE.md），改了它這裡才會跑。
+# 為什麼每次 push 到 master 都發佈：頁面的 F、L 表記錨點，行號是發佈時才從這個 commit 的檔案算出來的（#275）。
+# 任何被引用的檔案多一行、少一行，頁面上的行號就要跟著變，只看 docs/architecture/ 有沒有改會漏掉。發佈一次不到一分鐘。
 
 name: Pages
 
 on:
   push:
     branches: [master]
-    paths: ['docs/architecture/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 # deploy-pages 要的權限：寫 Pages、用 OIDC 證明「這次部署來自這個 repo 的這個 workflow」
@@ -37,8 +36,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/configure-pages@v6
+      # 錨點換成行號，寫到另一個資料夾再上傳：lines.mjs 本身不是網頁的一部分，不發佈。
+      # 錨點對不上就失敗、不發佈，線上留著上一版（PR 的 CI 已經先擋過一次）。
+      # ubuntu-latest 內建 Node，這支只用內建模組，不必 setup-node
+      - run: node docs/architecture/lines.mjs --out "$RUNNER_TEMP/pages"
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: docs/architecture
+          path: ${{ runner.temp }}/pages
       - id: deploy
         uses: actions/deploy-pages@v5
