@@ -65,6 +65,8 @@ Prometheus 其實同時做兩件事：抓和存。抓的工作交給 Alloy 之�
 
 它比較重，因為 Mimir 是為上面那些需求設計的分散式系統，拆成 distributor、ingester、querier、store-gateway、compactor 等元件。單機用 `-target=all` 把它們塞進同一個 process，`mimir/mimir.yaml` 大半是在關掉分散式功能（多租戶、複製、物件儲存）。`loki/loki-config.yaml` 也是同樣的做法，因為 Mimir、Loki、Tempo 是 Grafana 用同一套骨架做的。
 
+表格第一列要接物件儲存才成立。這裡沒接，資料存在本機的 volume，所以 Mimir 和 Loki 都設了保存期限（#270），期限和理由寫在 `mimir/mimir.yaml` 的 `limits`、`loki/loki-config.yaml` 的 `limits_config`。
+
 ### 為什麼 trace 要另外一個資料庫（Tempo）
 
 trace 是一棵 span 樹。每個 span 有自己的 id 和父 span，靠 trace id 串成一個請求。Mimir 只放得下「標籤 + 一個數字」，Loki 放的是一行一行的文字，都裝不下這種樹。
