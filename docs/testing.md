@@ -46,10 +46,16 @@ pnpm --dir web run e2e:ui
 
 在 repo 根目錄跑，PowerShell、Git Bash 都可以。
 
-單元測試和架構規則，不用起任何服務：
+單元測試和 ArchUnit 的分層規則（[ArchitectureTest](../backend/src/test/java/io/github/andersonchen/talkcal/ArchitectureTest.java)），不用起任何服務：
 
 ```bash
 backend/gradlew -p backend test
+```
+
+只跑分層規則，改了 package 或 import 之後最快知道依賴方向有沒有錯：
+
+```bash
+backend/gradlew -p backend test --tests '*ArchitectureTest'
 ```
 
 整合測試，要開 Docker；模型（快速開始的 `llm-chat`）沒開的那幾支會跳過：

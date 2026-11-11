@@ -29,12 +29,12 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
 @AnalyzeClasses(packages = ArchitectureTest.ROOT, importOptions = ImportOption.DoNotIncludeTests.class)
 class ArchitectureTest {
 
-    // 根 package：只有 Application。底下是 app（組裝根，代表整個應用程式）和各業務模組（calendar）
+    // 根 package：只有 Application。底下是 app（組裝根，代表整個應用程式）和各業務模組
     static final String ROOT = "io.github.andersonchen.talkcal";
 
     // app 裡唯一可以認識 adapter 具體類別、也可以同時認識好幾個模組的兩個 package：
     //   app.config —— 所有 @Configuration（誰接誰）
-    //   app.job    —— 排程工作（直接做某張表的維護，例如清舊對話）
+    //   app.job    —— 排程工作（直接做某張表的維護，例如清過期的冪等鍵）
     // app.observability 也在 app 裡，但它是全站共用的觀測，不需要、也不准認識任何一門業務
     static final String CONFIG = ROOT + ".app.config..";
     static final String JOB = ROOT + ".app.job..";
@@ -216,8 +216,7 @@ class ArchitectureTest {
     /**
      * 模組之間互不認識：不同的業務各自一個模組。
      *
-     * 目前只有 calendar 一個模組（一般問答的 conversation 模組已經拿掉），這條暫時不會擋到東西。
-     * 留著是因為 AI 助理遲早要拆成自己的模組（見 AssistantMemoryArchive 的註解），拆開那天它就開始守門。
+     * AI 助理遲早也要拆成自己的模組（見 AssistantMemoryArchive 的註解）。
      *
      * ROOT.(*).. 把根 package 底下第一層的 package 各切成一片（一個模組一片），app 也是一片。
      * app 裡的 config、job 是組裝根，本來就要認識各個模組 —— 從它們出發的依賴不算；
@@ -225,6 +224,7 @@ class ArchitectureTest {
      *
      * 哪天一個模組需要另一個模組的能力，該做的是在自己模組裡定義一個 outbound port，
      * 由 app.config 接上另一個模組的 use case，而不是直接 import 對方的類別。
+     * calendar 怎麼不認得 auth 也拿得到登入者，見 SignedIn。
      */
     @ArchTest
     static final ArchRule modulesMustNotDependOnEachOther =
