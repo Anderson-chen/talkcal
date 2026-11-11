@@ -3,7 +3,7 @@
 //
 // 封存的行程只能看：沒有修改、刪除按鈕，也不會放回月曆。查不到（封存暫時讀不到）只影響這裡，月曆照常。
 // 預設查正在看的那個月：使用者是翻到那個月才點進來的。
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { listArchivedEvents, type SavedEvent } from '../calendar'
 import { ARCHIVE_NOTICE, archivedTimeLabel, monthBounds, rangeProblem } from './archive'
 import Icon from './Icon.vue'
@@ -30,6 +30,8 @@ const problem = ref<string | null>(null)
 const loading = ref(false)
 
 const range = computed(() => (mode.value === 'day' ? { from: day.value, to: day.value } : { from: from.value, to: to.value }))
+// 改了日期或換了一天／一段期間，上一次的「日期不對」就不算數了
+watch(range, () => (problem.value = null))
 
 // 查詢中「查看」按鈕停用（按 Enter 也送不出去），不會有兩次查詢同時在跑、舊的結果蓋掉新的
 async function search() {

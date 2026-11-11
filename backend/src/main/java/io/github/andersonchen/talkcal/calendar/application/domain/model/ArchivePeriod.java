@@ -22,9 +22,15 @@ public record ArchivePeriod(LocalDate from, LocalDate to) {
      */
     static final int MONTHS_AFTER = 1;
 
+    private static final LocalDate LATEST = LocalDate.of(9999, 12, 31);
+
     public ArchivePeriod {
         if (from == null || to == null) {
             throw new IllegalArgumentException("起訖日期不可為 null");
+        }
+        // 遠到年份超過 4 位數的日期：to 隔天、下個月會超出 LocalDate 的範圍，在這裡先擋成 400，不要後面才變成 500
+        if (to.isAfter(LATEST)) {
+            throw new IllegalArgumentException("結束日期太遠了：" + to);
         }
         if (from.isAfter(to)) {
             throw new IllegalArgumentException("開始日期（" + from + "）不可晚於結束日期（" + to + "）");

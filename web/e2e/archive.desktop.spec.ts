@@ -126,6 +126,10 @@ test('反例：結束日期早於開始日期，畫面直接提示，不送出�
 
   await expect(dialog.getByRole('alert')).toHaveText('結束日期不能早於開始日期')
   expect(api.archiveQueries).toEqual([])
+
+  // 改成只看一天：上一次的提示不算數了，不能留在畫面上
+  await dialog.getByRole('radio', { name: '一天' }).check()
+  await expect(dialog.getByRole('alert')).toBeHidden()
 })
 
 test('封存讀不到（502）：查詢畫面說讀不到，關掉之後月曆上 2 年內的行程照常顯示', async ({ page }) => {

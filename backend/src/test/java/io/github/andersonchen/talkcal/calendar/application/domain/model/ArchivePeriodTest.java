@@ -35,6 +35,14 @@ class ArchivePeriodTest {
     }
 
     @Test
+    @DisplayName("反例：遠到 LocalDate 盡頭的日期是 IllegalArgumentException（400），不是算隔天時才爆的 DateTimeException（500）")
+    void farFutureDateIsRejected() {
+        new ArchivePeriod(LocalDate.of(9999, 12, 31), LocalDate.of(9999, 12, 31));
+
+        assertThrows(IllegalArgumentException.class, () -> new ArchivePeriod(LocalDate.MAX, LocalDate.MAX));
+    }
+
+    @Test
     @DisplayName("兩端都含：from 那天一早、to 那天晚上的都算")
     void bothEndsInclusive() {
         ArchivePeriod period = new ArchivePeriod(MAR_1, MAR_5);
