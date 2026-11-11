@@ -4,7 +4,7 @@ import io.github.andersonchen.talkcal.auth.adapter.in.security.AccountOAuth2User
 import io.github.andersonchen.talkcal.auth.adapter.in.security.AccountOidcUserService;
 import io.github.andersonchen.talkcal.auth.adapter.in.security.AccountUserDetailsService;
 import io.github.andersonchen.talkcal.auth.adapter.in.web.LoginProviders;
-import io.github.andersonchen.talkcal.auth.adapter.out.security.SpringPasswordHasher;
+import io.github.andersonchen.talkcal.auth.adapter.out.security.spring.SpringPasswordHasher;
 import io.github.andersonchen.talkcal.auth.application.domain.service.RegisterAccountService;
 import io.github.andersonchen.talkcal.auth.application.port.in.FindAccountUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.RegisterAccountUseCase;
