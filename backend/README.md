@@ -23,7 +23,12 @@ io.github.andersonchen.talkcal
 │       ├── in               HTTP controller、AI 助理與它的工具、放在 /actuator/prometheus 的活躍使用者數
 │       ├── out              PostgreSQL、Spring AI、S3、Micrometer
 │       └── shared           in、out 兩側都要的模型零件：日期對照表、斷路器
-└── auth                   帳號和登入，一個模組；application 底下跟 calendar 一樣分
+└── auth                   帳號和登入，一個模組
+    ├── application
+    │   ├── domain.model     帳號的規則（Account、Username…），純 Java
+    │   ├── domain.service   use case 的實作
+    │   ├── port.in          use case 介面：註冊、找帳號、用 Google 或 GitHub 登入
+    │   └── port.out         存取帳號、算密碼雜湊
     └── adapter
         ├── in               HTTP controller、Spring Security 登入時對到帳號
         └── out              PostgreSQL、用 Spring Security 算密碼雜湊
