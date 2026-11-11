@@ -29,12 +29,12 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
 @AnalyzeClasses(packages = ArchitectureTest.ROOT, importOptions = ImportOption.DoNotIncludeTests.class)
 class ArchitectureTest {
 
-    // 根 package：只有 Application。底下是 app（組裝根，代表整個應用程式）和各業務模組（calendar、auth）
+    // 根 package：只有 Application。底下是 app（組裝根，代表整個應用程式）和各業務模組
     static final String ROOT = "io.github.andersonchen.talkcal";
 
     // app 裡唯一可以認識 adapter 具體類別、也可以同時認識好幾個模組的兩個 package：
     //   app.config —— 所有 @Configuration（誰接誰）
-    //   app.job    —— 排程工作（直接做某張表的維護，例如歸檔舊對話、清過期的冪等鍵）
+    //   app.job    —— 排程工作（直接做某張表的維護，例如清過期的冪等鍵）
     // app.observability 也在 app 裡，但它是全站共用的觀測，不需要、也不准認識任何一門業務
     static final String CONFIG = ROOT + ".app.config..";
     static final String JOB = ROOT + ".app.job..";
@@ -71,7 +71,7 @@ class ArchitectureTest {
                     .because("inbound 只該透過 port 使喚 core，core 才決定要不要呼叫 outbound");
 
     /**
-     * 只有組裝根裡的 app.config、app.job 可以認識具體的實作。下面四條是同一句話套在 adapter.out 的四個子樹上。
+     * 只有組裝根裡的 app.config、app.job 可以認識具體的實作。下面每一條都是同一句話，套在 adapter.out 的一個子樹上。
      *
      * adapter.out 底下每個 package 就是「某一種往外的實作們」：
      * persistence 放 Save / Load / DeleteEventPort 的（和助理的對話記憶）、extraction 放 ExtractEventsPort 的，
@@ -210,8 +210,7 @@ class ArchitectureTest {
     /**
      * 模組之間互不認識：不同的業務各自一個模組。
      *
-     * 現在有 calendar、auth 兩個模組：calendar 只從 java.security.Principal 拿登入者（見 SignedIn），不認得 auth。
-     * AI 助理遲早也要拆成自己的模組（見 AssistantMemoryArchive 的註解），拆開那天這條一樣守著它。
+     * AI 助理遲早也要拆成自己的模組（見 AssistantMemoryArchive 的註解）。
      *
      * ROOT.(*).. 把根 package 底下第一層的 package 各切成一片（一個模組一片），app 也是一片。
      * app 裡的 config、job 是組裝根，本來就要認識各個模組 —— 從它們出發的依賴不算；
@@ -219,6 +218,7 @@ class ArchitectureTest {
      *
      * 哪天一個模組需要另一個模組的能力，該做的是在自己模組裡定義一個 outbound port，
      * 由 app.config 接上另一個模組的 use case，而不是直接 import 對方的類別。
+     * calendar 怎麼不認得 auth 也拿得到登入者，見 SignedIn。
      */
     @ArchTest
     static final ArchRule modulesMustNotDependOnEachOther =
