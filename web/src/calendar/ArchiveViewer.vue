@@ -28,27 +28,22 @@ const results = ref<SavedEvent[] | null>(null)
 const error = ref<string | null>(null)
 const problem = ref<string | null>(null)
 const loading = ref(false)
-let latest = 0
 
 const range = computed(() => (mode.value === 'day' ? { from: day.value, to: day.value } : { from: from.value, to: to.value }))
 
+// 查詢中「查看」按鈕停用（按 Enter 也送不出去），不會有兩次查詢同時在跑、舊的結果蓋掉新的
 async function search() {
   problem.value = rangeProblem(range.value.from, range.value.to)
   if (problem.value) return
-  // 連按兩次「查看」、或查到一半改了日期又查：只留最後一次的結果
-  const ticket = ++latest
   loading.value = true
   error.value = null
   try {
-    const found = await listArchivedEvents(range.value.from, range.value.to)
-    if (ticket !== latest) return
-    results.value = found
+    results.value = await listArchivedEvents(range.value.from, range.value.to)
   } catch (e) {
-    if (ticket !== latest) return
     results.value = null
     error.value = message(e)
   } finally {
-    if (ticket === latest) loading.value = false
+    loading.value = false
   }
 }
 </script>

@@ -39,9 +39,6 @@ interface Options {
   archived?: FakeEvent[]
 }
 
-// 'YYYY-MM-DD' 的隔天。只拿 UTC 做日期加減，不碰時區
-const nextDay = (day: string) => new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)
-
 // 助理每句話都提議這一筆（明天下午三點開會），proposalId 依序是 card-1、card-2…
 const PROPOSAL = { title: '開會', start: '2026-10-07T15:00:00', end: '2026-10-07T16:00:00', category: 'WORK', location: null, note: null }
 
@@ -73,7 +70,6 @@ export async function fakeApi(page: Page, options: Options = {}) {
     // 每次 PUT、DELETE /events/{id} 收到什麼（#259）
     updated: [] as { id: string; expected: Omit<FakeEvent, 'id'>; event: Omit<FakeEvent, 'id'> }[],
     deleted: [] as string[],
-    archived: [...(options.archived ?? [])],
     // 每次 GET /archive/events 的 from、to；下一次查封存要不要失敗
     archiveQueries: [] as { from: string; to: string }[],
     failNextArchive: false,
@@ -181,9 +177,9 @@ export async function fakeApi(page: Page, options: Options = {}) {
         return json(route, 502, { error: '封存的資料暫時讀不到，請稍後再試' })
       }
       if (from > to) return json(route, 400, { error: `開始日期（${from}）不可晚於結束日期（${to}）` })
-      const end = `${nextDay(to)}T00:00:00`
-      const overlapping = state.archived
-        .filter((e) => e.start.padEnd(19, ':00') < end && e.end.padEnd(19, ':00') > `${from}T00:00:00`)
+      // 開始那天不晚於 to = 開始早於 to 隔天 00:00；'YYYY-MM-DD...' 字串直接比大小就是時間順序
+      const overlapping = (options.archived ?? [])
+        .filter((e) => e.start.slice(0, 10) <= to && e.end.padEnd(19, ':00') > `${from}T00:00:00`)
         .sort((a, b) => a.start.localeCompare(b.start))
       return json(route, 200, { events: overlapping })
     }

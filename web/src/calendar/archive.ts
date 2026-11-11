@@ -2,7 +2,7 @@
 // 這裡是純函式：哪幾個月要註明「已自動封存」、查詢的日期合不合規、查到的行程時間怎麼寫。
 // 畫面在 ArchiveNotice.vue（說明和入口）、ArchiveViewer.vue（查詢和結果）。
 
-import { dayLabel, timeOf } from '../monthGrid'
+import { dayLabel, timeOf, toIsoDate } from '../monthGrid'
 
 /** 結束超過幾年就封存。跟後端的 calendar.event.retention 一致：畫面上寫著這個數字，改那邊要一起改這裡 */
 export const ARCHIVE_YEARS = 2
@@ -17,10 +17,8 @@ export const ARCHIVE_NOTICE = `結束超過 ${ARCHIVE_YEARS} 年的行程已自�
 export function archiveCutoff(today: string): string {
   const year = Number(today.slice(0, 4)) - ARCHIVE_YEARS
   const month = Number(today.slice(5, 7))
-  // new Date(y, m, 0)：m 月的第 0 天 = 上個月（也就是 m 月，因為 Date 的月份從 0 起算）的最後一天
-  const lastDay = new Date(year, month, 0).getDate()
-  const day = Math.min(Number(today.slice(8, 10)), lastDay)
-  return `${year}-${pad(month)}-${pad(day)}`
+  const day = Math.min(Number(today.slice(8, 10)), lastDayOf(year, month))
+  return toIsoDate(new Date(year, month - 1, day))
 }
 
 /** 這個月有沒有已經封存的日子：月初比分界早，就有一部分（或全部）行程已經搬走了 */
@@ -30,8 +28,12 @@ export function isArchivedMonth(year: number, month: number, today: string): boo
 
 /** 這個月的第一天和最後一天（兩端都含），查詢畫面預設查整個月 */
 export function monthBounds(year: number, month: number): { from: string; to: string } {
-  const lastDay = new Date(year, month, 0).getDate()
-  return { from: `${year}-${pad(month)}-01`, to: `${year}-${pad(month)}-${pad(lastDay)}` }
+  return { from: toIsoDate(new Date(year, month - 1, 1)), to: toIsoDate(new Date(year, month - 1, lastDayOf(year, month))) }
+}
+
+// new Date(y, m, 0)：Date 的月份從 0 起算，所以這是「m 月的下個月的第 0 天」，也就是 m 月的最後一天
+function lastDayOf(year: number, month: number): number {
+  return new Date(year, month, 0).getDate()
 }
 
 /** 查詢的日期哪裡不對；沒問題回 null。超過上限（24 個月）由後端擋，它回的話直接顯示 */
@@ -57,8 +59,4 @@ export function archivedTimeLabel(start: string, end: string): string {
 
 function withYear(day: string): string {
   return `${Number(day.slice(0, 4))}年${dayLabel(day)}`
-}
-
-function pad(n: number): string {
-  return String(n).padStart(2, '0')
 }

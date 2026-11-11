@@ -3,7 +3,6 @@ package io.github.andersonchen.talkcal.calendar.application.domain.model;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
-import java.time.temporal.ChronoUnit;
 
 /**
  * 查看封存時的一段日期（#274）：from 到 to，兩端都含，只看一天就是 from = to。
@@ -30,9 +29,8 @@ public record ArchivePeriod(LocalDate from, LocalDate to) {
         if (from.isAfter(to)) {
             throw new IllegalArgumentException("開始日期（" + from + "）不可晚於結束日期（" + to + "）");
         }
-        if (ChronoUnit.MONTHS.between(YearMonth.from(from), YearMonth.from(to)) + 1 > MonthRange.MAX_MONTHS) {
-            throw new IllegalArgumentException("一次最多查 " + MonthRange.MAX_MONTHS + " 個月：" + from + " ~ " + to);
-        }
+        // 最多幾個月的規則只寫在 MonthRange，超過的話它丟 IllegalArgumentException
+        new MonthRange(YearMonth.from(from), YearMonth.from(to));
     }
 
     /** 跟這段日期有重疊：開始早於 to 隔天的 00:00，而且結束晚於 from 的 00:00。剛好在 from 00:00 結束的不算。 */
