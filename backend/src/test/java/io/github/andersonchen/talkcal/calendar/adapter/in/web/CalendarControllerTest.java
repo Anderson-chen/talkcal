@@ -73,7 +73,7 @@ class CalendarControllerTest {
 
     /**
      * 這裡測的是 controller 本身（路由、JSON、狀態碼），不是認證：每個請求預設都是「已經登入、帶著 CSRF token」。
-     * 沒登入回 401、沒帶 CSRF 回 403 這些規則，在 SecurityTest 對真的 SecurityFilterChain 測。
+     * 沒登入回 401、沒帶 CSRF 回 403 這些規則，在 AuthSystemTest（integrationTest）對真的 SecurityFilterChain 測。
      */
     @BeforeEach
     void signedIn() {

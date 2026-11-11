@@ -4,12 +4,8 @@ import io.github.andersonchen.talkcal.auth.adapter.in.security.AccountOAuth2User
 import io.github.andersonchen.talkcal.auth.adapter.in.security.AccountOidcUserService;
 import io.github.andersonchen.talkcal.auth.adapter.in.security.AccountUserDetailsService;
 import io.github.andersonchen.talkcal.auth.adapter.in.web.LoginProviders;
-import io.github.andersonchen.talkcal.auth.adapter.out.security.spring.SpringPasswordHasher;
-import io.github.andersonchen.talkcal.auth.application.domain.service.RegisterAccountService;
 import io.github.andersonchen.talkcal.auth.application.port.in.FindAccountUseCase;
-import io.github.andersonchen.talkcal.auth.application.port.in.RegisterAccountUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.SignInExternallyUseCase;
-import io.github.andersonchen.talkcal.auth.application.port.out.SaveAccountPort;
 
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -18,7 +14,6 @@ import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -34,13 +29,13 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 
 /**
- * 本機帳密登入（talkcal.auth.provider=local，也是沒設定時的預設），加上有設定的 Google、GitHub 登入（#105）。
+ * Spring Security 的接線：帳密登入，加上有設定的 Google、GitHub 登入（#105）。auth 模組的 use case 在 AuthConfiguration。
  *
  * 瀏覽器和後端之間只有一個 session cookie（HttpOnly，JavaScript 讀不到），前端不碰任何 token ——
  * 用 Google 登入時也一樣：Google 給的 token 留在後端的 session 裡，換完使用者資料就沒再用。
  * 前端和後端在同一個網域（nginx 把 /api 轉過來），所以不需要 CORS，cookie 也自然帶得上。
  *
- * 規則（Cognito 那套也要一樣）：
+ * 規則：
  * - /api 底下除了註冊、登入，一律要登入；沒登入回 401 JSON，不轉址到登入頁（前端自己決定畫登入畫面）
  * - 會改東西的請求（POST、DELETE）要帶 CSRF token：別的網站騙使用者的瀏覽器送請求時，cookie 會自動帶上，
  *   但它讀不到我們這個網域的 XSRF-TOKEN cookie，送不出對的 header
@@ -50,10 +45,9 @@ import org.springframework.security.web.authentication.logout.HttpStatusReturnin
  *   API 埠上打 /actuator 照樣要登入
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(name = "talkcal.auth.provider", havingValue = "local", matchIfMissing = true)
-class LocalAuthConfiguration {
+class SecurityConfiguration {
 
-    private static final Logger log = LoggerFactory.getLogger(LocalAuthConfiguration.class);
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfiguration.class);
 
     /**
      * 預設是 BCrypt，存起來的雜湊值前面帶著「{bcrypt}」：之後要換演算法（例如 Argon2），
@@ -62,11 +56,6 @@ class LocalAuthConfiguration {
     @Bean
     PasswordEncoder passwordEncoder() {
         return PasswordEncoderFactories.createDelegatingPasswordEncoder();
-    }
-
-    @Bean
-    RegisterAccountUseCase registerAccount(SaveAccountPort saveAccountPort, PasswordEncoder passwordEncoder) {
-        return new RegisterAccountService(saveAccountPort, new SpringPasswordHasher(passwordEncoder));
     }
 
     // 登入時 Spring Security 用它查帳號、再用上面的 PasswordEncoder 比對密碼
@@ -95,8 +84,8 @@ class LocalAuthConfiguration {
     }
 
     @Bean
-    SecurityFilterChain localSecurity(HttpSecurity http, OAuth2Registrations oauth2Registrations,
-                                      SignInExternallyUseCase signInExternally) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, OAuth2Registrations oauth2Registrations,
+                                            SignInExternallyUseCase signInExternally) throws Exception {
         http
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
