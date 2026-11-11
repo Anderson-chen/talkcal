@@ -37,7 +37,7 @@ public final class IdempotencyKeyCleanup {
         }
     }
 
-    // 每天凌晨四點半（台北時間）：跟清對話的錯開半小時。多台一起跑也沒關係，DELETE 重跑一次只是刪 0 個
+    // 每天凌晨四點半（台北時間）：跟歸檔對話的錯開半小時。多台一起跑也沒關係，DELETE 重跑一次只是刪 0 個
     @Scheduled(cron = "0 30 4 * * *", zone = "${calendar.zone}")
     void run() {
         int deleted = events.deleteIdempotencyKeysCreatedBefore(clock.instant().minus(retention));

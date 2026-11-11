@@ -10,7 +10,7 @@
 io.github.andersonchen.talkcal
 ├── Application            只負責啟動（留在根 package，元件掃描和測試都從這裡找起）
 ├── app                    組裝根，代表整個應用程式：業務模組不知道自己被怎麼組起來
-│   ├── config             所有 @Configuration，只有這裡認識具體實作
+│   ├── config             所有 @Configuration，誰接誰都寫在這裡
 │   ├── job                排程工作：歸檔、清理舊資料
 │   └── observability      全站共用的 access log
 ├── calendar               行事曆和 AI 助理，一個模組
@@ -20,7 +20,7 @@ io.github.andersonchen.talkcal
 │   │   ├── port.in          use case 介面：外面怎麼叫核心做事
 │   │   └── port.out         核心需要的外部能力：存取行程、抽行程、歸檔、記用量
 │   └── adapter
-│       ├── in               HTTP controller、AI 助理與它的工具、給 Prometheus 抓的活躍使用者數
+│       ├── in               HTTP controller、AI 助理與它的工具、放在 /actuator/prometheus 的活躍使用者數
 │       ├── out              PostgreSQL、Spring AI、S3、Micrometer
 │       └── shared           in、out 兩側都要的模型零件：日期對照表、斷路器
 └── auth                   帳號和登入，一個模組；application 底下跟 calendar 一樣分
@@ -33,7 +33,7 @@ io.github.andersonchen.talkcal
 
 - 依賴只能由外往內。
 - core 不能依賴框架和外部函式庫，例如 Spring、Jackson。
-- 只有組裝根（app.config、app.job）能認識 adapter 的具體類別。
+- 只有組裝根（app.config、app.job）能認識 adapter.out 的具體類別。
 - 模組之間不互相 import。
 
 ## 技術選型
