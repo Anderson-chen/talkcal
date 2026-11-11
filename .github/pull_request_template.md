@@ -1,6 +1,6 @@
 ## Summary
 
-<!-- One paragraph on why it matters and what problem it solves; leave details in the issue -->
+<!-- One plain-language paragraph for a reader who hasn't read this code: what problem it solves and why it matters, what changes, and whether users see any difference; leave details in the issue -->
 
 ## Dependencies
 
