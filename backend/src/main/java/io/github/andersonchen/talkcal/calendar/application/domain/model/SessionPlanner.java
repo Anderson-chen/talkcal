@@ -5,10 +5,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * 在空檔裡排時段（#261）：使用者說「幫我排兩天讀書、各兩小時」，由這裡決定幾點到幾點。
@@ -36,13 +34,15 @@ public final class SessionPlanner {
             throw new IllegalArgumentException("每段的長度必須是正的：" + length);
         }
 
-        Set<LocalDate> planned = new HashSet<>();
+        // 空檔照時間排好，所以只要記上一段排在哪天
+        LocalDate lastPlanned = null;
         List<FreeSlot> sessions = new ArrayList<>();
         for (FreeSlot slot : free) {
+            LocalDate day = slot.start().toLocalDate();
             LocalDateTime start = roundUpToHalfHour(slot.start());
-            if (!planned.contains(slot.start().toLocalDate()) && !start.plus(length).isAfter(slot.end())) {
+            if (!day.equals(lastPlanned) && !start.plus(length).isAfter(slot.end())) {
                 sessions.add(new FreeSlot(start, start.plus(length)));
-                planned.add(slot.start().toLocalDate());
+                lastPlanned = day;
             }
         }
         return List.copyOf(sessions);

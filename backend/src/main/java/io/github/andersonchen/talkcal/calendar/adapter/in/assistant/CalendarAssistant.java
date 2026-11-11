@@ -9,6 +9,7 @@ import io.github.andersonchen.talkcal.calendar.application.port.in.FindEventUseC
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlotsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ParseEventsUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.PlanSessionsUseCase;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -148,16 +149,19 @@ public final class CalendarAssistant {
     private final ListEventsUseCase listEvents;
     private final FindEventUseCase findEvent;
     private final FindFreeSlotsUseCase findFreeSlots;
+    private final PlanSessionsUseCase planSessions;
     private final Clock clock;
 
     public CalendarAssistant(ChatModel chatModel, Function<OwnerId, ChatMemory> memories, ParseEventsUseCase parseEvents,
-                             ListEventsUseCase listEvents, FindEventUseCase findEvent, FindFreeSlotsUseCase findFreeSlots, Clock clock) {
+                             ListEventsUseCase listEvents, FindEventUseCase findEvent, FindFreeSlotsUseCase findFreeSlots,
+                             PlanSessionsUseCase planSessions, Clock clock) {
         this.chatModel = Objects.requireNonNull(chatModel, "chatModel 不可為 null");
         this.memories = Objects.requireNonNull(memories, "memories 不可為 null");
         this.parseEvents = Objects.requireNonNull(parseEvents, "parseEvents 不可為 null");
         this.listEvents = Objects.requireNonNull(listEvents, "listEvents 不可為 null");
         this.findEvent = Objects.requireNonNull(findEvent, "findEvent 不可為 null");
         this.findFreeSlots = Objects.requireNonNull(findFreeSlots, "findFreeSlots 不可為 null");
+        this.planSessions = Objects.requireNonNull(planSessions, "planSessions 不可為 null");
         this.clock = Objects.requireNonNull(clock, "clock 不可為 null");
     }
 
@@ -238,7 +242,7 @@ public final class CalendarAssistant {
             // 工具要知道使用者實際說過什麼（例如有沒有講早上晚上），不能只看模型整理出來的那句
             List<String> userSaid = conversation.stream()
                     .filter(m -> m.getMessageType() == MessageType.USER).map(Message::getText).toList();
-            CalendarTools tools = new CalendarTools(owner, parseEvents, listEvents, findEvent, findFreeSlots, userSaid);
+            CalendarTools tools = new CalendarTools(owner, parseEvents, listEvents, findEvent, findFreeSlots, planSessions, userSaid);
             // 從 application.properties 的預設開始再蓋：Spring AI 2.0 看到請求自帶選項就整份照用、不補預設，
             // 沒給模型名稱就送 gpt-5-mini（#76）。測試用的假 ChatModel 給的是通用的 ChatOptions，沒東西可以沿用
             OpenAiChatOptions.Builder start = chatModel.getOptions() instanceof OpenAiChatOptions defaults

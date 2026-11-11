@@ -10,6 +10,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.FreeSlot
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindEventUseCase;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.PlanSessionsService;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlotsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ParseEventsUseCase;
@@ -64,7 +65,8 @@ class CalendarToolsTest {
     private List<String> userSaid = List.of("明天下午三點跟小明吃飯");
 
     private CalendarTools tools() {
-        return new CalendarTools(OWNER, parse, list, find, free, userSaid);
+        // 排時段接真的 service（底下是假的找空檔），測得到從工具到挑時段的整段
+        return new CalendarTools(OWNER, parse, list, find, free, new PlanSessionsService(free), userSaid);
     }
 
     @Nested

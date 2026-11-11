@@ -8,6 +8,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Calendar
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.FindFreeSlotsService;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.PlanSessionsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ListEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ParseEventsService;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventsPort;
@@ -107,7 +108,8 @@ class CalendarAssistantConversationTest {
                 new ListEventsService((owner, range) -> {
                     calendarReads.incrementAndGet();
                     return CALENDAR.load(owner, range);
-                }), (owner, id) -> Optional.empty(), new FindFreeSlotsService(CALENDAR, TUE), TUE);
+                }), (owner, id) -> Optional.empty(), new FindFreeSlotsService(CALENDAR, TUE),
+                new PlanSessionsService(new FindFreeSlotsService(CALENDAR, TUE)), TUE);
         conversation = UUID.randomUUID().toString();
     }
 

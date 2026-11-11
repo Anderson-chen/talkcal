@@ -8,6 +8,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Calendar
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.FindFreeSlotsService;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.PlanSessionsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ListEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ParseEventsService;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventsPort;
@@ -101,7 +102,8 @@ class PromptInjectionTest {
                 .build();
         return new CalendarAssistant(chatModel, owner -> MessageWindowChatMemory.builder().maxMessages(Integer.MAX_VALUE).build(),
                 new ParseEventsService(new SpringAiExtractEventsAdapter(chatModel), TUE),
-                new ListEventsService(calendar), (owner, id) -> Optional.empty(), new FindFreeSlotsService(calendar, TUE), TUE);
+                new ListEventsService(calendar), (owner, id) -> Optional.empty(), new FindFreeSlotsService(calendar, TUE),
+                new PlanSessionsService(new FindFreeSlotsService(calendar, TUE)), TUE);
     }
 
     @Test

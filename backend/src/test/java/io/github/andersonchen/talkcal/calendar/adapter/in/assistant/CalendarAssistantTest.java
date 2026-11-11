@@ -103,7 +103,7 @@ class CalendarAssistantTest {
                     return List.of();
                 },
                 (owner, id) -> id.equals(SAVED.id()) ? Optional.of(SAVED) : Optional.empty(),
-                (owner, start, end, period, minimum) -> List.of(), TUE);
+                (owner, start, end, period, minimum) -> List.of(), (owner, start, end, period, length) -> List.of(), TUE);
     }
 
     private static AssistantMessage calls(String tool, String arguments) {
@@ -244,7 +244,7 @@ class CalendarAssistantTest {
             }
         };
         CalendarAssistant second = new CalendarAssistant(scripted(proposes("明天晚上七點吃飯"), says("請確認卡片。")), owner -> recording,
-                description -> List.of(DINNER), (owner, start, end) -> List.of(), (owner, id) -> Optional.empty(), (owner, start, end, period, minimum) -> List.of(), TUE);
+                description -> List.of(DINNER), (owner, start, end) -> List.of(), (owner, id) -> Optional.empty(), (owner, start, end, period, minimum) -> List.of(), (owner, start, end, period, length) -> List.of(), TUE);
 
         second.reply(OWNER, ID, "晚上");
 
@@ -287,7 +287,7 @@ class CalendarAssistantTest {
                     throw unavailable;
                 },
                 (owner, start, end) -> List.of(), (owner, id) -> Optional.empty(),
-                (owner, start, end, period, minimum) -> List.of(), TUE);
+                (owner, start, end, period, minimum) -> List.of(), (owner, start, end, period, length) -> List.of(), TUE);
 
         assertSame(unavailable, assertThrows(ModelUnavailableException.class, () -> assistant.reply(OWNER, ID, "晚上")));
         assertEquals(1, prompts.size(), "工具失敗之後不該再叫模型");
@@ -303,7 +303,7 @@ class CalendarAssistantTest {
                     throw new IllegalStateException("呼叫模型抽行程失敗：連線逾時");
                 },
                 (owner, start, end) -> List.of(), (owner, id) -> Optional.empty(),
-                (owner, start, end, period, minimum) -> List.of(), TUE);
+                (owner, start, end, period, minimum) -> List.of(), (owner, start, end, period, length) -> List.of(), TUE);
 
         assertEquals("抱歉，剛剛沒整理好，請再說一次。", assistant.reply(OWNER, ID, "晚上").text());
     }

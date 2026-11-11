@@ -5,6 +5,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Calendar
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.FindFreeSlotsService;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.PlanSessionsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ListEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ParseEventsService;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventsPort;
@@ -220,7 +221,7 @@ class AssistantEval {
         return new CalendarAssistant(chatModel, owner -> memory,
                 new ParseEventsService(new SpringAiExtractEventsAdapter(chatModel), TUE),
                 new ListEventsService(load), (owner, id) -> events.stream().filter(e -> e.id().equals(id)).findFirst(),
-                new FindFreeSlotsService(load, TUE), TUE);
+                new FindFreeSlotsService(load, TUE), new PlanSessionsService(new FindFreeSlotsService(load, TUE)), TUE);
     }
 
     private static List<Case> loadCases() {
