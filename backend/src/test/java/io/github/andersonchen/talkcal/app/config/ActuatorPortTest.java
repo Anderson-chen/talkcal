@@ -51,7 +51,7 @@ class ActuatorPortTest {
     @ParameterizedTest
     @ValueSource(strings = {"/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness",
             "/actuator/prometheus"})
-    // 401 而不是 200：LocalAuthConfiguration 只放行 management 埠上的 actuator（EndpointRequest），
+    // 401 而不是 200：SecurityConfiguration 只放行 management 埠上的 actuator（EndpointRequest），
     // API 埠上的 /actuator 跟其他沒登入的請求一樣被擋。同一個埠的話這裡會是 200（或資料庫連不到的 503）
     @DisplayName("API 埠上打 actuator 拿不到東西（401）")
     void apiPortHasNoActuator(String path) throws Exception {

@@ -1,9 +1,12 @@
 package io.github.andersonchen.talkcal.app.config;
 
 import io.github.andersonchen.talkcal.auth.adapter.out.persistence.postgres.JdbcAccountAdapter;
+import io.github.andersonchen.talkcal.auth.adapter.out.security.spring.SpringPasswordHasher;
 import io.github.andersonchen.talkcal.auth.application.domain.service.FindAccountService;
+import io.github.andersonchen.talkcal.auth.application.domain.service.RegisterAccountService;
 import io.github.andersonchen.talkcal.auth.application.domain.service.SignInExternallyService;
 import io.github.andersonchen.talkcal.auth.application.port.in.FindAccountUseCase;
+import io.github.andersonchen.talkcal.auth.application.port.in.RegisterAccountUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.SignInExternallyUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.out.LoadAccountPort;
 import io.github.andersonchen.talkcal.auth.application.port.out.SaveAccountPort;
@@ -11,16 +14,13 @@ import io.github.andersonchen.talkcal.auth.application.port.out.SaveAccountPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * auth 模組裡不管用哪種方式登入都需要的接線：帳號存在哪、怎麼查、別人驗過的身分怎麼對到帳號。
- *
- * 「怎麼登入」是另一回事，看 talkcal.auth.provider 組裝：
- * - local：自己的帳密，再加上有設定的 Google、GitHub（LocalAuthConfiguration）；本機和雲端都用這套（#127）
- * 原本規劃雲端改接 Cognito（#106），決定不做了。要加別的登入方式，就照 provider 再組一套 SecurityFilterChain，
- * 規則（哪些路徑要登入、沒登入回什麼）要跟 local 那套保持一致。
+ * auth 模組自己的 use case 和 port：帳號存在哪、怎麼註冊、怎麼查、別人驗過的身分怎麼對到帳號。
+ * Spring Security 的接線在 SecurityConfiguration。
  */
 @Configuration(proxyBeanMethods = false)
 class AuthConfiguration {
@@ -30,6 +30,12 @@ class AuthConfiguration {
     @Bean
     JdbcAccountAdapter accountStore(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
         return new JdbcAccountAdapter(jdbcClient, new TransactionTemplate(transactionManager));
+    }
+
+    // PasswordEncoder 來自 SecurityConfiguration
+    @Bean
+    RegisterAccountUseCase registerAccount(SaveAccountPort saveAccountPort, PasswordEncoder passwordEncoder) {
+        return new RegisterAccountService(saveAccountPort, new SpringPasswordHasher(passwordEncoder));
     }
 
     @Bean
