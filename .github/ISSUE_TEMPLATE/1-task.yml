@@ -14,6 +14,8 @@ body:
         No `feat:` prefix; the type is decided when the PR is opened, and the PR title is rewritten from this one.
 
         **Labels:** exactly one `stage:` or `product:` (how to choose: docs/classification.md), exactly one of `p0`/`p1`, and any `area:` it touches.
+
+        **Wording:** write for a reader who hasn't read this code (how: .claude/rules/writing.md, section 「issue 和 PR」).
   - type: textarea
     id: goal
     attributes:
