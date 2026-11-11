@@ -11,6 +11,7 @@ import io.github.andersonchen.talkcal.calendar.application.port.in.FindEventUseC
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlotsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ParseEventsUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.PlanSessionsUseCase;
 
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -32,7 +33,7 @@ import java.util.stream.Collectors;
  * 在架構上，這個類別是 inbound adapter —— 跟 CalendarController 同一個角色，只是呼叫端從瀏覽器換成了模型。
  * 它只認得 use case（port.in），不認得資料庫、不認得抽取的實作；規則一條都不在這裡。
  *
- * 每個請求建一份新的：propose_events、propose_change、propose_removal 提議的新增、修改、刪除收在這裡，
+ * 每個請求建一份新的：propose_events、plan_events、propose_change、propose_removal 提議的新增、修改、刪除收在這裡，
  * 請求結束後交給畫面顯示成卡片。
  * 擁有者也跟著這一份走，不是模型給的參數：查誰的行事曆由登入者決定，模型再怎麼被誘導也查不到、改不到別人的（#104）。
  * 提議不等於動手 —— 存檔、修改、刪除一定是使用者在畫面上按確認（走 POST、PUT、DELETE /events）。
@@ -47,11 +48,14 @@ public final class CalendarTools {
     private final ListEventsUseCase listEvents;
     private final FindEventUseCase findEvent;
     private final FindFreeSlotsUseCase findFreeSlots;
+    private final PlanSessionsUseCase planSessions;
     private final String userSaid;
     private final List<CalendarEvent> proposals = new ArrayList<>();
     private final List<Change> changes = new ArrayList<>();
     private final List<ScheduledEvent> removals = new ArrayList<>();
     private boolean checkedCalendar;
+    // 這一輪排過了沒（plan_events）：模型排完會再叫一次、把日期往後挪，同一天就排出兩張（實測）
+    private boolean planned;
 
     // 使用者講過的話裡，表示時段的寫法：早上、上午、中午、下午、晚上、傍晚、清晨、凌晨、半夜、宵夜、早餐、晚餐、晨跑……
     // 都至少有其中一個字；或是 AM/PM；或是 13～23 點的 24 小時制（「19點」「19:00」）
@@ -65,12 +69,13 @@ public final class CalendarTools {
      * @param userSaid 這段對話裡使用者說過的所有話（包括這一句）：propose_events 要拿它核對「使用者有沒有講早上還是晚上」
      */
     public CalendarTools(OwnerId owner, ParseEventsUseCase parseEvents, ListEventsUseCase listEvents, FindEventUseCase findEvent,
-                         FindFreeSlotsUseCase findFreeSlots, List<String> userSaid) {
+                         FindFreeSlotsUseCase findFreeSlots, PlanSessionsUseCase planSessions, List<String> userSaid) {
         this.owner = Objects.requireNonNull(owner, "owner 不可為 null");
         this.parseEvents = Objects.requireNonNull(parseEvents, "parseEvents 不可為 null");
         this.listEvents = Objects.requireNonNull(listEvents, "listEvents 不可為 null");
         this.findEvent = Objects.requireNonNull(findEvent, "findEvent 不可為 null");
         this.findFreeSlots = Objects.requireNonNull(findFreeSlots, "findFreeSlots 不可為 null");
+        this.planSessions = Objects.requireNonNull(planSessions, "planSessions 不可為 null");
         this.userSaid = String.join("\n", Objects.requireNonNull(userSaid, "userSaid 不可為 null"));
     }
 
@@ -191,8 +196,13 @@ public final class CalendarTools {
             return "沒有提議：使用者沒講是早上還是晚上（例如七點可能是 07:00 也可能是 19:00）。"
                     + "請先問使用者「早上還是晚上？」，等他回答再呼叫 propose_events。";
         }
-        proposals.addAll(parsed);
-        return "已顯示 " + parsed.size() + " 張卡片，等使用者確認：\n" + lines(parsed.stream().map(CalendarTools::describe).toList());
+        return show(parsed);
+    }
+
+    // 收下新增提議，回給模型「畫面上有哪幾張卡片」
+    private String show(List<CalendarEvent> events) {
+        proposals.addAll(events);
+        return "已顯示 " + events.size() + " 張卡片，等使用者確認：\n" + lines(events.stream().map(CalendarTools::describe).toList());
     }
 
     /**
@@ -244,18 +254,65 @@ public final class CalendarTools {
     public String findFreeSlots(
             @ToolParam(description = "開始日期（含），格式 yyyy-MM-dd") String from,
             @ToolParam(description = "結束日期（不含），格式 yyyy-MM-dd；只查一天就填隔天") String to,
-            @ToolParam(description = "時段：MORNING 早上 08–12、AFTERNOON 下午 12–18、EVENING 晚上 18–22、ANYTIME 不限 08–22") DayPeriod period,
+            @ToolParam(description = PERIOD) DayPeriod period,
             @ToolParam(description = "至少要幾分鐘才算空檔，沒講就填 60") Integer minMinutes) {
         try {
             Duration minimum = Duration.ofMinutes(minMinutes == null ? 60 : minMinutes);
-            List<FreeSlot> slots = findFreeSlots.findFreeSlots(owner, LocalDate.parse(from), LocalDate.parse(to),
-                    period == null ? DayPeriod.ANYTIME : period, minimum);
+            List<FreeSlot> slots = findFreeSlots.findFreeSlots(owner, LocalDate.parse(from), LocalDate.parse(to), orAnytime(period), minimum);
             if (slots.isEmpty()) {
                 return "這段期間的這個時段沒有空檔。";
             }
             return lines(slots.stream().map(CalendarTools::describe).toList());
         } catch (DateTimeParseException | IllegalArgumentException e) {
-            return "參數不對（" + e.getMessage() + "）。日期格式是 yyyy-MM-dd、to 要晚於 from、分鐘數要是正的。";
+            return badParameters(e);
+        }
+    }
+
+    // find_free_slots、plan_events 共用：時段參數的說明、沒填時的預設、參數錯時回給模型的話
+    private static final String PERIOD = "時段：MORNING 早上 08–12、AFTERNOON 下午 12–18、EVENING 晚上 18–22、ANYTIME 不限 08–22；沒講就填 ANYTIME";
+
+    private static DayPeriod orAnytime(DayPeriod period) {
+        return period == null ? DayPeriod.ANYTIME : period;
+    }
+
+    private static String badParameters(RuntimeException e) {
+        return "參數不對（" + e.getMessage() + "）。日期格式是 yyyy-MM-dd、to 要晚於 from、分鐘數要是正的。";
+    }
+
+    /**
+     * 使用者叫助理排時間（#261）：在空檔裡排時段（PlanSessionsUseCase）、出新增卡片，一次做完。
+     *
+     * 為什麼不讓模型自己挑：原本要它 find_free_slots → 自己挑 → propose_events，qwen3-8b 常停在中間，
+     * 用文字列出時段再問「要新增嗎？」，使用者回「好」又反問幾點。加規則、加範例、加提醒都只修好一半，還弄壞別的題目。
+     * 模型只要決定「做什麼、哪幾天、多長」，幾點由程式挑，這一個工具它叫得穩。怎麼挑見 SessionPlanner。
+     *
+     * 時間是程式從空檔裡挑的，所以不經過 propose_events 的「沒講早晚就先問」：使用者沒講幾點，沒有早晚可以問。
+     */
+    @Tool(name = "plan_events", description = "使用者叫你幫忙排時間（幫我排、幫我規劃、幫我找時間做某件事）時用："
+            + "行事曆會在空檔裡挑時段，畫面顯示卡片讓使用者確認（不會存檔）。")
+    public String planEvents(
+            @ToolParam(description = "要做的事，例如「讀書」") String title,
+            @ToolParam(description = "開始日期（含），格式 yyyy-MM-dd") String from,
+            @ToolParam(description = "結束日期（不含），格式 yyyy-MM-dd；排明天一天就填後天，排明天、後天兩天就填大後天") String to,
+            @ToolParam(description = "每段幾分鐘，沒講就填 120") Integer minutes,
+            @ToolParam(description = PERIOD) DayPeriod period) {
+        if (title == null || title.isBlank()) {
+            return "沒有收到要做的事，請問使用者要排什麼。";
+        }
+        if (planned) {
+            return "這一輪已經排過了，卡片已經顯示，不要再排一次。請使用者看卡片，不合意可以在卡片上改或取消。";
+        }
+        try {
+            List<CalendarEvent> sessions = planSessions.planSessions(owner, LocalDate.parse(from), LocalDate.parse(to), orAnytime(period),
+                            Duration.ofMinutes(minutes == null ? 120 : minutes)).stream()
+                    .map(s -> new CalendarEvent(title.strip(), s.start(), s.end())).toList();
+            if (sessions.isEmpty()) {
+                return "這段期間沒有夠長的空檔，沒有提議。請照實告訴使用者，問他要不要換日期、換時段或縮短時間。";
+            }
+            planned = true;
+            return show(sessions);
+        } catch (DateTimeParseException | IllegalArgumentException e) {
+            return badParameters(e);
         }
     }
 

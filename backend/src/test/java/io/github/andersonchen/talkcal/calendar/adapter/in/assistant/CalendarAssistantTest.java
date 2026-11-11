@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.andersonchen.talkcal.calendar.adapter.shared.ModelUnavailableException;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
+import io.github.andersonchen.talkcal.calendar.application.domain.model.FreeSlot;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 
@@ -62,6 +63,9 @@ class CalendarAssistantTest {
     private final List<OwnerId> memoryOwners = new ArrayList<>();
     private final List<OwnerId> listOwners = new ArrayList<>();
     // 行事曆上已經有的那筆：修改、刪除的工具用編號找得到它
+    // plan_events 背後排出來的時段（#261）；預設沒有，要測的那題自己放
+    private List<FreeSlot> plannedSlots = List.of();
+    private final List<OwnerId> planOwners = new ArrayList<>();
     private static final ScheduledEvent SAVED = ScheduledEvent.schedule(new CalendarEvent("開會", LocalDateTime.of(2026, 10, 7, 19, 0), LocalDateTime.of(2026, 10, 7, 20, 0)));
 
     /** 照劇本回話：每呼叫一次拿下一句；劇本用完就一直回最後一句。 */
@@ -103,7 +107,11 @@ class CalendarAssistantTest {
                     return List.of();
                 },
                 (owner, id) -> id.equals(SAVED.id()) ? Optional.of(SAVED) : Optional.empty(),
-                (owner, start, end, period, minimum) -> List.of(), TUE);
+                (owner, start, end, period, minimum) -> List.of(),
+                (owner, start, end, period, length) -> {
+                    planOwners.add(owner);
+                    return plannedSlots;
+                }, TUE);
     }
 
     private static AssistantMessage calls(String tool, String arguments) {
@@ -244,7 +252,7 @@ class CalendarAssistantTest {
             }
         };
         CalendarAssistant second = new CalendarAssistant(scripted(proposes("明天晚上七點吃飯"), says("請確認卡片。")), owner -> recording,
-                description -> List.of(DINNER), (owner, start, end) -> List.of(), (owner, id) -> Optional.empty(), (owner, start, end, period, minimum) -> List.of(), TUE);
+                description -> List.of(DINNER), (owner, start, end) -> List.of(), (owner, id) -> Optional.empty(), (owner, start, end, period, minimum) -> List.of(), (owner, start, end, period, length) -> List.of(), TUE);
 
         second.reply(OWNER, ID, "晚上");
 
@@ -287,7 +295,7 @@ class CalendarAssistantTest {
                     throw unavailable;
                 },
                 (owner, start, end) -> List.of(), (owner, id) -> Optional.empty(),
-                (owner, start, end, period, minimum) -> List.of(), TUE);
+                (owner, start, end, period, minimum) -> List.of(), (owner, start, end, period, length) -> List.of(), TUE);
 
         assertSame(unavailable, assertThrows(ModelUnavailableException.class, () -> assistant.reply(OWNER, ID, "晚上")));
         assertEquals(1, prompts.size(), "工具失敗之後不該再叫模型");
@@ -303,7 +311,7 @@ class CalendarAssistantTest {
                     throw new IllegalStateException("呼叫模型抽行程失敗：連線逾時");
                 },
                 (owner, start, end) -> List.of(), (owner, id) -> Optional.empty(),
-                (owner, start, end, period, minimum) -> List.of(), TUE);
+                (owner, start, end, period, minimum) -> List.of(), (owner, start, end, period, length) -> List.of(), TUE);
 
         assertEquals("抱歉，剛剛沒整理好，請再說一次。", assistant.reply(OWNER, ID, "晚上").text());
     }
@@ -365,6 +373,24 @@ class CalendarAssistantTest {
         assertTrue(reply.proposals().isEmpty());
         assertEquals(2, prompts.size(), "只提醒一次");
         assertEquals(CalendarAssistant.HONEST_FALLBACK, memory.findByConversationId(ID).getLast().getText());
+    }
+
+    @Test
+    @DisplayName("#261 plan_events 排出來的時段變成新增卡片回給畫面；接著說「已顯示卡片」不算說謊，只呼叫兩次模型")
+    void plannedSessionsBecomeProposals() {
+        plannedSlots = List.of(new FreeSlot(LocalDateTime.of(2026, 10, 7, 10, 0), LocalDateTime.of(2026, 10, 7, 12, 0)),
+                new FreeSlot(LocalDateTime.of(2026, 10, 8, 8, 0), LocalDateTime.of(2026, 10, 8, 10, 0)));
+
+        CalendarAssistant.Reply reply = assistant(scripted(
+                calls("plan_events", "{\"title\":\"讀書\",\"from\":\"2026-10-07\",\"to\":\"2026-10-09\"}"),
+                says("已顯示卡片，請確認。")))
+                .reply(OWNER, ID, "明天和後天要讀書，幫我規劃一下兩天的空檔");
+
+        assertEquals(List.of(new CalendarEvent("讀書", LocalDateTime.of(2026, 10, 7, 10, 0), LocalDateTime.of(2026, 10, 7, 12, 0)),
+                new CalendarEvent("讀書", LocalDateTime.of(2026, 10, 8, 8, 0), LocalDateTime.of(2026, 10, 8, 10, 0))), reply.proposals());
+        assertEquals("已顯示卡片，請確認。", reply.text());
+        assertEquals(2, prompts.size());
+        assertEquals(List.of(OWNER), planOwners, "排的是登入者的行事曆");
     }
 
     @Test

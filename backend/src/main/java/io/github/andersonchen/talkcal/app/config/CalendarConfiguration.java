@@ -15,6 +15,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.service.AddEve
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ArchiveEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.CountActiveUsersService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.FindFreeSlotsService;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.PlanSessionsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ListEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ParseEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.RemoveEventService;
@@ -27,6 +28,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.service.TrackP
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.CountActiveUsersUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlotsUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.PlanSessionsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ParseEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.RemoveEventUseCase;
@@ -148,8 +150,13 @@ class CalendarConfiguration {
         return new FindFreeSlotsService(loadEventsPort, Clock.system(zone));
     }
 
+    @Bean
+    PlanSessionsUseCase planSessions(FindFreeSlotsUseCase findFreeSlots) {
+        return new PlanSessionsService(findFreeSlots);
+    }
+
     /**
-     * AI 助理：模型 + 自己的對話記憶 + 五個工具（工具背後是上面那些 use case）。
+     * AI 助理：模型 + 自己的對話記憶 + 六個工具（工具背後是上面那些 use case）。
      *
      * 直接拿 ChatModel（跟抽行程背後是同一個），agent loop 由 CalendarAssistant 自己跑。
      * 記憶不用 Spring AI 自動組裝的那個（JdbcChatMemoryRepository 會把工具訊息濾掉），用自己的表，原因寫在 V7。
@@ -161,9 +168,9 @@ class CalendarConfiguration {
                                         JdbcAssistantMemoryRepository assistantMemory,
                                         ParseEventsUseCase parseEvents, ListEventsUseCase listEvents,
                                         FindEventUseCase findEvent, FindFreeSlotsUseCase findFreeSlots,
-                                        @Value("${calendar.zone}") ZoneId zone) {
+                                        PlanSessionsUseCase planSessions, @Value("${calendar.zone}") ZoneId zone) {
         return new CalendarAssistant(chatModel, assistantMemory::of,
-                parseEvents, listEvents, findEvent, findFreeSlots, Clock.system(zone));
+                parseEvents, listEvents, findEvent, findFreeSlots, planSessions, Clock.system(zone));
     }
 
     // 時鐘帶 calendar.zone：對話歸檔的 key 依「最後說話的月份」分，月份要用使用者看到的那個時區算

@@ -383,7 +383,7 @@ class CalendarAssistantControllerTest {
             return new CalendarAssistant(model, owner -> memories.computeIfAbsent(owner, o -> MessageWindowChatMemory.builder().maxMessages(Integer.MAX_VALUE).build()),
                     description -> List.of(CalendarEvent.startingAt("開會", LocalDateTime.of(2026, 10, 7, 15, 0))),
                     (owner, start, end) -> List.of(), (owner, id) -> id.equals(LUNCH.id()) ? Optional.of(LUNCH) : Optional.empty(), (owner, start, end, period, minimum) -> List.of(),
-                    Clock.systemDefaultZone());
+                    (owner, start, end, period, length) -> List.of(), Clock.systemDefaultZone());
         }
     }
 

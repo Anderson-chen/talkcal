@@ -24,6 +24,8 @@ leak-tools
 leak-translate
 list-empty-today
 list-tomorrow
+plan-from-issue
+plan-study-two-days
 refuse-delete
 refuse-direct-save
 vague-whatever
