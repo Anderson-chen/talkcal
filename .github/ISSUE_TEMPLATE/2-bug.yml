@@ -14,6 +14,8 @@ body:
         It's fine if the cause isn't known yet; write what you saw first.
 
         **Labels:** `bug` is added for you; also add exactly one `stage:` or `product:` (how to choose: docs/classification.md), exactly one of `p0`/`p1`, and any `area:` it touches.
+
+        **Wording:** write for a reader who hasn't read this code (how: .claude/rules/writing.md, section "issue 和 PR").
   - type: textarea
     id: actual
     attributes:
