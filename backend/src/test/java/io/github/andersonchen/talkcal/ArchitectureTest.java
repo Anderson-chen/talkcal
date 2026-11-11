@@ -19,7 +19,7 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
  * 但擋不住 ParseEventsService 去 import 一個 Spring AI 的 Adapter ——
  * 那樣寫編譯器一聲不吭，測試照樣全綠，架構就是這樣一點一點爛掉的。
  *
- * 規則全部寫成 noClasses(...)，也就是「不准出現」的形式。
+ * 規則大多寫成 noClasses(...)，也就是「不准出現」的形式。
  * 每條都帶 because(...)，違規時錯誤訊息會直接說出理由，
  * 不必回來翻這個檔案才知道為什麼不行。
  *
@@ -63,6 +63,8 @@ class ArchitectureTest {
     /**
      * 兩側的 adapter 互不認識。
      * 入口那側（目前是 HTTP 的 controller 和 AI 助理的工具）換成別的、模型換成別家，都不該牽動另一側。
+     *
+     * onlyTheCompositionRootMayKnowOutboundAdapters 也擋得到同一種 import；這條另外留著，錯誤訊息才會講 inbound 該怎麼做。
      */
     @ArchTest
     static final ArchRule inboundAdaptersMustNotDependOnOutboundAdapters =
@@ -74,11 +76,10 @@ class ArchitectureTest {
      * 只有組裝根裡的 app.config、app.job 可以認識 adapter.out 的具體類別。
      * 守住的是「換一行 new 就能換掉實作」這個承諾 —— 一旦有第二個地方 import 它，那個承諾就破了。
      *
-     * adapter.out 底下每個 package 是「某一種往外的實作們」：persistence 放 Save / Load / DeleteEventPort 的，
-     * extraction 放 ExtractEventsPort 的，security 放 auth 的 HashPasswordPort 的。
-     * 這條不點名子樹：以前一個子樹寫一條，auth 加了 security 卻沒人補（#268）。寫成整個 adapter.out，新加的子樹自動被守住。
+     * adapter.out 底下每個 package 是「某一種往外的實作們」，例如 persistence 放 Save / Load / DeleteEventPort 的。
+     * 這條不點名子樹，新加的子樹不用另外寫規則就被守住；一個子樹寫一條的時候，auth 的 security 就漏掉了（#268）。
      *
-     * adapter.out 裡的類別互相依賴不受這條管，子樹之間互不認識由下一條管。
+     * adapter.out 裡的類別互相依賴不受這條管，子樹之間互不認識由 outboundAdapterSubtreesMustNotDependOnEachOther 管。
      * app.job 的 AssistantMemoryArchive 也用 archive 的零件（ArchiveBucket、JsonLinesGzip）：它在組裝根裡，所以可以。
      */
     @ArchTest
@@ -91,8 +92,8 @@ class ArchitectureTest {
     /**
      * adapter.out 的子樹之間互不認識。
      *
-     * 每個子樹的細節只該出現在自己那一包：SQL 和表的長相在 persistence，
-     * 日期表、JSON Schema 這些只對某顆模型有效的手法在 extraction，bucket、key 的排法在 archive，指標名稱和標籤在 metrics。
+     * 每個子樹的細節只該出現在自己那一包，例如 SQL 和表的長相只在 persistence，
+     * 日期表、JSON Schema 這些只對某顆模型有效的手法只在 extraction。
      * 要兩個子樹合作，由 core 的 use case 分別呼叫兩個 port。
      *
      * ROOT.(*).adapter.out.(*).. 把每個模組的每個子樹各切成一片，calendar 的 persistence 和 auth 的 persistence 是兩片。
@@ -104,10 +105,11 @@ class ArchitectureTest {
                     .because("一個子樹的細節漏進另一個子樹，換掉其中一家就得改兩包");
 
     /**
-     * adapter.out 的類別一律放在「子樹.供應商」這一層，例如 persistence.postgres、extraction.springai、security.spring。
+     * adapter.out 的類別一律放在「子樹.供應商」這一層，例如 persistence.postgres、security.spring。
      * 第二家供應商來的時候放在隔壁，不用先搬動第一家。
      *
-     * 這條也補上前兩條的縫：直接放在 adapter.out 底下的類別不屬於任何子樹，前兩條都管不到它依賴誰。
+     * 這條也補上一道縫：直接放在 adapter.out 底下的類別不屬於任何子樹，
+     * onlyTheCompositionRootMayKnowOutboundAdapters 放過它，outboundAdapterSubtreesMustNotDependOnEachOther 也切不到它。
      */
     @ArchTest
     static final ArchRule outboundAdaptersSitUnderAVendorPackage =
