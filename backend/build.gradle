@@ -82,8 +82,7 @@ dependencies {
     implementation "io.github.resilience4j:resilience4j-circuitbreaker:${resilience4j}"
     implementation "io.github.resilience4j:resilience4j-bulkhead:${resilience4j}"
 
-    // 認證與授權（#11）：沒登入就用不了 /api。登入方式是可以換的 adapter（本機帳密、之後的 Google／GitHub、AWS 上的 Cognito），
-    // 由 app.config 依 talkcal.auth.provider 組裝其中一套 SecurityFilterChain。auth 模組的規則（帳號名稱、密碼長度）不碰 Spring
+    // 認證與授權（#11）：沒登入就用不了 /api。登入的流程在 app.config 組裝，auth 模組的規則（帳號名稱、密碼長度）不碰 Spring
     implementation 'org.springframework.boot:spring-boot-starter-security'
     // 用 Google、GitHub 帳號登入（#105）：OAuth2 的轉址、換 token、驗 ID token、拿使用者資料都交給它。
     // 只當 client（「用別人的帳號登入」），不當 authorization server，也不驗別人發的 JWT
