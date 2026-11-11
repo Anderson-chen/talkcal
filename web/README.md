@@ -6,7 +6,7 @@ talkcal 的前端，用 Vue 3 + TypeScript + Vite。它只是後端 API 的另�
 
 | 畫面 | 元件 | 打的 API | 契約 |
 |---|---|---|---|
-| 行事曆 | `src/calendar/CalendarView.vue` | `POST /api/calendar/assistant`（AI 助理對話）、`POST /api/calendar/events`（確認、手動新增）、`GET /api/calendar/events`（一頁）、`DELETE /api/calendar/events/{id}` | `src/calendar.ts` ↔ `CalendarController`、`CalendarAssistantController` |
+| 行事曆 | `src/calendar/CalendarView.vue` | `POST /api/calendar/assistant`（AI 助理對話）、`POST /api/calendar/events`（確認、手動新增）、`GET /api/calendar/events`（一頁）、`DELETE /api/calendar/events/{id}`、`GET /api/calendar/archive/events`（查看封存的行程） | `src/calendar.ts` ↔ `CalendarController`、`CalendarAssistantController`、`ArchiveController` |
 
 `src/App.vue` 只放行事曆。月曆格子的日期運算在 `src/monthGrid.ts`，是純函式，不碰畫面。
 
@@ -14,8 +14,9 @@ talkcal 的前端，用 Vue 3 + TypeScript + Vite。它只是後端 API 的另�
 
 - `useCalendar.ts`、`useAssistant.ts`、`useTheme.ts`：狀態和動作，由 `CalendarView` 建一份 provide 下去。桌面版和手機版共用，所以視窗拉窄換版面時，選的日期和 AI 對話都還在。
 - `DesktopCalendar.vue`（側欄 + 月／週／日 + AI 助理側欄）、`MobileCalendar.vue`（760px 以下）。
-- 共用零件：`MonthGrid`、`TimeGrid`（週、日時間軸）、`MiniMonth`、`AssistantChat`、`EventDetail`、`EventForm`、`ThemePicker`。
+- 共用零件：`MonthGrid`、`TimeGrid`（週、日時間軸）、`MiniMonth`、`AssistantChat`、`EventDetail`、`EventForm`、`ThemePicker`、`ArchiveNotice`、`ArchiveViewer`。
 - `timeline.ts` 處理跨夜行程切段和重疊並排，`theme.ts` 放 4 種主題和分類顏色，兩支都是純資料和純函式。
+- `archive.ts`：結束超過 2 年的行程後端會自動封存（#274），月曆翻到那些月份時由 `ArchiveNotice` 註明，`ArchiveViewer` 照一天或一段期間只讀查看。「幾年」寫死在這裡，要跟後端的 `calendar.event.retention` 一起改。
 
 ```
 corepack enable   # 只要做一次：之後打 pnpm，corepack 會照 package.json 的 packageManager 用那一版

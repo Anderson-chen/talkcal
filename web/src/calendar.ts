@@ -109,6 +109,16 @@ export async function listEvents(from: string, to: string): Promise<SavedEvent[]
 }
 
 /**
+ * 已經封存的行程（#274）：結束超過 2 年、被搬到封存的那些，月曆的 listEvents 讀不到。只能看，不能改、不能刪。
+ * from、to 都含（看一天就是同一天），格式 yyyy-MM-dd；跟範圍有重疊的都算。範圍不合規後端回 400，封存讀不到回 502。
+ */
+export async function listArchivedEvents(from: string, to: string): Promise<SavedEvent[]> {
+  const query = new URLSearchParams({ from, to })
+  const res = await send(`/api/calendar/archive/events?${query}`, { method: 'GET' })
+  return ((await res.json()) as { events: SavedEvent[] }).events.map(normalize)
+}
+
+/**
  * 把一個行程改成 event 的樣子（#259）。expected 是改之前看到的樣子（讀回來的那筆、或助理卡片的 before）：
  * 那筆在你看到之後被改過了，後端回 409、這次不改（ApiError，status 409）；已經不在了丟 NotFoundError。
  */
