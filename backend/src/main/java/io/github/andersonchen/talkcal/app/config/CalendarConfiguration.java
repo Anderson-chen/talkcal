@@ -156,7 +156,7 @@ class CalendarConfiguration {
     }
 
     /**
-     * AI 助理：模型 + 自己的對話記憶 + 五個工具（工具背後是上面那些 use case）。
+     * AI 助理：模型 + 自己的對話記憶 + 六個工具（工具背後是上面那些 use case）。
      *
      * 直接拿 ChatModel（跟抽行程背後是同一個），agent loop 由 CalendarAssistant 自己跑。
      * 記憶不用 Spring AI 自動組裝的那個（JdbcChatMemoryRepository 會把工具訊息濾掉），用自己的表，原因寫在 V7。

@@ -27,8 +27,10 @@ public final class PlanSessionsService implements PlanSessionsUseCase {
 
     @Override
     public List<FreeSlot> planSessions(OwnerId owner, LocalDate start, LocalDate endExclusive, DayPeriod period, Duration length) {
-        if (start != null && endExclusive != null && ChronoUnit.DAYS.between(start, endExclusive) > MAX_DAYS) {
-            throw new IllegalArgumentException("一次最多排 " + MAX_DAYS + " 天，這次要了 " + ChronoUnit.DAYS.between(start, endExclusive) + " 天");
+        // 期間本身合不合規（null、結束不晚於開始、超過 100 天）交給找空檔時的 DateRange，這裡只管排時段自己的上限
+        long days = start == null || endExclusive == null ? 0 : ChronoUnit.DAYS.between(start, endExclusive);
+        if (days > MAX_DAYS) {
+            throw new IllegalArgumentException("一次最多排 " + MAX_DAYS + " 天，這次要了 " + days + " 天");
         }
         return SessionPlanner.plan(findFreeSlots.findFreeSlots(owner, start, endExclusive, period, length), length);
     }
