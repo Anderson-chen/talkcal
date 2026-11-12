@@ -69,44 +69,10 @@ import java.time.ZoneId;
 @Configuration(proxyBeanMethods = false)
 class CalendarConfiguration {
 
-    // 跟 AI 助理用同一個模型（ChatModelConfiguration 包好保護的那個）。
-    // 抽行程自己的需求（溫度 0、max_tokens 1024、JSON Schema）在每個請求的選項裡帶，不必另建一個。
-    // 代價：逾時也跟助理共用（2 分鐘）。以前這裡自己建 RestClient、30 秒就放棄；現在靠 max_tokens 擋住失控
-    @Bean
-    ExtractEventsPort extractEventsPort(@Qualifier(ChatModelConfiguration.GUARDED_CHAT_MODEL) ChatModel chatModel) {
-        return new SpringAiExtractEventsAdapter(chatModel);
-    }
-
-    // 一個實作好幾個 port：回傳型別只能寫實作本身，下面的 use case 照樣用各自的 port 介面收它
-    @Bean
-    JdbcCalendarEventAdapter calendarEventStore(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
-        return new JdbcCalendarEventAdapter(jdbcClient, new TransactionTemplate(transactionManager));
-    }
+    // ── AI 助理（入口）─────────────────────────────────────────────────────
 
     /**
-     * 時區寫明，不用 Clock.systemDefaultZone()：
-     * 雖然決定了「不處理時區」（行程存牆上時間），但「現在幾點」一定得在某個時區裡問。
-     * JVM 的預設時區跟著機器走 —— 本機是台北，容器裡是 UTC。不寫明的話，
-     * 一部署到 Docker，早上九點就變成凌晨一點，「今天晚上」會被算到錯的那天。
-     */
-    @Bean
-    ParseEventsUseCase parseEvents(ExtractEventsPort extractEventsPort, @Value("${calendar.zone}") ZoneId zone) {
-        return new ParseEventsService(extractEventsPort, Clock.system(zone));
-    }
-
-    // 找空檔也要知道「現在」（過去的時間不算），時區跟解析用同一個
-    @Bean
-    FindFreeSlotsUseCase findFreeSlots(LoadEventsPort loadEventsPort, @Value("${calendar.zone}") ZoneId zone) {
-        return new FindFreeSlotsService(loadEventsPort, Clock.system(zone));
-    }
-
-    @Bean
-    PlanSessionsUseCase planSessions(FindFreeSlotsUseCase findFreeSlots) {
-        return new PlanSessionsService(findFreeSlots);
-    }
-
-    /**
-     * AI 助理：模型 + 自己的對話記憶 + 六個工具（工具背後是上面那些 use case）。
+     * AI 助理：模型 + 自己的對話記憶 + 六個工具（工具背後是下一段的 use case）。
      *
      * 直接拿 ChatModel（跟抽行程同一個），agent loop 由 CalendarAssistant 自己跑。
      * 記憶不用 Spring AI 自動組裝的那個（JdbcChatMemoryRepository 會把工具訊息濾掉），用自己的表，原因寫在 V7。
@@ -122,17 +88,67 @@ class CalendarConfiguration {
                 parseEvents, listEvents, findEvent, findFreeSlots, planSessions, Clock.system(zone));
     }
 
-    // 助理發出的提議卡片（#223）：ProposalStorePort 的實作，歸檔排程也用它刪舊卡片
-    @Bean
-    JdbcAssistantProposalAdapter assistantProposals(JdbcClient jdbcClient) {
-        return new JdbcAssistantProposalAdapter(jdbcClient);
-    }
-
     // 助理讀寫、歸檔工作搬走，用的是同一張表、同一個實作
     @Bean
     JdbcAssistantMemoryRepository assistantMemory(JdbcClient jdbcClient, PlatformTransactionManager transactionManager,
                                                   @Value("${calendar.assistant.memory-turns}") int memoryTurns) {
         return new JdbcAssistantMemoryRepository(jdbcClient, new TransactionTemplate(transactionManager), memoryTurns);
+    }
+
+    // ── 助理工具背後的 use case ────────────────────────────────────────────
+
+    // 一個實作好幾個 port：回傳型別只能寫實作本身，下面的 use case 照樣用各自的 port 介面收它
+    @Bean
+    JdbcCalendarEventAdapter calendarEventStore(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
+        return new JdbcCalendarEventAdapter(jdbcClient, new TransactionTemplate(transactionManager));
+    }
+
+    // 跟 AI 助理用同一個模型（ChatModelConfiguration 包好保護的那個）。
+    // 抽行程自己的需求（溫度 0、max_tokens 1024、JSON Schema）在每個請求的選項裡帶，不必另建一個。
+    // 代價：逾時也跟助理共用（2 分鐘）。以前這裡自己建 RestClient、30 秒就放棄；現在靠 max_tokens 擋住失控
+    @Bean
+    ExtractEventsPort extractEventsPort(@Qualifier(ChatModelConfiguration.GUARDED_CHAT_MODEL) ChatModel chatModel) {
+        return new SpringAiExtractEventsAdapter(chatModel);
+    }
+
+    /**
+     * 時區寫明，不用 Clock.systemDefaultZone()：
+     * 雖然決定了「不處理時區」（行程存牆上時間），但「現在幾點」一定得在某個時區裡問。
+     * JVM 的預設時區跟著機器走 —— 本機是台北，容器裡是 UTC。不寫明的話，
+     * 一部署到 Docker，早上九點就變成凌晨一點，「今天晚上」會被算到錯的那天。
+     */
+    @Bean
+    ParseEventsUseCase parseEvents(ExtractEventsPort extractEventsPort, @Value("${calendar.zone}") ZoneId zone) {
+        return new ParseEventsService(extractEventsPort, Clock.system(zone));
+    }
+
+    @Bean
+    ListEventsUseCase listEvents(LoadEventsPort loadEventsPort) {
+        return new ListEventsService(loadEventsPort);
+    }
+
+    @Bean
+    FindEventUseCase findEvent(LoadEventPort loadEventPort) {
+        return new FindEventService(loadEventPort);
+    }
+
+    // 找空檔也要知道「現在」（過去的時間不算），時區跟解析用同一個
+    @Bean
+    FindFreeSlotsUseCase findFreeSlots(LoadEventsPort loadEventsPort, @Value("${calendar.zone}") ZoneId zone) {
+        return new FindFreeSlotsService(loadEventsPort, Clock.system(zone));
+    }
+
+    @Bean
+    PlanSessionsUseCase planSessions(FindFreeSlotsUseCase findFreeSlots) {
+        return new PlanSessionsService(findFreeSlots);
+    }
+
+    // ── 新增行程、記下卡片的去向 ───────────────────────────────────────────
+
+    // 助理發出的提議卡片（#223）：ProposalStorePort 的實作，歸檔排程也用它刪舊卡片
+    @Bean
+    JdbcAssistantProposalAdapter assistantProposals(JdbcClient jdbcClient) {
+        return new JdbcAssistantProposalAdapter(jdbcClient);
     }
 
     @Bean
@@ -141,16 +157,30 @@ class CalendarConfiguration {
         return new AddEventsService(saveEventsPort, saveEventsOncePort, assistantProposals, usage);
     }
 
+    @Bean
+    TrackProposalsUseCase trackProposals(JdbcAssistantProposalAdapter assistantProposals, RecordUsagePort usage) {
+        return new TrackProposalsService(assistantProposals, usage);
+    }
+
     // MeterRegistry 是 actuator 自動建好的那一個，/actuator/prometheus 吐的就是它裡面的東西
     @Bean
     RecordUsagePort recordUsage(MeterRegistry registry) {
         return new MicrometerUsageAdapter(registry);
     }
 
+    // ── 改、刪行程 ─────────────────────────────────────────────────────────
+
     @Bean
-    TrackProposalsUseCase trackProposals(JdbcAssistantProposalAdapter assistantProposals, RecordUsagePort usage) {
-        return new TrackProposalsService(assistantProposals, usage);
+    UpdateEventUseCase updateEvent(UpdateEventPort updateEventPort, LoadEventPort loadEventPort) {
+        return new UpdateEventService(updateEventPort, loadEventPort);
     }
+
+    @Bean
+    RemoveEventUseCase removeEvent(DeleteEventPort deleteEventPort) {
+        return new RemoveEventService(deleteEventPort);
+    }
+
+    // ── 觀測：活躍使用者 ───────────────────────────────────────────────────
 
     // 活躍使用者算的是真實的時間點（created_at 帶時區），用 UTC 就好，跟行事曆的牆上時間無關
     @Bean
@@ -168,26 +198,6 @@ class CalendarConfiguration {
     @Bean
     ActiveUsersMetrics activeUsersMetrics(CountActiveUsersUseCase countActiveUsers) {
         return new ActiveUsersMetrics(countActiveUsers, Duration.ofMinutes(1), Clock.systemUTC());
-    }
-
-    @Bean
-    ListEventsUseCase listEvents(LoadEventsPort loadEventsPort) {
-        return new ListEventsService(loadEventsPort);
-    }
-
-    @Bean
-    RemoveEventUseCase removeEvent(DeleteEventPort deleteEventPort) {
-        return new RemoveEventService(deleteEventPort);
-    }
-
-    @Bean
-    FindEventUseCase findEvent(LoadEventPort loadEventPort) {
-        return new FindEventService(loadEventPort);
-    }
-
-    @Bean
-    UpdateEventUseCase updateEvent(UpdateEventPort updateEventPort, LoadEventPort loadEventPort) {
-        return new UpdateEventService(updateEventPort, loadEventPort);
     }
 
     // ── 資料歸檔（#54）─────────────────────────────────────────────────────
