@@ -159,7 +159,11 @@ services:
 
   # ── 行程與 AI 助理的對話記憶 ─────────────────────────────────
   postgres:
-    image: postgres:18.6-alpine       # 釘死版本；alpine 版比較小
+    # 官方映像檔再補上 Alpine 的修補，為什麼見 postgres/Dockerfile。
+    # tag 跟 Dockerfile 的 FROM 同一個版本（釘死；alpine 版比較小），看名字就知道裡面是哪一版；Renovate 兩處一起改
+    image: talkcal/postgres:18.6-alpine
+    build:
+      context: ./postgres
     container_name: talkcal-postgres
     environment:
       # 密碼從 deploy/.env 來（範本 .env.example，不進 git）；沒設就拒絕啟動，不退回一個寫死的預設值。
