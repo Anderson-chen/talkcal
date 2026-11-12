@@ -50,7 +50,7 @@ class ResilienceSettingsTest {
     @Test
     @DisplayName("模型的斷路器：共用預設 + 自己的慢呼叫門檻、失敗判斷，都是設定檔寫的值")
     void chatModelCircuitBreaker() {
-        CircuitBreakerConfig config = breakers.circuitBreaker(ResilienceConfiguration.CHAT_MODEL).getCircuitBreakerConfig();
+        CircuitBreakerConfig config = breakers.circuitBreaker(ChatModelConfiguration.CHAT_MODEL).getCircuitBreakerConfig();
 
         assertThat(config.getSlidingWindowType()).isEqualTo(CircuitBreakerConfig.SlidingWindowType.COUNT_BASED);
         assertThat(config.getSlidingWindowSize()).isEqualTo(10);
@@ -66,7 +66,7 @@ class ResilienceSettingsTest {
     @Test
     @DisplayName("模型的 bulkhead：50 個，滿了不排隊")
     void chatModelBulkhead() {
-        BulkheadConfig config = bulkheads.bulkhead(ResilienceConfiguration.CHAT_MODEL).getBulkheadConfig();
+        BulkheadConfig config = bulkheads.bulkhead(ChatModelConfiguration.CHAT_MODEL).getBulkheadConfig();
 
         assertThat(config.getMaxConcurrentCalls()).isEqualTo(50);
         assertThat(config.getMaxWaitDuration()).isZero();
@@ -86,8 +86,8 @@ class ResilienceSettingsTest {
     @DisplayName("指標：斷路器狀態、bulkhead 剩幾個位子、擋掉幾個，都帶著 name=chat-model 出現在 /actuator/prometheus 那份")
     void metricsAreRegistered() {
         // 先取一次，確保已經建好（registry 建了才會接上指標）
-        breakers.circuitBreaker(ResilienceConfiguration.CHAT_MODEL);
-        bulkheads.bulkhead(ResilienceConfiguration.CHAT_MODEL);
+        breakers.circuitBreaker(ChatModelConfiguration.CHAT_MODEL);
+        bulkheads.bulkhead(ChatModelConfiguration.CHAT_MODEL);
 
         assertThat(meters.find("resilience4j.circuitbreaker.state").tag("name", "chat-model").gauges()).isNotEmpty();
         assertThat(meters.find("resilience4j.bulkhead.available.concurrent.calls").tag("name", "chat-model").gauge()).isNotNull();
@@ -103,7 +103,7 @@ class ResilienceSettingsTest {
     @Test
     @DisplayName("反例：模型的斷路器打開時，health 裡也沒有斷路器這一項（模型掛了不等於 app 掛了）")
     void openBreakerIsNotPartOfHealth() {
-        CircuitBreaker breaker = breakers.circuitBreaker(ResilienceConfiguration.CHAT_MODEL);
+        CircuitBreaker breaker = breakers.circuitBreaker(ChatModelConfiguration.CHAT_MODEL);
         breaker.transitionToForcedOpenState();
         try {
             assertThat(health.healthForPath("circuitBreakers")).isNull();

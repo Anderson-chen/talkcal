@@ -72,7 +72,7 @@ class CalendarConfiguration {
     // 對話最多留幾輪（一輪 = 使用者一句話，加上之後的工具呼叫和回覆）
     private static final int ASSISTANT_MEMORY_TURNS = 10;
 
-    // ChatModel 是 Spring AI 依 spring.ai.openai.chat.* 自動建好的，跟 AI 助理背後是同一個。
+    // 跟 AI 助理用同一個模型（ChatModelConfiguration 包好保護的那個）。
     // 抽行程自己的需求（溫度 0、max_tokens 1024、JSON Schema）在每個請求的選項裡帶，不必另建一個。
     // 代價：逾時也跟助理共用（2 分鐘）。以前這裡自己建 RestClient、30 秒就放棄；現在靠 max_tokens 擋住失控
     @Bean
@@ -111,10 +111,9 @@ class CalendarConfiguration {
     /**
      * AI 助理：模型 + 自己的對話記憶 + 六個工具（工具背後是上面那些 use case）。
      *
-     * 直接拿 ChatModel（跟抽行程背後是同一個），agent loop 由 CalendarAssistant 自己跑。
+     * 直接拿 ChatModel（跟抽行程同一個），agent loop 由 CalendarAssistant 自己跑。
      * 記憶不用 Spring AI 自動組裝的那個（JdbcChatMemoryRepository 會把工具訊息濾掉），用自己的表，原因寫在 V7。
      * 記憶依擁有者分開（V11）：助理每一句話先拿「這個人名下的記憶」（assistantMemory::of），再照框架的介面讀寫。
-     * 模型跟抽行程用同一個包好保護的（見 ChatModelConfiguration）。
      */
     @Bean
     CalendarAssistant calendarAssistant(@Qualifier(ChatModelConfiguration.GUARDED_CHAT_MODEL) ChatModel chatModel,
@@ -193,7 +192,7 @@ class CalendarConfiguration {
         return new UpdateEventService(updateEventPort, loadEventPort);
     }
 
-    // ── 資料歸檔（#54）：bucket 在 ArchiveStorageConfiguration，排程在 JobConfiguration ──────────
+    // ── 資料歸檔（#54）─────────────────────────────────────────────────────
 
     // 歸檔的檔名帶著「存的時間」，用 UTC：跟 S3 自己記的時間同一個基準，不必換算
     @Bean
