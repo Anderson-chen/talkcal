@@ -1,6 +1,7 @@
 package io.github.andersonchen.talkcal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -44,9 +45,13 @@ import tools.jackson.databind.ObjectMapper;
  * - 行程的新增、讀取、刪除：不需要模型，GitHub 上的 CI 也會跑
  * - 問助理：需要真的 llama-server，沒開就跳過（跟 CalendarAssistantConversationTest 一樣，只在本機真的跑）
  * 模型沒開也起得來：ChatModel 是第一次呼叫時才連線，啟動時不碰它。
+ *
+ * 物件儲存刻意指到一個連不上的位址：歸檔的 bucket 也是第一次用到才連線，app 照樣起得來，
+ * 順便驗「物件儲存掛了，只有查看封存失敗，月曆照常」（#274）。真的接上儲存的情境在 ArchiveSystemTest。
  */
 @Testcontainers
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "talkcal.archive.endpoint=http://127.0.0.1:1")
 @DisplayName("系統測試：整個應用接起來")
 class SystemTest {
 
@@ -117,6 +122,24 @@ class SystemTest {
         assertEquals(400, response.statusCode(), response.body());
         assertTrue(JSON.readTree(response.body()).has("error"), response.body());
         assertEquals(0, jdbc.sql("SELECT count(*) FROM calendar_event").query(Integer.class).single());
+    }
+
+    @Test
+    @DisplayName("物件儲存連不上：查看封存回 502（訊息不帶內部位址），2 年內的行程照常讀得到")
+    void archiveDownKeepsCalendarWorking() throws Exception {
+        assertEquals(201, post("/api/calendar/events", """
+                {"events": [{"title": "牙醫回診", "start": "2030-01-15T10:00:00", "end": "2030-01-15T11:00:00"}]}
+                """).statusCode());
+
+        HttpResponse<String> archived = get("/api/calendar/archive/events?from=2023-05-01&to=2023-05-31");
+        HttpResponse<String> listed = get("/api/calendar/events?from=2030-01-01&to=2030-02-01");
+
+        assertEquals(502, archived.statusCode(), archived.body());
+        assertTrue(JSON.readTree(archived.body()).has("error"), archived.body());
+        assertFalse(archived.body().contains("127.0.0.1"), archived.body());
+        assertFalse(archived.body().contains("s3://"), archived.body());
+        assertEquals(200, listed.statusCode(), listed.body());
+        assertEquals("牙醫回診", JSON.readTree(listed.body()).at("/events/0/title").asString());
     }
 
     @Test

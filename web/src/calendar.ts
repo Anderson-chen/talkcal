@@ -102,9 +102,22 @@ export async function dismissProposals(proposalIds: string[]): Promise<void> {
 }
 
 /** 期間裡的行程。from 含、to 不含，格式 yyyy-MM-dd；跨夜跨月的行程前後兩頁都會出現。 */
-export async function listEvents(from: string, to: string): Promise<SavedEvent[]> {
+export function listEvents(from: string, to: string): Promise<SavedEvent[]> {
+  return eventsBetween('/api/calendar/events', from, to)
+}
+
+/**
+ * 已經封存的行程（#274）：結束超過 2 年、被搬到封存的那些，月曆的 listEvents 讀不到。只能看，不能改、不能刪。
+ * from、to 都含（看一天就是同一天），格式 yyyy-MM-dd；跟範圍有重疊的都算。範圍不合規後端回 400，封存讀不到回 502。
+ */
+export function listArchivedEvents(from: string, to: string): Promise<SavedEvent[]> {
+  return eventsBetween('/api/calendar/archive/events', from, to)
+}
+
+// 月曆和封存回的是同一個形狀（後端共用 CalendarController.SavedEvents），只差網址和 to 含不含
+async function eventsBetween(path: string, from: string, to: string): Promise<SavedEvent[]> {
   const query = new URLSearchParams({ from, to })
-  const res = await send(`/api/calendar/events?${query}`, { method: 'GET' })
+  const res = await send(`${path}?${query}`, { method: 'GET' })
   return ((await res.json()) as { events: SavedEvent[] }).events.map(normalize)
 }
 

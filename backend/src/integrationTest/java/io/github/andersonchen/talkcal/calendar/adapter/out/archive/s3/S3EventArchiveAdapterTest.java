@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
-import io.github.andersonchen.talkcal.calendar.application.domain.model.MonthRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 
@@ -78,7 +77,7 @@ class S3EventArchiveAdapterTest {
 
         archive.store(ALICE, MARCH, List.of(full, bare));
 
-        assertEquals(List.of(full, bare), archive.load(ALICE, new MonthRange(MARCH, MARCH)));
+        assertEquals(List.of(full, bare), archive.load(ALICE, MARCH, MARCH));
     }
 
     @Test
@@ -111,12 +110,12 @@ class S3EventArchiveAdapterTest {
         archive.store(ALICE, MARCH, List.of(alices));
         archive.store(BOB, MARCH, List.of(bobs));
 
-        assertEquals(List.of(alices), archive.load(ALICE, new MonthRange(MARCH, MARCH)));
-        assertEquals(List.of(bobs), archive.load(BOB, new MonthRange(MARCH, MARCH)));
+        assertEquals(List.of(alices), archive.load(ALICE, MARCH, MARCH));
+        assertEquals(List.of(bobs), archive.load(BOB, MARCH, MARCH));
 
         assertEquals(1, archive.deleteAll(ALICE));
-        assertTrue(archive.load(ALICE, new MonthRange(MARCH, MARCH)).isEmpty());
-        assertEquals(List.of(bobs), archive.load(BOB, new MonthRange(MARCH, MARCH)));
+        assertTrue(archive.load(ALICE, MARCH, MARCH).isEmpty());
+        assertEquals(List.of(bobs), archive.load(BOB, MARCH, MARCH));
     }
 
     @Test
@@ -129,12 +128,12 @@ class S3EventArchiveAdapterTest {
         archive.store(ALICE, MARCH, List.of(mar));
         archive.store(ALICE, YearMonth.of(2024, 4), List.of(apr));
 
-        assertEquals(List.of(mar), archive.load(ALICE, new MonthRange(MARCH, MARCH)));
-        assertEquals(List.of(feb, mar), archive.load(ALICE, new MonthRange(YearMonth.of(2024, 2), MARCH)));
+        assertEquals(List.of(mar), archive.load(ALICE, MARCH, MARCH));
+        assertEquals(List.of(feb, mar), archive.load(ALICE, YearMonth.of(2024, 2), MARCH));
     }
 
     @Test
-    @DisplayName("同一筆存了兩次（重跑、還原後又歸檔）：讀回來只有一筆，而且是後存的那份")
+    @DisplayName("同一筆存了兩次（重跑排程、以前還原後又歸檔）：讀回來只有一筆，而且是後存的那份")
     void sameEventStoredTwiceComesBackOnce() {
         ScheduledEvent first = event("初版", LocalDateTime.of(2024, 3, 1, 9, 0));
         ScheduledEvent edited = new ScheduledEvent(first.id(), first.event().withDetails("會議室 B", null));
@@ -143,7 +142,7 @@ class S3EventArchiveAdapterTest {
         new S3EventArchiveAdapter(bucket, Clock.fixed(Instant.parse("2026-01-02T00:00:00Z"), ZoneOffset.UTC))
                 .store(ALICE, MARCH, List.of(edited));
 
-        assertEquals(List.of(edited), archive.load(ALICE, new MonthRange(MARCH, MARCH)));
+        assertEquals(List.of(edited), archive.load(ALICE, MARCH, MARCH));
     }
 
     @Test
@@ -159,17 +158,28 @@ class S3EventArchiveAdapterTest {
     }
 
     @Test
-    @DisplayName("歸檔壞掉（不是 gzip、或內容不合行程的規則）：讀的時候丟例外，不會把壞資料放回行事曆")
+    @DisplayName("反例：讀的時候儲存連不上、bucket 不存在，丟 IllegalStateException（查看封存的 API 翻成 502），不會當成「沒有封存」")
+    void loadFailureIsAnException() {
+        S3EventArchiveAdapter noBucket = new S3EventArchiveAdapter(RUSTFS.bucket("no-such-bucket"), Clock.systemUTC());
+        S3EventArchiveAdapter unreachable = new S3EventArchiveAdapter(ArchiveBucket.connect("http://127.0.0.1:1",
+                RustFsContainer.REGION, "events", RustFsContainer.ACCESS_KEY, RustFsContainer.SECRET_KEY), Clock.systemUTC());
+
+        assertThrows(IllegalStateException.class, () -> noBucket.load(ALICE, MARCH, MARCH));
+        assertThrows(IllegalStateException.class, () -> unreachable.load(ALICE, MARCH, MARCH));
+    }
+
+    @Test
+    @DisplayName("歸檔壞掉（不是 gzip、或內容不合行程的規則）：讀的時候丟例外，不會把壞資料顯示出來")
     void corruptArchiveIsRejected() throws IOException {
         String prefix = ArchiveBucket.ownerPrefix(S3EventArchiveAdapter.ROOT, ALICE) + "month=2024-03/";
         bucket.put(prefix + "broken.jsonl.gz", "not gzip".getBytes(StandardCharsets.UTF_8));
-        assertThrows(IllegalStateException.class, () -> archive.load(ALICE, new MonthRange(MARCH, MARCH)));
+        assertThrows(IllegalStateException.class, () -> archive.load(ALICE, MARCH, MARCH));
 
         bucket.deleteAll(prefix);
         String endBeforeStart = "{\"v\":1,\"id\":\"" + UUID.randomUUID() + "\",\"title\":\"倒著走\","
                 + "\"start\":\"2024-03-01T10:00:00\",\"end\":\"2024-03-01T09:00:00\",\"category\":\"WORK\"}";
         bucket.put(prefix + "invalid.jsonl.gz", gzip(endBeforeStart));
-        assertThrows(IllegalStateException.class, () -> archive.load(ALICE, new MonthRange(MARCH, MARCH)));
+        assertThrows(IllegalStateException.class, () -> archive.load(ALICE, MARCH, MARCH));
     }
 
     private static byte[] gzip(String text) throws IOException {

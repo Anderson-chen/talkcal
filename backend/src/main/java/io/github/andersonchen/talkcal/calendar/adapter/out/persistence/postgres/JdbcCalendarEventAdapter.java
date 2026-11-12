@@ -12,7 +12,6 @@ import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteEventP
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEndedEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventsPort;
-import io.github.andersonchen.talkcal.calendar.application.port.out.RestoreEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsOncePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.UpdateEventPort;
@@ -54,7 +53,8 @@ import java.util.stream.Collectors;
  *
  * 一個類別實作讀、存、刪幾個 port：碰的是同一張表，「這張表長什麼樣」的知識只該在一個地方。
  * 冪等鍵的表也在這裡：記下的是「哪一批行程」，要跟 calendar_event 在同一個交易裡一起寫。
- * 歸檔（#54）要的三個 port 也在這裡：找出舊的、歸檔好之後刪掉、從歸檔還原回來 —— 一樣是這張表。
+ * 歸檔（#54）要的兩個 port 也在這裡：找出舊的、歸檔好之後刪掉 —— 一樣是這張表。
+ * 封存的行程不放回這張表，要看就直接讀歸檔（#274）。
  *
  * 修改（UPDATE，#259）用樂觀鎖，不然晚存的分頁會把先存的改動蓋回去，兩邊還都看到「儲存成功」：
  * WHERE 除了 id、owner_id，每個欄位都要跟呼叫端「改之前看到的樣子」一樣（SAME_CONTENT，跟 deleteArchived 共用），
@@ -62,7 +62,7 @@ import java.util.stream.Collectors;
  * 不加 version 欄位的理由見 UpdateEventService。
  */
 public final class JdbcCalendarEventAdapter implements SaveEventsPort, SaveEventsOncePort, LoadEventsPort, LoadEventPort,
-        DeleteEventPort, UpdateEventPort, LoadEndedEventsPort, DeleteArchivedEventsPort, RestoreEventsPort {
+        DeleteEventPort, UpdateEventPort, LoadEndedEventsPort, DeleteArchivedEventsPort {
 
     private final JdbcClient jdbc;
     private final TransactionTemplate transaction;
@@ -302,20 +302,6 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, SaveEvent
         }
     }
 
-    @Override
-    public int restore(OwnerId owner, List<ScheduledEvent> events) {
-        try {
-            // ON CONFLICT (id) DO NOTHING：已經在行事曆上的那筆不蓋掉、也不算錯（RestoreEventsPort 的約定）。
-            // 同一個 id 在別人名下（UUID 撞號，實際上不會發生）一樣跳過，不會變成搶走別人的行程
-            Integer restored = transaction.execute(status -> events.stream()
-                    .mapToInt(event -> insertSql(owner, event, "ON CONFLICT (id) DO NOTHING").update())
-                    .sum());
-            return restored == null ? 0 : restored;
-        } catch (DataAccessException | TransactionException e) {
-            throw new IllegalStateException("還原行程失敗（" + events.size() + " 筆）", e);
-        }
-    }
-
     private record OwnedRow(OwnerId owner, Row row) {
     }
 
@@ -372,15 +358,10 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, SaveEvent
     }
 
     private void insert(OwnerId owner, ScheduledEvent scheduled) {
-        insertSql(owner, scheduled, "").update();
-    }
-
-    // 新增和還原只差在最後那一句（還原遇到已經有的 id 就跳過），欄位的對應只寫一份
-    private JdbcClient.StatementSpec insertSql(OwnerId owner, ScheduledEvent scheduled, String onConflict) {
-        return jdbc.sql("""
+        jdbc.sql("""
                         INSERT INTO calendar_event (id, owner_id, title, start_at, end_at, category, location, note)
                         VALUES (:id, :owner, :title, :start, :end, :category, :location, :note)
-                        """ + onConflict)
+                        """)
                 .param("id", scheduled.id().value())
                 .param("owner", owner.value())
                 .param("title", scheduled.event().title())
@@ -390,6 +371,7 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, SaveEvent
                 // 分類存 enum 的名稱，跟 V5 的 CHECK 一致；沒有地點、備註就存 NULL（V5 的 CHECK 不收空白字串）
                 .param("category", scheduled.event().category().name())
                 .param("location", scheduled.event().location().orElse(null))
-                .param("note", scheduled.event().note().orElse(null));
+                .param("note", scheduled.event().note().orElse(null))
+                .update();
     }
 }

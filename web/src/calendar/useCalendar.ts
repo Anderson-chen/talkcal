@@ -8,6 +8,7 @@ import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 
 import { addEvents, listEvents, NotFoundError, removeEvent, updateEvent, type Category, type EventFields, type SavedEvent } from '../calendar'
 import { message } from '../http'
 import { addDays, daysCovered, gridRange, monthGrid, toIsoDate } from '../monthGrid'
+import { isArchivedMonth } from './archive'
 
 export type View = 'month' | 'week' | 'day'
 
@@ -96,6 +97,9 @@ export function useCalendar() {
 
   const detail = computed(() => events.value.find((e) => e.id === detailId.value) ?? null)
 
+  // 看的這個月有沒有已經封存的日子（#274）：有的話月曆上要註明，並放查看封存的入口
+  const archived = computed(() => isArchivedMonth(shown.value.year, shown.value.month, today))
+
   // ── 導覽 ──────────────────────────────────────────────
   function pickDate(day: string, nextView?: View) {
     sel.value = day
@@ -173,7 +177,7 @@ export function useCalendar() {
   }
 
   return {
-    today, sel, view, shown, days, events, loadError, hidden, detailId, detail, form, monthCounts,
+    today, sel, view, shown, days, events, loadError, hidden, detailId, detail, form, monthCounts, archived,
     eventsOn, pickDate, shiftMonth, step, toggleCategory, add, update, remove, openForm, openEdit, reload,
   }
 }

@@ -16,12 +16,12 @@ import io.github.andersonchen.talkcal.calendar.application.domain.service.Archiv
 import io.github.andersonchen.talkcal.calendar.application.domain.service.CountActiveUsersService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.FindFreeSlotsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.PlanSessionsService;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.ListArchivedEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ListEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ParseEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.RemoveEventService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.FindEventService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.UpdateEventService;
-import io.github.andersonchen.talkcal.calendar.application.domain.service.RestoreEventsService;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ArchiveEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.TrackProposalsService;
@@ -29,12 +29,12 @@ import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseC
 import io.github.andersonchen.talkcal.calendar.application.port.in.CountActiveUsersUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlotsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.PlanSessionsUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.ListArchivedEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ParseEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.RemoveEventUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindEventUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.UpdateEventUseCase;
-import io.github.andersonchen.talkcal.calendar.application.port.in.RestoreEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteArchivedEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.in.TrackProposalsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.out.CountActiveOwnersPort;
@@ -45,7 +45,6 @@ import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEndedEve
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.UpdateEventPort;
-import io.github.andersonchen.talkcal.calendar.application.port.out.RestoreEventsPort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsagePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsOncePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPort;
@@ -86,7 +85,7 @@ import java.time.ZoneId;
  *
  * 這裡要下的決定：
  * - ExtractEventsPort 用 Spring AI 的 ChatModel（跟 AI 助理共用同一個，自動組裝的那一個）
- * - 行程存 PostgreSQL（一個實作同時當 Save / SaveOnce / Load / Update / DeleteEventPort，和歸檔要的那三個）
+ * - 行程存 PostgreSQL（一個實作同時當 Save / SaveOnce / Load / Update / DeleteEventPort，和歸檔要的那兩個）
  * - 「現在」用哪個時區的時鐘
  * - 舊資料歸檔到哪（S3 相容的物件儲存）、AI 助理的對話和行程各留多久（#54；排程每天搬一次，所以要開排程）
  * - 產品用量記到哪（#36）：Micrometer 的 counter；活躍使用者從資料庫數，掛成 gauge
@@ -284,9 +283,10 @@ class CalendarConfiguration {
         return new ArchiveEventsService(loadEndedEvents, eventArchive, deleteArchivedEvents, 500);
     }
 
+    // 查看封存的行程（#274）：只讀歸檔，不接任何寫資料庫的 port
     @Bean
-    RestoreEventsUseCase restoreEvents(EventArchivePort eventArchive, RestoreEventsPort restoreEventsPort) {
-        return new RestoreEventsService(eventArchive, restoreEventsPort);
+    ListArchivedEventsUseCase listArchivedEvents(EventArchivePort eventArchive) {
+        return new ListArchivedEventsService(eventArchive);
     }
 
     @Bean
@@ -296,7 +296,7 @@ class CalendarConfiguration {
         return new EventArchiveJob(archiveEvents, retention, Clock.system(zone));
     }
 
-    // 還原 API 要的對話那一半：controller 不認識 app.job，這裡把方法接過去（跟 assistantMemory::of 同一個做法）
+    // 還原 API 放回的對話（行程不放回，見 listArchivedEvents）：controller 不認識 app.job，這裡把方法接過去（跟 assistantMemory::of 同一個做法）
     @Bean
     ArchiveController.RestoreConversations restoreConversations(AssistantMemoryArchive assistantMemoryArchive) {
         return assistantMemoryArchive::restore;
