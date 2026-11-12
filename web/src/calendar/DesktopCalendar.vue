@@ -5,6 +5,8 @@ import { computed, ref } from 'vue'
 import { logOut, me } from '../auth'
 import { CATEGORIES } from '../calendar'
 import { monthDayLabel, weekdayName, weekOf } from '../monthGrid'
+import ArchiveNotice from './ArchiveNotice.vue'
+import ArchiveViewer from './ArchiveViewer.vue'
 import AssistantChat from './AssistantChat.vue'
 import ClearChatButton from './ClearChatButton.vue'
 import EventDetail from './EventDetail.vue'
@@ -22,6 +24,7 @@ import { useThemeState } from './useTheme'
 const calendar = useCalendarState()
 const theme = useThemeState()
 const aiOpen = ref(true)
+const archiveOpen = ref(false)
 
 const week = computed(() => weekOf(calendar.sel.value))
 
@@ -86,6 +89,7 @@ const noEventsToday = computed(() => calendar.view.value === 'day' && calendar.e
         <ViewTabs />
       </div>
       <LoadError />
+      <ArchiveNotice @open="archiveOpen = true" />
 
       <MonthGrid v-if="calendar.view.value === 'month'" />
 
@@ -144,6 +148,12 @@ const noEventsToday = computed(() => calendar.view.value === 'day' && calendar.e
     <div v-if="calendar.form.value" class="scrim" @click.self="calendar.form.value = null">
       <div role="dialog" aria-modal="true" aria-labelledby="event-form-title" class="dialog">
         <EventForm variant="dialog" />
+      </div>
+    </div>
+
+    <div v-if="archiveOpen" class="scrim" @click.self="archiveOpen = false">
+      <div role="dialog" aria-modal="true" aria-labelledby="archive-title" class="dialog">
+        <ArchiveViewer variant="dialog" @close="archiveOpen = false" />
       </div>
     </div>
   </div>

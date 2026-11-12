@@ -1,7 +1,6 @@
 package io.github.andersonchen.talkcal.app.job;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.ArchiveBucket;
@@ -11,15 +10,16 @@ import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
-import io.github.andersonchen.talkcal.calendar.application.domain.model.MonthRange;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ArchiveEventsService;
-import io.github.andersonchen.talkcal.calendar.application.domain.service.RestoreEventsService;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.ListArchivedEventsService;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ArchiveEventsUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.ListArchivedEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.out.EventArchivePort;
 
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
@@ -40,13 +40,14 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * 行程歸檔的整條路（#54）：真的 PostgreSQL、真的 S3 相容儲存（RustFS），中間是正式的 use case 和 adapter，跟 app 裡接的一樣。
+ * 行程歸檔的整條路（#54、#274）：真的 PostgreSQL、真的 S3 相容儲存（RustFS），中間是正式的 use case 和 adapter，跟 app 裡接的一樣。
  *
  * 每個規則都配一個反例：
  * - 舊的搬走 ↔ 不舊的（昨天、剛好在期限上）留著
  * - 存好才刪 ↔ 上傳失敗時資料庫一筆都沒少（整個儲存掛掉、只有某一包失敗都是）
- * - 歸檔 → 還原後跟原本一模一樣 ↔ 還原兩次不會多一份、不蓋掉線上的
- * - 只還原得到自己的 ↔ 別人還原同一段月份拿不到我的
+ * - 歸檔 → 查看跟原本一模一樣 ↔ 查看不寫資料庫，查完線上的筆數不變
+ * - 跨月的行程查得到 ↔ 範圍外的、剛好碰到邊界的不出現
+ * - 只查得到自己的 ↔ 別人查同一段期間拿不到我的
  */
 @Testcontainers
 @DisplayName("行程歸檔：PostgreSQL ↔ S3 相容儲存")
@@ -63,11 +64,13 @@ class EventArchiveFlowTest {
 
     // 「現在」固定在 2026-10-19，保留 2 年 → 2024-10-19 之前結束的算舊
     private static final LocalDateTime CUTOFF = LocalDateTime.of(2024, 10, 19, 4, 30);
+    private static final YearMonth MAY_2023 = YearMonth.of(2023, 5);
 
     static JdbcClient jdbc;
     static JdbcCalendarEventAdapter events;
     static ArchiveBucket bucket;
     static S3EventArchiveAdapter archive;
+    static ListArchivedEventsUseCase viewing;
 
     @BeforeAll
     static void setUp() {
@@ -82,6 +85,7 @@ class EventArchiveFlowTest {
         RUSTFS.createBucket("talkcal-archive");
         bucket = RUSTFS.bucket("talkcal-archive");
         archive = new S3EventArchiveAdapter(bucket, Clock.systemUTC());
+        viewing = new ListArchivedEventsService(archive);
     }
 
     @BeforeEach
@@ -99,9 +103,18 @@ class EventArchiveFlowTest {
         return new ScheduledEvent(EventId.newId(), new CalendarEvent(title, start, start.plusHours(1)));
     }
 
+    private static ScheduledEvent between(String title, LocalDateTime start, LocalDateTime end) {
+        return new ScheduledEvent(EventId.newId(), new CalendarEvent(title, start, end));
+    }
+
     // 那個人在資料庫裡的全部行程，依結束時間排（月曆的 load 一次最多 100 天，這裡借「找舊行程」那句把期限開到很遠）
     private static List<ScheduledEvent> online(OwnerId owner) {
         return events.loadEndedBefore(LocalDateTime.of(2100, 1, 1, 0, 0), 1000).getOrDefault(owner, List.of());
+    }
+
+    // 資料庫裡全部的行程筆數，不分人
+    private static long onlineRows() {
+        return jdbc.sql("SELECT count(*) FROM calendar_event").query(Long.class).single();
     }
 
     @Test
@@ -118,7 +131,7 @@ class EventArchiveFlowTest {
 
         assertEquals(new ArchiveEventsUseCase.Report(1, 0), report);
         assertEquals(List.of(onTheLine, yesterday), online(ALICE));
-        assertEquals(List.of(old), archive.load(ALICE, new MonthRange(YearMonth.of(2023, 5), YearMonth.of(2023, 5))));
+        assertEquals(List.of(old), archive.load(ALICE, MAY_2023, MAY_2023));
     }
 
     @Test
@@ -152,8 +165,8 @@ class EventArchiveFlowTest {
             }
 
             @Override
-            public List<ScheduledEvent> load(OwnerId owner, MonthRange months) {
-                return archive.load(owner, months);
+            public List<ScheduledEvent> load(OwnerId owner, YearMonth firstMonth, YearMonth lastMonth) {
+                return archive.load(owner, firstMonth, lastMonth);
             }
 
             @Override
@@ -167,46 +180,70 @@ class EventArchiveFlowTest {
         assertEquals(new ArchiveEventsUseCase.Report(1, 1), report);
         assertTrue(online(ALICE).isEmpty());
         assertEquals(List.of(bobs), online(BOB));
-        assertTrue(archive.load(BOB, new MonthRange(YearMonth.of(2023, 5), YearMonth.of(2023, 5))).isEmpty());
+        assertTrue(archive.load(BOB, MAY_2023, MAY_2023).isEmpty());
     }
 
     @Test
-    @DisplayName("歸檔 → 還原：放回來的跟原本一模一樣（id、分類、地點、備註都在）；還原兩次不會多一份")
-    void archiveThenRestoreIsLossless() {
+    @DisplayName("歸檔 → 照一天、一段期間查看：每個欄位都跟封存前一樣（id、標題、時間、分類、地點、備註）；查完線上的筆數不變")
+    void viewIsLosslessAndReadOnly() {
         ScheduledEvent detailed = new ScheduledEvent(EventId.newId(), new CalendarEvent("看牙醫",
                 LocalDateTime.of(2023, 5, 1, 9, 0), LocalDateTime.of(2023, 5, 1, 10, 30),
                 Category.HEALTH, Optional.of("仁愛路診所"), Optional.of("帶健保卡")));
-        ScheduledEvent plain = at("開會", LocalDateTime.of(2023, 6, 2, 14, 0));
-        events.save(ALICE, List.of(detailed, plain));
-        List<ScheduledEvent> before = online(ALICE);
+        ScheduledEvent plain = at("開會", LocalDateTime.of(2023, 5, 2, 14, 0));
+        ScheduledEvent recent = at("昨天", LocalDateTime.of(2026, 10, 18, 9, 0));
+        events.save(ALICE, List.of(detailed, plain, recent));
         archiving(archive).archiveEndedBefore(CUTOFF);
-        assertTrue(online(ALICE).isEmpty());
+        assertEquals(List.of(recent), online(ALICE));
+        long rowsBefore = onlineRows();
 
-        RestoreEventsService restore = new RestoreEventsService(archive, events);
-        assertEquals(2, restore.restore(ALICE, new MonthRange(YearMonth.of(2023, 5), YearMonth.of(2023, 6))));
-        assertEquals(before, online(ALICE));
+        assertEquals(List.of(detailed), viewing.listArchivedEvents(ALICE, LocalDate.of(2023, 5, 1), LocalDate.of(2023, 5, 1)));
+        assertEquals(List.of(detailed, plain),
+                viewing.listArchivedEvents(ALICE, LocalDate.of(2023, 5, 1), LocalDate.of(2023, 5, 31)));
 
-        assertEquals(0, restore.restore(ALICE, new MonthRange(YearMonth.of(2023, 5), YearMonth.of(2023, 6))));
-        assertEquals(before, online(ALICE));
+        // 查看不放回資料庫：筆數不變，那兩筆也沒有回到月曆上
+        assertEquals(rowsBefore, onlineRows());
+        assertEquals(List.of(recent), online(ALICE));
     }
 
     @Test
-    @DisplayName("不同使用者不混：Bob 還原同一段月份拿不到 Alice 的；Alice 還原也不會帶出 Bob 的")
-    void restoreOnlyReturnsOwnersEvents() {
+    @DisplayName("跨月：範圍內開始、下個月才結束的行程查得到（它在下個月的包裡）；從範圍前開始的也查得到")
+    void crossMonthEventIsFound() {
+        ScheduledEvent trip = between("出差", LocalDateTime.of(2023, 5, 30, 9, 0), LocalDateTime.of(2023, 6, 2, 18, 0));
+        events.save(ALICE, List.of(trip));
+        archiving(archive).archiveEndedBefore(CUTOFF);
+        // 先確認它真的放在六月的包，不在五月：這一題才是在驗「往後多讀一個月」
+        assertTrue(archive.load(ALICE, MAY_2023, MAY_2023).isEmpty());
+
+        assertEquals(List.of(trip), viewing.listArchivedEvents(ALICE, LocalDate.of(2023, 5, 30), LocalDate.of(2023, 5, 31)));
+        assertEquals(List.of(trip), viewing.listArchivedEvents(ALICE, LocalDate.of(2023, 6, 1), LocalDate.of(2023, 6, 1)));
+    }
+
+    @Test
+    @DisplayName("反例：範圍外的不出現；剛好在範圍開始那一刻結束的、剛好在範圍結束隔天 00:00 開始的都不算重疊")
+    void outsideAndTouchingEventsAreLeftOut() {
+        ScheduledEvent inside = at("範圍裡", LocalDateTime.of(2023, 5, 10, 9, 0));
+        ScheduledEvent before = at("前一天", LocalDateTime.of(2023, 5, 9, 9, 0));
+        ScheduledEvent after = at("後一天", LocalDateTime.of(2023, 5, 12, 9, 0));
+        ScheduledEvent endsAtStart = between("前一晚到半夜", LocalDateTime.of(2023, 5, 9, 23, 0), LocalDateTime.of(2023, 5, 10, 0, 0));
+        ScheduledEvent startsAtEnd = at("隔天半夜", LocalDateTime.of(2023, 5, 12, 0, 0));
+        events.save(ALICE, List.of(inside, before, after, endsAtStart, startsAtEnd));
+        archiving(archive).archiveEndedBefore(CUTOFF);
+
+        assertEquals(List.of(inside), viewing.listArchivedEvents(ALICE, LocalDate.of(2023, 5, 10), LocalDate.of(2023, 5, 11)));
+    }
+
+    @Test
+    @DisplayName("反例：兩個人封存了同一段期間的行程，各自只查得到自己的")
+    void viewOnlyReturnsOwnersEvents() {
         ScheduledEvent alices = at("Alice 的", LocalDateTime.of(2023, 5, 1, 9, 0));
-        ScheduledEvent bobs = at("Bob 的", LocalDateTime.of(2023, 5, 3, 9, 0));
+        ScheduledEvent bobs = at("Bob 的", LocalDateTime.of(2023, 5, 1, 10, 0));
         events.save(ALICE, List.of(alices));
         events.save(BOB, List.of(bobs));
         archiving(archive).archiveEndedBefore(CUTOFF);
-        RestoreEventsService restore = new RestoreEventsService(archive, events);
+        LocalDate may1 = LocalDate.of(2023, 5, 1);
 
-        assertEquals(1, restore.restore(BOB, new MonthRange(YearMonth.of(2023, 5), YearMonth.of(2023, 5))));
-        assertEquals(List.of(bobs), online(BOB));
-        assertTrue(online(ALICE).isEmpty());
-
-        assertEquals(1, restore.restore(ALICE, new MonthRange(YearMonth.of(2023, 5), YearMonth.of(2023, 5))));
-        assertEquals(List.of(alices), online(ALICE));
-        assertEquals(List.of(bobs), online(BOB));
+        assertEquals(List.of(alices), viewing.listArchivedEvents(ALICE, may1, may1));
+        assertEquals(List.of(bobs), viewing.listArchivedEvents(BOB, may1, may1));
     }
 
     @Test
@@ -221,7 +258,7 @@ class EventArchiveFlowTest {
 
         assertEquals(new ArchiveEventsUseCase.Report(7, 0), report);
         assertTrue(online(ALICE).isEmpty());
-        assertEquals(many, archive.load(ALICE, new MonthRange(YearMonth.of(2023, 1), YearMonth.of(2023, 7))));
+        assertEquals(many, archive.load(ALICE, YearMonth.of(2023, 1), YearMonth.of(2023, 7)));
     }
 
     @Test
@@ -250,16 +287,5 @@ class EventArchiveFlowTest {
         List<ScheduledEvent> left = online(ALICE);
         assertEquals(List.of(edited.id()), left.stream().map(ScheduledEvent::id).toList());
         assertEquals(Optional.of("補上的備註"), left.getFirst().event().note());
-    }
-
-    @Test
-    @DisplayName("還原沒給擁有者或月份範圍：不收（範圍本身的規則在 MonthRangeTest）")
-    void restoreArgumentsAreRequired() {
-        RestoreEventsService restore = new RestoreEventsService(archive, events);
-        MonthRange march = new MonthRange(YearMonth.of(2024, 3), YearMonth.of(2024, 3));
-
-        assertThrows(IllegalArgumentException.class, () -> restore.restore(null, march));
-        assertThrows(IllegalArgumentException.class, () -> restore.restore(ALICE, null));
-        assertEquals(0, restore.restore(ALICE, march));
     }
 }

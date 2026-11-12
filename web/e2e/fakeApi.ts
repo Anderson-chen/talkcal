@@ -13,6 +13,8 @@
 //   - 事後檢查前端送了什麼（saved）
 //   - 修改、刪除（#259）：照後端的規則演，改之前的樣子對不上就 409；事後檢查送了什麼（updated、deleted）
 //   - AI 助理（#223）：不打模型，每句話都回一張固定的提議卡片（帶著假後端發的 proposalId）；事後檢查按掉了哪幾張（dismissed）
+//   - 封存（#274）：預先放幾筆已經封存的行程（archived），月曆的 /events 讀不到它們，只有 /archive/events 查得到；
+//     讓下一次查封存失敗（failNextArchive，模擬物件儲存連不上）；事後檢查查了哪幾段（archiveQueries）
 import type { Page, Route } from '@playwright/test'
 
 export interface FakeEvent {
@@ -33,6 +35,8 @@ interface Options {
   providers?: string[]
   // 已經用 Google、GitHub 登入的人：/me 回這個名字，沒有帳號名稱（跟後端一樣）
   externalName?: string
+  // 已經封存的行程（#274）：不在 events 裡，月曆上看不到
+  archived?: FakeEvent[]
 }
 
 // 助理每句話都提議這一筆（明天下午三點開會），proposalId 依序是 card-1、card-2…
@@ -66,6 +70,9 @@ export async function fakeApi(page: Page, options: Options = {}) {
     // 每次 PUT、DELETE /events/{id} 收到什麼（#259）
     updated: [] as { id: string; expected: Omit<FakeEvent, 'id'>; event: Omit<FakeEvent, 'id'> }[],
     deleted: [] as string[],
+    // 每次 GET /archive/events 的 from、to；下一次查封存要不要失敗
+    archiveQueries: [] as { from: string; to: string }[],
+    failNextArchive: false,
   }
 
   const json = (route: Route, status: number, body: unknown) => route.fulfill({ status, json: body })
@@ -159,6 +166,23 @@ export async function fakeApi(page: Page, options: Options = {}) {
       state.events.splice(at, 1)
       return route.fulfill({ status: 204 })
     }
+    // 封存（#274）：照後端的規則，from、to 都含，跟範圍有重疊的都算（剛好在 from 00:00 結束的不算）
+    if (url.pathname === '/api/calendar/archive/events' && method === 'GET') {
+      const from = url.searchParams.get('from')!
+      const to = url.searchParams.get('to')!
+      state.archiveQueries.push({ from, to })
+      if (state.failNextArchive) {
+        state.failNextArchive = false
+        // 跟後端物件儲存連不上時一樣：502，訊息不帶內部位址
+        return json(route, 502, { error: '封存的資料暫時讀不到，請稍後再試' })
+      }
+      if (from > to) return json(route, 400, { error: `開始日期（${from}）不可晚於結束日期（${to}）` })
+      // 開始那天不晚於 to = 開始早於 to 隔天 00:00；'YYYY-MM-DD...' 字串直接比大小就是時間順序
+      const overlapping = (options.archived ?? [])
+        .filter((e) => e.start.slice(0, 10) <= to && e.end.padEnd(19, ':00') > `${from}T00:00:00`)
+        .sort((a, b) => a.start.localeCompare(b.start))
+      return json(route, 200, { events: overlapping })
+    }
     if (url.pathname === '/api/calendar/assistant' && method === 'POST') {
       state.cards++
       return json(route, 200, {
@@ -183,7 +207,9 @@ export async function fakeApi(page: Page, options: Options = {}) {
     get updated() { return state.updated },
     get deleted() { return state.deleted },
     get events() { return state.events },
+    get archiveQueries() { return state.archiveQueries },
     set failNextSave(error: string | null) { state.failNextSave = error },
+    set failNextArchive(fail: boolean) { state.failNextArchive = fail },
     /** 模擬 session 過期：之後的請求都當成沒登入 */
     expireSession() { state.me = null },
   }

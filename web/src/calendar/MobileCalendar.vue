@@ -8,6 +8,8 @@ import { computed, ref } from 'vue'
 import { logOut, me } from '../auth'
 import type { Category, SavedEvent } from '../calendar'
 import { dayLabel, monthDayLabel, timeOf, weekdayName, weekOf } from '../monthGrid'
+import ArchiveNotice from './ArchiveNotice.vue'
+import ArchiveViewer from './ArchiveViewer.vue'
 import AssistantChat from './AssistantChat.vue'
 import ClearChatButton from './ClearChatButton.vue'
 import EventDetail from './EventDetail.vue'
@@ -26,6 +28,7 @@ const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
 
 const aiOpen = ref(false)
 const themeOpen = ref(false)
+const archiveOpen = ref(false)
 
 const week = computed(() => weekOf(calendar.sel.value))
 
@@ -69,6 +72,7 @@ const dotColor = (category: Category) => theme.colors.value[category].color
   <div class="mobile">
     <EventDetail v-if="calendar.detail.value && !calendar.form.value" variant="page" />
     <EventForm v-else-if="calendar.form.value" variant="page" />
+    <ArchiveViewer v-else-if="archiveOpen" variant="page" @close="archiveOpen = false" />
 
     <template v-else>
       <!-- 頁首：月、週是「年 + 大標」；日視圖是「‹ 10月」回到月視圖 + 下面的大標 -->
@@ -100,6 +104,7 @@ const dotColor = (category: Category) => theme.colors.value[category].color
 
       <ViewTabs wide class="tabs" />
       <LoadError class="load-error-gap" />
+      <ArchiveNotice class="load-error-gap" @open="archiveOpen = true" />
 
       <!-- 月視圖 -->
       <template v-if="calendar.view.value === 'month'">

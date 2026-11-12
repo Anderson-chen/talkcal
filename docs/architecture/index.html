@@ -385,7 +385,7 @@ req:{n:"請求怎麼走",intro:"使用者打開網址，到 AI 回答為止經�
  {k:"app",t:"app",d:"Spring 處理行程查詢和 AI 助理。模型呼叫走 OpenAI 相容的 client，換模型只改環境變數。"},
  {k:{bedrock:"bsvc",gpu:"llm"},t:"模型",d:{bedrock:"打 Bedrock mantle 端點上的 Qwen3 32B，帶 .env 裡的 API key。模型在 AWS 那邊，這台機器不需要 GPU。",gpu:"打同一台機器上的 llm-chat（llama-server、L4 GPU），跟本機一樣是 Qwen3-8B。"}},
  {k:"postgres",t:"資料庫",d:"行程和對話記憶存在 postgres，資料在 EBS 上的 docker volume；不對外開埠。"},
- {k:"s3a",t:"歸檔",d:"每天凌晨 app 把結束超過 2 年的行程、30 天沒說話的對話壓成 JSON Lines + gzip 放進 S3，存好了才從 postgres 刪；POST /api/calendar/archive/restore 找回來（#54）。"}]},
+ {k:"s3a",t:"歸檔",d:"每天凌晨 app 把結束超過 2 年的行程、30 天沒說話的對話壓成 JSON Lines + gzip 放進 S3，存好了才從 postgres 刪（#54）。行程用 GET /api/calendar/archive/events 照日期只讀查看、不放回 postgres（#274）；對話用 POST /api/calendar/archive/restore 放回來。"}]},
 deploy:{n:"怎麼部署上去",intro:"從空帳號到網站上線：本機跑兩次 terraform apply，機器開機後自己部署完（約 4 分鐘）。",steps:[
  {k:"tfstate",t:"bootstrap",d:"整個帳號只跑一次：建放 state 的 S3 bucket（加密、版本控制、禁止刪除）和花費告警。它自己用本機 state。"},
  {k:"backend",t:"state 位置",d:"階段一的 state 放進那個 bucket，use_lockfile 上鎖。bucket 名稱帶帳號 ID，放在 gitignore 掉的 backend.hcl。"},
