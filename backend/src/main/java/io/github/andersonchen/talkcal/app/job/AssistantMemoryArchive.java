@@ -40,7 +40,7 @@ import java.util.UUID;
  * 而 ArchitectureTest 只准組裝根裡的 app.config、app.job 認識 adapter.out。
  * 對話記憶本來就不在 core 裡（core 不知道有「對話」這回事，見 JdbcAssistantMemoryRepository），所以歸檔也不走 core 的 port。
  *
- * 類別和建構子是 public：由 app.config 的 CalendarConfiguration 建出來，跨 package 了。
+ * 類別和建構子是 public：由 app.config 的 JobConfiguration 建出來，跨 package 了。
  * C 重構把助理搬成自己的模組時，這裡跟著改成呼叫那邊的 use case。
  */
 public final class AssistantMemoryArchive {

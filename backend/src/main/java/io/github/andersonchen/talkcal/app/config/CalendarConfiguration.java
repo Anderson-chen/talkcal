@@ -25,7 +25,6 @@ import io.github.andersonchen.talkcal.calendar.application.domain.service.Update
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ArchiveEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.TrackProposalsService;
-import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.CountActiveUsersUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindFreeSlotsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.PlanSessionsUseCase;
@@ -49,65 +48,36 @@ import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsageP
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsOncePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.SaveEventsPort;
 import io.github.andersonchen.talkcal.app.job.AssistantMemoryArchive;
-import io.github.andersonchen.talkcal.app.job.EventArchiveJob;
-import io.github.andersonchen.talkcal.app.job.IdempotencyKeyCleanup;
 
-import io.github.andersonchen.talkcal.calendar.adapter.shared.GuardedChatModel;
-
-import io.github.resilience4j.bulkhead.BulkheadRegistry;
-import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.time.Period;
 import java.time.ZoneId;
 
 /**
  * 組裝 calendar 模組的 use case 和 port
  */
 @Configuration(proxyBeanMethods = false)
-@EnableScheduling
 class CalendarConfiguration {
 
     // 對話最多留幾輪（一輪 = 使用者一句話，加上之後的工具呼叫和回覆）
     private static final int ASSISTANT_MEMORY_TURNS = 10;
 
-    private static final String GUARDED_CHAT_MODEL = "guardedChatModel";
-
     // ChatModel 是 Spring AI 依 spring.ai.openai.chat.* 自動建好的，跟 AI 助理背後是同一個。
     // 抽行程自己的需求（溫度 0、max_tokens 1024、JSON Schema）在每個請求的選項裡帶，不必另建一個。
     // 代價：逾時也跟助理共用（2 分鐘）。以前這裡自己建 RestClient、30 秒就放棄；現在靠 max_tokens 擋住失控
     @Bean
-    ExtractEventsPort extractEventsPort(@Qualifier(GUARDED_CHAT_MODEL) ChatModel chatModel) {
+    ExtractEventsPort extractEventsPort(@Qualifier(ChatModelConfiguration.GUARDED_CHAT_MODEL) ChatModel chatModel) {
         return new SpringAiExtractEventsAdapter(chatModel);
-    }
-
-    /**
-     * 模型外面包一層 GuardedChatModel（#44），助理和抽行程都用這一個：背後是同一顆模型，壞就一起壞。
-     * 規則在 application.properties 的 resilience4j.*.instances.chat-model。
-     *
-     * 每一次呼叫的逾時也是在這裡補上的（GuardedChatModel.getOptions）：Spring AI 自動建的那個沒包保護，每次呼叫只等 60 秒，
-     * 之後有新的地方要叫模型，一樣用 @Qualifier(GUARDED_CHAT_MODEL) 拿這一個。
-     *
-     * defaultCandidate = false：它也是 ChatModel，一般按型別要 ChatModel 的地方（例如 Spring AI 自己的 ChatClient.Builder）
-     * 看不到它、照樣拿 Spring AI 自動建的那個；只有指名 @Qualifier(GUARDED_CHAT_MODEL) 的才拿得到。
-     */
-    @Bean(name = GUARDED_CHAT_MODEL, defaultCandidate = false)
-    ChatModel guardedChatModel(ChatModel chatModel, CircuitBreakerRegistry breakers, BulkheadRegistry bulkheads,
-                               @Value("${talkcal.model.busy-retry-after}") Duration busyRetryAfter,
-                               @Value("${spring.ai.openai.chat.timeout}") Duration callTimeout) {
-        return new GuardedChatModel(chatModel, breakers.circuitBreaker(ResilienceConfiguration.CHAT_MODEL),
-                bulkheads.bulkhead(ResilienceConfiguration.CHAT_MODEL), busyRetryAfter, callTimeout);
     }
 
     // 一個實作好幾個 port：回傳型別只能寫實作本身，下面的 use case 照樣用各自的 port 介面收它
@@ -144,25 +114,16 @@ class CalendarConfiguration {
      * 直接拿 ChatModel（跟抽行程背後是同一個），agent loop 由 CalendarAssistant 自己跑。
      * 記憶不用 Spring AI 自動組裝的那個（JdbcChatMemoryRepository 會把工具訊息濾掉），用自己的表，原因寫在 V7。
      * 記憶依擁有者分開（V11）：助理每一句話先拿「這個人名下的記憶」（assistantMemory::of），再照框架的介面讀寫。
-     * 模型跟抽行程用同一個包好保護的（見 guardedChatModel）。
+     * 模型跟抽行程用同一個包好保護的（見 ChatModelConfiguration）。
      */
     @Bean
-    CalendarAssistant calendarAssistant(@Qualifier(GUARDED_CHAT_MODEL) ChatModel chatModel,
+    CalendarAssistant calendarAssistant(@Qualifier(ChatModelConfiguration.GUARDED_CHAT_MODEL) ChatModel chatModel,
                                         JdbcAssistantMemoryRepository assistantMemory,
                                         ParseEventsUseCase parseEvents, ListEventsUseCase listEvents,
                                         FindEventUseCase findEvent, FindFreeSlotsUseCase findFreeSlots,
                                         PlanSessionsUseCase planSessions, @Value("${calendar.zone}") ZoneId zone) {
         return new CalendarAssistant(chatModel, assistantMemory::of,
                 parseEvents, listEvents, findEvent, findFreeSlots, planSessions, Clock.system(zone));
-    }
-
-    // 時鐘帶 calendar.zone：對話歸檔的 key 依「最後說話的月份」分，月份要用使用者看到的那個時區算
-    @Bean
-    AssistantMemoryArchive assistantMemoryArchive(JdbcAssistantMemoryRepository assistantMemory,
-                                                  JdbcAssistantProposalAdapter assistantProposals, ArchiveBucket archiveBucket,
-                                                  @Value("${calendar.assistant.retention}") Duration retention,
-                                                  @Value("${calendar.zone}") ZoneId zone) {
-        return new AssistantMemoryArchive(assistantMemory, assistantProposals, archiveBucket, retention, Clock.system(zone));
     }
 
     // 助理發出的提議卡片（#223）：ProposalStorePort 的實作，歸檔排程也用它刪舊卡片
@@ -175,12 +136,6 @@ class CalendarConfiguration {
     @Bean
     JdbcAssistantMemoryRepository assistantMemory(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
         return new JdbcAssistantMemoryRepository(jdbcClient, new TransactionTemplate(transactionManager), ASSISTANT_MEMORY_TURNS);
-    }
-
-    @Bean
-    IdempotencyKeyCleanup idempotencyKeyCleanup(JdbcCalendarEventAdapter calendarEventStore,
-                                                @Value("${calendar.idempotency.retention}") Duration retention) {
-        return new IdempotencyKeyCleanup(calendarEventStore, retention, Clock.systemUTC());
     }
 
     @Bean
@@ -238,21 +193,7 @@ class CalendarConfiguration {
         return new UpdateEventService(updateEventPort, loadEventPort);
     }
 
-    // ── 資料歸檔（#54）─────────────────────────────────────────────────────
-
-    /**
-     * 歸檔用的 bucket：行程和 AI 助理的對話共用一個。連到哪是設定（talkcal.archive.*）：
-     * 本機是 compose 的 RustFS，雲端是 S3（endpoint 空白）。建這個物件不會連線，連不上要到真的上傳時才知道 ——
-     * 物件儲存掛了不該讓整個 app 起不來，歸檔晚一天沒關係（沒存好的不會被刪）。
-     */
-    @Bean
-    ArchiveBucket archiveBucket(@Value("${talkcal.archive.endpoint}") String endpoint,
-                                @Value("${talkcal.archive.region}") String region,
-                                @Value("${talkcal.archive.bucket}") String bucket,
-                                @Value("${talkcal.archive.access-key}") String accessKey,
-                                @Value("${talkcal.archive.secret-key}") String secretKey) {
-        return ArchiveBucket.connect(endpoint, region, bucket, accessKey, secretKey);
-    }
+    // ── 資料歸檔（#54）：bucket 在 ArchiveStorageConfiguration，排程在 JobConfiguration ──────────
 
     // 歸檔的檔名帶著「存的時間」，用 UTC：跟 S3 自己記的時間同一個基準，不必換算
     @Bean
@@ -271,13 +212,6 @@ class CalendarConfiguration {
     @Bean
     ListArchivedEventsUseCase listArchivedEvents(EventArchivePort eventArchive) {
         return new ListArchivedEventsService(eventArchive);
-    }
-
-    @Bean
-    EventArchiveJob eventArchiveJob(ArchiveEventsUseCase archiveEvents,
-                                    @Value("${calendar.event.retention}") Period retention,
-                                    @Value("${calendar.zone}") ZoneId zone) {
-        return new EventArchiveJob(archiveEvents, retention, Clock.system(zone));
     }
 
     // 還原 API 放回的對話（行程不放回，見 listArchivedEvents）：controller 不認識 app.job，這裡把方法接過去（跟 assistantMemory::of 同一個做法）
