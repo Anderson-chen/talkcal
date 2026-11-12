@@ -42,7 +42,7 @@ public final class SpringAiExtractEventsAdapter implements ExtractEventsPort {
             // 助理的工具框架認的是這個型別（見 CalendarAssistant 的 toolCallingManager），包了就認不出來
             throw e;
         } catch (RuntimeException e) {
-            // port 的契約是失敗丟 IllegalStateException（CalendarController 翻成 502）。
+            // port 的契約是失敗丟 IllegalStateException。
             // ChatModel 失敗時丟的是 OpenAI SDK 自己的例外，而且型別隨失敗原因不同（連不上、逾時、HTTP 4xx/5xx），
             // 全部包成同一種；保留 cause，log 裡才看得到真正的原因
             throw new IllegalStateException("呼叫模型抽行程失敗：" + e.getMessage(), e);
