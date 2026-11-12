@@ -32,7 +32,7 @@ class AuthConfiguration {
         return new JdbcAccountAdapter(jdbcClient, new TransactionTemplate(transactionManager));
     }
 
-    // PasswordEncoder 來自 SecurityConfiguration
+    // PasswordEncoder 來自 PasswordHashingConfiguration
     @Bean
     RegisterAccountUseCase registerAccount(SaveAccountPort saveAccountPort, PasswordEncoder passwordEncoder) {
         return new RegisterAccountService(saveAccountPort, new SpringPasswordHasher(passwordEncoder));
