@@ -79,7 +79,7 @@ docker compose "${compose_files[@]}" config -q
 
 echo "── 4. 服務（deploy/ + compose.ec2.yaml + compose.$MODEL_BACKEND.yaml）"
 # 映像檔先準備好，這幾行只拉、只 build，不換掉任何在跑的容器（#291）。
-# CI 的漏洞掃描每次都從頭 build、拉最新的基底映像檔；這裡不重拉、只用快取的話，CI 綠燈不代表線上也是這一版
+# 跟 CI vulns job 的 --pull 對齊（.github/workflows/ci.yml）：這裡不重拉、只用快取的話，CI 綠燈不代表線上也是這一版
 docker compose "${compose_files[@]}" pull --quiet --ignore-buildable  # 第三方：同一個 tag 官方重新 build 過，就換成新的 digest
 docker compose "${compose_files[@]}" build --pull                     # 自己 build 的：基底映像檔重拉
 # web、postgres 的 Dockerfile 會 apk upgrade，但那一層有快取：Dockerfile 和基底都沒變時，停在第一次 build 那天的套件。
@@ -113,7 +113,7 @@ unset db_password
 # 備份失敗就不部署 —— 沒有退路的時候不往前走
 bash infra/envs/1-ec2/backup-to-s3.sh pre-deploy
 
-# 映像檔上面 build 好了，這裡只換容器：映像檔變了的才重建
+# 映像檔上面 build 好了，這裡不帶 --build
 docker compose "${compose_files[@]}" up -d --remove-orphans
 
 echo "── 5. 觀測（ops/ + compose.ops.yaml）"
@@ -174,8 +174,8 @@ systemctl list-timers "$PROJECT-backup.timer" --no-pager
 
 docker compose "${compose_files[@]}" ps
 
-# 換下來、沒有容器在用的舊映像檔（重拉、重 build 之後會一直累積）：根磁碟跟 PostgreSQL 共用（#291）。
-# 只清沒有 tag 的；退版要用的 talkcal/app:<版本>、talkcal/web:<版本> 有 tag，不會被清掉
+# 換下來、沒有容器在用的舊映像檔，重拉、重 build 之後會一直累積（#291）。
+# 不帶 -a：退版要用的映像檔不能清，見 cd/rollback.md「映像檔不在了」
 docker image prune -f
 
 echo "── 7. 冒煙測試：網站、觀測、Bedrock、告警寄信"
