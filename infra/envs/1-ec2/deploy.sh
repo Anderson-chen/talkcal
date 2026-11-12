@@ -82,8 +82,8 @@ echo "── 4. 服務（deploy/ + compose.ec2.yaml + compose.$MODEL_BACKEND.yam
 # 跟 CI vulns job 的 --pull 對齊（.github/workflows/ci.yml）：這裡不重拉、只用快取的話，CI 綠燈不代表線上也是這一版
 docker compose "${compose_files[@]}" pull --quiet --ignore-buildable  # 第三方：同一個 tag 官方重新 build 過，就換成新的 digest
 docker compose "${compose_files[@]}" build --pull                     # 自己 build 的：基底映像檔重拉
-# web、postgres 的 Dockerfile 會 apk upgrade，但那一層有快取：Dockerfile 和基底都沒變時，停在第一次 build 那天的套件。
-# build 完還有能升的套件，就只對那個服務不用快取重 build（之後一般的 build 會沿用這次的結果）。
+# 這兩個 Dockerfile 會 apk upgrade，但那一層有快取：Dockerfile 和基底都沒變時，停在第一次 build 那天的套件。
+# 不用快取重 build 一次之後，下次一般的 build 會沿用這次的結果。
 # 不每次都不用快取：那樣映像檔每次都會變，postgres 每次部署都要重啟
 for svc in web postgres; do
   # config --images 會連依賴的服務一起列（web 會多出 app、postgres），照 talkcal/<服務>:<tag> 的命名挑出這一個
@@ -92,7 +92,7 @@ for svc in web postgres; do
   pending="$(docker run --rm --entrypoint sh "$image" -c 'apk update -q >/dev/null && apk version -l "<"')"
   if grep ' < ' <<<"$pending"; then
     echo "$svc 的映像檔還有上面這些套件能升，不用快取重 build"
-    docker compose "${compose_files[@]}" build --pull --no-cache "$svc"
+    docker compose "${compose_files[@]}" build --no-cache "$svc"
   fi
 done
 
@@ -121,9 +121,8 @@ echo "── 5. 觀測（ops/ + compose.ops.yaml）"
 # 設定跟本機同一份，compose.ops.yaml 只蓋掉雲端不一樣的值（trace 取樣比例、備份告警讀的資料夾）
 # --env-file：Grafana 寄告警信的 SMTP 設定（#121）和 heartbeat 網址（#40）都在同一份 deploy/.env。
 # compose 預設只讀第一個 compose 檔所在資料夾（ops/）的 .env，不帶的話 Grafana 拿不到、就不寄信也不送 heartbeat
-ops_compose=(docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml)
-"${ops_compose[@]}" pull --quiet  # 跟上面的第三方同一個理由（#291）
-"${ops_compose[@]}" up -d
+# --pull always：跟上面的第三方同一個理由（#291）
+docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml up -d --pull always --quiet-pull
 
 echo "── 6. 備份排程（#45）：每小時一次、關機前一次"
 # 寫在這裡、不寫在 user_data：user_data 只在第一次開機跑，已經在跑的機器重跑 deploy.sh 才裝得上。
@@ -174,7 +173,7 @@ systemctl list-timers "$PROJECT-backup.timer" --no-pager
 
 docker compose "${compose_files[@]}" ps
 
-# 換下來、沒有容器在用的舊映像檔，重拉、重 build 之後會一直累積（#291）。
+# 根磁碟跟 PostgreSQL 共用：重拉、重 build 換下來的舊映像檔要清掉（#291）。
 # 不帶 -a：退版要用的映像檔不能清，見 cd/rollback.md「映像檔不在了」
 docker image prune -f
 
