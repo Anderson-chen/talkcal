@@ -27,7 +27,17 @@ schema_config:
       schema: v13            # 搭配 tsdb 的 schema 版本（Loki 3.x 要求 v13）
       index:
         prefix: index_
-        period: 24h
+        period: 24h          # 保存期限要靠 24h 的索引週期才能用（見下面的 compactor）
+
+# 保存期限（#270）：超過 30 天的 log 由 compactor 刪掉，不設的話永久保留。為什麼要設見 ops/README.md。
+# 30 天跟 mimir.yaml 的指標一樣長：指標查得到的範圍，那段時間的 log 一定還在。
+# 以 chunk 為單位刪：一個 chunk 裡最新的一筆也超過 30 天，整個 chunk 才會刪，所以剛過 30 天的 log 可能還查得到一陣子。
+compactor:
+  retention_enabled: true
+  delete_request_store: filesystem   # 開 retention 時必填：刪除請求存在哪，單機跟 chunk 放同一個地方
+
+limits_config:
+  retention_period: 30d
 
 # 關掉「用量回報」，跟 Grafana 那邊同個理由：學習環境不往外送任何東西
 analytics:

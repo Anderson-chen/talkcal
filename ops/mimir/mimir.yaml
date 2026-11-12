@@ -67,6 +67,10 @@ distributor:
 # 數字是「整個租戶最多同時記住幾個 exemplar」，學習環境的量很小，給一個寬鬆的上限就好。
 limits:
   max_global_exemplars_per_user: 100000
+  # 保存期限（#270）：超過 30 天的區塊由 compactor 刪掉，預設 0 是永久保留。為什麼要設見 ops/README.md。
+  # 至少要 28 天：SLO 的 error budget 是滾動 28 天（rules/anonymous/slo.yaml 的 ratio_rate28d），留得比它短就算不出來；再多留 2 天當緩衝。
+  # Mimir 也用這個值限制查詢範圍：超過 30 天的時間查不到資料，就算區塊還沒刪。
+  compactor_blocks_retention_period: 30d
 
 # Mimir 本身也會回報用量給 Grafana Labs，跟 Loki、Grafana 那邊同個理由關掉
 usage_stats:
