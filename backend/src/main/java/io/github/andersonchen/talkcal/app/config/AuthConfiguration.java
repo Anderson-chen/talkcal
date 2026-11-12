@@ -19,7 +19,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * 組裝 auth 模組的 use case 和 port
+ *  auth 模組的組裝(adapter,useCase)
  */
 @Configuration(proxyBeanMethods = false)
 class AuthConfiguration {
@@ -29,7 +29,6 @@ class AuthConfiguration {
         return new JdbcAccountAdapter(jdbcClient, new TransactionTemplate(transactionManager));
     }
 
-    // PasswordEncoder 來自 PasswordHashingConfiguration
     @Bean
     RegisterAccountUseCase registerAccount(SaveAccountPort saveAccountPort, PasswordEncoder passwordEncoder) {
         return new RegisterAccountService(saveAccountPort, new SpringPasswordHasher(passwordEncoder));
@@ -39,6 +38,7 @@ class AuthConfiguration {
     FindAccountUseCase findAccount(LoadAccountPort loadAccountPort) {
         return new FindAccountService(loadAccountPort);
     }
+    
     @Bean
     SignInExternallyUseCase signInExternally(LoadAccountPort loadAccountPort, SaveAccountPort saveAccountPort) {
         return new SignInExternallyService(loadAccountPort, saveAccountPort);

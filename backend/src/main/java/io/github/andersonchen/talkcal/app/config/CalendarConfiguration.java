@@ -73,23 +73,7 @@ import java.time.Period;
 import java.time.ZoneId;
 
 /**
- * calendar 模組的接線：哪個 port 用哪個實作、use case 怎麼 new 出來。一個模組一個 Configuration。
- *
- * 放在 app.config、類別不 public、proxyBeanMethods = false：
- * 所有「誰接誰」的決定集中在 app.config 這一個 package —— 想知道某個介面背後是哪個實作，只要看這裡。
- * 組裝根站在所有模組外面，才有資格認識 adapter 的具體類別（ArchitectureTest 只准 app.config、app.job 認識它們）；
- * 沒有程式該直接引用它，Bean 方法之間也不互相呼叫。
- *
- * 跟模型有關的 bean（ChatModel）是 Spring AI 依 application.properties 的 spring.ai.* 自動建的 ——
- * 連到哪、等多久、生成上限是設定，不是程式。
- *
- * 這裡要下的決定：
- * - ExtractEventsPort 用 Spring AI 的 ChatModel（跟 AI 助理共用同一個，自動組裝的那一個）
- * - 行程存 PostgreSQL（一個實作同時當 Save / SaveOnce / Load / Update / DeleteEventPort，和歸檔要的那兩個）
- * - 「現在」用哪個時區的時鐘
- * - 舊資料歸檔到哪（S3 相容的物件儲存）、AI 助理的對話和行程各留多久（#54；排程每天搬一次，所以要開排程）
- * - 產品用量記到哪（#36）：Micrometer 的 counter；活躍使用者從資料庫數，掛成 gauge
- * - 新增行程的冪等鍵留多久（IdempotencyKeyCleanup，也是每天清一次）
+ * 組裝 calendar 模組的 use case 和 port
  */
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
