@@ -28,6 +28,7 @@
 
 | 要做什麼 | 先讀 |
 |---|---|
+| 開分支、跟別的 session 同時改這個 repo | [.claude/rules/branch.md](.claude/rules/branch.md) |
 | commit | [.claude/rules/commit.md](.claude/rules/commit.md) |
 | 開或改 PR | [.claude/rules/pr.md](.claude/rules/pr.md) |
 | 開或改 issue | [.claude/rules/issue.md](.claude/rules/issue.md) |
