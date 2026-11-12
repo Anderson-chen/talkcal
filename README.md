@@ -2,7 +2,12 @@
 
 [![CI](https://github.com/Anderson-chen/talkcal/actions/workflows/ci.yml/badge.svg)](https://github.com/Anderson-chen/talkcal/actions/workflows/ci.yml)
 
-行事曆系統，可透過對話方式來建立行程。[主架構圖](docs/architecture.md#總覽)
+行事曆系統，可透過對話方式來建立行程。
+
+[主架構圖](docs/architecture.md#總覽)
+
+[DEMO](https://talkcal.13-192-239-148.sslip.io/)
+
 
 ## 技術
 
