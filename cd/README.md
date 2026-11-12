@@ -45,9 +45,9 @@ WAIT_TIMEOUT=600 cd/apply.sh local app   # 拉長等待
 
 代價是 `postgres` 和 `llm-chat` 要先起好。沒起的話 app 連不上資料庫，`--wait` 會等到逾時報錯，不會假裝成功。
 
-歸檔用的 `archive` 也要先起好，但它沒起的時候擋不住。app 啟動時刻意不連物件儲存（理由見 `ArchiveStorageConfiguration` 的 `archiveBucket`），照樣 healthy，`--wait` 也跟著成功；要等到畫面上的「查看封存」回 502，或凌晨的歸檔排程真的有資料存不進去，才看得出來。2026-10-31 把它加進 compose 之後，本機就這樣漏了快兩個星期（[#286](https://github.com/Anderson-chen/talkcal/issues/286)）。
+歸檔用的 `archive` 也要先起好，但它沒起的時候擋不住。app 啟動時刻意不連物件儲存（理由見 `ArchiveStorageConfiguration` 的 `archiveBucket`），照樣 healthy，`--wait` 也跟著成功；要等到畫面上的「查看封存」或還原對話回 502，或凌晨的歸檔排程真的有資料存不進去，才看得出來。2026-10-31 把它加進 compose 之後，本機就這樣漏了快兩個星期（[#286](https://github.com/Anderson-chen/talkcal/issues/286)）。
 
-第一次部署前先把這三個起好，`archive-init` 建好 bucket 就會結束：
+第一次部署前先把這三個起好，`archive-init` 建好 bucket 就會結束。2026-10-31 之前就部署過的環境不會再走第一次的步驟，補跑一次 `docker compose -f deploy/compose.yaml up -d archive archive-init` 就好：
 
 ```bash
 docker compose -f deploy/compose.yaml up -d postgres llm-chat archive archive-init

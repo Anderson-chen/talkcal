@@ -63,7 +63,7 @@ Gradle 指令都在 `backend/` 裡跑。它們只是捷徑，部署步驟寫在 
 ./gradlew deployApp -PdeployWaitTimeout=600      # 模型第一次載入比較慢時，拉長等待（預設 300 秒）
 ```
 
-這只動 app，不碰模型、資料庫和歸檔，所以第一次部署前要先 `docker compose up -d postgres llm-chat archive archive-init`。漏了 `archive` 的話 app 不會報錯，見 [cd/README.md](../cd/README.md#為什麼每個服務分開換)。前端也一樣：app 沒在跑的話，nginx 找不到 `app` 這個 upstream，web 起不來、會報 unhealthy。
+這只動 app，不碰模型、資料庫和歸檔，所以第一次部署前要在 repo 根目錄先跑 `docker compose -f deploy/compose.yaml up -d postgres llm-chat archive archive-init`。漏了 `archive` 的話 app 不會報錯，見 [cd/README.md](../cd/README.md#為什麼每個服務分開換)。前端也一樣：app 沒在跑的話，nginx 找不到 `app` 這個 upstream，web 起不來、會報 unhealthy。
 
 ## 兩種環境怎麼分
 
