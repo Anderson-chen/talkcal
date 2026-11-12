@@ -78,13 +78,29 @@ compose_files=(
 docker compose "${compose_files[@]}" config -q
 
 echo "── 4. 服務（deploy/ + compose.ec2.yaml + compose.$MODEL_BACKEND.yaml）"
+# 映像檔先準備好，這幾行只拉、只 build，不換掉任何在跑的容器（#291）。
+# CI 的漏洞掃描每次都從頭 build、拉最新的基底映像檔；這裡不重拉、只用快取的話，CI 綠燈不代表線上也是這一版
+docker compose "${compose_files[@]}" pull --quiet --ignore-buildable  # 第三方：同一個 tag 官方重新 build 過，就換成新的 digest
+docker compose "${compose_files[@]}" build --pull                     # 自己 build 的：基底映像檔重拉
+# web、postgres 的 Dockerfile 會 apk upgrade，但那一層有快取：Dockerfile 和基底都沒變時，停在第一次 build 那天的套件。
+# build 完還有能升的套件，就只對那個服務不用快取重 build（之後一般的 build 會沿用這次的結果）。
+# 不每次都不用快取：那樣映像檔每次都會變，postgres 每次部署都要重啟
+for svc in web postgres; do
+  # config --images 會連依賴的服務一起列（web 會多出 app、postgres），照 talkcal/<服務>:<tag> 的命名挑出這一個
+  image="$(docker compose "${compose_files[@]}" config --images "$svc" | grep "^talkcal/$svc:")" \
+    || { echo "compose 裡找不到 talkcal/$svc:<tag> 的映像檔" >&2; exit 1; }
+  pending="$(docker run --rm --entrypoint sh "$image" -c 'apk update -q >/dev/null && apk version -l "<"')"
+  if grep ' < ' <<<"$pending"; then
+    echo "$svc 的映像檔還有上面這些套件能升，不用快取重 build"
+    docker compose "${compose_files[@]}" build --pull --no-cache "$svc"
+  fi
+done
+
 # 先只起 postgres，把資料庫裡的密碼同步成 .env 這一份，app 才起來（#14）。
 # 為什麼要這步：官方 postgres 映像檔只在「資料庫第一次初始化」時讀 POSTGRES_PASSWORD，之後就不管了。
 # 不同步的話，在 Terraform 換了密碼再部署，app 拿新密碼、資料庫還是舊的 —— app 連不上，整個服務掛掉。
 # 每次部署都跑：密碼沒換時就是設成同一組，沒有副作用。
-# --build：postgres 是自己 build 的（deploy/postgres/Dockerfile），Dockerfile 變了在這一步就換新的映像檔，
-# 不會先起舊的、等到下面整組 up 時才重啟資料庫
-docker compose "${compose_files[@]}" up -d --build --wait postgres
+docker compose "${compose_files[@]}" up -d --wait postgres
 # 走容器裡的 local socket（官方映像檔對它是 trust），不必知道舊密碼也改得了。
 # 密碼從 stdin 送進去，不放在指令參數裡：參數在 ps 看得到，stdin 看不到。
 # 只用英數字（secrets.tf 的 special = false），所以直接放進 SQL 字串不會有跳脫問題
@@ -97,14 +113,17 @@ unset db_password
 # 備份失敗就不部署 —— 沒有退路的時候不往前走
 bash infra/envs/1-ec2/backup-to-s3.sh pre-deploy
 
-docker compose "${compose_files[@]}" up -d --build --remove-orphans
+# 映像檔上面 build 好了，這裡只換容器：映像檔變了的才重建
+docker compose "${compose_files[@]}" up -d --remove-orphans
 
 echo "── 5. 觀測（ops/ + compose.ops.yaml）"
 # 要在 deploy/ 之後：Alloy 要加入的網路是 deploy/ 建的。
 # 設定跟本機同一份，compose.ops.yaml 只蓋掉雲端不一樣的值（trace 取樣比例、備份告警讀的資料夾）
 # --env-file：Grafana 寄告警信的 SMTP 設定（#121）和 heartbeat 網址（#40）都在同一份 deploy/.env。
 # compose 預設只讀第一個 compose 檔所在資料夾（ops/）的 .env，不帶的話 Grafana 拿不到、就不寄信也不送 heartbeat
-docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml up -d
+ops_compose=(docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml)
+"${ops_compose[@]}" pull --quiet  # 跟上面的第三方同一個理由（#291）
+"${ops_compose[@]}" up -d
 
 echo "── 6. 備份排程（#45）：每小時一次、關機前一次"
 # 寫在這裡、不寫在 user_data：user_data 只在第一次開機跑，已經在跑的機器重跑 deploy.sh 才裝得上。
@@ -154,6 +173,10 @@ systemctl enable --now "$PROJECT-backup.timer" "$PROJECT-backup-on-shutdown.serv
 systemctl list-timers "$PROJECT-backup.timer" --no-pager
 
 docker compose "${compose_files[@]}" ps
+
+# 換下來、沒有容器在用的舊映像檔（重拉、重 build 之後會一直累積）：根磁碟跟 PostgreSQL 共用（#291）。
+# 只清沒有 tag 的；退版要用的 talkcal/app:<版本>、talkcal/web:<版本> 有 tag，不會被清掉
+docker image prune -f
 
 echo "── 7. 冒煙測試：網站、觀測、Bedrock、告警寄信"
 # --wait 只證明容器的 healthcheck 過了；這裡從外面走一遍：https 的網站和 /api、Grafana 資料源、
