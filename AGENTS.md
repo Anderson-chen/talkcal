@@ -32,7 +32,8 @@
 | commit | [.claude/rules/commit.md](.claude/rules/commit.md) |
 | 開或改 PR | [.claude/rules/pr.md](.claude/rules/pr.md) |
 | 開或改 issue | [.claude/rules/issue.md](.claude/rules/issue.md) |
-| 寫或改文件、issue、PR、commit 的文字 | [.claude/rules/writing.md](.claude/rules/writing.md) |
+| 寫或改文件、程式碼註解、issue、PR、commit 的文字 | [.claude/rules/writing.md](.claude/rules/writing.md) |
+| 寫或改程式碼註解 | [.claude/rules/comments.md](.claude/rules/comments.md) |
 
 `pr.md` 裡的 `/code-review`、`/simplify`、`/security-review` 是 Claude Code 的指令；其他工具用自己的審查功能，審同樣的範圍。
 
