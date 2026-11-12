@@ -81,6 +81,8 @@ echo "── 4. 服務（deploy/ + compose.ec2.yaml + compose.$MODEL_BACKEND.yam
 # 映像檔先準備好，這幾行只拉、只 build，不換掉任何在跑的容器（#291）。
 # 跟 CI vulns job 的 --pull 對齊（.github/workflows/ci.yml）：這裡不重拉、只用快取的話，CI 綠燈不代表線上也是這一版
 docker compose "${compose_files[@]}" pull --quiet --ignore-buildable  # 第三方：同一個 tag 官方重新 build 過，就換成新的 digest
+# 觀測那組也在這裡先拉：registry 連不到時，在換掉任何容器之前就失敗
+docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml pull --quiet
 docker compose "${compose_files[@]}" build --pull                     # 自己 build 的：基底映像檔重拉
 # 這兩個 Dockerfile 會 apk upgrade，但那一層有快取：Dockerfile 和基底都沒變時，停在第一次 build 那天的套件。
 # 不用快取重 build 一次之後，下次一般的 build 會沿用這次的結果。
@@ -121,8 +123,7 @@ echo "── 5. 觀測（ops/ + compose.ops.yaml）"
 # 設定跟本機同一份，compose.ops.yaml 只蓋掉雲端不一樣的值（trace 取樣比例、備份告警讀的資料夾）
 # --env-file：Grafana 寄告警信的 SMTP 設定（#121）和 heartbeat 網址（#40）都在同一份 deploy/.env。
 # compose 預設只讀第一個 compose 檔所在資料夾（ops/）的 .env，不帶的話 Grafana 拿不到、就不寄信也不送 heartbeat
-# --pull always：跟上面的第三方同一個理由（#291）
-docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml up -d --pull always --quiet-pull
+docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml up -d
 
 echo "── 6. 備份排程（#45）：每小時一次、關機前一次"
 # 寫在這裡、不寫在 user_data：user_data 只在第一次開機跑，已經在跑的機器重跑 deploy.sh 才裝得上。
