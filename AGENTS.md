@@ -28,6 +28,7 @@
 
 | 要做什麼 | 先讀 |
 |---|---|
+| 換到別的分支做事、發現 commit 落錯分支 | [.claude/rules/branch.md](.claude/rules/branch.md) |
 | commit | [.claude/rules/commit.md](.claude/rules/commit.md) |
 | 開或改 PR | [.claude/rules/pr.md](.claude/rules/pr.md) |
 | 開或改 issue | [.claude/rules/issue.md](.claude/rules/issue.md) |
