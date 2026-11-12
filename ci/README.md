@@ -111,7 +111,8 @@ pre-push 先掃祕密再跑測試。掃描只要幾秒，而且測試紅了可�
 
 ```bash
 docker compose -f deploy/compose.yaml build app web
-ci/vulns.sh --repo talkcal/app:local talkcal/web:local $(ci/compose-images.sh)
+docker build --tag talkcal/postgres:local deploy/postgres
+ci/vulns.sh --repo talkcal/app:local talkcal/web:local talkcal/postgres:local $(ci/compose-images.sh)
 ```
 
 | 時機 | 為什麼 |
@@ -122,11 +123,11 @@ ci/vulns.sh --repo talkcal/app:local talkcal/web:local $(ci/compose-images.sh)
 
 ### 掃哪些映像檔
 
-`vulns` job 會擋自己 build 的 `talkcal/app`、`talkcal/web`，加上 `ci/compose-images.sh` 列出的第三方映像檔。PR 上只有動到 compose、`ci/trivyignore.yaml`、`ci/compose-images.sh`、`ci/vulns.sh`、`ci/Dockerfile` 時才掃全部，其他 PR 只掃 postgres；排程和 push 到 master 一律全掃。
+`vulns` job 會擋自己 build 的 `talkcal/app`、`talkcal/web`、`talkcal/postgres`，加上 `ci/compose-images.sh` 列出的第三方映像檔。自己 build 的三個每個 PR 都掃；第三方只有 PR 動到 compose、`ci/trivyignore.yaml`、`ci/compose-images.sh`、`ci/vulns.sh`、`ci/Dockerfile` 時才掃。排程和 push 到 master 一律全掃。
 
 第三方的清單由 `ci/compose-images.sh` 問 compose（`docker compose config --images`，疊的檔案跟 `deploy.sh` 一樣），不在 ci.yml 另外抄一份。用 compose 自己解析而不是 grep，因為疊上去的檔案會蓋掉 image，有 profiles 的服務（mailpit）雲端也不會起，grep 都看不出來。
 
-第三方第一次掃（2026-10-30）有約 400 筆 HIGH、CRITICAL，#239 升版之後才改成擋，跟 #85「先掃、修完再擋」是同一個做法。升不掉的（上游還沒帶修補、版本未滿 14 天）寫在 `ci/trivyignore.yaml`，附理由和到期日。新公布的 CVE 或到期的例外會讓每天的排程和 master 變紅，這時要升版，或評估後寫例外。
+第三方第一次掃（2026-10-30）有約 400 筆 HIGH、CRITICAL，#239 升版之後才改成擋，跟 #85「先掃、修完再擋」是同一個做法。升不掉的（上游還沒帶修補、版本未滿 14 天）寫在 `ci/trivyignore.yaml`，附理由和到期日。新公布的 CVE 或到期的例外會讓每天的排程和 master 變紅，這時要升版，或評估後寫例外。postgres 和 web 的作業系統套件不必寫例外：兩個 Dockerfile 都會 `apk upgrade`，Alpine 發了修補，重新 build 就裝上（#289）。
 
 不掃的映像檔和理由：
 

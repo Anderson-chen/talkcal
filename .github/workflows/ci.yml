@@ -143,9 +143,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 跟 deploy/compose.yaml 同樣的 context，標成同樣的名字
+      # 自己 build 的三個，每個 PR 都掃。跟 deploy/compose.yaml 同樣的 context；tag 一律 local，下面的掃描用這個名字
       - run: docker build --quiet --pull --tag talkcal/app:local backend
       - run: docker build --quiet --pull --tag talkcal/web:local web
+      - run: docker build --quiet --pull --tag talkcal/postgres:local deploy/postgres
 
       # 先列清單、自己一步：compose 解析失敗或清單是空的要真的紅，
       # 寫在 $() 裡的話失敗會變成少了參數，什麼第三方映像檔都沒掃卻是綠的。
@@ -156,7 +157,7 @@ jobs:
           images=$(ci/compose-images.sh)
           test -n "$images"
           if [ -n "$BASE_REF" ] && git diff --quiet "origin/$BASE_REF...HEAD" --               deploy/compose.yaml ops/compose.yaml 'infra/envs/1-ec2/compose*.yaml'               ci/compose-images.sh ci/trivyignore.yaml ci/Dockerfile ci/vulns.sh; then
-            images=$(grep '^postgres:' <<<"$images")
+            images=""
           fi
           echo "images=$(paste -sd' ' <<<"$images")" >> "$GITHUB_OUTPUT"
         env:
@@ -164,7 +165,7 @@ jobs:
 
       # --repo：先掃設定（Dockerfile、compose、Terraform）和前端 lockfile，再掃映像檔。
       # $IMAGES 刻意不加引號：映像檔之間用空白隔開，要拆成多個參數
-      - run: ci/vulns.sh --repo talkcal/app:local talkcal/web:local $IMAGES
+      - run: ci/vulns.sh --repo talkcal/app:local talkcal/web:local talkcal/postgres:local $IMAGES
         env:
           IMAGES: ${{ steps.list.outputs.images }}
 

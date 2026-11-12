@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 用 Trivy 掃已知漏洞（CVE）和危險的設定，在容器裡跑。HIGH、CRITICAL 就 exit 1，CI 紅燈。
 #
-#   ci/vulns.sh --repo talkcal/app:local talkcal/web:local $(ci/compose-images.sh)
+#   ci/vulns.sh --repo talkcal/app:local talkcal/web:local talkcal/postgres:local $(ci/compose-images.sh)
 #   ci/vulns.sh $(ci/compose-images.sh)        只掃 EC2 上的第三方映像檔
 #
 # --repo：先掃 repo 本身（#235）——
