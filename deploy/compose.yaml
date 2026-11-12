@@ -159,8 +159,8 @@ services:
 
   # ── 行程與 AI 助理的對話記憶 ─────────────────────────────────
   postgres:
-    # 官方的 postgres:18.6-alpine 再補上 Alpine 的修補，為什麼見 postgres/Dockerfile。
-    # tag 跟 Dockerfile 的 FROM 同一個版本（釘死；alpine 版比較小），看名字就知道裡面是哪一版
+    # 官方映像檔再補上 Alpine 的修補，為什麼見 postgres/Dockerfile。
+    # tag 跟 Dockerfile 的 FROM 同一個版本（釘死；alpine 版比較小），看名字就知道裡面是哪一版；Renovate 兩處一起改
     image: talkcal/postgres:18.6-alpine
     build:
       context: ./postgres

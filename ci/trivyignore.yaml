@@ -251,7 +251,7 @@ misconfigurations:
     paths: [web/Dockerfile]
     statement: nginx master 是 root、worker 不是；改成非 root 要換埠，另外做
     expired_at: 2027-01-31
-  # postgres 照官方映像檔的做法：entrypoint 以 root 起來，只為了建 PGDATA、把擁有者改成 postgres，接著用 gosu 換成 postgres 使用者執行。
+  # postgres 照官方 entrypoint：以 root 準備 PGDATA 再用 gosu 換使用者（見檔案開頭 gosu 那段）。
   # 跟改成自己 build（#289）之前直接用官方映像檔時一樣，差別是現在有一份 Dockerfile 讓 Trivy 看得到
   - id: DS-0002
     paths: [deploy/postgres/Dockerfile]

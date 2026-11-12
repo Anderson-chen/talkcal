@@ -8,7 +8,7 @@
 # 這些 grep 都看不出來。--no-interpolate：不代換 ${}，所以不需要 deploy/.env。
 #
 # 疊的檔案跟 infra/envs/1-ec2/deploy.sh 一樣（那邊改了這裡要跟著改）；model_backend 用預設的 bedrock。
-# talkcal/ 開頭的是自己 build 的（app、web、postgres 由 ci.yml build 好再掃），略過。不掃哪些、為什麼，見 ci/README.md「漏洞掃描」
+# talkcal/ 開頭的是自己 build 的（由 ci.yml build 好再掃），略過。不掃哪些、為什麼，見 ci/README.md「漏洞掃描」
 
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"

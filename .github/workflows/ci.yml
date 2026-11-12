@@ -132,7 +132,7 @@ jobs:
 
   # 漏洞掃描：前端的 lockfile、build 出來會上線的映像檔、EC2 上的第三方映像檔，有 HIGH、CRITICAL 就紅燈（必過檢查）。
   # --pull：每次都拉最新的基底映像檔，掃到的才是重新部署時真的會拿到的版本
-  # 第三方映像檔：排程、push 到 master 全掃；PR 只有動到映像檔版本或例外時才全掃（#239）——
+  # 第三方映像檔：排程、push 到 master 都掃；PR 只有動到映像檔版本或例外時才掃（#239）——
   # 把 compose 改回有漏洞的版本要在合併前紅燈，但無關的 PR 不必多拉約 1.5 GB，也不該被剛公布的第三方 CVE 弄紅
   vulns:
     runs-on: ubuntu-latest
@@ -143,7 +143,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 自己 build 的三個，每個 PR 都掃。跟 deploy/compose.yaml 同樣的 context；tag 一律 local，下面的掃描用這個名字
+      # 跟 deploy/compose.yaml 同樣的 context
       - run: docker build --quiet --pull --tag talkcal/app:local backend
       - run: docker build --quiet --pull --tag talkcal/web:local web
       - run: docker build --quiet --pull --tag talkcal/postgres:local deploy/postgres
@@ -152,13 +152,13 @@ jobs:
       # 寫在 $() 裡的話失敗會變成少了參數，什麼第三方映像檔都沒掃卻是綠的。
       # 清單從 compose 讀（ci/compose-images.sh），不在這裡再寫一次：升版、加服務時掃的就跟著換
       - id: list
-        # git diff --quiet 出錯（非 0、非 1）也會走全掃那邊：寧可多掃，不要少掃
+        # git diff --quiet 出錯（非 0、非 1）也會往下掃：寧可多掃，不要少掃
         run: |
+          if [ -n "$BASE_REF" ] && git diff --quiet "origin/$BASE_REF...HEAD" --               deploy/compose.yaml ops/compose.yaml 'infra/envs/1-ec2/compose*.yaml'               ci/compose-images.sh ci/trivyignore.yaml ci/Dockerfile ci/vulns.sh; then
+            exit 0
+          fi
           images=$(ci/compose-images.sh)
           test -n "$images"
-          if [ -n "$BASE_REF" ] && git diff --quiet "origin/$BASE_REF...HEAD" --               deploy/compose.yaml ops/compose.yaml 'infra/envs/1-ec2/compose*.yaml'               ci/compose-images.sh ci/trivyignore.yaml ci/Dockerfile ci/vulns.sh; then
-            images=""
-          fi
           echo "images=$(paste -sd' ' <<<"$images")" >> "$GITHUB_OUTPUT"
         env:
           BASE_REF: ${{ github.base_ref }}

@@ -12,8 +12,10 @@ repo="$(cd "$here/../.." && pwd)"
 net=talkcaldrill
 pg=talkcaldrill-postgres
 app=talkcaldrill-app
-# 跟 deploy/compose.yaml 同一個版本：從那裡讀，compose 升版時演練跟著升
-image=$(grep -m1 -oE 'postgres:[0-9.]+-alpine' "$repo/deploy/compose.yaml")   || { echo "deploy/compose.yaml 裡找不到 postgres:<版本>-alpine 的映像檔，改這行的規則" >&2; exit 1; }
+# 跟部署用的同一個版本：從 deploy/postgres/Dockerfile 的 FROM 讀，升版時演練跟著升。
+# 用官方映像檔就好：演練測的是備份和還原，跟自己 build 多升的套件無關
+image=$(sed -nE 's/^FROM (postgres:[0-9.]+-alpine).*/\1/p' "$repo/deploy/postgres/Dockerfile")
+[ -n "$image" ] || { echo "deploy/postgres/Dockerfile 裡找不到 FROM postgres:<版本>-alpine，改這行的規則" >&2; exit 1; }
 export BACKUP_DIR="${BACKUP_DIR:-$(mktemp -d)}"
 export PG_CONTAINER=$pg APP_CONTAINER=$app
 
