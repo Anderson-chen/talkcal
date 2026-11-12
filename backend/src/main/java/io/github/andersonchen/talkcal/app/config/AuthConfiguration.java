@@ -19,7 +19,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- *  auth 模組的組裝(adapter,useCase)
+ * 組裝 auth 模組的 use case 和 adapter
  */
 @Configuration(proxyBeanMethods = false)
 class AuthConfiguration {
@@ -38,7 +38,7 @@ class AuthConfiguration {
     FindAccountUseCase findAccount(LoadAccountPort loadAccountPort) {
         return new FindAccountService(loadAccountPort);
     }
-    
+
     @Bean
     SignInExternallyUseCase signInExternally(LoadAccountPort loadAccountPort, SaveAccountPort saveAccountPort) {
         return new SignInExternallyService(loadAccountPort, saveAccountPort);

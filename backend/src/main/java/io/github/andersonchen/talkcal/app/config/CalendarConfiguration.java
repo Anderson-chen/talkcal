@@ -64,7 +64,7 @@ import java.time.Duration;
 import java.time.ZoneId;
 
 /**
- * 組裝 calendar 模組的 use case 和 port
+ * 組裝 calendar 模組的 use case 和 adapter
  */
 @Configuration(proxyBeanMethods = false)
 class CalendarConfiguration {
