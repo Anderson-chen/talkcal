@@ -69,9 +69,6 @@ import java.time.ZoneId;
 @Configuration(proxyBeanMethods = false)
 class CalendarConfiguration {
 
-    // 對話最多留幾輪（一輪 = 使用者一句話，加上之後的工具呼叫和回覆）
-    private static final int ASSISTANT_MEMORY_TURNS = 10;
-
     // 跟 AI 助理用同一個模型（ChatModelConfiguration 包好保護的那個）。
     // 抽行程自己的需求（溫度 0、max_tokens 1024、JSON Schema）在每個請求的選項裡帶，不必另建一個。
     // 代價：逾時也跟助理共用（2 分鐘）。以前這裡自己建 RestClient、30 秒就放棄；現在靠 max_tokens 擋住失控
@@ -131,10 +128,11 @@ class CalendarConfiguration {
         return new JdbcAssistantProposalAdapter(jdbcClient);
     }
 
-    // 助理讀寫、歸檔工作搬走，用的是同一張表、同一個實作。存的時候只留最近幾輪，助理讀到的就是這幾輪
+    // 助理讀寫、歸檔工作搬走，用的是同一張表、同一個實作
     @Bean
-    JdbcAssistantMemoryRepository assistantMemory(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
-        return new JdbcAssistantMemoryRepository(jdbcClient, new TransactionTemplate(transactionManager), ASSISTANT_MEMORY_TURNS);
+    JdbcAssistantMemoryRepository assistantMemory(JdbcClient jdbcClient, PlatformTransactionManager transactionManager,
+                                                  @Value("${calendar.assistant.memory-turns}") int memoryTurns) {
+        return new JdbcAssistantMemoryRepository(jdbcClient, new TransactionTemplate(transactionManager), memoryTurns);
     }
 
     @Bean
