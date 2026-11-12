@@ -234,6 +234,16 @@
       versioningTemplate: 'regex:^b(?<major>\\d+)$',
     },
     {
+      // 自己 build 的 postgres（#289）：deploy/postgres/Dockerfile 的 FROM 由 dockerfile 管理器追，
+      // compose 的 image tag 抄了同一個版本，docker-compose 管理器又會跳過有 build 的服務，所以這條讓 tag 跟著一起改
+      customType: 'regex',
+      description: 'compose 裡 talkcal/postgres 的 tag',
+      managerFilePatterns: ['/^deploy/compose\\.yaml$/'],
+      matchStrings: ['image: talkcal/postgres:(?<currentValue>\\S+)'],
+      depNameTemplate: 'postgres',
+      datasourceTemplate: 'docker',
+    },
+    {
       // 架構頁（docs/architecture/index.html）把映像檔版本抄了一份。升級 PR 一起改它，頁面才不會跟 compose 對不上；
       // 頁尾的「最後核對」日期和其他說明文字還是要人看過再改（CLAUDE.md 的規則）
       customType: 'regex',

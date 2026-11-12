@@ -110,8 +110,8 @@ pre-push 先掃祕密再跑測試。掃描只要幾秒，而且測試紅了可�
 有 HIGH、CRITICAL 而且已經有修補版本的，就 exit 1。上游還沒修的我們也沒得升，擋了也沒事可做。
 
 ```bash
-docker compose -f deploy/compose.yaml build app web
-ci/vulns.sh --repo talkcal/app:local talkcal/web:local $(ci/compose-images.sh)
+docker compose -f deploy/compose.yaml build app web postgres
+ci/vulns.sh --repo talkcal/app:local talkcal/web:local talkcal/postgres:18.6-alpine $(ci/compose-images.sh)
 ```
 
 | 時機 | 為什麼 |
@@ -122,7 +122,7 @@ ci/vulns.sh --repo talkcal/app:local talkcal/web:local $(ci/compose-images.sh)
 
 ### 掃哪些映像檔
 
-`vulns` job 會擋自己 build 的 `talkcal/app`、`talkcal/web`，加上 `ci/compose-images.sh` 列出的第三方映像檔。PR 上只有動到 compose、`ci/trivyignore.yaml`、`ci/compose-images.sh`、`ci/vulns.sh`、`ci/Dockerfile` 時才掃全部，其他 PR 只掃 postgres；排程和 push 到 master 一律全掃。
+`vulns` job 會擋自己 build 的 `talkcal/app`、`talkcal/web`、`talkcal/postgres`，加上 `ci/compose-images.sh` 列出的第三方映像檔。自己 build 的每個 PR 都掃；第三方只有 PR 動到 compose、`ci/trivyignore.yaml`、`ci/compose-images.sh`、`ci/vulns.sh`、`ci/Dockerfile` 時才掃。排程和 push 到 master 一律全掃。
 
 第三方的清單由 `ci/compose-images.sh` 問 compose（`docker compose config --images`，疊的檔案跟 `deploy.sh` 一樣），不在 ci.yml 另外抄一份。用 compose 自己解析而不是 grep，因為疊上去的檔案會蓋掉 image，有 profiles 的服務（mailpit）雲端也不會起，grep 都看不出來。
 
@@ -138,7 +138,7 @@ ci/vulns.sh --repo talkcal/app:local talkcal/web:local $(ci/compose-images.sh)
 | `python`（`ci/alerting/compose.yaml`） | 只在 CI 的告警測試裡跑假 app，已經釘 digest |
 | Trivy、gitleaks、ShellCheck、CodeQL、promtool 這類工具 | 只在 CI 跑完就丟，不處理外部輸入；版本＋digest 釘死，升級交給 Renovate |
 
-掃到漏洞時，有修補版本就升：基底映像檔重新 build，函式庫在 build.gradle 拉高版本。真的修不了、評估過碰不到的，寫進 `ci/trivyignore.yaml`，**一定要附理由和到期日**。到期後它會重新被報出來，逼人再看一次。
+掃到漏洞時，有修補版本就升：基底映像檔重新 build（自己 build 的映像檔都會在 build 時升作業系統套件，見各自的 Dockerfile），函式庫在 build.gradle 拉高版本。真的修不了、評估過碰不到的，寫進 `ci/trivyignore.yaml`，**一定要附理由和到期日**。到期後它會重新被報出來，逼人再看一次。
 
 不用 trivy-action。Trivy 在 2026-03 被入侵過，v0.69.4 和 trivy-action 幾乎所有 tag 都被換成會偷 CI secret 的版本。這裡跟 gitleaks 一樣直接跑映像檔，版本和 digest 都釘死，用的是事件之後的版本。
 
