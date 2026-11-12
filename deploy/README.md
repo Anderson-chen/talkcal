@@ -228,6 +228,6 @@ bash deploy/backup/drill.sh                                                 # �
 - 帳密是 `.env` 的 `ARCHIVE_ACCESS_KEY`、`ARCHIVE_SECRET_KEY`：RustFS 用它建起來，app 用同一組連進去。
 - bucket `talkcal-archive` 由 `archive-init` 建，建好就結束；每次 `up` 再跑一次也沒關係。
 - 本機 bootRun 的 app 打主機的 `127.0.0.1:9100`，要用到歸檔就要先 `docker compose up -d archive archive-init`。沒起的話 app 照樣啟動，「查看封存」才會回 502。
-- 管理頁面在 <http://127.0.0.1:9101>。
+- 管理頁面在 <http://127.0.0.1:9101/rustfs/console/>（只開 9101 會回 403）。
 
 **`down -v` 會清掉 `archive-data`，裡面的行程和對話已經不在資料庫裡，清掉就找不回來。** `pg-backup.sh` 只備份資料庫，不含這裡。
