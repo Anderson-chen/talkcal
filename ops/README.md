@@ -69,6 +69,8 @@ Prometheus 其實同時做兩件事：抓和存。抓的工作交給 Alloy 之�
 
 保存期限只管資料留多久，不管佔多少空間：log 突然暴量時，期限內一樣可能把磁碟寫滿。EC2 上這顆根磁碟還跟 PostgreSQL 共用，磁碟快滿的告警在 #271。
 
+改了期限要 `docker compose restart mimir loki` 才會生效：設定檔是掛進容器的，內容變了 `up -d` 看不出來，不會重建容器。
+
 ### 為什麼 trace 要另外一個資料庫（Tempo）
 
 trace 是一棵 span 樹。每個 span 有自己的 id 和父 span，靠 trace id 串成一個請求。Mimir 只放得下「標籤 + 一個數字」，Loki 放的是一行一行的文字，都裝不下這種樹。
