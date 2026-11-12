@@ -8,7 +8,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  *
  * 這個類別刻意不認識任何 adapter、也不認識任何 port ——
  * 一個 import 都沒有從 io.github.andersonchen.talkcal.calendar 進來。
- * 「哪個介面用哪個實作」那些決定集中在 app.config（一個模組一個 Configuration，目前只有 CalendarConfiguration）。
+ * 「哪個介面用哪個實作」那些決定集中在 app.config（一個模組一個 Configuration，例如 CalendarConfiguration；
+ * 模型、物件儲存、排程這類跨模組共用的，各有自己的 Configuration）。
  * 拆開的理由是責任不同：這裡回答「怎麼啟動」，那邊回答「誰接誰」。
  * 模組變多時，app.config 會多幾個 Configuration，這裡永遠只有 main。
  *

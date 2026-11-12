@@ -31,9 +31,6 @@ class ResilienceConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(ResilienceConfiguration.class);
 
-    /** 模型那一組的名字：application.properties 的 instances.chat-model、指標上 name 這個 tag 都是它。 */
-    static final String CHAT_MODEL = "chat-model";
-
     // 狀態一變就留一行 log：Loki 上查得到「哪個依賴幾點打開、幾點關回來」，跟指標的時間軸對得起來
     @Bean
     RegistryEventConsumer<CircuitBreaker> logCircuitBreakerTransitions() {

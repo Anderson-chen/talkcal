@@ -21,8 +21,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.crypto.factory.PasswordEncoderFactories;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizedClientRepository;
 import org.springframework.security.web.SecurityFilterChain;
@@ -49,16 +47,7 @@ class SecurityConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(SecurityConfiguration.class);
 
-    /**
-     * 預設是 BCrypt，存起來的雜湊值前面帶著「{bcrypt}」：之後要換演算法（例如 Argon2），
-     * 舊的雜湊照樣認得出來、照樣能登入，新註冊的才用新演算法 —— 不必強迫所有人重設密碼。
-     */
-    @Bean
-    PasswordEncoder passwordEncoder() {
-        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
-    }
-
-    // 登入時 Spring Security 用它查帳號、再用上面的 PasswordEncoder 比對密碼
+    // 登入時 Spring Security 用它查帳號、再用 PasswordHashingConfiguration 的 PasswordEncoder 比對密碼
     @Bean
     UserDetailsService userDetailsService(FindAccountUseCase findAccount) {
         return new AccountUserDetailsService(findAccount);

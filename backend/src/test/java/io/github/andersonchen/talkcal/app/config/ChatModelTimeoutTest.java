@@ -29,7 +29,7 @@ class ChatModelTimeoutTest {
     private static final Duration SPRING_AI_DEFAULT = Duration.ofSeconds(60);
 
     @Autowired
-    @Qualifier("guardedChatModel")
+    @Qualifier(ChatModelConfiguration.GUARDED_CHAT_MODEL)
     ChatModel guarded;
 
     // Spring AI 自動組裝的那個，沒包保護
