@@ -19,7 +19,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- *  組裝adapter與useCase
+ * 組裝 auth 模組的 use case 和 port
  */
 @Configuration(proxyBeanMethods = false)
 class AuthConfiguration {
