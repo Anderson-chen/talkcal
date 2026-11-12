@@ -82,7 +82,9 @@ echo "── 4. 服務（deploy/ + compose.ec2.yaml + compose.$MODEL_BACKEND.yam
 # 為什麼要這步：官方 postgres 映像檔只在「資料庫第一次初始化」時讀 POSTGRES_PASSWORD，之後就不管了。
 # 不同步的話，在 Terraform 換了密碼再部署，app 拿新密碼、資料庫還是舊的 —— app 連不上，整個服務掛掉。
 # 每次部署都跑：密碼沒換時就是設成同一組，沒有副作用。
-docker compose "${compose_files[@]}" up -d --wait postgres
+# --build：postgres 是自己 build 的（deploy/postgres/Dockerfile），Dockerfile 變了在這一步就換新的映像檔，
+# 不會先起舊的、等到下面整組 up 時才重啟資料庫
+docker compose "${compose_files[@]}" up -d --build --wait postgres
 # 走容器裡的 local socket（官方映像檔對它是 trust），不必知道舊密碼也改得了。
 # 密碼從 stdin 送進去，不放在指令參數裡：參數在 ps 看得到，stdin 看不到。
 # 只用英數字（secrets.tf 的 special = false），所以直接放進 SQL 字串不會有跳脫問題

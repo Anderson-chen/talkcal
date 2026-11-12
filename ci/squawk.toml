@@ -1,6 +1,6 @@
 # squawk（PostgreSQL migration 的 linter）的設定，ci/migrations.sh 用。規則清單：https://squawkhq.com/docs/rules
 #
-# 跟 deploy/compose.yaml 的 postgres 版本一致：有些變更在新版 PostgreSQL 才變安全
+# 跟 deploy/postgres/Dockerfile 的 postgres 版本一致：有些變更在新版 PostgreSQL 才變安全
 # （例如 11 起 ADD COLUMN ... DEFAULT 常數不再重寫整張表），版本寫錯會誤擋或漏擋
 pg_version = "18.0"
 
