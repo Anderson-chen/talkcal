@@ -16,7 +16,7 @@ server:
   http_listen_port: 9009     # 寫入（/api/v1/push）和查詢（/prometheus/api/v1/...）都走這個埠
   log_level: warn            # 預設 info 會一直印 ring、compactor 的例行訊息，學習時只想看到出事
 
-# 資料放哪。正式環境這裡是 s3 / gcs，「保存好幾年也不怕硬碟爆」就是靠它；單機寫本機檔案，所以要設保存期限（見下面的 limits）。
+# 資料放哪。正式環境這裡是 s3 / gcs，「保存好幾年也不怕硬碟爆」就是靠它；單機寫本機檔案。
 common:
   storage:
     backend: filesystem
@@ -67,10 +67,8 @@ distributor:
 # 數字是「整個租戶最多同時記住幾個 exemplar」，學習環境的量很小，給一個寬鬆的上限就好。
 limits:
   max_global_exemplars_per_user: 100000
-  # 保存期限（#270）：超過 30 天的區塊由 compactor 刪掉。預設 0 是永久保留。
-  # 以前的 Prometheus 沒寫期限也只留 15 天（它的預設值），換成 Mimir 之後這個上限就不見了。
-  # 至少要 28 天：SLO 的 error budget 是滾動 28 天（rules/anonymous/slo.yaml 的 ratio_rate28d），留得比它短就算不出來。
-  # 再多留 2 天當緩衝，也跟 Loki 的 log 一樣長。
+  # 保存期限（#270）：超過 30 天的區塊由 compactor 刪掉，預設 0 是永久保留。為什麼要設見 ops/README.md。
+  # 至少要 28 天：SLO 的 error budget 是滾動 28 天（rules/anonymous/slo.yaml 的 ratio_rate28d），留得比它短就算不出來；再多留 2 天當緩衝。
   # Mimir 也用這個值限制查詢範圍：超過 30 天的時間查不到資料，就算區塊還沒刪。
   compactor_blocks_retention_period: 30d
 

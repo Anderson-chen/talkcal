@@ -65,7 +65,9 @@ Prometheus 其實同時做兩件事：抓和存。抓的工作交給 Alloy 之�
 
 它比較重，因為 Mimir 是為上面那些需求設計的分散式系統，拆成 distributor、ingester、querier、store-gateway、compactor 等元件。單機用 `-target=all` 把它們塞進同一個 process，`mimir/mimir.yaml` 大半是在關掉分散式功能（多租戶、複製、物件儲存）。`loki/loki-config.yaml` 也是同樣的做法，因為 Mimir、Loki、Tempo 是 Grafana 用同一套骨架做的。
 
-表格第一列要接物件儲存才成立。這裡沒接，資料存在本機的 volume，所以 Mimir 和 Loki 都設了保存期限（#270），期限和理由寫在 `mimir/mimir.yaml` 的 `limits`、`loki/loki-config.yaml` 的 `limits_config`。
+表格第一列要接物件儲存才成立。這裡沒接，指標、log、trace 都存在本機的 volume，Mimir 和 Loki 不設期限就永久保留，volume 會一直長（#270）。所以三個都設了保存期限，數字和理由寫在各自的設定檔：`mimir/mimir.yaml` 的 `limits`、`loki/loki-config.yaml` 的 `compactor`、`tempo/tempo.yaml` 的 `backend_worker`。
+
+保存期限只管資料留多久，不管佔多少空間：log 突然暴量時，期限內一樣可能把磁碟寫滿。EC2 上這顆根磁碟還跟 PostgreSQL 共用，磁碟快滿的告警在 #271。
 
 ### 為什麼 trace 要另外一個資料庫（Tempo）
 
