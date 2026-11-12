@@ -11,6 +11,7 @@
 | Qwen3-8B 生成模型 | 容器（`llm-chat`） | 8080 |
 | talkcal app | 容器（`app`） | 18090 |
 | PostgreSQL（行程、AI 助理的對話記憶） | 容器（`postgres`） | 5432（只綁 127.0.0.1） |
+| RustFS（舊資料的歸檔，見[下面](#舊資料的歸檔)） | 容器（`archive`） | 9100 S3 API、9101 管理頁面（只綁 127.0.0.1） |
 | 前端（nginx + Vue） | 容器（`web`） | 18080，用瀏覽器開這個 |
 
 本機開發的 app（`backend/` 裡 `./gradlew bootRun`，8090）可以同時開著。它打主機上發佈出來的 8080，用的是同一個模型容器；兩個 app 的埠不同，可以並排比對。
@@ -62,7 +63,7 @@ Gradle 指令都在 `backend/` 裡跑。它們只是捷徑，部署步驟寫在 
 ./gradlew deployApp -PdeployWaitTimeout=600      # 模型第一次載入比較慢時，拉長等待（預設 300 秒）
 ```
 
-這只動 app，不碰模型和資料庫，所以第一次部署前要先 `docker compose up -d postgres llm-chat`。前端也一樣：app 沒在跑的話，nginx 找不到 `app` 這個 upstream，web 起不來、會報 unhealthy。
+這只動 app，不碰模型、資料庫和歸檔，所以第一次部署前要先 `docker compose up -d postgres llm-chat archive archive-init`。漏了 `archive` 的話 app 不會報錯，見 [cd/README.md](../cd/README.md#為什麼每個服務分開換)。前端也一樣：app 沒在跑的話，nginx 找不到 `app` 這個 upstream，web 起不來、會報 unhealthy。
 
 ## 兩種環境怎麼分
 
@@ -75,6 +76,7 @@ Gradle 指令都在 `backend/` 裡跑。它們只是捷徑，部署步驟寫在 
 | actuator 埠（健康檢查、指標） | 8091 | 容器內 8091，不發佈到主機 |
 | 模型位址 | `127.0.0.1:8080` | `llm-chat:8080` |
 | 資料庫位址 | `127.0.0.1:5432`（用 deploy/ 這個 postgres） | `postgres:5432` |
+| 歸檔位址 | `127.0.0.1:9100`（用 deploy/ 這個 RustFS） | `archive:9000` |
 | log 格式 | 給人看的彩色文字 | 一行一個 JSON（ECS），方便 Loki 拆欄位 |
 
 臨時要指到別的模型位址，不用改檔案：`-Dspring.ai.openai.chat.base-url=...` 或環境變數 `SPRING_AI_OPENAI_CHAT_BASEURL` 都比設定檔優先。
@@ -204,7 +206,7 @@ FROM calendar_assistant_message
 ORDER BY created_at DESC, position;
 ```
 
-`docker compose down` 不會刪資料，`down -v` 會連 `postgres-data` 一起清掉；模型的 volume 也會被清，下次要重新播種。
+`docker compose down` 不會刪資料，`down -v` 會連 `postgres-data` 一起清掉；模型的 volume 也會被清，下次要重新播種。歸檔的 `archive-data` 也會被清，而且找不回來，見[舊資料的歸檔](#舊資料的歸檔)。
 
 ### 備份與還原
 
@@ -218,3 +220,14 @@ bash deploy/backup/drill.sh                                                 # �
 ```
 
 雲端會在每小時、關機前、部署前自動備份到 S3。完整步驟、RPO／RTO 和選型理由見 [docs/runbooks/backup-restore.md](../docs/runbooks/backup-restore.md)。
+
+## 舊資料的歸檔
+
+舊行程和太久沒再說話的 AI 助理對話，app 每天凌晨會壓縮後放進 `archive`，存好了才從 `postgres` 刪掉（[#54](https://github.com/Anderson-chen/talkcal/issues/54)）。多久算舊寫在 `backend/src/main/resources/application.properties` 的 `calendar.*.retention`。`archive` 是 RustFS，講的是 S3 的 API，雲端換成 AWS S3 時 app 只差 endpoint 和帳密；為什麼不用 MinIO 寫在 `compose.yaml` 的 `archive` 那段。
+
+- 帳密是 `.env` 的 `ARCHIVE_ACCESS_KEY`、`ARCHIVE_SECRET_KEY`：RustFS 用它建起來，app 用同一組連進去。
+- bucket `talkcal-archive` 由 `archive-init` 建，建好就結束；每次 `up` 再跑一次也沒關係。
+- 本機 bootRun 的 app 打主機的 `127.0.0.1:9100`，要用到歸檔就要先 `docker compose up -d archive archive-init`。沒起的話 app 照樣啟動，「查看封存」才會回 502。
+- 管理頁面在 <http://127.0.0.1:9101>。
+
+**`down -v` 會清掉 `archive-data`，裡面的行程和對話已經不在資料庫裡，清掉就找不回來。** `pg-backup.sh` 只備份資料庫，不含這裡。

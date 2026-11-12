@@ -60,10 +60,10 @@
    cp deploy/.env.example deploy/.env
    ```
 
-4. 起資料庫和模型（第一次要 build 映像檔，約 10 分鐘）：
+4. 起資料庫、模型和歸檔用的 RustFS（第一次要 build 映像檔，約 10 分鐘）：
 
    ```bash
-   docker compose -f deploy/compose.yaml up -d postgres llm-chat
+   docker compose -f deploy/compose.yaml up -d postgres llm-chat archive archive-init
    ```
 
    `llm-chat` 起不來時，確認容器拿得到顯卡，要印出 `GPU 0: NVIDIA ...`：
