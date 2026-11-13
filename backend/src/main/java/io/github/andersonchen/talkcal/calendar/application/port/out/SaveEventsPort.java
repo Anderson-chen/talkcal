@@ -6,16 +6,10 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Schedule
 import java.util.List;
 
 /**
- * 儲存已排入的行程（outbound port）：由核心定義、由 Adapter（PostgreSQL…）實作。
+ * 約定：一次給的那幾筆全部存或全部不存。一句話拆出來的行程是使用者一起確認的，存了一半，
+ * 使用者會看到少了一筆卻不知道為什麼。
  *
- * 約定：一次給的那幾筆，全部存或全部不存。
- * 一句話拆出來的行程是使用者一起確認的；存了一半，使用者會看到少了一筆卻不知道為什麼。
- * 怎麼做到（交易）是 adapter 的事，core 不知道有交易這回事。
- *
- * 擁有者跟著這一批存，不放進 ScheduledEvent：一批行程一定屬於同一個人（發請求的那一個），
- * 而 domain 的規則（標題、起訖）跟是誰的無關。
- *
- * 只收 ScheduledEvent：沒有身分的預覽行程在型別上就傳不進來。
+ * 擁有者跟著這一批傳，不放進 ScheduledEvent：一批行程一定屬於發請求的那個人，domain 的規則跟是誰的無關。
  * 失敗時丟 IllegalStateException。
  */
 public interface SaveEventsPort {

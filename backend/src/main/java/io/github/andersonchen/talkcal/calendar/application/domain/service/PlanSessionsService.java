@@ -13,10 +13,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * 實作「在空檔裡排時段」：找出夠長的空檔（FindFreeSlotsUseCase），交給 SessionPlanner 每天挑一段。
- * 空檔的最短長度就是每段的長度，太短的在找空檔時就濾掉了。
- */
+/** 空檔的最短長度就是每段的長度：太短的空檔在找的時候就濾掉了。 */
 public final class PlanSessionsService implements PlanSessionsUseCase {
 
     private final FindFreeSlotsUseCase findFreeSlots;

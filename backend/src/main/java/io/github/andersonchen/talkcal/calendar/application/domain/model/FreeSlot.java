@@ -3,9 +3,7 @@ package io.github.andersonchen.talkcal.calendar.application.domain.model;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
-/**
- * 一段沒有行程的時間。用牆上時間（理由見 CalendarEvent），結束要晚於開始。
- */
+/** 用牆上時間，理由見 CalendarEvent。 */
 public record FreeSlot(LocalDateTime start, LocalDateTime end) {
 
     public FreeSlot {

@@ -6,12 +6,10 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ScheduledEvent;
 
 /**
- * 把行事曆上的一個行程改成另一個樣子（inbound port）。
+ * 除了新的內容，還要帶改之前看到的樣子（expected）：資料庫裡的那筆跟它不一樣，就是你看到之後有人改過了，
+ * 這次不改、丟 EventChangedException，不讓晚送的一邊把先存的改動蓋回去。
  *
- * 除了新的內容，還要帶「改之前看到的樣子」（expected）：資料庫裡的那筆跟它不一樣，就是在你看到之後有人改過了，
- * 這次不改、丟 EventChangedException，不讓晚送的那一邊把先存的改動蓋回去。
- *
- * 只改得到 owner 自己的行程，別人的跟不存在的同一個結果，理由見 RemoveEventUseCase。
+ * 別人的行程跟不存在的同一個結果，理由見 RemoveEventUseCase。
  *
  * 失敗時：
  * - 參數是 null → IllegalArgumentException
@@ -21,6 +19,5 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Schedule
  */
 public interface UpdateEventUseCase {
 
-    /** 回改好的那筆（同一個 id、新的內容）。 */
     ScheduledEvent updateEvent(OwnerId owner, EventId id, CalendarEvent expected, CalendarEvent replacement);
 }

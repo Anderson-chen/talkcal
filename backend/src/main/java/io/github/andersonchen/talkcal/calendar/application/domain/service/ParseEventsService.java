@@ -11,12 +11,8 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 實作「把自然語言解析成行程」。
- * service 只呼叫 model 的方法與 port，不自己判斷業務規則。
- *
- * 時鐘從建構子收 java.time.Clock，而不是直接呼叫 LocalDateTime.now()：
- * Clock 是 JDK 的型別（不是 Spring 的），core 可以放心依賴；
- * 測試給固定時鐘，「明天」就是一個確定的日期。用哪個時區（台北）由組裝根決定，core 不知道。
+ * 「現在」從建構子收的 Clock 取，不直接呼叫 LocalDateTime.now()：測試給固定時鐘，「明天」就是確定的日期；
+ * 用哪個時區由組裝根決定，core 不知道。Clock 是 JDK 的型別，core 可以依賴。
  */
 public final class ParseEventsService implements ParseEventsUseCase {
 
@@ -30,10 +26,9 @@ public final class ParseEventsService implements ParseEventsUseCase {
 
     @Override
     public List<CalendarEvent> parseEvents(String description) {
-        // 先交給 model 檢查：空白的描述連模型都不會驚動
+        // 空白的描述在這裡就擋下，不會叫到模型
         EventDescription described = new EventDescription(description);
-        // 複製成不可變的 List：adapter 回傳什麼實作都一樣，呼叫端拿到的永遠改不動。
-        // List.copyOf 也會拒絕 null 元素 —— adapter 漏翻一筆的話在這裡就炸，不會一路傳到畫面上
+        // List.copyOf 會拒絕 null 元素：adapter 漏翻一筆的話在這裡就炸，不會一路傳到畫面上
         return List.copyOf(extractEventsPort.extractEvents(described, LocalDateTime.now(clock)));
     }
 }

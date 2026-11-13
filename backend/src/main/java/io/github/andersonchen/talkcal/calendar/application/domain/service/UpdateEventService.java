@@ -13,15 +13,12 @@ import io.github.andersonchen.talkcal.calendar.application.port.out.UpdateEventP
 import java.util.Objects;
 
 /**
- * 實作「把一個行程改成另一個樣子」。
- *
- * 防止兩邊同時改用「改之前看到的樣子」比對，不加 version 欄位：一筆行程的全部內容就是那幾個欄位，
- * 欄位全都一樣就是同一個版本。改過又改回原樣的那筆會被當成沒改過，但內容本來就一樣，蓋過去不會丟掉任何改動。
- * 這樣不必改表、GET 的回應也不必多帶一個版本號。
- * 代價：calendar_event 之後加欄位，要記得加進 JdbcCalendarEventAdapter 的比對（SAME_CONTENT）和前端送的 expected，
+ * 防止兩邊同時改，拿「改之前看到的樣子」比對，不加 version 欄位：一筆行程的內容就是那幾個欄位，全都一樣就是同一個版本。
+ * 改過又改回原樣的那筆會被當成沒改過，但內容本來就一樣，蓋過去不會丟掉任何改動。這樣不必改表，GET 也不必多帶版本號。
+ * 代價：calendar_event 加欄位時，要一起加進 JdbcCalendarEventAdapter 的 SAME_CONTENT 和前端送的 expected，
  * 漏了那個欄位就沒有並行保護。欄位多到容易漏的時候，改成 version 欄位。
  *
- * 一句 UPDATE 同時比對和修改；改不到才回頭查一次，分出「不存在」（404）跟「被改過」（409）。
+ * 一句 UPDATE 同時比對和修改；改不到才回頭查一次，分出不存在（404）和被改過（409）。
  */
 public final class UpdateEventService implements UpdateEventUseCase {
 

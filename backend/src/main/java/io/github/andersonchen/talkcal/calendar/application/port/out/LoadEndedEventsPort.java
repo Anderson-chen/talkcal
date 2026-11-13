@@ -8,13 +8,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 找出該歸檔的行程（outbound port）：結束時間早於 cutoff 的，不分擁有者，依擁有者分好。
- *
- * 不分擁有者：這是排程的維護工作，不是誰的請求。分好再交回來，是因為歸檔一定一個人一包（見 EventArchivePort）。
+ * 該歸檔的行程：不分擁有者（排程的維護工作，不是誰的請求），依擁有者分好交回來，因為歸檔一個人一包。
  *
  * 約定：
- * - 「結束早於 cutoff」= end < cutoff；剛好在 cutoff 結束的不算
- * - 一次最多 limit 筆：一次全部讀進記憶體，資料一多就撐爆。剩下的由呼叫端下一輪再拿
+ * - 結束早於 cutoff 是 end < cutoff，剛好在 cutoff 結束的不算
+ * - 一次最多 limit 筆：全部讀進記憶體的話，資料一多就撐爆。剩下的由呼叫端下一輪再拿
  * - 失敗時丟 IllegalStateException
  */
 public interface LoadEndedEventsPort {

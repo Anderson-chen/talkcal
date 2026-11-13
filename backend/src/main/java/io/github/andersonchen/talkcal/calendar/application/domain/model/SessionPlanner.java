@@ -9,13 +9,11 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 在空檔裡排時段：使用者說「幫我排兩天讀書、各兩小時」，由這裡決定幾點到幾點。
+ * 使用者說「幫我排兩天讀書、各兩小時」時，決定幾點到幾點。純計算，不交給模型挑，理由見 CalendarTools 的 plan_events。
  *
- * 寫成純計算，不交給模型挑（模型挑會怎樣見 CalendarTools 的 plan_events）：挑時段程式做起來簡單又確定。
- *
- * 規則：每天一段，放在當天最早放得下的空檔，開始時間進位到整點或半點。
+ * 每天一段，放在當天最早放得下的空檔，開始時間進位到整點或半點。
  * 不做一天好幾段：模型會把「各排兩小時」填成每天兩段，也還沒有人要過。
- * 排得不合意，使用者在卡片上按「自己調整」改，所以這裡不猜偏好（例如讀書要排下午），只求放得下、看起來整齊。
+ * 不猜偏好（例如讀書要排下午），只求放得下、看起來整齊：排得不合意，使用者在卡片上按「自己調整」改。
  */
 public final class SessionPlanner {
 
@@ -23,9 +21,8 @@ public final class SessionPlanner {
     }
 
     /**
-     * @param free   空檔（FreeSlots.find 的結果：照時間排好，不跨天）
-     * @param length 每段多長
-     * @return 排好的時段，照時間排；空檔都放不下的天就不排
+     * @param free FreeSlots.find 的結果：照時間排好，不跨天
+     * @return 照時間排；空檔都放不下的那天就不排
      */
     public static List<FreeSlot> plan(List<FreeSlot> free, Duration length) {
         Objects.requireNonNull(free, "free 不可為 null");

@@ -9,10 +9,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * 實作「最近幾段時間內各有幾個人在用」：把每個「最近 window」換成一個時間點，一次交給 port 去數。
- * 時鐘從外面給，理由見 ParseEventsService。
- */
+/** 時鐘從外面給，理由見 ParseEventsService。 */
 public final class CountActiveUsersService implements CountActiveUsersUseCase {
 
     private final CountActiveOwnersPort activeOwners;

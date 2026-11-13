@@ -7,13 +7,9 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 列出一段期間裡的行程（inbound port）：給月曆畫一頁用。
+ * 給月曆畫一頁。收兩個 LocalDate，不收 DateRange：期間合不合規由 service 交給 DateRange 檢查，呼叫端不必知道有這個型別。
  *
- * 收兩個 LocalDate 而不是 DateRange：期間合不合規（結束晚於開始、不超過上限）是 model 的規則，
- * 由 service 交給 DateRange 檢查，呼叫端不必先知道有這個型別。
- *
- * 「在期間裡」指的是跟期間有重疊：跨夜、跨月的行程，前後兩段期間都看得到它。
- * 依開始時間排序。只有 owner 自己的行程，別人的看不到。
+ * 跟期間有重疊的就算：跨夜、跨月的行程，前後兩段期間都看得到。依開始時間排序，只有 owner 自己的行程。
  *
  * 失敗時：
  * - owner 是 null、期間不合規 → IllegalArgumentException

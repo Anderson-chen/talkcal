@@ -12,9 +12,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.IntStream;
 
-/**
- * 實作「記下提議卡片的去向」：發卡片時給 id、存起來；拒絕時整批交給 port 核對，核對過的才算進指標。
- */
 public final class TrackProposalsService implements TrackProposalsUseCase {
 
     private final ProposalStorePort store;
