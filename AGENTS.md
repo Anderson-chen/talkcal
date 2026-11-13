@@ -1,41 +1,26 @@
 # AGENTS.md
 
-在這個 repo 工作的 AI 工具（Codex、Cursor、Copilot、Gemini CLI、Claude Code…）都照這份。
-專案是什麼、怎麼跑，看 [README.md](README.md)。
+專案介紹、怎麼跑，看 [README.md](README.md)。
 
 ## 語言
 
 回答用繁體中文。
 
-## 指令
+## 工作流程
 
-都在 repo 根目錄下打。前端指令要先裝好依賴（`corepack enable`、`pnpm --dir web install`，見 [web/README.md](web/README.md)）：
+規則只有一份，放在 `.agents/rules/`。照下表的順序做，每一步動手前先讀那一列的規則；其他工具要自己讀，Claude Code 經由 [CLAUDE.md](CLAUDE.md) 讀到這份檔案時，會把表格裡 `@` 開頭的路徑整份載入。
 
-| 要做什麼 | 指令 |
-|---|---|
-| 跟 CI 一模一樣的整輪檢查（要開 Docker） | `ci/run.sh` |
-| 後端單元測試、架構規則 | `cd backend && ./gradlew test` |
-| 後端整合測試（真的 PostgreSQL、模型） | `cd backend && ./gradlew integrationTest` |
-| 前端單元測試 | `pnpm --dir web test` |
-| 前端 E2E | `pnpm --dir web run e2e` |
-| 前端 lint | `pnpm --dir web run lint` |
-| 後端 lint（Error Prone，編譯時檢查） | `cd backend && ./gradlew classes testClasses` |
-| 架構圖的錨點都對得上檔案 | `node docs/architecture/lines.mjs --check` |
+| 步驟 | 做什麼 | 先讀 |
+|---|---|---|
+| 1 | 開 issue：分支名稱要用到 issue 編號；之後改 issue 也照這份 | [@.agents/rules/issue.md](.agents/rules/issue.md) |
+| 2 | 開分支 | [@.agents/rules/branch.md](.agents/rules/branch.md) |
+| 3 | 改程式碼、寫註解；改到基礎設施另見下面「改基礎設施」 | [@.agents/rules/comments.md](.agents/rules/comments.md) |
+| 4 | commit | [@.agents/rules/commit.md](.agents/rules/commit.md) |
+| 5 | 要開 PR 時，照改到的地方跑測試、檢查 | [@.agents/rules/commands.md](.agents/rules/commands.md) |
+| 6 | 審查、開或改 PR | [@.agents/rules/pr.md](.agents/rules/pr.md) |
+| 每一步 | 寫文件、註解、issue、PR、commit 的文字 | [@.agents/rules/writing.md](.agents/rules/writing.md) |
 
-## 動手前要讀的規則
-
-規則只有一份，放在 `.agents/rules/`。Claude Code 透過 [CLAUDE.md](CLAUDE.md) 自動載入；其他工具要在做這些事之前自己讀：
-
-| 要做什麼 | 先讀 |
-|---|---|
-| 換到別的分支做事、發現 commit 落錯分支 | [.agents/rules/branch.md](.agents/rules/branch.md) |
-| commit | [.agents/rules/commit.md](.agents/rules/commit.md) |
-| 開或改 PR | [.agents/rules/pr.md](.agents/rules/pr.md) |
-| 開或改 issue | [.agents/rules/issue.md](.agents/rules/issue.md) |
-| 寫或改文件、程式碼註解、issue、PR、commit 的文字 | [.agents/rules/writing.md](.agents/rules/writing.md) |
-| 寫或改程式碼註解 | [.agents/rules/comments.md](.agents/rules/comments.md) |
-
-新增規則檔時，這張表和 CLAUDE.md 的 `@` 引入各加一行。
+新增規則檔時在這張表加一行，寫成 `[@.agents/rules/<檔名>](.agents/rules/<檔名>)`：`@` 讓 Claude Code 載入，連結讓 GitHub 上點得到。`@` 緊接在「：」這類字後面，Claude Code 不會載入。
 
 `pr.md` 裡的 `/code-review`、`/simplify`、`/security-review` 是 Claude Code 的指令；其他工具用自己的審查功能，審同樣的範圍。
 

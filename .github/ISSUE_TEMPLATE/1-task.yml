@@ -1,45 +1,45 @@
 # 一般的 issue：新功能、改進、文件、流程。檔名的數字決定在選單裡的順序。
-# 欄位照現有 issue 的寫法（例如 #188）：目的（Goal）、現況（Context）、做法（Proposed Solution）、做完的證據（Acceptance Criteria）。
-# 表單上看得到的文字（欄位名稱、說明）用英文，填的內容用中文。欄位名稱取 2026 年主流 repo 的用法（kubernetes、terraform、grafana…）。
-# Acceptance Criteria 寫成 checkbox，見 #207。
+# 欄位照現有 issue 的寫法（例如 #188）：目標、現況、做法、驗收條件。
+# 表單上看得到的文字（欄位名稱、說明）和填的內容都用中文；欄位名稱就是 issue 內文的 `### 標題`。
+# 驗收條件寫成 checkbox，見 #207。
 name: Task
-description: Feature, improvement, docs, or process
+description: 新功能、改進、文件、流程
 # 開完直接加進 talkcal-to-product 看板（開的人要對看板有寫入權限，沒有的話不會加、也不會報錯）
 projects: ["Anderson-chen/6"]
 body:
   - type: markdown
     attributes:
       value: |
-        **Title:** the outcome once this is done, e.g. `多個副本時限流上限不會倍增`.
-        No `feat:` prefix; the type is decided when the PR is opened, and the PR title is rewritten from this one.
+        **標題：** 寫做完之後變成怎樣，例如 `多個副本時限流上限不會倍增`。
+        不加 `feat:` 這類前綴：類型等開 PR 時再決定，PR 標題從這個標題改寫。
 
-        **Labels:** exactly one `stage:` or `product:` (how to choose: docs/classification.md), exactly one of `p0`/`p1`, and any `area:` it touches.
+        **Label：** `stage:` 或 `product:` 剛好一個（怎麼選見 docs/classification.md），`p0`／`p1` 剛好一個，改到哪塊就貼對應的 `area:`。
 
-        **Wording:** write for a reader who hasn't read this code (how: .agents/rules/writing.md, section "issue 和 PR").
+        **用字：** 寫給沒讀過這段程式碼的人看，每個欄位用條列，一點講一件事（照 .agents/rules/writing.md）。
   - type: textarea
     id: goal
     attributes:
-      label: Goal
-      description: Once done, who can do what, or what hassle goes away.
+      label: 目標
+      description: 做完之後誰可以做什麼，或少了什麼麻煩。
     validations:
       required: true
   - type: textarea
     id: context
     attributes:
-      label: Context
-      description: How things are now and what's missing; link related files or issues.
+      label: 現況
+      description: 現在怎樣、缺什麼；連到相關的檔案或 issue。
   - type: textarea
     id: solution
     attributes:
-      label: Proposed Solution
-      description: The plan, why this approach, and what's deliberately left out. Can stay empty until known.
+      label: 做法
+      description: 打算怎麼做、為什麼選這個做法、刻意不做什麼。還不知道可以先空著。
   - type: textarea
     id: acceptance
     attributes:
-      label: Acceptance Criteria
-      description: How to prove it's done. One checkbox per item, each clearly pass or fail; add a counter-example for each check (what should be blocked is blocked, and normal input isn't blocked). Tick each one as it's done.
+      label: 驗收條件
+      description: 怎麼證明做完了。一條一個 checkbox，每條都能判斷過或沒過；每道檢查各寫一條反例（該擋的有擋到、正常的沒被擋）。做完一條勾一條。
       placeholder: |
-        - [ ] The expected behavior happens
-        - [ ] Counter-example: what should be blocked is blocked; normal input passes
+        - [ ] 預期的行為會發生
+        - [ ] 反例：該擋的有擋到，正常的照常通過
     validations:
       required: true

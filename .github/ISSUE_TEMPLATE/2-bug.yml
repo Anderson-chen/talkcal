@@ -1,58 +1,58 @@
 # 問題：壞掉、跟預期不一樣。欄位照現有的問題回報（例如 #76）：
-# 症狀（Actual Behavior）、預期（Expected Behavior）、怎麼發現的（Environment）、重現（Steps to Reproduce）、原因（Root Cause）、做法（Proposed Solution）、做完的證據（Acceptance Criteria）。
-# 表單上看得到的文字（欄位名稱、說明）用英文，填的內容用中文。欄位名稱取 2026 年主流 repo 的用法（kubernetes、terraform、grafana…）。
-# Acceptance Criteria 寫成 checkbox，見 #207。
+# 症狀、預期、發生環境、重現步驟、原因、做法、驗收條件。
+# 表單上看得到的文字（欄位名稱、說明）和填的內容都用中文；欄位名稱就是 issue 內文的 `### 標題`。
+# 驗收條件寫成 checkbox，見 #207。
 name: Bug
-description: Something is broken or not behaving as expected
+description: 壞掉了，或跟預期不一樣
 labels: [bug]
 projects: ["Anderson-chen/6"]
 body:
   - type: markdown
     attributes:
       value: |
-        **Title:** the visible symptom, e.g. `app 換 IP 後 nginx 還連舊的，API 回 502`.
-        It's fine if the cause isn't known yet; write what you saw first.
+        **標題：** 寫看得到的症狀，例如 `app 換 IP 後 nginx 還連舊的，API 回 502`。
+        還不知道原因沒關係，先寫看到了什麼。
 
-        **Labels:** `bug` is added for you; also add exactly one `stage:` or `product:` (how to choose: docs/classification.md), exactly one of `p0`/`p1`, and any `area:` it touches.
+        **Label：** `bug` 會自動貼上；另外 `stage:` 或 `product:` 剛好一個（怎麼選見 docs/classification.md），`p0`／`p1` 剛好一個，改到哪塊就貼對應的 `area:`。
 
-        **Wording:** write for a reader who hasn't read this code (how: .agents/rules/writing.md, section "issue 和 PR").
+        **用字：** 寫給沒讀過這段程式碼的人看，每個欄位用條列，一點講一件事（照 .agents/rules/writing.md）。
   - type: textarea
     id: actual
     attributes:
-      label: Actual Behavior
-      description: What you saw.
+      label: 症狀
+      description: 你看到了什麼。
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: Expected Behavior
-      description: What should have happened instead.
+      label: 預期
+      description: 原本應該怎樣。
   - type: textarea
     id: environment
     attributes:
-      label: Environment
-      description: When and where it happened (local, EC2), and what you were doing.
+      label: 發生環境
+      description: 什麼時候、在哪裡發生（本機、EC2），當時在做什麼。
   - type: textarea
     id: repro
     attributes:
-      label: Steps to Reproduce
-      description: Steps that make it happen. If it can't be reproduced yet, say so.
+      label: 重現步驟
+      description: 照著做就會發生的步驟。還重現不出來就寫還重現不出來。
   - type: textarea
     id: cause
     attributes:
-      label: Root Cause
-      description: What caused it. Can stay empty until known.
+      label: 原因
+      description: 什麼造成的。還不知道可以先空著。
   - type: textarea
     id: solution
     attributes:
-      label: Proposed Solution
-      description: How you plan to fix it. Can stay empty until known.
+      label: 做法
+      description: 打算怎麼修。還不知道可以先空著。
   - type: textarea
     id: acceptance
     attributes:
-      label: Acceptance Criteria
-      description: How to prove it's fixed. One checkbox per item, e.g. the reproduction steps no longer trigger it, and a counter-example (removing the fix brings it back). Tick each one as it's done. Can stay empty until the cause is known.
+      label: 驗收條件
+      description: 怎麼證明修好了。一條一個 checkbox，例如照重現步驟做不會再發生，再加一條反例（拿掉修正就會再發生）。做完一條勾一條。還不知道原因可以先空著。
       placeholder: |
-        - [ ] Following the reproduction steps no longer triggers it
-        - [ ] Counter-example: removing the fix brings it back
+        - [ ] 照重現步驟做，不會再發生
+        - [ ] 反例：拿掉修正就會再發生

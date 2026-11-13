@@ -1,8 +1,8 @@
 # epic：上線準備的一段，或產品範圍的一個面向，底下掛子 issue（分法見 docs/classification.md）。
-# 欄位照現有 epic 的寫法（例如 #30、#189）：要回答的問題（Goal）、細項（Scope）。
-# 表單上看得到的文字（欄位名稱、說明、表格欄名）用英文，填的內容用中文。
+# 欄位照現有 epic 的寫法（例如 #30、#189）：要回答的問題（目標）、細項（範圍）。
+# 表單上看得到的文字（欄位名稱、說明、表格欄名）和填的內容都用中文。
 name: Epic
-description: A stage of launch readiness or one area of product scope, with sub-issues under it
+description: 上線準備的一段，或產品範圍的一個面向，底下掛子 issue
 title: "epic(): "
 labels: [epic]
 projects: ["Anderson-chen/6"]
@@ -10,25 +10,25 @@ body:
   - type: markdown
     attributes:
       value: |
-        **Title:** `epic(scope): name`, e.g. `epic(run): 上線後觀測`.
-        Scope is lowercase English; if a matching `stage:` or `product:` label exists, use the same word and add that label.
+        **標題：** `epic(範圍): 名稱`，例如 `epic(run): 上線後觀測`。
+        範圍用英文小寫；有對應的 `stage:` 或 `product:` label 就用同一個字，並貼上那個 label。
 
-        **Labels:** `epic` is added for you; also add the matching `stage:` or `product:` and one of `p0`/`p1`. Sub-issues use the same `stage:` or `product:` label as their epic.
+        **Label：** `epic` 會自動貼上；另外貼對應的 `stage:` 或 `product:`，和 `p0`／`p1` 其中一個。子 issue 跟 epic 用同一個 `stage:` 或 `product:`。
 
-        **Wording:** write for a reader who hasn't read this code (how: .agents/rules/writing.md, section "issue 和 PR").
+        **用字：** 寫給沒讀過這段程式碼的人看，每個欄位用條列，一點講一件事（照 .agents/rules/writing.md）。
   - type: textarea
     id: goal
     attributes:
-      label: Goal
-      description: What this area has to make sure of.
+      label: 目標
+      description: 這一塊要確保什麼。
     validations:
       required: true
   - type: textarea
     id: scope
     attributes:
-      label: Scope
-      description: One row per item. Items to do become sub-issues attached to this epic (the epic shows how many are done), with the number in the last column; for items decided against, put the reason there.
+      label: 範圍
+      description: 一列一個細項。要做的開成子 issue 掛在這個 epic 底下（epic 會顯示做完幾個），編號寫在最後一欄；決定不做的，理由寫在最後一欄。
       value: |
-        | Item | Status | Tracking / Decision |
+        | 細項 | 狀態 | 追蹤／決定 |
         |---|---|---|
         |  |  |  |
