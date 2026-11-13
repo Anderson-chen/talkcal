@@ -1,6 +1,6 @@
 # CI：每次推上來、每個 PR，都在乾淨的容器裡跑一遍 ci/checks.sh。
 #
-# 這份檔案刻意很薄，只回答 GitHub 才需要回答的事：什麼時候跑、在哪台機器、結果貼到哪。
+# 這份檔案只回答 GitHub 才需要回答的事：什麼時候跑、在哪台機器、結果貼到哪。
 # 「要檢查什麼」寫在 ci/checks.sh，「在什麼環境檢查」寫在 ci/Dockerfile，
 # 本機的 pre-push hook 走的是同一支 ci/run.sh —— 本機綠就代表 GitHub 綠。
 # 換成 GitLab、Jenkins，也只要換掉這一層（設計理由見 ci/README.md）。
@@ -60,7 +60,7 @@ jobs:
             !ci/build/reports/jacoco/
             ci/build/playwright-report/
 
-      # 覆蓋率報告（#23）：綠燈也要留，用途是找漏測，不是判斷成敗（總數在上面的摘要裡）。
+      # 覆蓋率報告：綠燈也要留，用途是找漏測，不是判斷成敗（總數在上面的摘要裡）。
       # 失敗時也只在這裡、不在 test-reports 裡重複一份。怎麼看見 docs/test-coverage.md
       - uses: actions/upload-artifact@v7
         if: always()
@@ -88,8 +88,8 @@ jobs:
       # HEAD：只掃這次要測的 commit 往回的歷史，不掃其他 PR 的分支（不帶參數 gitleaks 會掃 --all）
       - run: ci/secrets.sh HEAD
 
-  # DB migration 的檢查（#18）：已經跑過的不能改；新增的給 squawk 看會不會在新舊版本同時在線時壞掉、鎖住整張表。
-  # 也是自己一個 job、一個燈：它要 .git 比對「這次改了哪些」，不在 checks.sh 的容器裡（同 secrets）
+  # DB migration 的檢查：已經跑過的不能改；新增的給 squawk 看會不會在新舊版本同時在線時壞掉、鎖住整張表。
+  # 也是自己一個 job、一個燈：它要 .git 比對「這次改了哪些」，不在 checks.sh 的容器裡
   migrations:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
@@ -115,7 +115,7 @@ jobs:
       - uses: actions/checkout@v7
       - run: ci/rules.sh
 
-  # 原始碼安全分析（CodeQL，#235）：SQL 拼字串、XSS、workflow 注入這類自己寫出來的漏洞，HIGH、CRITICAL 就紅燈。
+  # 原始碼安全分析（CodeQL）：SQL 拼字串、XSS、workflow 注入這類自己寫出來的漏洞，HIGH、CRITICAL 就紅燈。
   # 不放進 checks：CodeQL 映像檔約 2 GB、分析要幾分鐘；跟 checks 並行跑。
   # 排程那次不跑：CodeQL 版本釘死，程式碼沒變結果就不會變（不像 CVE 每天有新的）
   sast:
@@ -132,7 +132,7 @@ jobs:
 
   # 漏洞掃描：前端的 lockfile、build 出來會上線的映像檔、EC2 上的第三方映像檔，有 HIGH、CRITICAL 就紅燈（必過檢查）。
   # --pull：每次都拉最新的基底映像檔，掃到的才是重新部署時真的會拿到的版本
-  # 第三方映像檔：排程、push 到 master 都掃；PR 只有動到映像檔版本或例外時才掃（#239）——
+  # 第三方映像檔：排程、push 到 master 都掃；PR 只有動到映像檔版本或例外時才掃：
   # 把 compose 改回有漏洞的版本要在合併前紅燈，但無關的 PR 不必多拉約 1.5 GB，也不該被剛公布的第三方 CVE 弄紅
   vulns:
     runs-on: ubuntu-latest
@@ -164,7 +164,7 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
 
       # --repo：先掃設定（Dockerfile、compose、Terraform）和前端 lockfile，再掃映像檔。
-      # $IMAGES 刻意不加引號：映像檔之間用空白隔開，要拆成多個參數
+      # $IMAGES 不加引號：映像檔之間用空白隔開，要拆成多個參數
       - run: ci/vulns.sh --repo talkcal/app:local talkcal/web:local talkcal/postgres:local $IMAGES
         env:
           IMAGES: ${{ steps.list.outputs.images }}

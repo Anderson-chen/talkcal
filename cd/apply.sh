@@ -4,11 +4,11 @@
 #
 #   cd/apply.sh local                 部署 app、web（預設，不含模型）
 #   cd/apply.sh local web             只部署前端
-#   cd/apply.sh local llm-chat        只換模型（很貴，刻意不在預設裡）
+#   cd/apply.sh local llm-chat        只換模型（很貴，所以不在預設裡）
 #   WAIT_TIMEOUT=600 cd/apply.sh local app   拉長等待（例如模型第一次載入很慢時）
 #
 # 只負責「部署」這一步。部署前要過哪道關由觸發的那一方決定：
-#   ./gradlew deployApp 先跑測試、之後的 CD 是等 CI 綠燈。這裡不重複檢查。
+#   ./gradlew deployApp 先跑測試、cd/triggers/watch.sh 等 CI 綠燈。這裡不重複檢查。
 #
 # 一次只換一個服務、每個都帶 --no-deps，理由見 cd/README.md「為什麼每個服務分開換」。
 
@@ -26,7 +26,7 @@ source "$env_file"
 compose_args=()
 for f in $COMPOSE_FILES; do compose_args+=(-f "$f"); done
 
-# 版本號（#25）：compose 拿它當映像檔的 tag、傳進 build 貼成 label。規則在 cd/version.sh
+# 版本號：compose 拿它當映像檔的 tag、傳進 build 貼成 label。規則在 cd/version.sh
 APP_VERSION="$(cd/version.sh)"
 GIT_COMMIT="$(git rev-parse HEAD)"
 export APP_VERSION GIT_COMMIT

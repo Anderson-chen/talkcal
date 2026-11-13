@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 檢查這次新增、改動的 DB migration 會不會讓「新舊版本同時在線」的時候壞掉（#18）。
+# 檢查這次新增、改動的 DB migration 會不會讓「新舊版本同時在線」的時候壞掉。
 #
 #   ci/migrations.sh                 跟 origin/master 比（PR、本機用）
 #   ci/migrations.sh <base>          跟指定的 commit 比（push 到 master 時用推之前那個 commit）
@@ -12,14 +12,14 @@
 #      ADD CONSTRAINT 沒有 NOT VALID、ALTER TABLE 前沒設 lock_timeout…… 這些在舊版還在線上時會壞掉或鎖住整張表。
 #      每一條規則的理由、安全的替代做法，見 https://squawkhq.com/docs/rules。
 #
-# 只看新增的檔案，不回頭掃 V1～V11：那些已經跑過、改不了（第 1 道就是在擋這件事），
+# 只看新增的檔案，不回頭掃已經在 <base> 裡的：那些已經跑過、改不了（第 1 道就是在擋這件事），
 # 掃出來的警告也修不掉，只會讓真正新的問題淹沒在舊的裡面。
 #
 # 真的要做危險的變更（例如 contract 那一步刪掉已經沒人用的欄位）：在那一句上面加
 #   -- squawk-ignore ban-drop-column
 # 並在註解寫清楚「為什麼現在刪是安全的」（哪個版本起就沒人讀寫它了）。ignore 本身在 PR 的 diff 裡看得到，就是審查的重點。
 #
-# 不放進 checks.sh：那邊的容器只有某一個 commit 的檔案、沒有 .git，比不出「這次改了哪些」（同 secrets.sh）。
+# 不放進 checks.sh：那邊的容器只有某一個 commit 的檔案、沒有 .git，比不出「這次改了哪些」。
 
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"

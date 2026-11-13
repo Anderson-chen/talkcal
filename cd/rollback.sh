@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 把這台機器上的 app、web 退回某個已經部署過的版本（#19），並釘住，watcher 不會自己再部署新的上來。
+# 把這台機器上的 app、web 退回某個已經部署過的版本，並釘住，watcher 不會自己再部署新的上來。
 #
 #   cd/rollback.sh local --list          機器上有哪些版本退得回去、現在跑哪個、有沒有釘住
 #   cd/rollback.sh local 3f9c2ab         退到指定版本（版本號就是映像檔的 tag，見 cd/release.md）
@@ -88,12 +88,12 @@ list_versions() {
 }
 
 # GitHub Deployments 上，現在這版之前最近一次成功部署的 commit，再找機器上 label 是那個 commit 的映像檔。
-# 不用映像檔的建立時間排「上一版」：build 有快取時，舊 commit 的映像檔可能比新的還「新」（示範時真的遇到）。
+# 不用映像檔的建立時間排「上一版」：build 有快取時，舊 commit 的映像檔可能比新的還「新」。
 # 結果直接寫進 target，不用 $(...) 接：在子 shell 裡跑的話，查到的 repo 帶不回來，記錄時又要再查一次
 previous_version() {
   local current_rev deployments id sha state v
   current_rev="$(revision_of "$(running_version app)")"
-  # 每一步失敗都要停：在 if 裡呼叫時 set -e 不算數，不擋的話 repo 是空的也會一路查下去（示範時真的發生過）
+  # 每一步失敗都要停：在 if 裡呼叫時 set -e 不算數，不擋的話 repo 是空的也會一路查下去
   repo_name || return 1
   deployments="$(gh_ api "repos/$repo/deployments?environment=$env_name&per_page=30" \
                    --jq '.[] | "\(.id) \(.sha)"')" || return 1
@@ -114,7 +114,7 @@ previous_version() {
   return 1
 }
 
-# 把 web、app 各換成指定的版本，等 healthy。先換 web 再換 app，跟 apply.sh 相反（理由見 cd/rollback.md）。
+# 把 web、app 各換成指定的版本，等 healthy。先換 web 再換 app，跟 apply.sh 相反（理由見 cd/rollback.md「為什麼先換 web 再換 app」）。
 # 兩個版本分開給：換回原本的時候，web 和 app 原本不一定是同一版（例如只用 apply.sh 換過 web）
 switch_to() {
   local web_version="$1" app_version="$2" svc version timeout now
@@ -229,7 +229,7 @@ elif ! git diff --quiet "$target_rev" HEAD -- $COMPOSE_FILES; then
 fi
 
 # 2. 拿 watcher 的鎖：換的途中 watcher 不會插進來
-# 超過 60 分鐘的鎖當成上一輪被砍掉留下的，跟 watch.sh 同一條規則：出事要退版時不該被殘留的鎖擋住
+# 超過 60 分鐘的鎖當成上一輪被砍掉留下的（門檻跟 watch.sh 一致）：出事要退版時不該被殘留的鎖擋住
 if [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +60)" ]; then
   echo "鎖超過 60 分鐘，當成殘留清掉：$lock"
   rmdir "$lock"

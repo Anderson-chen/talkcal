@@ -1,4 +1,4 @@
-// 從 VS Code 跑本機腳本（#238）：Ctrl+Shift+P →「Tasks: Run Task」→ 選一個，參數會跳出選單或文字框。
+// 從 VS Code 跑本機腳本：Ctrl+Shift+P →「Tasks: Run Task」→ 選一個，參數會跳出選單或文字框。
 // 每個 task 都只是呼叫 justfile 的指令，指令的說明、要什麼環境見 justfile 開頭。
 // 只有要填參數的幾個各自一個 task，其餘用「just: 任意指令」，不在這裡再抄一份 justfile 的清單。
 // 用 shell task 把整行交給終端機：沒填的參數（例如部署哪些服務）就是沒有，不會變成一個空字串傳給腳本。

@@ -3,7 +3,7 @@
 #
 #   ci/vulns.sh $(ci/compose-images.sh)
 #
-# 從 compose 讀，不在 ci.yml 另外抄一份：升版、加服務只改 compose，掃的清單自動跟上（#235）。
+# 從 compose 讀，不在 ci.yml 另外抄一份：升版、加服務只改 compose，掃的清單自動跟上。
 # 交給 compose 自己解析（config --images），不 grep：疊上去的檔案會蓋掉 image、有 profiles 的服務不會起（mailpit），
 # 這些 grep 都看不出來。--no-interpolate：不代換 ${}，所以不需要 deploy/.env。
 #

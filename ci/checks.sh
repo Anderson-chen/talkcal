@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# CI 要檢查什麼 —— 唯一定義的地方。在 ci/Dockerfile 的容器裡跑（由 ci/run.sh 啟動）。
+# CI 要檢查什麼都寫在這裡。在 ci/Dockerfile 的容器裡跑（由 ci/run.sh 啟動）。
 #
-# 為什麼獨立成一支 script：GitHub Actions、pre-push hook，甚至換成 GitLab、Jenkins，
-# 都只是「在某個時機呼叫這支」。要加一項檢查只改這裡，各個入口自動一致。
+# 要加一項檢查只改這裡，GitHub Actions、pre-push hook 這些入口自動一致；
+# 為什麼獨立成一支 script，見 docs/adr/0008-ci-same-script-in-container.md。
 #
 # 每一項都跑完才結束，不在第一個失敗就停：後端紅了，前端的結果照樣有參考價值，
 # 一次看到全部的問題，比修一個、推一次、再看下一個快。
@@ -16,11 +16,11 @@ echo "── shell 腳本：ShellCheck ──"
 # 沒加引號被拆成好幾個參數、cd 失敗還繼續往下跑、trap 的變數展開時機不對…這類只有執行到那一行才會發現的錯。
 # 幾秒就有結果，放最前面。容器裡沒有 .git（run.sh 用 git archive），所以用 find 找，不用 git ls-files；
 # 這時還沒 pnpm install，node_modules 裡別人的腳本不會被找到。
-# 刻意的寫法在那一行上面加 # shellcheck disable=SCxxxx 並寫理由（例子見 cd/triggers/watch.sh 的 trap）
+# 要留著被警告的寫法，在那一行上面加 # shellcheck disable=SCxxxx 並寫理由（例子見 cd/triggers/watch.sh 的 trap）
 find . \( -name '*.sh' -o -path './.githooks/*' \) -type f -print0 | xargs -0 shellcheck || status=1
 
 echo "── 架構圖：每個錨點都對得上檔案 ──"
-# docs/architecture/index.html 的 F、L 表記錨點不記行號（#275），檔案多一行、少一行都不用改那頁。
+# docs/architecture/index.html 的 F、L 表記錨點不記行號，檔案多一行、少一行都不用改那頁。
 # 錨點那一行被改名、刪掉，或多了一行長得一樣的，這裡就紅燈並列出是哪一個，不會等發佈後才連到錯的行。
 # 只用 Node 內建模組，不必先 pnpm install，一秒內跑完
 node docs/architecture/lines.mjs --check || status=1
@@ -30,7 +30,7 @@ echo "── 後端：單元測試、架構規則、整合測試（編譯時 Err
 # 要真模型的那幾支，連不到 llama-server 就自動跳過（Assumptions），下面的摘要會列出來
 # evalClasses：AI eval（./gradlew eval）不在這裡跑（要真模型、跑一分多鐘），但至少要編得過，
 # 不然改了 CalendarAssistant 的方法簽名，eval 壞了沒人知道，直到下次有人想跑它
-# jacocoTestReport：單元＋整合測試合併的覆蓋率報告（#23），不會讓 CI 紅，總數貼在下面的摘要
+# jacocoTestReport：單元＋整合測試合併的覆蓋率報告，不會讓 CI 紅，總數貼在下面的摘要
 # checkLicense：runtimeClasspath（會打包進 jar 的）有沒有不允許的授權，規則在 backend/allowed-licenses.json（見 docs/licenses.md）
 (cd backend && ./gradlew --no-daemon test integrationTest evalClasses jacocoTestReport checkLicense) || status=1
 
@@ -122,7 +122,7 @@ web_coverage() { # 前端的「行 | 分支」兩欄：讀 Vitest 的 json-summa
         echo "沒有跳過任何測試。"
     fi
 
-    # 覆蓋率（#23）：只列總數，不設門檻。要看哪一行沒跑到、報告在哪，見 docs/test-coverage.md
+    # 覆蓋率：只列總數，不設門檻。要看哪一行沒跑到、報告在哪，見 docs/test-coverage.md
     echo
     echo "## 測試覆蓋率"
     echo

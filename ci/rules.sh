@@ -13,9 +13,9 @@
 
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
-export MSYS_NO_PATHCONV=1  # 同 run.sh：別讓 Git Bash 把 /m 改寫成 Windows 路徑
+export MSYS_NO_PATHCONV=1  # 別讓 Git Bash 把 /m 改寫成 Windows 路徑（見 ci/run.sh）
 
-# 版本和 digest 都釘死（同 secrets.sh）
+# 版本和 digest 都釘死（理由見 ci/vulns.sh）
 image=prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0
 
 # Windows 上 docker 要 C:/... 形式的路徑（pwd -W），Linux、macOS 沒有 -W 就用 pwd

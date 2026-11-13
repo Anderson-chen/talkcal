@@ -1,4 +1,4 @@
-// Renovate 的設定：套件自動升級（#48）。為什麼選 Renovate 不選 Dependabot 見 docs/adr/0011-renovate-for-dependency-updates.md，
+// Renovate 的設定：套件自動升級。為什麼選 Renovate 不選 Dependabot 見 docs/adr/0011-renovate-for-dependency-updates.md，
 // 升級 PR 怎麼審、怎麼合見 docs/dependency-updates.md。
 //
 // 改這份檔案之後先在本機驗證（在 repo 根目錄跑，不給路徑它會自己找到這份）：
@@ -21,7 +21,7 @@
   prConcurrentLimit: 5,
   prHourlyLimit: 2,
   // 新版發佈滿 14 天才開 PR，跟 repo 選套件的兩週規則一致（ci/README.md 的選型段落）：被植入惡意程式碼的版本
-  // 通常幾天內就被發現下架（2025 年 npm 的 Shai-Hulud、2026-03 的 Trivy）。#107 合併後前端還有第二道：web/pnpm-workspace.yaml 的
+  // 通常幾天內就被發現下架（2025 年 npm 的 Shai-Hulud、2026-03 的 Trivy）。前端還有第二道：web/pnpm-workspace.yaml 的
   // minimumReleaseAge，CI 的 pnpm install --frozen-lockfile 遇到不滿兩週的版本直接失敗 —— 這裡比它短的話，PR 只會紅燈
   minimumReleaseAge: '14 days',
 
@@ -34,8 +34,7 @@
   // 一律不自動合併：要等使用者看過、CI 綠燈才合（流程見 docs/dependency-updates.md）
   automerge: false,
   // 鎖檔裡沒直接寫在 package.json 的間接依賴，一個月整理一次（只動鎖檔，例如 pnpm-lock.yaml）。
-  // 間接依賴的發佈日期 Renovate 管不到，靠套件管理器：pnpm 會照 pnpm-workspace.yaml 跳過不滿兩週的版本；
-  // 換 pnpm（#107）之前的 npm 沒有這種設定（docs/dependency-updates.md）
+  // 間接依賴的發佈日期 Renovate 管不到，靠套件管理器：pnpm 會照 pnpm-workspace.yaml 跳過不滿兩週的版本
   lockFileMaintenance: {
     enabled: true,
     schedule: ['* 0-8 1 * *'],
@@ -45,7 +44,7 @@
   // repo 沒開 GitHub 的 Dependabot alerts（Renovate 預設讀那裡），所以另外讓 Renovate 自己查 OSV 漏洞資料庫。
   // 修漏洞的 PR 不等週一、不受 PR 數量上限限制，但一樣等 14 天：Renovate 預設讓它不等（minimumReleaseAge: null），
   // 這裡要明寫蓋掉。不能「HIGH、CRITICAL 不等，其他等」：漏洞的設定是 Renovate 最後用 force 蓋上去的，
-  // packageRules 依嚴重度（matchJsonata 的 vulnerabilitySeverity）改不動它（四種寫法實測，見 docs/dependency-updates.md）。
+  // packageRules 依嚴重度（matchJsonata 的 vulnerabilitySeverity）改不動它（見 docs/dependency-updates.md）。
   // HIGH、CRITICAL 要提早的話由人在 Dependency Dashboard 勾選，流程也在那份文件
   osvVulnerabilityAlerts: true,
   vulnerabilityAlerts: {
@@ -66,7 +65,7 @@
     // 為什麼不全部合成一個：後端紅燈不該擋住前端的修補；分生態系，紅了一眼就知道是哪一邊。
     // 每組都要寫 groupSlug（分支名）：沒寫的話 Renovate 用 groupName 產生分支名，中文會被拿掉，
     // 「後端套件（minor、patch）」「前端套件（minor、patch）」都變成 renovate/minorpatch，全部擠進同一個 PR
-    // （本機 dry-run 實測，見 docs/dependency-updates.md）
+    // （見 docs/dependency-updates.md）
     {
       description: '後端（Gradle）的 minor、patch 合成一個 PR',
       matchManagers: ['gradle'],
@@ -113,7 +112,7 @@
     {
       // 映像檔那一處改由下面的 customManagers 用 wrapper 的資料來源追，這裡關掉 Dockerfile 管理器抓到的那一份。
       // 不關的話兩邊查不同的地方：Docker Hub 拿不到發佈時間就不等，wrapper 會等滿 14 天，
-      // 同一個 PR 變成 wrapper 9.8.1、映像檔 9.8.2（2026-10-30 dry-run 實測）
+      // 同一個 PR 變成 wrapper 9.8.1、映像檔 9.8.2
       description: 'backend/Dockerfile 的 gradle 映像檔不從 Docker Hub 追',
       matchManagers: ['dockerfile'],
       matchPackageNames: ['gradle'],
@@ -152,7 +151,7 @@
       addLabels: ['major'],
     },
 
-    // ── 刻意釘住的：理由寫在原本的檔案，這裡只防 Renovate 一直來敲門 ──
+    // ── 釘住的版本：理由寫在各自的檔案，這裡只防 Renovate 一直來敲門 ──
     {
       description: 'TypeScript 釘在 5.x：TS 7 是 Go 重寫的，vue-tsc 3 還接不上（web/README.md）。等 vue-tsc 支援再拿掉這條',
       matchPackageNames: ['typescript'],
@@ -207,9 +206,9 @@
       datasourceTemplate: 'docker',
     },
     {
-      // ci/sast/Dockerfile 用 ADD 下載 CodeQL bundle（#235），版本寫在網址裡，dockerfile manager 看不到。
+      // ci/sast/Dockerfile 用 ADD 下載 CodeQL bundle，版本寫在網址裡，dockerfile manager 看不到。
       // Renovate 只會改網址，不會改旁邊的 --checksum：升版 PR 的 sast job 會因為 checksum 對不上而紅，
-      // 要人到 release 頁抄新的 sha256 —— 刻意的，下載的東西要有人看過 digest 才進得來
+      // 要人到 release 頁抄新的 sha256：下載的東西要有人看過 digest 才進得來
       customType: 'regex',
       description: 'CodeQL bundle 的版本',
       managerFilePatterns: ['/^ci/sast/Dockerfile$/'],
@@ -234,7 +233,7 @@
       versioningTemplate: 'regex:^b(?<major>\\d+)$',
     },
     {
-      // 自己 build 的 postgres（#289）：deploy/postgres/Dockerfile 的 FROM 由 dockerfile 管理器追，
+      // 自己 build 的 postgres：deploy/postgres/Dockerfile 的 FROM 由 dockerfile 管理器追，
       // compose 的 image tag 抄了同一個版本，docker-compose 管理器又會跳過有 build 的服務，所以這條讓 tag 跟著一起改
       customType: 'regex',
       description: 'compose 裡 talkcal/postgres 的 tag',
@@ -245,7 +244,7 @@
     },
     {
       // 架構頁（docs/architecture/index.html）把映像檔版本抄了一份。升級 PR 一起改它，頁面才不會跟 compose 對不上；
-      // 頁尾的「最後核對」日期和其他說明文字還是要人看過再改（CLAUDE.md 的規則）
+      // 頁尾的「最後核對」日期和其他說明文字還是要人看過再改（AGENTS.md 的「改基礎設施」）
       customType: 'regex',
       description: '架構頁的 image 欄位（caddy、postgres）',
       managerFilePatterns: ['/^docs/architecture/index\\.html$/'],

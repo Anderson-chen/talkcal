@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 打 release tag（#25）。先檢查、再在本機建 annotated tag，最後印出推上去的指令 —— 推之前還有一次機會看一眼。
+# 打 release tag。先檢查、再在本機建 annotated tag，最後印出推上去的指令 —— 推之前還有一次機會看一眼。
 #
 #   cd/release.sh v0.2.0              # 打在 origin/master 最新的 commit
 #   cd/release.sh v0.2.0 3f9c2ab      # 打在 master 上比較早的某個 commit（例如確認過的那一版）
@@ -42,7 +42,7 @@ fi
 git merge-base --is-ancestor "$sha" origin/master || fail "${sha:0:7} 不在 origin/master 上"
 echo "  ✓ 在 origin/master 上"
 
-# 4 只看 push 事件：PR 的 run 測的是合併前的版本（跟 cd/triggers/watch.sh 同一個理由）
+# 4 只看 push 事件：PR 的 run 測的是合併前的版本
 ci="$(gh run list --workflow ci.yml --commit "$sha" --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
 [ -n "$ci" ] || fail "${sha:0:7} 沒有綠燈的 CI（gh run list --workflow ci.yml --commit $sha）"
 echo "  ✓ CI 綠燈（run $ci）"

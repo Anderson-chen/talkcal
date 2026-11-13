@@ -2,7 +2,7 @@
 # git push 之前，在乾淨的容器裡把 CI 跑一遍（ci/run.sh）。沒過就不推。
 #
 # 為什麼本機也要擋：GitHub 上的 CI 沒有 GPU，模型相關的測試在那裡永遠是跳過。
-# 這台電腦有模型，llama-server 開著的時候，這裡是那些測試唯一會真的被跑到的地方。
+# 這台電腦有模型，llama-server 開著的時候，那些測試只有在這裡才會真的跑到。
 #
 # 啟用（每個 clone 做一次；hook 不會跟著 git clone 自動生效）：
 #   git config core.hooksPath .githooks
@@ -24,7 +24,7 @@ while read -r local_ref local_sha _ _; do  # 後兩個是遠端的 ref、sha，�
     # 祕密先掃：幾秒就好，而且推上去就收不回來了 —— 測試紅了可以再推一次修，key 外洩只能作廢重發。
     # 範圍是「還不在任何遠端分支上的 commit」，也就是這次真的會送出去的那些；新分支、舊分支都適用
     ci/secrets.sh "$local_sha" --not --remotes </dev/null
-    # AI eval 只在改到 prompt 或模型相關的檔案時跑（一分多鐘，每次都跑太慢；但改了 prompt 卻忘了跑，就是 #13 那種退化沒人發現）。
+    # AI eval 只在改到 prompt 或模型相關的檔案時跑（一分多鐘，每次都跑太慢；但改了 prompt 卻忘了跑，模型的回答變差了也沒人發現）。
     # 看的是這次真的會送出去的 commit 改了哪些檔案
     if git log --name-only --format= "$local_sha" --not --remotes | grep -qE "$EVAL_PATHS"; then
         echo "pre-push：改到 prompt 或模型相關的檔案，這次也跑 AI eval"

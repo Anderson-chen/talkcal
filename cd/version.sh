@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 印出目前 checkout 的版本號（#25）。映像檔的 tag 和 label 都用它，規則只寫在這裡。
+# 印出目前 checkout 的版本號。映像檔的 tag 和 label 都用它，規則只寫在這裡。
 #
 #   cd/version.sh   → v0.2.0 / 3f9c2ab / 3f9c2ab-dirty
 #
@@ -10,7 +10,7 @@
 #   2. 沒有 → commit 的前 7 碼（跟 GitHub 頁面、watcher 的 log 同樣長度）
 #   3. 有沒 commit 的改動或新檔案 → 後面加 -dirty：映像檔裡的東西不等於那個 commit，不能假裝是
 #
-# 刻意不用 git describe 預設的 v0.2.0-3-g3f9c2ab：「離 tag 幾個 commit」要有完整歷史才算得出來，
+# 不用 git describe 預設的 v0.2.0-3-g3f9c2ab：「離 tag 幾個 commit」要有完整歷史才算得出來，
 # EC2 是 --depth 1 的淺 clone，同一個 commit 在本機和 EC2 會算出不同的版本號。這裡只看「指著 HEAD 的 tag」，淺 clone 也一樣。
 
 set -euo pipefail

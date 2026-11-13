@@ -1,4 +1,4 @@
-# PR 一定要連到 issue（描述裡寫「Closes #21」），沒有就紅燈。
+# PR 一定要連到 issue（描述裡寫「Closes #<issue 編號>」），沒有就紅燈。
 #
 # 為什麼要擋：issue 和 PR 的連動全靠這個連結 —— 合併時 GitHub 自動關 issue、
 # 看板自動移到 Done、半年後從 PR 點回當初的需求。忘了寫，整條就斷了。
@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   pr-issue:
-    # Renovate 開的套件升級 PR 不用連 issue（#48）：它們沒有對應的需求，追蹤的地方是 Renovate 自己的
+    # Renovate 開的套件升級 PR 不用連 issue：它們沒有對應的需求，追蹤的地方是 Renovate 自己的
     # Dependency Dashboard issue，PR 描述裡也寫了升了什麼、release notes 在哪。
     # job 被 if 跳過時，GitHub 把它當成通過，branch protection 的必過檢查不會卡住
     if: github.event.pull_request.user.login != 'renovate[bot]'

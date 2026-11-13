@@ -1,8 +1,6 @@
 # CI 的執行環境：本機（ci/run.sh、pre-push hook）和 GitHub Actions 都在這個映像檔裡跑檢查。
 #
-# 為什麼要自己的映像檔，而不是直接用機器上裝好的工具：
-# 「本機綠、CI 紅」最常見的原因是兩邊環境不一樣（JDK、Node 版本、個人設定、殘留的 build/）。
-# 兩邊都在同一個映像檔裡跑，版本只定義在這裡一次，綠燈的意思就一致了。
+# 為什麼在自己的映像檔裡跑、不用機器上裝好的工具，見 docs/adr/0008-ci-same-script-in-container.md。
 #
 # 什麼烤進映像檔、什麼放快取 —— 看它多久變一次：
 #   JDK、Node、Gradle 本體 —— 很少變，烤進來。改版時映像檔自動重 build（見下面 Gradle 那段）
@@ -10,7 +8,7 @@
 #   Java 函式庫、前端套件 —— 跟著 build.gradle、pnpm-lock.yaml 常常變，放 run.sh 掛上來的 volume（pnpm store）
 #
 # build context 不是資料夾，是 run.sh 用 git archive 從「要測的那個 commit」取出的
-# ci/Dockerfile、backend/gradlew、backend/gradle/wrapper/ —— 跟程式碼一樣，不讀工作目錄裡沒 commit 的東西。
+# ci/Dockerfile、backend/gradlew、backend/gradle/wrapper/、web/package.json：不讀工作目錄裡沒 commit 的東西。
 #
 # 版本對齊：
 #   JDK 25  —— build.gradle 的 toolchain，以及 app 映像檔（backend/Dockerfile）的 temurin:25、ci/sast/Dockerfile
@@ -22,7 +20,7 @@
 FROM node:22-bookworm-slim AS node
 
 # ShellCheck（checks.sh 檢查 repo 裡的 shell 腳本）：官方映像檔裡只有一支靜態連結的執行檔，直接搬過來。
-# 不用 apt 裝：Ubuntu 24.04 的是 0.9.0（2022），官方映像檔的版本＋digest 釘死，跟 ci/vulns.sh 的 Trivy 同一個做法
+# 不用 apt 裝：Ubuntu 24.04 的是 0.9.0（2022）。版本＋digest 釘死，為什麼釘 digest 見 ci/vulns.sh
 FROM koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d AS shellcheck
 
 # 底用 JDK（不是 JRE）：CI 要編譯、跑測試。noble 是 Ubuntu 24.04，跟 app 映像檔同一個發行版
@@ -61,7 +59,7 @@ RUN ./gradlew --version --no-daemon
 # 所以版本不在這裡另外寫一次，直接從 package.json 讀 —— 升級 Playwright 時這一層自動重建，不會忘了改。
 # 代價：package.json 任何一行改了，這層都會重建（重新下載瀏覽器，約一兩分鐘）；它不常改，划得來。
 # --with-deps：順便用 apt 裝 Chromium 需要的系統函式庫（字型、libnss 等），Ubuntu 基底映像檔裡沒有。
-# 瀏覽器放在固定位置、烤進映像檔：跟 Gradle 本體同一個道理，很少變，不必每次 CI 都下載
+# 瀏覽器放在固定位置、烤進映像檔：很少變，不必每次 CI 都下載
 #
 # pnpm 本體也在這一層下載（corepack install 讀 packageManager），烤在 COREPACK_HOME，每次 CI 不必再下載。
 # pnpm dlx 下載的 playwright 套件放暫時的 store、用完刪掉：預設的 store 位置會被 run.sh 的 volume 蓋住，留著只是占映像檔

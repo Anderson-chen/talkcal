@@ -12,11 +12,11 @@
 #   4. 假 app 起來：要收到 app 掛了的 RESOLVED  → 擋恢復通知被關掉
 # 每一步輪詢 Mailpit 的 API，時限比實測多抓一倍：寧可慢一點綠，不要因為時間差誤判。
 #
-# 刻意不驗：慢燒（視窗要好幾小時，算式交給 ci/rules.sh 的單元測試）、真的信箱收不收得到（CI 裡沒有）。
+# 不驗：慢燒（視窗要好幾小時，算式交給 ci/rules.sh 的單元測試）、真的信箱收不收得到（CI 裡沒有）。
 
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
-export MSYS_NO_PATHCONV=1  # 同 run.sh：別讓 Git Bash 把容器裡的 /tmp 改寫成 Windows 路徑
+export MSYS_NO_PATHCONV=1  # 別讓 Git Bash 把容器裡的 /tmp 改寫成 Windows 路徑（見 ci/run.sh）
 
 project=talkcal-alerttest
 mimir=http://127.0.0.1:19009

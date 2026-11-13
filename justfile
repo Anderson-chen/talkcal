@@ -1,5 +1,5 @@
-# 本機常用腳本的入口（#238）：`just` 或 `just --list` 列出全部指令和說明，`just <指令> [參數]` 執行。
-# 這裡只轉呼叫原本的腳本，做法、參數的意思寫在各腳本開頭；腳本路徑沒變，直接執行照樣可以。
+# 本機常用腳本的入口：`just` 或 `just --list` 列出全部指令和說明，`just <指令> [參數]` 執行。
+# 這裡只轉呼叫 repo 裡的腳本，做法、參數的意思寫在各腳本開頭；直接執行腳本也可以。
 #
 # 需要：just（winget install Casey.Just）、Git Bash。just 在 Windows 上用 PATH 裡的 `sh` 跑每一行，
 # 在 Git Bash 裡就找得到；要從 PowerShell、VS Code 的 task 跑，把 <Git 安裝目錄>\bin 加進使用者的 PATH。

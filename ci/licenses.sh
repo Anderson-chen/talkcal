@@ -2,12 +2,12 @@
 # 前端套件的授權檢查：會打包進前端、送到使用者瀏覽器的套件，不能是 GPL、AGPL 這類 copyleft，也不能查不出授權。
 # 後端的在 Gradle 的 checkLicense（backend/build.gradle），規則和理由整理在 docs/licenses.md。
 #
-#   ci/licenses.sh        由 ci/checks.sh 在 CI 容器裡呼叫（容器裡有 node、Trivy）
+#   ci/licenses.sh        要有 node、Trivy，CI 容器（ci/Dockerfile）裡有
 #
 # 為什麼先另外裝一份「只有 dependencies」的 node_modules 再掃：
 #   - devDependencies（vite、vitest、playwright…）只在 build、測試時用，不會進到 dist/，不算散布出去，不必管
-#   - 不讀 lockfile 而是讀裝好的 package.json：pnpm-lock.yaml 沒有記授權 ——
-#     直接掃它時 Trivy 找得到 24 個套件、卻一個授權都沒有，檢查會靜靜地通過（2026-10-19 實測）。
+#   - 不讀 lockfile 而是讀裝好的 package.json：pnpm-lock.yaml 沒有記授權，
+#     直接掃它的話 Trivy 找得到套件、卻一個授權都沒有，檢查會靜靜地通過。
 #     裝好的 node_modules 裡每個套件都有自己的 package.json，讀得到授權
 #   - 套件從 pnpm store 拿（run.sh 掛的 volume），前面 checks.sh 的 pnpm install 已經下載過，這裡不會再連網
 #

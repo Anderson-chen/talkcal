@@ -17,7 +17,7 @@ $clone = (Resolve-Path "$PSScriptRoot\..\..").Path
 $runner = "$clone\.git\cd-watch.sh"
 Copy-Item "$PSScriptRoot\watch.sh" $runner -Force
 
-# 跟 backend/build.gradle 同一個理由：PATH 裡第一個 bash 是 WSL，要明確找 Git Bash。
+# PATH 裡第一個 bash 可能是 WSL 的，要明確找 Git Bash。
 # git --exec-path 是 <Git>/mingw64/libexec/git-core，往上三層就是安裝目錄
 $gitCore = (git --exec-path).Trim()
 $bash = Join-Path (Split-Path (Split-Path (Split-Path $gitCore))) 'bin\bash.exe'
