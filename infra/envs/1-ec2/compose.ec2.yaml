@@ -13,7 +13,7 @@
 # 由 deploy.sh 從 SSM Parameter Store 拉下來（Terraform 在 secrets.tf 產生）。
 
 services:
-  # DB 密碼：本機寫死 talkcal，這裡換成 Terraform 隨機產生的。
+  # DB 密碼：本機是自己填在 deploy/.env 的，這裡換成 Terraform 隨機產生的。
   # 只在 volume 第一次初始化時生效；之後要換密碼得進資料庫改，光改這裡沒用。
   postgres:
     environment:
@@ -22,9 +22,9 @@ services:
   app:
     environment:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?缺 DB_PASSWORD}
-      # 登入的 session cookie 只走 HTTPS（#103）。雲端前面有 Caddy 做 HTTPS 才能開；本機是 http，開了瀏覽器就不送回來
+      # 登入的 session cookie 只走 HTTPS。雲端前面有 Caddy 做 HTTPS 才能開；本機是 http，開了瀏覽器就不送回來
       SERVER_SERVLET_SESSION_COOKIE_SECURE: "true"
-      # 歸檔（#54）改放 S3：endpoint 空白 = AWS S3 本身（不是 compose 裡的 RustFS）。
+      # 歸檔改放 S3：endpoint 空白 = AWS S3 本身（不是 compose 裡的 RustFS）。
       # bucket、區域、專用 user 的 key 都在 .env（archive.tf 建、secrets.tf 寫進去）；key 本身由 deploy/compose.yaml 交給 app
       TALKCAL_ARCHIVE_ENDPOINT: ""
       TALKCAL_ARCHIVE_BUCKET: ${ARCHIVE_BUCKET:?缺 ARCHIVE_BUCKET}
@@ -34,7 +34,7 @@ services:
     # 設了上限之後，75% 改成以 2GB 算（約 1.5GB heap）。
     mem_limit: 2g
 
-  # 本機扮演 S3 的 RustFS 不起：放進一個不會被打開的 profile（跟 compose.bedrock.yaml 關掉模型的做法一樣）。
+  # 本機扮演 S3 的 RustFS 不起：放進一個不會被打開的 profile。
   # app 本來就不 depends_on 它（物件儲存掛了不該讓 app 起不來），所以不必改 app 的 depends_on
   archive:
     profiles: [local-archive]

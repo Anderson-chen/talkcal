@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 部署的冒煙測試（#225）：確認「這個環境」真的能用。CI 測得到程式和設定的邏輯，測不到環境的差異
+# 部署的冒煙測試：確認「這個環境」真的能用。CI 測得到程式和設定的邏輯，測不到環境的差異
 # （SSM 拉下來的 .env、網路、憑證、真的 SMTP），這些只有部署當下在機器上才驗得到。
 # deploy.sh 呼叫兩次，任何一項沒過就結束碼 1，deploy.sh 跟著失敗：
 #
@@ -54,14 +54,14 @@ retry() {
 }
 
 check_env() {
-  # 寫出空檔案卻回 0 的事真的發生過（snap 版的 aws，#74）
+  # snap 版的 aws 會寫出空檔案卻回 0
   if [ ! -s "$dotenv" ]; then
     fail ".env 是空的：檢查 aws --version（不要用 snap 版）、SSM 參數"
     return
   fi
 
-  # 2026-10-29：從 Windows apply，CRLF 的 secrets.tf 讓 SSM 的 .env 每行多一個 \r，
-  # deploy.sh 取出的 DB 密碼多一個字元、ALTER ROLE 設錯，app 要等 --wait 判 unhealthy 才失敗，網站斷了 5 分鐘
+  # 從 Windows apply 的話，CRLF 的 secrets.tf 會讓 SSM 的 .env 每行多一個 \r，
+  # deploy.sh 取出的 DB 密碼多一個字元、ALTER ROLE 設錯，app 要等 --wait 判 unhealthy 才失敗，這段時間網站是斷的
   local cr_lines
   cr_lines="$(awk '/\r$/ { n++ } END { print n + 0 }' "$dotenv")"
   if [ "$cr_lines" -gt 0 ]; then
@@ -86,8 +86,7 @@ check_https() {
 }
 
 # Grafana 用資料源設定去連一次，連得上才算：位址、網路、對方 ready 都包含在內。
-# Mimir（prometheus）、Loki 有 health API；Tempo 的 health 在 Grafana 11.4 沒實作（回 404），12.4 才有；
-# 這裡沿用當時的寫法：改經 Grafana 的資料源 proxy 打 Tempo 的 /ready，一樣是走 Grafana 那份設定連過去
+# Mimir（prometheus）、Loki 打 health API；Tempo 經 Grafana 的資料源 proxy 打 /ready，一樣是走 Grafana 那份設定連過去
 datasource_path() {
   case "$1" in
     tempo) echo "/api/datasources/proxy/uid/tempo/ready" ;;
@@ -105,7 +104,7 @@ app_scraped() {
 
 # bedrock 時直接用 .env 的 key 問 Bedrock 一句：key 過期（預設 90 天）、模型名稱錯、token 配額用完，
 # 都只有真的叫一次才知道，/api 健康檢查不會叫到模型。不經過 app：要登入、會在正式資料庫留下對話；
-# 代價是 app 自己的設定（例如 Spring AI 送出的選項，#76）驗不到。max_tokens=1，一次只花幾個 token
+# 代價是 app 自己的設定（例如 Spring AI 送出的選項）驗不到。max_tokens=1，一次只花幾個 token
 check_bedrock() {
   local base_url
   base_url="$(env_get BEDROCK_BASE_URL)"

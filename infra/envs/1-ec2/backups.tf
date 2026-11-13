@@ -1,4 +1,4 @@
-# ── 資料庫備份放這裡（#45）──────────────────────────────────────────────────────
+# ── 資料庫備份放這裡 ──────────────────────────────────────────────────────
 # 機器上的 deploy/backup/pg-backup.sh 做 pg_dump，infra/envs/1-ec2/backup-to-s3.sh 傳上來。
 # 放在機器外面：EBS 壞了、機器被 terminate、`terraform destroy`，資料庫跟著沒，備份還在。
 # 什麼時候備份、RPO／RTO 為什麼是那樣：docs/runbooks/backup-restore.md。

@@ -13,7 +13,7 @@ locals {
 
 # gpu：AWS 的 Deep Learning Base AMI（開源版 NVIDIA 驅動）。驅動、Docker、NVIDIA Container Toolkit 都裝好了，
 # 不必自己裝驅動（要對核心版本、要重開機，最容易壞）。
-# 2026-10-13 在東京查過這個參數存在，指到的 AMI 根磁碟是 75GB（root_volume_size 不能比它小）。
+# 指到的 AMI 根磁碟是 75 GB（root_volume_size 不能比它小）。
 # 注意：llama-server 映像檔是 CUDA 13，驅動要 580 以上；開機後 user_data 會印 nvidia-smi 確認。
 data "aws_ssm_parameter" "dlami" {
   count = local.gpu ? 1 : 0
@@ -21,7 +21,7 @@ data "aws_ssm_parameter" "dlami" {
 }
 
 # bedrock：Canonical 官方的 Ubuntu Server 24.04（amd64、gp3）。沒有 GPU 就不需要驅動，
-# 映像檔小、開機快；Docker 由 user_data 裝。2026-10-13 在東京查過，指到 ubuntu-noble-24.04-amd64-server-20261004。
+# 映像檔小、開機快；Docker 由 user_data 裝。
 data "aws_ssm_parameter" "ubuntu" {
   count = local.gpu ? 0 : 1
   name  = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"

@@ -1,18 +1,17 @@
 # 自己 build 的 llama-server（CUDA 版）。
 #
-# 為什麼不用官方的 ghcr.io/ggml-org/llama.cpp:server-cuda：本機連 ghcr 實測只有 0.17 MB/s，
-# 2.6GB 要拉 3.5 小時；Docker Hub 有 10 MB/s、GitHub 原始碼 6 MB/s，自己編反而快。
-# 上雲端也是這個做法：自己 build、推到自己同區的 registry，GPU 機冷啟動才不會卡在拉 image。
+# 不用官方的 ghcr.io/ggml-org/llama.cpp:server-cuda：本機連 ghcr 太慢，自己編反而快（數字見 docs/adr/0002）。
+# 上雲端也自己 build、推到同區的 registry，GPU 機冷啟動才不會卡在拉 image。
 #
 # 兩段式（multi-stage）：
-#   build   —— devel 映像檔，有 nvcc 編譯器和標頭檔，好幾 GB，只用來編譯
-#   runtime —— runtime 映像檔，只有 CUDA 函式庫，把編好的那一支執行檔搬過去
+#   build    devel 映像檔，有 nvcc 編譯器和標頭檔，好幾 GB，只用來編譯
+#   runtime  runtime 映像檔，只有 CUDA 函式庫，把編好的那一支執行檔搬過去
 # 最後的 image 只有 runtime 那段，編譯器不會跟著上雲端。
 
 # ── 版本參數：全部集中在這裡，改版本只動這幾行 ─────────────────────────
 # llama.cpp 跟 C:\llm\llama.cpp 的原生 build 同一版，原生 vs 容器才比得出「容器」本身的差異
 ARG LLAMA_BUILD=b10964
-# CUDA 13 跟原生的 cudart64_13 同一代。注意：CUDA 13 要主機驅動 >= 580，
+# CUDA 13 跟原生的 cudart64_13 同一代。CUDA 13 要主機驅動 >= 580，
 # 本機是 610 沒問題；雲端 GPU 機的驅動如果比較舊，改成 12.9.1 重 build。
 ARG CUDA_VERSION=13.0.1
 ARG UBUNTU_VERSION=24.04
@@ -31,8 +30,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # 原生碼直接從 GitHub 抓指定版本的 tarball。
-# --checksum：內容跟這串 SHA256 對不上就 build 失敗——確保每次、每台機器編的都是同一份原始碼，
-# 不會被中途竄改或悄悄換掉（供應鏈安全的最基本一步）。
+# --checksum：內容跟這串 SHA256 對不上就 build 失敗，每次、每台機器編的都是同一份原始碼，
+# 中途被竄改或換掉都會擋下來。
 # 升級 LLAMA_BUILD 時這串要一起換：先下載新版 tarball，用 sha256sum 算出來貼上。
 ADD --checksum=sha256:4c96d72c40cefdacf621457d8a12fe5673b8de5b640ff7fe6d342ea1c579a9fe \
     https://github.com/ggml-org/llama.cpp/archive/refs/tags/${LLAMA_BUILD}.tar.gz /tmp/src.tar.gz

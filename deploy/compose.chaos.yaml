@@ -1,4 +1,4 @@
-# 故障演練用：疊在 compose.yaml 上，在 app 和它的兩個依賴（模型、PostgreSQL）中間各插一段 Toxiproxy（#44）。
+# 故障演練用：疊在 compose.yaml 上，在 app 和它的兩個依賴（模型、PostgreSQL）中間各插一段 Toxiproxy。
 #
 #   docker compose -f deploy/compose.yaml -f deploy/compose.chaos.yaml up -d
 #
@@ -7,7 +7,6 @@
 
 services:
   toxiproxy:
-    # 版本釘死，跟其他映像檔一樣
     image: ghcr.io/shopify/toxiproxy:2.13.0
     container_name: talkcal-toxiproxy
     # 兩段 proxy 啟動時就從設定檔建好，不必每次演練前先用 API 建

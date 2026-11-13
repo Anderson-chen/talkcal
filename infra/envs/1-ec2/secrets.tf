@@ -1,12 +1,12 @@
 # ── 密碼與部署設定 ───────────────────────────────────────────────────────────
-# 本機的 compose 把 DB 密碼寫死成 talkcal（只綁 127.0.0.1，刻意接受，見 ready.md 祕密管理）。雲端上改由 Terraform 隨機產生，
+# 本機的 DB 密碼自己填在 deploy/.env。雲端上由 Terraform 隨機產生，
 # 存進 SSM Parameter Store（SecureString，用 AWS 代管的金鑰，免費）。
 # 機器部署時才拉下來寫成 deploy/.env，明碼不進 git、不進 user_data、不進映像檔。
-# Google、GitHub 的 client secret 也走這條（#127）：值從 variables.tf 的 sensitive 變數來，沒給就是空的、那個登入方式不開。
+# Google、GitHub 的 client secret 也走這條：值從 variables.tf 的 sensitive 變數來，沒給就是空的、那個登入方式不開。
 # 代價：密碼會出現在 Terraform state 裡，所以 bootstrap 的 state bucket 一定要加密、不公開。
 locals {
   # sslip.io 把 IP 編進網域（talkcal.1-2-3-4.sslip.io → 1.2.3.4）：免費、免註冊，
-  # 而且是公開解析得到的真網域，Let's Encrypt 願意簽憑證——不必買網域也有 HTTPS。
+  # 而且是公開解析得到的真網域，Let's Encrypt 願意簽憑證，不必買網域也有 HTTPS。
   # 代價是 IP 一換網址就換，所以配了 Elastic IP。
   site_address = "${var.project}.${replace(aws_eip.main.public_ip, ".", "-")}.sslip.io"
 
@@ -43,15 +43,15 @@ resource "aws_ssm_parameter" "dotenv" {
     GOOGLE_CLIENT_SECRET=${var.google_client_secret}
     GITHUB_CLIENT_ID=${var.github_client_id}
     GITHUB_CLIENT_SECRET=${var.github_client_secret}
-    # Grafana 告警寄信（#121）：ops/ 的 compose 用 --env-file 讀同一份。alert_smtp_host 沒給就不寄信
+    # Grafana 告警寄信：ops/ 的 compose 用 --env-file 讀同一份。alert_smtp_host 沒給就不寄信
     ALERT_SMTP_HOST=${var.alert_smtp_host}
     ALERT_SMTP_USER=${var.alert_smtp_user}
     ALERT_SMTP_PASSWORD='${var.alert_smtp_password}'
     ALERT_SMTP_FROM=${var.alert_smtp_from}
     ALERT_EMAIL_TO=${var.alert_email_to}
-    # Grafana 的 heartbeat（#40）：deploy.sh 起 ops/ 時用 --env-file 讀同一份
+    # Grafana 的 heartbeat：deploy.sh 起 ops/ 時用 --env-file 讀同一份
     HEARTBEAT_URL=${var.heartbeat_url}
-    # 舊資料的歸檔（#54）：app 讀寫 S3 用的 bucket、區域、專用 user 的 key（archive.tf）
+    # 舊資料的歸檔：app 讀寫 S3 用的 bucket、區域、專用 user 的 key（archive.tf）
     ARCHIVE_BUCKET=${aws_s3_bucket.archive.bucket}
     ARCHIVE_REGION=${var.region}
     ARCHIVE_ACCESS_KEY=${aws_iam_access_key.archive.id}

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 還原演練（#45）：在一組獨立的容器上跑「備份 → 誤刪 → 還原」，量時間，再跑反例證明壞掉的備份會被擋下。
+# 還原演練：在一組獨立的容器上跑「備份 → 誤刪 → 還原」，量時間，再跑反例證明壞掉的備份會被擋下。
 # 不碰正在用的 talkcal-postgres：另外起 talkcaldrill-postgres（15432）和一個假 app，跑完全部刪掉。
 #
 #   bash deploy/backup/drill.sh

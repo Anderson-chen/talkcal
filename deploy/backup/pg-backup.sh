@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 備份 PostgreSQL：pg_dump 成一個檔案，驗過完整性才算數，再清掉過期的舊檔（#45）。
+# 備份 PostgreSQL：pg_dump 成一個檔案，驗過完整性才算數，再清掉過期的舊檔。
 # 本機（Git Bash）和 EC2 共用這一支；EC2 上由 infra/envs/1-ec2/backup-to-s3.sh 呼叫，再把結果傳上 S3。
 #
 #   bash deploy/backup/pg-backup.sh                       # 備份 talkcal-postgres 到 ~/talkcal-backups
@@ -12,17 +12,17 @@ set -euo pipefail
 PG_CONTAINER="${PG_CONTAINER:-talkcal-postgres}"
 PG_USER="${PG_USER:-talkcal}"
 PG_DB="${PG_DB:-talkcal}"
-# 預設放在 repo 外面：放在 repo 裡的話，刪 worktree、git clean 都可能把備份一起帶走（#103 掉過檔案）。
+# 預設放在 repo 外面：放在 repo 裡的話，刪 worktree、git clean 都可能把備份一起帶走。
 # 也不放在 Docker volume 裡：`docker compose down -v` 會連同資料庫一起清掉，備份就跟著沒了
 BACKUP_DIR="${BACKUP_DIR:-$HOME/talkcal-backups}"
 # 保留規則：超過 KEEP_DAYS 天的刪掉，但最新的 KEEP_MIN 份無論多舊都留著。
-# 只看天數的話，機器關了一個月再開，第一次備份完就會把之前的全刪光 —— 剛好是最可能要回頭找的時候
+# 只看天數的話，機器關了一個月再開，第一次備份完就會把之前的全刪光，剛好是最可能要回頭找的時候
 KEEP_DAYS="${KEEP_DAYS:-14}"
 KEEP_MIN="${KEEP_MIN:-7}"
 
 log() { echo "[pg-backup] $*" >&2; }
 
-# 備份裡有所有人的行程和對話：目錄和檔案只給擁有者讀寫，跟 deploy.sh 寫 .env 時的 umask 077 一樣
+# 備份裡有所有人的行程和對話：目錄和檔案只給擁有者讀寫
 umask 077
 mkdir -p "$BACKUP_DIR"
 # 檔名只精確到秒：同一秒已經有一份（前一份剛做完，backup-to-s3.sh 的鎖讓它們排隊），就等到下一秒，不蓋掉它

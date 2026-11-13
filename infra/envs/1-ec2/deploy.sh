@@ -19,7 +19,7 @@ if [ -f "$DEPLOY_ENV" ]; then
   GIT_REF="${override_ref:-$GIT_REF}"
 fi
 : "${PROJECT:?}" "${AWS_REGION:?}" "${GIT_REF:?}" "${DOTENV_PARAM:?}"
-# 舊版 user_data 寫的 deploy.env 沒有 MODEL_BACKEND：那時只有 gpu
+# deploy.env 沒有 MODEL_BACKEND 的話，是只有 gpu 時的 user_data 寫的
 MODEL_BACKEND="${MODEL_BACKEND:-gpu}"
 
 ROOT="/opt/$PROJECT"
@@ -29,7 +29,7 @@ MODELS_DIR="$ROOT/models"
 echo "── 1. 原始碼：$GIT_REF"
 # 正在跑的這支腳本也會被換掉：git 是刪掉舊檔、寫新檔，bash 手上拿的還是舊檔，不會讀到一半變內容。
 # 新版的腳本從下次部署開始生效。
-# --tags：連 release tag 一起拉，cd/version.sh 才認得出這個 commit 是不是某個 v<版本>（#25）。
+# --tags：連 release tag 一起拉，cd/version.sh 才認得出這個 commit 是不是某個 v<版本>。
 # 淺 clone 也沒關係：version.sh 只看「指著 HEAD 的 tag」，不需要歷史
 git -C "$REPO" fetch --depth 1 --tags origin "$GIT_REF"
 git -C "$REPO" checkout --detach FETCH_HEAD
@@ -61,7 +61,7 @@ umask 077
 aws ssm get-parameter --name "$DOTENV_PARAM" --with-decryption \
   --region "$AWS_REGION" --query Parameter.Value --output text > "$REPO/deploy/.env"
 umask 022
-# 冒煙測試的前半（#225）：.env 是空的（snap 版的 aws，#74）、帶 \r（從 Windows apply）、缺必要的 key，
+# 冒煙測試的前半：.env 是空的（snap 版的 aws）、帶 \r（從 Windows apply）、缺必要的 key，
 # 都在啟動任何容器之前就擋下、說出是哪一項。不擋的話要等 app 起不來、--wait 判 unhealthy 才失敗，看不出原因
 bash "$REPO/infra/envs/1-ec2/smoke.sh" env "$REPO/deploy/.env"
 
@@ -78,7 +78,7 @@ compose_files=(
 docker compose "${compose_files[@]}" config -q
 
 echo "── 4. 服務（deploy/ + compose.ec2.yaml + compose.$MODEL_BACKEND.yaml）"
-# 映像檔先準備好，這幾行只拉、只 build，不換掉任何在跑的容器（#291）。
+# 映像檔先準備好，這幾行只拉、只 build，不換掉任何在跑的容器。
 # 跟 CI vulns job 的 --pull 對齊（.github/workflows/ci.yml）：這裡不重拉、只用快取的話，CI 綠燈不代表線上也是這一版
 docker compose "${compose_files[@]}" pull --quiet --ignore-buildable  # 第三方：同一個 tag 官方重新 build 過，就換成新的 digest
 # 觀測那組也在這裡先拉：registry 連不到時，在換掉任何容器之前就失敗
@@ -98,9 +98,9 @@ for svc in web postgres; do
   fi
 done
 
-# 先只起 postgres，把資料庫裡的密碼同步成 .env 這一份，app 才起來（#14）。
+# 先只起 postgres，把資料庫裡的密碼同步成 .env 這一份，app 才起來。
 # 為什麼要這步：官方 postgres 映像檔只在「資料庫第一次初始化」時讀 POSTGRES_PASSWORD，之後就不管了。
-# 不同步的話，在 Terraform 換了密碼再部署，app 拿新密碼、資料庫還是舊的 —— app 連不上，整個服務掛掉。
+# 不同步的話，在 Terraform 換了密碼再部署，app 拿新密碼、資料庫還是舊的，app 連不上，整個服務掛掉。
 # 每次部署都跑：密碼沒換時就是設成同一組，沒有副作用。
 docker compose "${compose_files[@]}" up -d --wait postgres
 # 走容器裡的 local socket（官方映像檔對它是 trust），不必知道舊密碼也改得了。
@@ -111,8 +111,8 @@ printf "ALTER ROLE talkcal PASSWORD '%s';\n" "$db_password" \
   | docker compose "${compose_files[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -q -U talkcal -d talkcal
 unset db_password
 
-# 換新版之前先備份（#45）：新版的 Flyway migration 把資料改壞時，回得去部署前那一刻。
-# 備份失敗就不部署 —— 沒有退路的時候不往前走
+# 換新版之前先備份：新版的 Flyway migration 把資料改壞時，回得去部署前那一刻。
+# 備份失敗就不部署：沒有退路的時候不往前走
 bash infra/envs/1-ec2/backup-to-s3.sh pre-deploy
 
 # 映像檔上面 build 好了，這裡不帶 --build
@@ -121,7 +121,7 @@ docker compose "${compose_files[@]}" up -d --remove-orphans
 echo "── 5. 觀測（ops/ + compose.ops.yaml）"
 # 要在 deploy/ 之後：Alloy 要加入的網路是 deploy/ 建的。
 # 設定跟本機同一份，compose.ops.yaml 只蓋掉雲端不一樣的值（trace 取樣比例、備份告警讀的資料夾）
-# --env-file：Grafana 寄告警信的 SMTP 設定（#121）和 heartbeat 網址（#40）都在同一份 deploy/.env。
+# --env-file：Grafana 寄告警信的 SMTP 設定和 heartbeat 網址都在同一份 deploy/.env。
 # compose 預設只讀第一個 compose 檔所在資料夾（ops/）的 .env，不帶的話 Grafana 拿不到、就不寄信也不送 heartbeat
 docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml up -d
 
@@ -174,13 +174,13 @@ systemctl list-timers "$PROJECT-backup.timer" --no-pager
 
 docker compose "${compose_files[@]}" ps
 
-# 根磁碟跟 PostgreSQL 共用：重拉、重 build 換下來的舊映像檔要清掉（#291）。
+# 根磁碟跟 PostgreSQL 共用：重拉、重 build 換下來的舊映像檔要清掉。
 # 不帶 -a：退版要用的映像檔不能清，見 cd/rollback.md「映像檔不在了」
 docker image prune -f
 
 echo "── 7. 冒煙測試：網站、觀測、Bedrock、告警寄信"
 # --wait 只證明容器的 healthcheck 過了；這裡從外面走一遍：https 的網站和 /api、Grafana 資料源、
-# Alloy 抓得到 app、（bedrock 時）問 Bedrock 一句、（有設 SMTP 時）寄一封測試信。沒過就讓部署失敗（#225）
+# Alloy 抓得到 app、（bedrock 時）問 Bedrock 一句、（有設 SMTP 時）寄一封測試信。沒過就讓部署失敗
 bash infra/envs/1-ec2/smoke.sh services deploy/.env
 
 echo "完成。網址：https://$(grep '^SITE_ADDRESS=' deploy/.env | cut -d= -f2)"

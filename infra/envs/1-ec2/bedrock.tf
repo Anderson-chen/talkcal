@@ -8,7 +8,7 @@
 # 碰不到這個帳號的其他東西。不掛在 EC2 的角色上：角色拿不到長期 key，也不該拿。
 #
 # 不用這把 key 的做法是 Spring AI 的 Bedrock Converse 模組（直接吃 EC2 角色）：程式要多一套供應商設定，
-# 先用 key 驗證模型合不合用，之後再換（#72 的決定）。
+# 先用 key 驗證模型合不合用，之後再換。
 
 resource "aws_iam_user" "bedrock" {
   count = local.gpu ? 0 : 1
@@ -49,7 +49,7 @@ resource "aws_iam_user_policy" "bedrock" {
 }
 
 # Terraform 產生 key，連同其他設定寫進 SSM 的 .env（secrets.tf），機器部署時才拉下來。
-# key 的明碼會在 Terraform state 裡：跟 DB 密碼一樣，靠 bootstrap 的 state bucket 加密、不公開。
+# key 的明碼會在 Terraform state 裡，靠 bootstrap 的 state bucket 加密、不公開。
 # 到期前換新：terraform apply -replace='aws_iam_service_specific_credential.bedrock[0]'，再到機器上重跑 deploy.sh
 resource "aws_iam_service_specific_credential" "bedrock" {
   count               = local.gpu ? 0 : 1

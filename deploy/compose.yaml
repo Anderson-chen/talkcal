@@ -1,32 +1,28 @@
-# 這個 stack 是「在本機模擬雲端部署」：把原本用 .bat 跑在 Windows 上的服務，一個一個搬進容器。
-# 跟 ops/ 分開：ops/ 是觀測（看別人），這裡是被部署的服務本身（被看的那些）。
+# 這個 stack 在本機模擬雲端部署：Qwen3-8B 生成、PostgreSQL、舊資料的歸檔（RustFS）、talkcal app，
+# 以及前面擋一層的 nginx（web），都在容器裡。觀測的元件在 ops/，這裡只放被觀測的服務。
+# 不用容器時 `docker compose down`，改點 llama.cpp 的 .bat、跑 ./gradlew bootRun。
 #
-# 都在容器裡：Qwen3-8B 生成、PostgreSQL、舊資料的歸檔（RustFS）、talkcal app，以及前面擋一層的 nginx（web）。
-# 要退回去就 `docker compose down`，再點原本的 .bat、./gradlew bootRun。
-#
-# 容器之間怎麼溝通：同一個 compose 的服務自動在同一個網路（talkcal-deploy_default）上，
-# 用服務名稱互相找——app 打 http://llm-chat:8080，不經過主機、不看 ports 發佈成幾號。
+# 同一個 compose 的服務在同一個網路（talkcal-deploy_default）上，用服務名稱互相找：
+# app 打 http://llm-chat:8080，不經過主機，跟 ports 發佈成幾號無關。
 #
 # 發佈到主機的埠（ports）是給「容器外面」的人用的：
-#   8080        —— 模型。沿用原生的埠，這樣本機開發的 ./gradlew bootRun 照樣打得到。
-#                  （ops/ 的 Alloy 不靠這個埠：它加入了這組的網路，直接用服務名稱抓。）
-#                  代價：跟原生 .bat 搶同樣的埠，起這個之前要先關掉那個視窗。
-#   18090       —— 容器裡的 app。刻意不用 8090：8090 留給本機開發的 bootRun，兩個可以同時開著比對。
-#   18080       —— 容器裡的前端（nginx）。瀏覽器開這個，/api 由 nginx 轉給 app。
-#   9100 / 9101 —— 歸檔用的 RustFS（S3 API / 管理頁面）。本機 bootRun 的 app 打 9100；不用 9000 是因為太多工具預設佔它。
+#   8080        模型。用原生 llama-server 的埠，本機開發的 ./gradlew bootRun 照樣打得到。
+#               ops/ 的 Alloy 不靠這個埠：它加入了這組的網路，直接用服務名稱抓。
+#               代價：跟原生 .bat 搶同樣的埠，起這個之前要先關掉那個視窗。
+#   18090       容器裡的 app。不用 8090：8090 留給本機開發的 bootRun，兩個可以同時開著比對。
+#   18080       容器裡的前端（nginx）。瀏覽器開這個，/api 由 nginx 轉給 app。
+#   9100 / 9101 歸檔用的 RustFS（S3 API / 管理頁面）。本機 bootRun 的 app 打 9100；不用 9000 是因為太多工具預設佔它。
 
 name: talkcal-deploy
 
-# 模型服務和播種共用同一個自己 build 的映像檔（Dockerfile 在 llama-server/，為什麼自己 build 寫在那裡）。
-# image 給一個自己的名字：build 完就存成這個名字，之後上雲端就是把它推到 registry。
-# tag 把兩個關鍵版本都寫進去，看名字就知道裡面是哪個 llama.cpp、哪個 CUDA。
+# 模型服務和播種共用同一個自己 build 的映像檔，為什麼自己 build 見 llama-server/Dockerfile。
+# tag 寫進 llama.cpp 和 CUDA 兩個版本，看名字就知道裡面是哪一版。
 x-llama-server: &llama-server
   image: talkcal/llama-server:b10964-cuda13.0.1
   build:
     context: ./llama-server
 
-# x- 開頭的頂層欄位 Compose 會直接忽略，專門拿來放「要重複用的片段」。
-# &gpu 是 YAML 錨點，下面用 *gpu 引用——GPU 設定集中寫在這裡，之後多一個模型服務也直接引用。
+# GPU 設定集中在這裡，要 GPU 的服務用 *gpu 引用。
 x-gpu: &gpu
   resources:
     reservations:
@@ -34,25 +30,25 @@ x-gpu: &gpu
         # 跟 Docker 要 GPU。沒這段，容器裡看不到顯卡，-ngl 99 會靜靜退回 CPU 跑（慢十倍以上）。
         # 雲端 k8s 上對應的是 resources.limits: nvidia.com/gpu: 1。
         #
-        # 注意本機跟雲端的差異：Docker Desktop 不切分 GPU，每個容器都看得到整張卡、共用 12GB VRAM。
-        # 但 k8s 的 nvidia.com/gpu: 1 是「獨佔一整張」，以後多一個要 GPU 的服務就要多一張卡。
+        # 本機跟雲端算法不同：Docker Desktop 不切分 GPU，每個容器都看得到整張卡、共用 12 GB VRAM；
+        # k8s 的 nvidia.com/gpu: 1 是獨佔一整張，多一個要 GPU 的服務就要多一張卡。
         - driver: nvidia
           count: 1
           capabilities: [gpu]
 
-# app、web 的映像檔共用的版本參數（#25）：值是 cd/apply.sh export 的環境變數。
-# 只寫名字不寫值：環境變數沒設時 compose 不傳，改用 Dockerfile 裡 ARG 的預設（local / unknown），預設值只寫在那裡
+# app、web 的映像檔共用的版本參數：值是 cd/apply.sh export 的環境變數。
+# 只寫名字不寫值：環境變數沒設時 compose 不傳，改用 Dockerfile 裡 ARG 的預設（local / unknown），預設值只寫在那裡。
 x-version-args: &version-args
   - APP_VERSION
   - GIT_COMMIT
 
 services:
   # ── 模型播種：把模型從 Windows 資料夾複製進 volume（只跑一次就結束）──────────
-  # 為什麼不讓模型服務直接掛 C:/llm/models：實測 Windows → WSL2 的檔案通道只有約 20 MB/s，
-  # 而 llama.cpp 預設用 mmap 零碎讀取更慢——Qwen 5GB 載了 5 分鐘還卡在 275MB。
-  # volume 放在 WSL2 自己的 Linux 檔案系統上，讀取快得多。慢的通道只在「第一次複製」時走一遍。
+  # 模型服務直接掛 C:/llm/models 的話，讀檔要走 Windows → WSL2 的檔案通道（約 20 MB/s），
+  # llama.cpp 預設用 mmap 零碎讀取更慢，5 GB 的模型載好幾分鐘都載不完。
+  # volume 放在 WSL2 自己的 Linux 檔案系統上，讀取快得多；慢的通道只在第一次複製時走一遍。
   #
-  # 對照雲端：這就是 k8s 的 initContainer —— 主程式啟動前，先把模型從物件儲存（S3/GCS）
+  # 對照雲端：這就是 k8s 的 initContainer，主程式啟動前，先把模型從物件儲存（S3/GCS）
   # 拉到本機磁碟（PVC），主程式只讀本機磁碟。這裡的「物件儲存」由 C:\llm\models 扮演。
   model-seed:
     <<: *llama-server               # 借用同一個映像檔（有 bash、sha256sum），不用多拉一個 image
@@ -68,7 +64,7 @@ services:
         for src in /seed/*.gguf; do
           name=$$(basename "$$src")
           dst=/models/$$name
-          # 已經有、而且大小一樣，就跳過——這讓播種可以每次啟動都跑，只有第一次真的複製
+          # 已經有、而且大小一樣，就跳過：播種每次啟動都跑，只有第一次真的複製
           if [ -f "$$dst" ] && [ "$$(stat -c%s "$$src")" = "$$(stat -c%s "$$dst")" ]; then
             echo "skip  $$name (already in volume)"
             continue
@@ -94,8 +90,8 @@ services:
     <<: *llama-server
     container_name: talkcal-llm-chat
 
-    # 參數照抄正在跑的 .bat（那才是實際在用的；.claude/launch.json 那份已經跟它分岔了）。
-    # 從此這裡是唯一真相：雲端上跑的就是這幾行。
+    # 容器版的模型參數以這裡為準，EC2 用 GPU 跑模型時（compose.gpu.yaml）也是這幾行。
+    # 本機 .claude/launch.json 的原生 llama-server 參數不一樣，例如沒帶 -np。
     command:
       - -m
       - /models/Qwen3-8B-Q4_K_M.gguf
@@ -127,11 +123,11 @@ services:
       - --min-p
       - "0"
       - --metrics           # ops/ 的 Alloy 抓 /metrics 靠這個
-      # 刻意不帶 --log-file / --log-prompts-dir：容器的慣例是 log 一律寫 stdout，
+      # 不帶 --log-file / --log-prompts-dir：容器的慣例是 log 一律寫 stdout，
       # 由平台（docker logs、雲端的 log 收集器）去收。寫進容器內的檔案，容器一刪就沒了。
 
     ports:
-      # 只綁 127.0.0.1：跟原本 .bat 的 --host 127.0.0.1 一樣，只給本機連，區網的人連不到。
+      # 只綁 127.0.0.1：只給本機連，區網的人連不到。
       - "127.0.0.1:8080:8080"
 
     volumes:
@@ -147,7 +143,7 @@ services:
 
     healthcheck:
       # llama-server 的 /health：模型還在載入時回 503，載好才回 200。
-      # 這就是雲端的 readiness probe——「程序活著」不等於「能接請求」，載 5GB 模型要一段時間。
+      # 這就是雲端的 readiness probe：process 活著不等於能接請求，載 5 GB 的模型要一段時間。
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
       interval: 10s
       timeout: 3s
@@ -185,22 +181,22 @@ services:
       retries: 10
     restart: unless-stopped
 
-  # ── 資料庫那一端的指標：postgres_exporter（#32）────────────────────
+  # ── 資料庫那一端的指標：postgres_exporter ────────────────────────
   # app 的連線池（HikariCP）只看得到「自己這邊」借了幾條；資料庫的上限（max_connections）、
   # 各狀態的連線數（pg_stat_activity：active / idle / idle in transaction）要從資料庫那頭問。
   # PostgreSQL 自己不吐 Prometheus 格式，所以旁邊掛一個 exporter 翻譯，ops/ 的 Alloy 來抓它的 :9187/metrics。
   #
-  # 放在 deploy/ 而不是 ops/：它要用 deploy/.env 的 DB_PASSWORD 連資料庫，而且跟著資料庫走——
+  # 放在 deploy/：它要用 deploy/.env 的 DB_PASSWORD 連資料庫，而且跟著資料庫走。
   # 對照雲端就是跟資料庫同一個 Pod 的 sidecar，或 RDS 換成 CloudWatch / 一台獨立的 exporter。
   postgres-exporter:
     image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
     container_name: talkcal-postgres-exporter
     command:
       # 關掉逐表統計（pg_stat_user_tables）：它的查詢會算每張表的大小，要對表拿鎖。
-      # 實測（#32）有人對 calendar_event 下 ACCESS EXCLUSIVE 鎖（例如 migration 改表）時，這個查詢就卡住，
-      # 整次抓取逾時、連 pg_stat_activity 都抓不到 —— 偏偏是資料庫出事、最需要看的時候瞎掉；
-      # 而且每 15 秒一次的抓取各開一條新連線卡在那，事故當下反而多吃資料庫的連線。
-      # 代價：看不到每張表的 seq scan、dead tuple，要查時直接下 SQL
+      # 有人對 calendar_event 下 ACCESS EXCLUSIVE 鎖（例如 migration 改表）時，這個查詢會卡住，
+      # 整次抓取逾時、連 pg_stat_activity 都抓不到，資料庫出事、最需要看的時候反而看不到；
+      # 每 15 秒一次的抓取還各開一條新連線卡在那，多吃資料庫的連線。
+      # 代價：看不到每張表的 seq scan、dead tuple，要查時直接下 SQL。
       - --no-collector.stat_user_tables
     environment:
       DATA_SOURCE_URI: postgres:5432/talkcal?sslmode=disable
@@ -214,11 +210,11 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # ── 舊資料的歸檔：S3 相容的物件儲存（#54）──────────────────────────
+  # ── 舊資料的歸檔：S3 相容的物件儲存 ──────────────────────────────
   # app 每天凌晨把舊行程、舊的 AI 助理對話壓成 JSON Lines + gzip 放進來，存好了才從 postgres 刪。
   # 對照雲端：S3（infra/envs/1-ec2/archive.tf）。app 用同一套 S3 API，只差 endpoint，所以本機驗得到雲端的行為。
   #
-  # 為什麼是 RustFS 不是 MinIO：MinIO 已經不發社群版的映像檔（Docker Hub 上的 minio/minio 拉不到，2026-10 實測），
+  # 用 RustFS：MinIO 不發社群版的映像檔（Docker Hub 上的 minio/minio 拉不到），
   # RustFS 是 Apache-2.0、講同一套 S3 API 的替代品，整合測試（RustFsContainer）也用同一個映像檔。
   archive:
     image: rustfs/rustfs:1.0.3
@@ -242,9 +238,9 @@ services:
       retries: 10
     restart: unless-stopped
 
-  # 建 bucket（只跑一次就結束）。雲端的 bucket 由 Terraform 建，app 的權限刻意不含建 bucket，所以本機也在外面建。
+  # 建 bucket（只跑一次就結束）。雲端的 bucket 由 Terraform 建，app 的權限不含建 bucket，所以本機也在 app 外面建。
   # 用 RustFS 映像檔裡的 curl 自己簽 S3 的請求（--aws-sigv4），不必為了這一行多拉一個 aws-cli 映像檔。
-  # 已經有了再 PUT 一次也是回 200，所以每次 up 都跑沒關係
+  # 已經有了再 PUT 一次也是回 200，所以每次 up 都跑沒關係。
   archive-init:
     image: rustfs/rustfs:1.0.3
     container_name: talkcal-archive-init
@@ -262,10 +258,10 @@ services:
   # ── talkcal app ────────────────────────────────────────────────────
   app:
     # Dockerfile 在 backend/（要看得到 src/ 和 build.gradle），後端自己的東西放一起
-    # tag 是版本號（#25）：cd/apply.sh 用 cd/version.sh 算好 APP_VERSION、GIT_COMMIT 再叫 compose，
-    # 每個版本一個 tag，機器上留著舊版本的映像檔（之後 #19 rollback 就是換回某個 tag）。
-    # 沒經過 apply.sh 直接 docker compose up 時沒有這兩個變數，退回原本的 local / unknown，
-    # 容器的 label 也會照實寫 local —— 一看就知道這不是走部署流程上去的
+    # tag 是版本號：cd/apply.sh 用 cd/version.sh 算好 APP_VERSION、GIT_COMMIT 再叫 compose，
+    # 每個版本一個 tag，機器上留著舊版本的映像檔，退版（cd/rollback.sh）就是換回某個 tag。
+    # 沒經過 apply.sh 直接 docker compose up 時沒有這兩個變數，用 local / unknown，
+    # 容器的 label 也會照實寫 local，一看就知道這不是走部署流程上去的。
     image: talkcal/app:${APP_VERSION:-local}
     build:
       context: ../backend
@@ -273,23 +269,23 @@ services:
     container_name: talkcal-app
 
     environment:
-      # 打開 docker profile：application-docker.properties 蓋掉預設值——
+      # 打開 docker profile：application-docker.properties 蓋掉預設值，
       # 模型位址改成服務名稱、log 改成 JSON。本機 bootRun 沒開這個 profile，所以還是 127.0.0.1、彩色文字。
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?缺 DB_PASSWORD：cp deploy/.env.example deploy/.env 再填值}
-      # Google、GitHub 登入（#105）：值在 deploy/.env（主機上設了同名的環境變數就以它為準），
-      # 沒設就是空的 → 登入頁只有帳密。secret 不寫進這個檔案
+      # Google、GitHub 登入：值在 deploy/.env（主機上設了同名的環境變數就以它為準），
+      # 沒設就是空的，登入頁只有帳密。secret 不寫進這個檔案。
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
-      # 歸檔（#54）：連 archive 那個 RustFS 的帳密，位址在 application-docker.properties
+      # 歸檔：連 archive 那個 RustFS 的帳密，位址在 application-docker.properties
       ARCHIVE_ACCESS_KEY: ${ARCHIVE_ACCESS_KEY:?缺 ARCHIVE_ACCESS_KEY：見 deploy/.env.example}
       ARCHIVE_SECRET_KEY: ${ARCHIVE_SECRET_KEY:?缺 ARCHIVE_SECRET_KEY：見 deploy/.env.example}
 
     ports:
-      # 主機的 18090 → 容器的 8090。只綁 127.0.0.1，跟模型一樣不對區網開放。
-      # actuator 的 8091（management 埠，#33）故意不發佈：只給同網路的 Alloy 和下面的 healthcheck 用
+      # 主機的 18090 → 容器的 8090。只綁 127.0.0.1，不對區網開放。
+      # actuator 的 8091（management 埠）不發佈：只給同網路的 Alloy 和下面的 healthcheck 用
       - "127.0.0.1:18090:8090"
 
     depends_on:
@@ -303,7 +299,7 @@ services:
 
     healthcheck:
       # actuator 的 readiness：啟動完成、能接請求才回 200（對應雲端的 readinessProbe）。
-      # 打 management 埠 8091，不是 API 的 8090（#33）；為什麼是 readiness 不是 liveness 見 application.properties
+      # 打 management 埠 8091，不是 API 的 8090；為什麼是 readiness 不是 liveness 見 application.properties
       test: ["CMD", "curl", "-fsS", "http://localhost:8091/actuator/health/readiness"]
       interval: 10s
       timeout: 3s
@@ -321,15 +317,15 @@ services:
   # ── 前端：nginx 送 Vue 靜態檔，並把 /api 轉給 app ──────────────────
   # 瀏覽器只連這一個入口，看到的是同一個來源，app 不必開 CORS。對照雲端：Ingress / CDN 那一層。
   web:
-    image: talkcal/web:${APP_VERSION:-local}   # 版本號跟 app 同一組，理由同上
+    image: talkcal/web:${APP_VERSION:-local}   # 版本號跟 app 同一組，為什麼用版本號當 tag 見 app 的 image
     build:
       context: ../web             # Dockerfile、nginx.conf 都在 web/ 裡，前端自己的東西放一起
       args: *version-args
     container_name: talkcal-web
 
     ports:
-      # 18080：跟 app 的 18090 一樣用 1 開頭標示「容器版」。只綁 127.0.0.1，不對區網開放。
-      # app 的 18090 仍然留著：perf/ 的 k6 直接打 app，不想多經過一層 nginx 影響量測。
+      # 18080、18090 用 1 開頭，跟本機開發的埠錯開。只綁 127.0.0.1，不對區網開放。
+      # app 的 18090 也發佈：perf/ 的 k6 直接打 app，量測不經過 nginx。
       - "127.0.0.1:18080:80"
 
     depends_on:
@@ -352,7 +348,7 @@ volumes:
   # `docker compose down` 不會刪它（模型不必重新複製）；`down -v` 才會清掉，下次啟動重新播種。
   # 對照雲端：PersistentVolumeClaim。
   models:
-  # 對話紀錄。跟模型那個 volume 一樣，down 不刪、down -v 才清
+  # 行程和 AI 助理的對話記憶。down 不刪、down -v 才清
   postgres-data:
-  # 歸檔（#54）。一樣 down 不刪、down -v 才清
+  # 歸檔。down 不刪、down -v 才清
   archive-data:

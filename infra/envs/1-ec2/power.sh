@@ -42,7 +42,7 @@ pause_heartbeat() {
 }
 
 # 開機後等 check 回到 up。暫停中的 check 要收到 heartbeat 才會恢復：Grafana 起不來的話它會一直停在 paused、
-# 不會寄信 —— 正好漏掉這套要抓的「Grafana 掛了」。所以開機這一步自己盯到恢復為止
+# 不會寄信，正好漏掉這套要抓的「Grafana 掛了」。所以開機這一步自己盯到恢復為止
 wait_heartbeat() {
   local status=""
   # 15 秒一次、最多 10 分鐘：開機、容器起來、Grafana 送出第一個 heartbeat 通常 2～3 分鐘
@@ -66,7 +66,7 @@ esac
 
 # 先拿 instance id，拿不到（還沒 terraform init、state 讀不到）就停在這裡。
 # 不能寫成 aws ... --instance-ids "$(terraform output ...)"：命令替換在參數裡失敗時 set -e 不會停，
-# 會帶著空字串去呼叫 aws（實測過，AWS 回 InvalidInstanceID.Malformed）
+# 會帶著空字串去呼叫 aws（AWS 回 InvalidInstanceID.Malformed）
 id="$(terraform output -raw instance_id)"
 
 if [ "$1" = stop ]; then

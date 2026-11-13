@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# 在 EC2 上跑：備份資料庫、傳到 S3（#45）。不必手動跑，三個時機會自動叫它：
-#   hourly     —— systemd timer，開機期間每小時一次
-#   shutdown   —— 關機時（systemd 在停 Docker 之前），所以「關機前最後寫進去的」也有備份
-#   pre-deploy —— deploy.sh 在換新版之前（新版的 Flyway migration 改壞資料時，回得去部署前那一刻）
+# 在 EC2 上跑：備份資料庫、傳到 S3。不必手動跑，三個時機會自動叫它：
+#   hourly      systemd timer，開機期間每小時一次
+#   shutdown    關機時（systemd 在停 Docker 之前），所以「關機前最後寫進去的」也有備份
+#   pre-deploy  deploy.sh 在換新版之前（新版的 Flyway migration 改壞資料時，回得去部署前那一刻）
 # 這三個 unit 由 deploy.sh 第 6 步裝上。手動補一份：sudo bash /opt/talkcal/repo/infra/envs/1-ec2/backup-to-s3.sh manual
 #
 # 做法：pg-backup.sh（跟本機同一支）寫到機器上的 /opt/<project>/backups，再傳到 S3 的 postgres/ 底下。
@@ -39,7 +39,7 @@ aws s3 cp "$dump.sha256" "$dest" --region "$AWS_REGION" --only-show-errors
 
 # 最後一次成功的時間，給人用 cat 看
 date -u +%Y-%m-%dT%H:%M:%SZ > "$BACKUP_DIR/last-success"
-# 同一件事給 Alloy 讀（textfile collector 的格式），備份太久沒成功就告警（#39）。
+# 同一件事給 Alloy 讀（textfile collector 的格式），備份太久沒成功就告警。
 # 先寫暫存檔再 mv：Alloy 隨時可能來讀，mv 是原子的，不會讀到寫一半的檔
 METRICS_DIR="$ROOT/metrics"
 mkdir -p "$METRICS_DIR"

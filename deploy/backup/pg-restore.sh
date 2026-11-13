@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 把 pg-backup.sh 做的備份還原回去（#45）。步驟和理由見 docs/runbooks/backup-restore.md。
+# 把 pg-backup.sh 做的備份還原回去。步驟和理由見 docs/runbooks/backup-restore.md。
 #
 #   bash deploy/backup/pg-restore.sh <備份檔.dump> --verify-only   # 只演練：還原到暫存庫、印筆數、刪掉暫存庫
 #   bash deploy/backup/pg-restore.sh <備份檔.dump>                 # 真的還原：換掉線上的資料庫

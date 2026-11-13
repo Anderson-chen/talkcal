@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 比兩個資料庫差在哪：備份那一刻之後，到現在多了、少了、改了哪些列（#45，runbook 情境 C）。
+# 比兩個資料庫差在哪：備份那一刻之後，到現在多了、少了、改了哪些列（runbook 情境 C）。
 #
 #   bash deploy/backup/pg-diff.sh <舊的庫> <新的庫> [表 ...]
 #
