@@ -12,12 +12,12 @@
 
 | 步驟 | 做什麼 | 先讀 |
 |---|---|---|
-| 1 | 開分支；發現 commit 落錯分支 | [@.agents/rules/branch.md](.agents/rules/branch.md) |
-| 2 | 改程式碼、寫註解；改到基礎設施另見下面「改基礎設施」 | [@.agents/rules/comments.md](.agents/rules/comments.md) |
-| 3 | commit | [@.agents/rules/commit.md](.agents/rules/commit.md) |
-| 4 | 要開 PR 時，照改到的地方跑測試、檢查 | [@.agents/rules/commands.md](.agents/rules/commands.md) |
-| 5 | 審查、開或改 PR | [@.agents/rules/pr.md](.agents/rules/pr.md) |
-| 隨時 | 開或改 issue | [@.agents/rules/issue.md](.agents/rules/issue.md) |
+| 1 | 開 issue：分支名稱要用到 issue 編號；之後改 issue 也照這份 | [@.agents/rules/issue.md](.agents/rules/issue.md) |
+| 2 | 開分支 | [@.agents/rules/branch.md](.agents/rules/branch.md) |
+| 3 | 改程式碼、寫註解；改到基礎設施另見下面「改基礎設施」 | [@.agents/rules/comments.md](.agents/rules/comments.md) |
+| 4 | commit | [@.agents/rules/commit.md](.agents/rules/commit.md) |
+| 5 | 要開 PR 時，照改到的地方跑測試、檢查 | [@.agents/rules/commands.md](.agents/rules/commands.md) |
+| 6 | 審查、開或改 PR | [@.agents/rules/pr.md](.agents/rules/pr.md) |
 | 每一步 | 寫文件、註解、issue、PR、commit 的文字 | [@.agents/rules/writing.md](.agents/rules/writing.md) |
 
 新增規則檔時在這張表加一行，寫成 `[@.agents/rules/<檔名>](.agents/rules/<檔名>)`：`@` 讓 Claude Code 載入，連結讓 GitHub 上點得到。`@` 緊接在「：」這類字後面，Claude Code 不會載入。
