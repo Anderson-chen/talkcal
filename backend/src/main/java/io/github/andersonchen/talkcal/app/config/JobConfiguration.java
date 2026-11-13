@@ -20,7 +20,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * 排程工作（app.job）：每天清掉過期的冪等鍵、把舊的行程和對話搬去歸檔。
  * 排程在這裡開，因為 @Scheduled 只出現在這些類別上。工作要用的 adapter、use case、bucket 都從別的設定檔注入，這裡只建工作本身。
  */
 @Configuration(proxyBeanMethods = false)
