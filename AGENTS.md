@@ -8,13 +8,14 @@
 
 ## 指令
 
-都在 repo 根目錄下打。前端指令要先裝好依賴（`corepack enable`、`pnpm --dir web install`，見 [web/README.md](web/README.md)）：
+改完程式碼用這張表驗證，都在 repo 根目錄下打；每種測試要先準備什麼，見 [docs/testing.md](docs/testing.md)。
+前端指令要先裝好依賴（`corepack enable`、`pnpm --dir web install`，見 [web/README.md](web/README.md)）：
 
 | 要做什麼 | 指令 |
 |---|---|
 | 跟 CI 一模一樣的整輪檢查（要開 Docker） | `ci/run.sh` |
 | 後端單元測試、架構規則 | `cd backend && ./gradlew test` |
-| 後端整合測試（真的 PostgreSQL、模型） | `cd backend && ./gradlew integrationTest` |
+| 後端整合測試（要開 Docker） | `cd backend && ./gradlew integrationTest` |
 | 前端單元測試 | `pnpm --dir web test` |
 | 前端 E2E | `pnpm --dir web run e2e` |
 | 前端 lint | `pnpm --dir web run lint` |
