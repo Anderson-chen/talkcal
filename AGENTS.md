@@ -12,7 +12,7 @@
 
 - 詳細、白話：同一件事的兩種說法。
 - 原因：為什麼這樣做或這樣提議。
-- 狀態：`已做完`、`待討論`（等使用者決定）、`還沒做`。寫進 repo 的文字（文件、註解、issue、PR、commit）不套用，照 [writing.md](.agents/rules/writing.md)。
+- 狀態：`已做完`、`進行中`、`待討論`（等使用者決定）、`還沒做`。寫進 repo 的文字（文件、註解、issue、PR、commit）不套用，照 [writing.md](.agents/rules/writing.md)。
 
 ## 動手前要讀的規則
 
