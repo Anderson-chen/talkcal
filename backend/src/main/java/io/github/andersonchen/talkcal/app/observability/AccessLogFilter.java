@@ -35,7 +35,7 @@ import java.util.concurrent.TimeUnit;
 // 排序：緊貼在 Spring Security 外面（它是 SecurityFilterProperties.DEFAULT_FILTER_ORDER = -100，這裡是 -101）。
 // - 在 Spring Security 外面：被它擋下的請求（沒登入 401、沒帶 CSRF token 403）也要留下紀錄 ——
 //   有人在暴力試密碼、或拿別人的 cookie 亂打，最需要被看到。排在它裡面的話，這些請求在 log 裡完全隱形
-//   （#103 加上 Spring Security 時 AccessLogTraceIdTest 就是這樣失敗的：沒帶 CSRF 的 POST 被擋下，一行 log 都沒有）
+//   （例如沒帶 CSRF token 的 POST 被擋下，一行 log 都沒有）
 // - 在 Spring 開 trace 的 ServerHttpObservationFilter 裡面：它排在最外層附近（HIGHEST_PRECEDENCE + 1），
 //   trace id 只在它的範圍內放進 MDC。排在它外面的話，這行 access log 印出來時 trace 已經結束，ECS JSON 裡就沒有 traceId，
 //   Loki 上那顆「到 Tempo 看這個請求」的按鈕也就不會出現。AccessLogTraceIdTest 守著這件事。

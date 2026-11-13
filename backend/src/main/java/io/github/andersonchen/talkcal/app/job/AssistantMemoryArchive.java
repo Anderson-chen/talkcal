@@ -22,17 +22,17 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 每天把 AI 助理的舊對話搬到歸檔（#54）：超過保留期限沒再說過話的，整段壓縮放進物件儲存，存好了才從資料庫刪掉。
+ * 每天把 AI 助理的舊對話搬到歸檔：超過保留期限沒再說過話的，整段壓縮放進物件儲存，存好了才從資料庫刪掉。
  * 也負責反過來：從歸檔把某個人某幾個月的對話放回資料庫。
  *
  * 為什麼要搬走：每段對話都存著工具呼叫和工具結果（一輪好幾列），前端只記最新那一段的 id，
  * 按「清空」（前端只丟掉 id，後端不刪）或換瀏覽器之後，舊的那段就沒人接得回來了，只會一直留在表裡。
- * 以前是直接刪掉；現在先歸檔：線上的表一樣保持小，真的要找（查 AI 當時說了什麼、使用者要匯出資料）還找得回來。
+ * 直接刪的話，要查 AI 當時說了什麼、使用者要匯出資料時就找不回來；先歸檔，線上的表一樣保持小，要找還找得回來。
  * 這裡是唯一會刪對話紀錄的地方。
  *
  * 順序是重點：先上傳 → 上傳成功 → 才刪。上傳失敗的那段一列都不刪，留在資料庫等明天再試。
  *
- * 助理發出的提議卡片（#223，只用在產品指標）也在這裡清，保留期限跟對話一樣，但直接刪、不歸檔：
+ * 助理發出的提議卡片（只用在產品指標）也在這裡清，保留期限跟對話一樣，但直接刪、不歸檔：
  * 它是統計用的紀錄，不是使用者的資料；超過期限的卡片，對話本身都搬走了，使用者也不會再回頭按它。
  *
  * 為什麼放在 app.job、不放在 calendar 的 adapter.in：計時器也算是「從外面推進來」的入口，
@@ -40,8 +40,8 @@ import java.util.UUID;
  * 而 ArchitectureTest 只准組裝根裡的 app.config、app.job 認識 adapter.out。
  * 對話記憶本來就不在 core 裡（core 不知道有「對話」這回事，見 JdbcAssistantMemoryRepository），所以歸檔也不走 core 的 port。
  *
- * 類別和建構子是 public：由 app.config 的 JobConfiguration 建出來，跨 package 了。
- * C 重構把助理搬成自己的模組時，這裡跟著改成呼叫那邊的 use case。
+ * 類別和建構子是 public：組裝它的 app.config 在別的 package。
+ * 助理搬成自己的模組之後，這裡要改成呼叫那邊的 use case。
  */
 public final class AssistantMemoryArchive {
 
@@ -131,7 +131,7 @@ public final class AssistantMemoryArchive {
         return restored;
     }
 
-    /** 刪掉 owner 在歸檔裡的全部對話，回傳刪了幾包。給刪除帳號（#52）用，歸檔不能變成刪不掉的備份。 */
+    /** 刪掉 owner 在歸檔裡的全部對話，回傳刪了幾包。刪除帳號時歸檔也要跟著刪，不能變成刪不掉的備份。 */
     public int deleteAll(OwnerId owner) {
         return bucket.deleteAll(ArchiveBucket.ownerPrefix(ROOT, owner));
     }

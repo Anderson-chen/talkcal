@@ -126,7 +126,7 @@ class CalendarConfiguration {
 
     // ── 新增行程、記下卡片的去向 ───────────────────────────────────────────
 
-    // 助理發出的提議卡片：ProposalStorePort 的實作，歸檔排程也用它刪舊卡片
+    // 回傳型別寫實作本身，理由見 calendarEventStore
     @Bean
     JdbcAssistantProposalAdapter assistantProposals(JdbcClient jdbcClient) {
         return new JdbcAssistantProposalAdapter(jdbcClient);

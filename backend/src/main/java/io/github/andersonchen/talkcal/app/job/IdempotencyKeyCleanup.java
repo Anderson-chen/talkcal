@@ -11,13 +11,13 @@ import java.time.Duration;
 import java.util.Objects;
 
 /**
- * 每天清一次新增行程用過的冪等鍵（#51）：記下超過保留期限的，刪掉。
+ * 每天清一次新增行程用過的冪等鍵：記下超過保留期限的，刪掉。
  *
  * 為什麼可以清：鍵只是用來認出「同一次新增的重送」，重送是幾秒到幾分鐘內的事（使用者看到失敗再按一次）。
  * 留太久沒有好處，只會讓表一直長大。清掉之後同一個鍵再送會被當成新的一次 —— 代價寫在 V13。
  *
  * 只刪鍵、不碰行程：行程在 calendar_event，鍵在自己的表（calendar_add_request）。
- * 放在 app.job 的理由同 AssistantMemoryArchive：直接用 adapter 做這張表自己的維護，ArchitectureTest 只准 app.job 這樣做。
+ * 放在 app.job：直接用 adapter 做這張表自己的維護，ArchitectureTest 只准 app.job 這樣做。
  */
 public final class IdempotencyKeyCleanup {
 
