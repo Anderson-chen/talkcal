@@ -21,7 +21,7 @@
 | commit | [@.agents/rules/commit.md](.agents/rules/commit.md) |
 | 開或改 PR | [@.agents/rules/pr.md](.agents/rules/pr.md) |
 | 開或改 issue | [@.agents/rules/issue.md](.agents/rules/issue.md) |
-| 寫或改文件、程式碼註解、issue、PR、commit 的文字 | [@.agents/rules/writing.md](.agents/rules/writing.md) |
+| 寫或改文件、issue、PR、commit 的文字 | [@.agents/rules/writing.md](.agents/rules/writing.md) |
 | 寫或改程式碼註解 | [@.agents/rules/comments.md](.agents/rules/comments.md) |
 
 新增規則檔時在這張表加一行，寫成 `[@.agents/rules/<檔名>](.agents/rules/<檔名>)`：`@` 讓 Claude Code 載入，連結讓 GitHub 上點得到。`@` 緊接在「：」這類字後面，Claude Code 不會載入。

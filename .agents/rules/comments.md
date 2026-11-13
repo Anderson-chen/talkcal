@@ -20,6 +20,7 @@
 | 一個設定值 | 設定它的檔案（`application.properties`、compose 檔）那個 key 旁邊 |
 | 一張表、一個欄位 | 建它的 migration |
 | 整個資料夾 | 那個資料夾的 README |
+| 為什麼選這個技術元件 | ADR（照 `docs/adr/README.md`） |
 
 「跟 X 一樣」只是類比，X 拿掉理由就斷了：理由直接寫，或「見」寫理由的那一處。
 每個 port 自己的契約（失敗時丟什麼）各寫各的，不算重複。
