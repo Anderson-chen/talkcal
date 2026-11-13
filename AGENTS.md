@@ -27,14 +27,14 @@
 
 | 要做什麼 | 先讀 |
 |---|---|
-| 換到別的分支做事、發現 commit 落錯分支 | @.agents/rules/branch.md |
-| commit | @.agents/rules/commit.md |
-| 開或改 PR | @.agents/rules/pr.md |
-| 開或改 issue | @.agents/rules/issue.md |
-| 寫或改文件、程式碼註解、issue、PR、commit 的文字 | @.agents/rules/writing.md |
-| 寫或改程式碼註解 | @.agents/rules/comments.md |
+| 換到別的分支做事、發現 commit 落錯分支 | [@.agents/rules/branch.md](.agents/rules/branch.md) |
+| commit | [@.agents/rules/commit.md](.agents/rules/commit.md) |
+| 開或改 PR | [@.agents/rules/pr.md](.agents/rules/pr.md) |
+| 開或改 issue | [@.agents/rules/issue.md](.agents/rules/issue.md) |
+| 寫或改文件、程式碼註解、issue、PR、commit 的文字 | [@.agents/rules/writing.md](.agents/rules/writing.md) |
+| 寫或改程式碼註解 | [@.agents/rules/comments.md](.agents/rules/comments.md) |
 
-新增規則檔時在這張表加一行，路徑寫成 `@` 開頭、前面空一格；`@` 緊接在「：」這類字後面，Claude Code 不會載入。
+新增規則檔時在這張表加一行，寫成 `[@.agents/rules/<檔名>](.agents/rules/<檔名>)`：`@` 讓 Claude Code 載入，連結讓 GitHub 上點得到。`@` 緊接在「：」這類字後面，Claude Code 不會載入。
 
 `pr.md` 裡的 `/code-review`、`/simplify`、`/security-review` 是 Claude Code 的指令；其他工具用自己的審查功能，審同樣的範圍。
 
