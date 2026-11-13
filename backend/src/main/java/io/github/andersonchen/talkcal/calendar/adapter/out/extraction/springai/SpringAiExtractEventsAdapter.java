@@ -37,7 +37,7 @@ public final class SpringAiExtractEventsAdapter implements ExtractEventsPort {
         try {
             response = chatModel.call(ExtractionRequest.prompt(description, now, chatModel.getOptions()));
         } catch (ModelUnavailableException e) {
-            // 沒叫模型就被擋下（#44）：本來就是 IllegalStateException，不再包一層，
+            // 沒叫模型就被擋下：本來就是 IllegalStateException，不包第二層，
             // 助理的工具框架認的是這個型別（見 CalendarAssistant 的 toolCallingManager），包了就認不出來
             throw e;
         } catch (RuntimeException e) {

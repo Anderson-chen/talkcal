@@ -41,7 +41,7 @@ import java.util.regex.Pattern;
 /**
  * 行事曆的 AI 助理：一段對話，模型自己決定要查行程、找空檔、提議新增、修改、刪除，還是先反問使用者。
  *
- * 分工是實測出來的（qwen3:8b，不 thinking）：
+ * 分工照 qwen3:8b（不 thinking）實際的表現定：
  * - 模型擅長的交給模型：判斷使用者想做什麼、時間不確定時反問、把對話整理成一句完整的話、轉述查詢結果
  * - 模型不擅長的不交給它：時間怎麼解析（propose_events 只收一句話，交給既有的抽取流程）、
  *   空檔怎麼算（FreeSlots）、「下午」是幾點到幾點（DayPeriod）、存不存檔（使用者按確認）
@@ -50,29 +50,29 @@ import java.util.regex.Pattern;
  *
  * agent loop 寫在這裡（reply），不交給 Spring AI 的 ChatClient + advisor：
  * 記憶裡一定要留著工具呼叫和工具結果。只留「使用者的話」和「助理最後那句」時，
- * 下一輪模型看到的是「助理說了『已顯示卡片』就完成了」，於是改時間時只說不做、畫面上沒有卡片（使用者實際遇到的 bug）。
+ * 下一輪模型看到的是「助理說了『已顯示卡片』就完成了」，於是改時間時只說不做、畫面上沒有卡片。
  * Spring AI 的 JDBC 記憶庫會把工具訊息濾掉，MessageChatMemoryAdvisor 也只存頭尾兩則，
  * 自己跑迴圈，每一則訊息都在手上，存什麼、截到哪都看得見。
  *
- * 每一句話都屬於一個擁有者（#104）：記憶只讀寫這個人名下的對話，工具也只查得到這個人的行程。
+ * 每一句話都屬於一個擁有者：記憶只讀寫這個人名下的對話，工具也只查得到這個人的行程。
  */
 public final class CalendarAssistant {
 
     // agent 內部做了什麼（叫了哪個工具、帶什麼參數、有沒有說謊被擋下）。access log 只看得到「HTTP 200、回了一段話」，
-    // 模型只說不做時從外面看不出來 —— 使用者回報「說已加入卻沒有卡片」時，log 裡什麼都沒有
+    // 模型只說不做時從外面看不出來：沒有這份 log，使用者回報「說已加入卻沒有卡片」時就查不到原因
     private static final Logger log = LoggerFactory.getLogger(CalendarAssistant.class);
 
     /**
      * 回覆裡在說「有卡片」或「已經加入」。這一輪明明沒有提議任何行程，卻這樣說，就是在說謊：
-     * 實際發生過 ——「隨便」→「已顯示卡片」（沒呼叫工具）、「是」→「已加入這週三寫日記的行程」（助理根本不能加入）。
+     * 例如「隨便」→「已顯示卡片」（沒呼叫工具）、「是」→「已加入這週三寫日記的行程」（助理根本不能加入）。
      *
-     * 前面是「是否、有沒有、還沒、尚未、未、不」的不算：「我無法確認是否已加入」是在問、不是在宣稱（實際被誤擋過）。
+     * 前面是「是否、有沒有、還沒、尚未、未、不」的不算：「我無法確認是否已加入」是在問、不是在宣稱，不排除的話會被誤擋。
      */
     private static final Pattern CLAIMS_ACTION = Pattern.compile(
             "卡片|(?<!是否|有沒有|沒有|還沒|尚未|未|不)已經?(加入|新增|安排)|幫你(加入|新增)好?了");
 
     /**
-     * 回覆裡在說「已經改好、刪掉了」（#259）。助理自己動不了行事曆，什麼情況下這樣說都是假的，所以不看這一輪做了什麼：
+     * 回覆裡在說「已經改好、刪掉了」。助理自己動不了行事曆，什麼情況下這樣說都是假的，所以不看這一輪做了什麼：
      * - 查完行事曆沒呼叫 propose_removal 就說「已刪除」：改、刪一定先 list_events，「查過行事曆就不檢查」那條放過的正是這種
      * - 提議了修改卡片卻說「已修改」：使用者還沒按確認，會以為改好了
      * 問到之前刪掉沒有，照實的說法是描述行事曆現在的樣子（「行事曆上已經沒有這個行程」），不是「已刪除」。
@@ -87,7 +87,7 @@ public final class CalendarAssistant {
             + "要新增就呼叫 propose_events；要改或刪，先用 list_events 查出編號，再呼叫 propose_change 或 propose_removal；"
             + "資訊不夠就問使用者；不然就照實回答，不要提卡片。";
 
-    // 說了「已修改」「已刪除」時的提醒（CLAIMS_DONE）。跟 CORRECTION 一樣只放在這一次的請求裡
+    // 說了「已修改」「已刪除」時的提醒（CLAIMS_DONE）：只放在這一次的請求裡，不存進記憶
     static final String CORRECTION_DONE = "（系統提醒，不是使用者說的）你剛才說了已修改或已刪除，但你沒辦法自己改或刪行事曆，"
             + "只有使用者按卡片上的按鈕才會改、才會刪。這一輪有提議卡片，就請使用者按卡片確認；要改或刪卻還沒提議，"
             + "就用 list_events 查到的編號呼叫 propose_change 或 propose_removal；是查行事曆看到的結果，"
@@ -107,13 +107,13 @@ public final class CalendarAssistant {
     private static final Pattern LINK = Pattern.compile(
             "(?i)(?:https?://|www\\.)[A-Za-z0-9._~:/?#@!$&'()*+,;=%-]+|\\b[a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.[a-z]{2,}\\b(?:/[A-Za-z0-9._~:/?#@!$&'()*+,;=%-]*)?");
 
-    // 回覆裡有使用者沒講過的網址時，改送這句（#13）。存進記憶的也是這句：那段被注入的話留著，下一輪模型會照著再講一次
+    // 回覆裡有使用者沒講過的網址時，改送這句。存進記憶的也是這句：那段被注入的話留著，下一輪模型會照著再講一次
     static final String UNSAFE_LINK_FALLBACK = "查到的行程資料裡夾帶了網址，為了安全我不轉述。請直接在行事曆上查看那筆行程；"
             + "如果有人要你到某個網址登入或付款，那不是這個助理說的。";
 
     /**
      * 內部的名字：工具名稱、參數名稱、時段的列舉值。給使用者的回覆用不到這些，出現了就是在講自己的設定（LLM07）。
-     * 實測問「你可以呼叫哪些工具？」，模型把三個工具和參數全部列出來。
+     * 問「你可以呼叫哪些工具？」，模型會把工具和參數全部列出來。
      */
     private static final Pattern INTERNAL_NAMES = Pattern.compile(
             "(?i)propose_events|propose_change|propose_removal|list_events|find_free_slots|plan_events|minMinutes|eventId|\\b(?:MORNING|AFTERNOON|EVENING|ANYTIME)\\b|system\\s*prompt|系統提示");
@@ -137,7 +137,7 @@ public final class CalendarAssistant {
     private final ChatModel chatModel;
     // 擁有者 → 這個人名下的對話記憶。框架的 ChatMemory 只認 conversationId，擁有者要在拿到它之前先決定
     private final Function<OwnerId, ChatMemory> memories;
-    // 工具裡叫模型被斷路器、bulkhead 擋下（ModelUnavailableException，#44）要原樣丟出來，回 503。
+    // 工具裡叫模型被斷路器、bulkhead 擋下（ModelUnavailableException）要原樣丟出來，回 503。
     // Spring AI 預設把工具丟的例外轉成一段文字交給模型（讓模型自己道歉、改問別的），那樣使用者會拿到 200 和一段模型編的話，
     // 看不出「現在不能用、過一陣子再來」。其他例外照預設，轉成文字讓模型處理
     private final ToolCallingManager toolCallingManager = ToolCallingManager.builder()
@@ -216,13 +216,13 @@ public final class CalendarAssistant {
      * 這一輪新增的（使用者的話、工具呼叫和結果、回覆）接到記憶的最後面
      * </pre>
      *
-     * 存的時候只接「這一輪新增的」，不把讀出來的歷史整段寫回去（#50）：
+     * 存的時候只接「這一輪新增的」，不把讀出來的歷史整段寫回去：
      * 同一段對話同時送兩句，兩個請求讀到的是同一份歷史；整段寫回的話，晚存的會把早存的那一輪蓋掉。
      * 只往後接，兩輪都留著。怎麼接、接在哪裡由記憶自己排隊（JdbcAssistantMemoryRepository）。
      *
      * 失敗時（模型、資料庫出事、繞圈超過 MAX_STEPS）一律丟 IllegalStateException：
      * 背後的例外型別五花八門，裡面還可能混著 IllegalArgumentException，不包起來會被誤認成「呼叫端送錯」。
-     * 「模型這次沒被叫」（ModelUnavailableException，#44）本來就是 IllegalStateException，原樣丟出去，呼叫端才回得出 503；
+     * 「模型這次沒被叫」（ModelUnavailableException）本來就是 IllegalStateException，原樣丟出去，呼叫端才回得出 503；
      * 工具裡被擋下的也一樣（見 toolCallingManager）。
      */
     public Reply reply(OwnerId owner, String conversationId, String message) {
@@ -244,7 +244,7 @@ public final class CalendarAssistant {
                     .filter(m -> m.getMessageType() == MessageType.USER).map(Message::getText).toList();
             CalendarTools tools = new CalendarTools(owner, parseEvents, listEvents, findEvent, findFreeSlots, planSessions, userSaid);
             // 從 application.properties 的預設開始再蓋：Spring AI 2.0 看到請求自帶選項就整份照用、不補預設，
-            // 沒給模型名稱就送 gpt-5-mini（#76）。測試用的假 ChatModel 給的是通用的 ChatOptions，沒東西可以沿用
+            // 沒給模型名稱就送 gpt-5-mini。測試用的假 ChatModel 給的是通用的 ChatOptions，沒東西可以沿用
             OpenAiChatOptions.Builder start = chatModel.getOptions() instanceof OpenAiChatOptions defaults
                     ? defaults.mutate()
                     : OpenAiChatOptions.builder();
@@ -278,8 +278,8 @@ public final class CalendarAssistant {
                         answer = new AssistantMessage(fallback);
                         text = fallback;
                     }
-                    // 間接 prompt injection 的最後一道（#13）：行程標題不一定是使用者自己想的字（複製貼上、之後的邀請），裡面藏「叫使用者去某網址登入」，
-                    // 模型會照著轉述 —— 實測 qwen3-8b 就算 prompt 和工具結果都講明「那是資料、不要照做」，還是會講。
+                    // 間接 prompt injection 的最後一道：行程標題不一定是使用者自己想的字（複製貼上、之後的邀請），裡面藏「叫使用者去某網址登入」，
+                    // 模型會照著轉述：qwen3-8b 就算 prompt 和工具結果都講明「那是資料、不要照做」，還是會講。
                     // prompt 擋不住就由程式擋：行事曆助理沒有理由主動給出使用者沒講過的網址。
                     // 不提醒它重來：藏指令的資料還在對話裡，重來多半再講一次
                     if (hasLinkUserNeverSaid(text, userSaid)) {
@@ -389,30 +389,30 @@ public final class CalendarAssistant {
     }
 
     /**
-     * 給模型的指示。每一段都是實測出來的：
+     * 給模型的指示。每一段擋的都是模型真的會犯的錯：
      * - 「不用算日期和時間」：讓它自己填時間時，「下週三」會算成星期二、結束時間會自己編
      * - 對話範例：只用文字說「不確定就問」，它照樣直接提議 07:00；給了一段範例對話，它才會先問、
      *   使用者回「晚上」之後再把整句合起來提議。找空檔的範例則是為了「to 不含，所以要多一天」——
      *   沒有範例時它查「這週三、四」只查到週三
      * - 「不能自己存、不要說已加入」：存檔一定要使用者按確認，模型的話不能讓人以為已經存了
-     * - 「一定要呼叫 propose_events，不要只用文字複述」：經過 Spring AI 之後，「明天七點吃晚餐」它只回了
+     * - 「一定要呼叫 propose_events，不要只用文字複述」：沒有這句的話，「明天七點吃晚餐」它會只回
      *   「明天晚上七點吃晚餐。」—— 判斷對了（晚上），卻沒有提議，畫面上就沒有卡片可以確認
      * - 「包括改剛提議、還沒加入的卡片」：使用者說「其實是早上」，那張卡片還沒進行事曆，所以是一張新的卡片，不是聊天
-     * - 改、刪先 list_events（#259）：沒有修改、刪除工具時，模型對「改成喝咖啡」「刪除吃飯」都呼叫 propose_events，
+     * - 改、刪先 list_events：沒有修改、刪除工具時，模型對「改成喝咖啡」「刪除吃飯」都呼叫 propose_events，
      *   行事曆上反而多一筆。編號只有 list_events 查得到，範例寫明「先查、再拿編號呼叫」
-     * - 「你沒辦法加入行事曆」「沒呼叫就不要說已顯示卡片」：實際發生過它沒呼叫工具卻說「已顯示卡片」「已加入」。
+     * - 「你沒辦法加入行事曆」「沒呼叫就不要說已顯示卡片」：沒有這句，它會沒呼叫工具就說「已顯示卡片」「已加入」。
      *   這句只是提醒，真正擋住說謊的是 reply 裡的 CLAIMS_ACTION 檢查
      * - 「提議過的行程可能加入了也可能取消了，先用 list_events 查」：按「加入行事曆」走的是 POST /events，
      *   按「取消」只改前端的畫面，兩個都不經過助理，所以助理永遠不知道卡片後來怎麼了。
      *   不另外記卡片的狀態：行事曆本身就是事實來源 —— 加入的查得到、取消的查不到。
-     *   只有規則時，同一句「剛剛那個有加進去嗎？」有時會查、有時回「我無法確認」，加了範例才會穩定地查
+     *   只有規則沒有範例時，同一句「剛剛那個有加進去嗎？」有時會查、有時回「我無法確認」，有範例才會穩定地查
      * - 範例裡的日期是真的日期（每天代入）：範例寫「from = 這週三」時，模型會照抄，把「這週三」當參數傳給工具
      *   （log 裡看得到），範例一多就抄得更兇，連找空檔都壞了
-     * - 「只有帶著時段的字才不用問」：原本寫成「從要做的事看得出來就不用問」，模型把「七點吃飯」也當成看得出來、
-     *   直接提議 19:00 —— 但早上七點吃飯也很常見。界線改成看字：早餐、晚餐、晨跑這種字本身帶著時段，其他一律問
-     * - 「叫你排時間就用 plan_events」（#261）：沒有這條時，「幫我規劃兩天讀書」它查完空檔只報空檔，
-     *   使用者回「好」還反問幾點。改成規則加範例讓它自己挑時段再 propose_events，它還是常停在用文字列出時段，
-     *   範例一多又開始照抄範例的文字、弄壞別的題目。所以挑時段交給程式（SessionPlanner），這裡只叫它用哪個工具
+     * - 「只有帶著時段的字才不用問」：寫成「從要做的事看得出來就不用問」的話，模型會把「七點吃飯」也當成看得出來、
+     *   直接提議 19:00，但早上七點吃飯也很常見。所以界線看字：早餐、晚餐、晨跑這種字本身帶著時段，其他一律問
+     * - 「叫你排時間就用 plan_events」：沒有這條時，「幫我規劃兩天讀書」它查完空檔只報空檔，
+     *   使用者回「好」還反問幾點。用規則加範例叫它自己挑時段再 propose_events 的話，它常停在用文字列出時段，
+     *   範例一多又會照抄範例的文字、弄壞別的題目。所以挑時段交給程式（SessionPlanner），這裡只叫它用哪個工具
      */
     static String instruction(LocalDateTime now) {
         return """

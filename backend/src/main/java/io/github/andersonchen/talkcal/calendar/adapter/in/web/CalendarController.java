@@ -59,12 +59,12 @@ import java.util.Optional;
  * 一句話變成行程草稿不在這裡：那是 AI 助理的工作（CalendarAssistantController），
  * 草稿以 proposals 回給前端，使用者確認後才送到 POST /events。
  *
- * 誰的行事曆（#104）由登入者決定，不收任何「擁有者」參數：網址、body 裡都沒有，想改也改不了。
+ * 誰的行事曆由登入者決定，不收任何「擁有者」參數：網址、body 裡都沒有，想改也改不了。
  * 登入者怎麼變成擁有者見 SignedIn。
  *
- * POST /events 收選填的 Idempotency-Key header（#51，照 IETF 草案 draft-ietf-httpapi-idempotency-key-header 的名字）：
+ * POST /events 收選填的 Idempotency-Key header（照 IETF 草案 draft-ietf-httpapi-idempotency-key-header 的名字）：
  * 帶了的話，同一個鍵再送一次不會多存，回的是第一次存的那幾筆，回應多一個 Idempotent-Replayed: true。
- * 選填而不是必填：前後端不一定同時部署（舊版前端沒帶），k6 這類腳本也不必為了壓測自己產鍵；不帶就跟以前一樣每次都存。
+ * 選填而不是必填：前後端不一定同時部署（舊版前端沒帶），k6 這類腳本也不必為了壓測自己產鍵；不帶就每次都存。
  */
 @RestController
 @RequestMapping("/api/calendar")
@@ -109,7 +109,7 @@ public final class CalendarController {
         // 「確認時重驗規則」就發生在這一行：每一筆都得先成為 CalendarEvent，
         // 使用者在確認卡片上改壞的（結束早於開始、清空標題）在這裡就丟 IllegalArgumentException → 400
         List<CalendarEvent> events = request.events().stream().map(CalendarController::toDomain).toList();
-        // 從助理卡片來的那幾筆帶著卡片的 id（#223）；是不是真的採納由 use case 核對，這裡只負責轉型別
+        // 從助理卡片來的那幾筆帶著卡片的 id；是不是真的採納由 use case 核對，這裡只負責轉型別
         List<ProposalId> adopting = request.events().stream()
                 .map(EventFields::proposalId).filter(Objects::nonNull).map(ProposalId::of).toList();
         OwnerId owner = SignedIn.owner(signedIn);

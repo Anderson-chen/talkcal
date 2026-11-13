@@ -18,8 +18,8 @@ import java.util.Objects;
 /**
  * 把「一句自然語言 + 現在時間」翻譯成要交給 Spring AI ChatModel 的 Prompt。
  *
- * 跟聊天用的是同一個 ChatModel，但要的東西不一樣：
- * 聊天要一段自由文字，這邊要一份機器讀得懂的行程清單。差別全在這個 class 裡 ——
+ * 跟 AI 助理用的是同一個 ChatModel，但要的東西不一樣：
+ * 助理要一段自由文字，這邊要一份機器讀得懂的行程清單。差別全在這個 class 裡 ——
  * system prompt 怎麼寫、附上哪張日期表、用什麼 JSON Schema 約束輸出。
  *
  * 這些都是「怎麼讓這顆模型做對這件事」的知識，所以屬於 adapter，不屬於 domain：
@@ -29,12 +29,12 @@ import java.util.Objects;
 final class ExtractionRequest {
 
     // 生成上限。文法約束只管形狀不管長度：模型要是一直往 events 陣列裡塞東西，
-    // 會像壓測時那題 thinking 暴走一樣佔住一個 slot 直到逾時。
+    // 會一直佔住 llama-server 的一個 slot 直到逾時。
     // 兩個行程實測約 114 tokens，1024 夠一句話塞十幾個行程，再多就是模型失控了
     static final int MAX_TOKENS = 1024;
 
     // 這個請求自己的取樣溫度：0 = 每一步都挑機率最高的 token（貪婪解碼），同樣的輸入永遠同樣的輸出。
-    // server 啟動時的 0.7 是替聊天調的，聊天要一點變化；抽行程只有一個正確答案，變化就是錯誤。
+    // server 啟動時的 0.7（deploy/compose.yaml）留給要一點變化的自由文字；抽行程只有一個正確答案，變化就是錯誤。
     // 實測：同一份 body 在 0.7 下 10 次有 1 次把「下週三」查成下週二，0 之後 7 種句子各 10 次全對
     static final double TEMPERATURE = 0;
 
@@ -103,10 +103,10 @@ final class ExtractionRequest {
     /**
      * 這個請求自己的選項：從 application.properties 的預設（spring.ai.openai.chat.options.*，傳進來的 defaults）開始，
      * 再蓋掉這件工作專屬的三個：max_tokens 是失控保險、response_format 是輸出約束、
-     * temperature 是「這個請求要確定性」。聊天沒有理由跟 server 的取樣設定不同，這裡有，而且只屬於這種請求。
+     * temperature 是「這個請求要確定性」。這三個只屬於這種請求。
      *
      * 一定要從預設開始：Spring AI 2.0 的 OpenAiChatModel 看到請求自帶選項就整份照用，不會補上預設，
-     * 沒給模型名稱就送 gpt-5-mini（#76）。本機的 llama-server 不看名稱所以一直沒事，換到 Bedrock 就 404。
+     * 沒給模型名稱就送 gpt-5-mini。本機的 llama-server 不看名稱，Bedrock 會回 404。
      *
      * 用的是 OpenAiChatOptions 而不是通用的 ChatOptions：通用的那份沒有 response_format。
      * 這也是這個 adapter 唯一綁在「OpenAI 協定」上的地方 —— 換成 Claude，要改的就是這個方法。
@@ -127,7 +127,7 @@ final class ExtractionRequest {
     }
 
     /**
-     * 給模型的指示。每一句都是對著實測踩到的坑寫的：
+     * 給模型的指示。每一句擋的都是模型真的會犯的錯：
      * - 「從下表找，不要自己推算」：不 thinking 的 8B 模型心算星期幾不可靠，「下週三」給過星期一、星期二
      * - 「跨過午夜要用隔天的日期」：不講的話「晚上十點到凌晨一點」的結束時間會被丟掉
      * - 「沒有行程就回空陣列」：不講的話閒聊也可能被硬湊出一個行程

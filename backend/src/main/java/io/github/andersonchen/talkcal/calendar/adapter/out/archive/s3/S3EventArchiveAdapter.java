@@ -20,7 +20,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * 行程的歸檔放在 S3 相容的物件儲存（#54）。
+ * 行程的歸檔放在 S3 相容的物件儲存。
  *
  * key 長這樣：calendar-event/owner=&lt;擁有者&gt;/month=&lt;結束的月份&gt;/&lt;存的時間&gt;-&lt;亂數&gt;.jsonl.gz
  * （前面的排法和理由在 ArchiveBucket，跟對話共用）

@@ -30,14 +30,14 @@ import java.util.UUID;
 /**
  * AI 助理的對話記憶存 PostgreSQL，連工具呼叫一起（表在 V7__create_calendar_assistant_message.sql，為什麼另開一張表也寫在那裡）。
  *
- * 對話依擁有者分開（#104，V11）：of(owner) 拿到的是「這個人名下的對話」，每一句 SQL 都帶著 owner_id。
+ * 對話依擁有者分開（V11）：of(owner) 拿到的是「這個人名下的對話」，每一句 SQL 都帶著 owner_id。
  * 同一個 conversation_id 在不同人底下是不同的兩段，別人拿到你的 conversation_id 也讀不到、蓋不掉你的那段。
  *
- * 寫入是只往後接（append-only），不是整段取代（#50）。
- * 原本照 Spring AI ChatMemoryRepository 的 saveAll：讀出整段 → 跑模型（好幾秒）→ 整段刪掉重插。
+ * 寫入是只往後接（append-only），不整段取代。
+ * 照 Spring AI ChatMemoryRepository 的 saveAll 寫的話是：讀出整段 → 跑模型（好幾秒）→ 整段刪掉重插。
  * 同一段對話同時送兩句（兩個分頁、按了兩次送出），兩個請求讀到同一份歷史，晚存的那個整段蓋掉早的，
- * 早的那句和它的回覆就不見了，而且沒有任何錯誤（V7 當時寫明接受這個代價）。
- * 改成每一輪只把「這一輪新增的那幾則」接在最後面：兩句都留著，誰先誰後照存進來的順序。
+ * 早的那句和它的回覆就不見了，而且沒有任何錯誤。
+ * 每一輪只把「這一輪新增的那幾則」接在最後面，兩句都留著，誰先誰後照存進來的順序。
  *
  * 為什麼不是樂觀鎖（version 欄位、衝突回 409）：對話不是「兩個人改同一份東西」，兩句都是使用者真的說過的，
  * 沒有誰該被退回；回 409 要使用者重送，重送就要重跑一次模型（又是好幾秒、又花一次錢），換來的結果跟直接接上去一樣。
@@ -81,7 +81,7 @@ public final class JdbcAssistantMemoryRepository {
     }
 
     /**
-     * 找出 cutoff 之前就沒再說過話的對話（#54：歸檔之後才刪，見 app.job.AssistantMemoryArchive），最多 limit 段，最舊的先。
+     * 找出 cutoff 之前就沒再說過話的對話（歸檔之後才刪，見 app.job.AssistantMemoryArchive），最多 limit 段，最舊的先。
      * 不分擁有者：這是這張表自己的維護工作，不是誰的請求。
      *
      * 「最後說話的時間」= 那段對話最新一列的 created_at：寫入是只往後接，最新一列就是最後那一輪存進來的時間。

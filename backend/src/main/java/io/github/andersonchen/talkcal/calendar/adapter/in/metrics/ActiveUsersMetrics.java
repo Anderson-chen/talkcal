@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 活躍使用者數（#36）：talkcal_active_users{window="1d"|"7d"|"30d"}。
+ * 活躍使用者數：talkcal_active_users{window="1d"|"7d"|"30d"}。
  *
  * 它是 inbound adapter：觸發的是 Alloy 來抓 /actuator/prometheus（跟 HTTP 請求觸發 controller 一樣），
  * 抓的時候才問 use case「最近這幾段時間各有幾個人在用」。

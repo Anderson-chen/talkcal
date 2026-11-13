@@ -29,14 +29,14 @@ import java.time.YearMonth;
 import java.util.Objects;
 
 /**
- * 歸檔的 HTTP 入口（#54）：查看封存的行程（#274），和把自己某幾個月的 AI 助理對話放回線上。
+ * 歸檔的 HTTP 入口：查看封存的行程，和把自己某幾個月的 AI 助理對話放回線上。
  *
- * 只碰登入者自己的（#104）：跟 CalendarController 一樣不收任何「擁有者」參數，別人的歸檔從這裡碰不到。
+ * 只碰登入者自己的：不收任何「擁有者」參數，別人的歸檔從這裡碰不到。
  * - 行程：GET，只讀。封存的行程不放回資料庫，放回去隔天的排程又會再封存一次
  * - 對話：POST，會寫資料庫。按很多次結果都一樣（已經在線上的不會被蓋掉），所以重試是安全的
  *
- * 對話的還原不在 core 裡（core 不知道有「對話」這回事），由組裝根接上一個 RestoreConversations 進來 ——
- * 跟 CalendarAssistant 拿 assistantMemory::of 是同一個做法，這個 controller 不認識 adapter.out。
+ * 對話的還原不在 core 裡（core 不知道有「對話」這回事），由組裝根接上一個 RestoreConversations 進來：
+ * 這個 controller 不認識 adapter.out。
  *
  * 回傳的行程跟月曆同一個形狀（CalendarController.SavedEvents），前端用同一個型別畫。
  */

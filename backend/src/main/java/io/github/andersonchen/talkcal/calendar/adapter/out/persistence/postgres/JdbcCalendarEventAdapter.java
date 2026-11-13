@@ -46,16 +46,16 @@ import java.util.stream.Collectors;
  * 讀取用的索引在 V3__index_calendar_event_period.sql，分類、地點、備註是 V5 加的，擁有者是 V11 加的，
  * 冪等鍵的表 calendar_add_request 是 V13 加的）。
  *
- * 每一句 SQL 都帶著 owner_id 條件（#104）：授權不是另外一道「先查再比對」的檢查，而是查詢本身就只碰得到這個人的資料。
+ * 每一句 SQL 都帶著 owner_id 條件：授權不是另外一道「先查再比對」的檢查，而是查詢本身就只碰得到這個人的資料。
  *
  * JdbcClient 手寫 SQL、交易用 TransactionTemplate（類別是 final，@Transactional 的代理包不了）。
  *
  * 一個類別實作讀、存、刪幾個 port：碰的是同一張表，「這張表長什麼樣」的知識只該在一個地方。
  * 冪等鍵的表也在這裡：記下的是「哪一批行程」，要跟 calendar_event 在同一個交易裡一起寫。
- * 歸檔（#54）要的兩個 port 也在這裡：找出舊的、歸檔好之後刪掉 —— 一樣是這張表。
- * 封存的行程不放回這張表，要看就直接讀歸檔（#274）。
+ * 歸檔要的兩個 port 也在這裡：找出舊的、歸檔好之後刪掉 —— 一樣是這張表。
+ * 封存的行程不放回這張表，要看就直接讀歸檔。
  *
- * 修改（UPDATE，#259）用樂觀鎖，不然晚存的分頁會把先存的改動蓋回去，兩邊還都看到「儲存成功」：
+ * 修改（UPDATE）用樂觀鎖，不然晚存的分頁會把先存的改動蓋回去，兩邊還都看到「儲存成功」：
  * WHERE 除了 id、owner_id，每個欄位都要跟呼叫端「改之前看到的樣子」一樣（SAME_CONTENT，跟 deleteArchived 共用），
  * 更新 0 列就是被改過了（或不存在），由 UpdateEventService 分成 409、404。
  * 不加 version 欄位的理由見 UpdateEventService。
@@ -83,7 +83,7 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, SaveEvent
     }
 
     /**
-     * 先搶下這個鍵、搶到了才存行程，兩件事在同一個交易裡（#51，表和理由見 V13）。
+     * 先搶下這個鍵、搶到了才存行程，兩件事在同一個交易裡（表和理由見 V13）。
      *
      * 搶不到（之前有人用這個鍵存過）就不存，改看當時存的內容一不一樣：一樣就回當時那幾筆，不一樣就是 KeyUsedForOtherContent。
      * 兩個請求同時帶著同一個鍵進來時，後到的 INSERT ... ON CONFLICT 會停在那裡等先到的交易結束：
@@ -146,12 +146,12 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, SaveEvent
 
     /**
      * 清掉 before 之前記下的冪等鍵，回傳清了幾個（給 IdempotencyKeyCleanup 用）。
-     * 不是 port：這是這張表自己的維護工作，跟 JdbcAssistantMemoryRepository.deleteInactiveSince 一樣由 app.job 直接呼叫。
+     * 不是 port：這是這張表自己的維護工作，由 app.job 直接呼叫。
      */
     public int deleteIdempotencyKeysCreatedBefore(Instant before) {
         try {
             return jdbc.sql("DELETE FROM calendar_add_request WHERE created_at < :before")
-                    // TIMESTAMPTZ 對 OffsetDateTime：Instant 直接傳 PostgreSQL 的 driver 不認得（同 JdbcAssistantMemoryRepository）
+                    // TIMESTAMPTZ 對 OffsetDateTime：Instant 直接傳 PostgreSQL 的 driver 不認得
                     .param("before", OffsetDateTime.ofInstant(before, ZoneOffset.UTC))
                     .update();
         } catch (DataAccessException e) {
@@ -328,7 +328,7 @@ public final class JdbcCalendarEventAdapter implements SaveEventsPort, SaveEvent
     }
 
     /**
-     * 讀出來的每一筆重新走一次 CalendarEvent 的規則，資料庫裡的壞資料在這裡就被擋下（跟 Conversation.restore 同一個想法）。
+     * 讀出來的每一筆重新走一次 CalendarEvent 的規則，資料庫裡的壞資料在這裡就被擋下。
      * 擋下時丟 IllegalStateException 而不是讓 IllegalArgumentException 往外跑：
      * 壞的是資料庫裡的資料，不是呼叫端送錯東西，不該變成 400。
      */

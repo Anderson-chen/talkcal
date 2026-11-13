@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 產品用量記成 Micrometer 的 counter，經 /actuator/prometheus 讓 Alloy 抓進 Mimir（#36）。
+ * 產品用量記成 Micrometer 的 counter，經 /actuator/prometheus 讓 Alloy 抓進 Mimir。
  *
  * 指標（Prometheus 上的名字）：
  * - talkcal_assistant_proposals_shown_total       助理給使用者看了幾張提議卡片

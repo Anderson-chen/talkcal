@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
- * 助理發出去的提議卡片存在 PostgreSQL（表的定義在 V12__create_assistant_proposal.sql，#223）。
+ * 助理發出去的提議卡片存在 PostgreSQL（表的定義在 V12__create_assistant_proposal.sql）。
  *
  * port 的約定是「記錄失敗不丟例外」：卡片照樣顯示、行程照樣存好，只是那幾張的採納、拒絕不算進指標。
  * 所以這裡把資料庫的例外吞掉、留一筆 warn，不往外丟。

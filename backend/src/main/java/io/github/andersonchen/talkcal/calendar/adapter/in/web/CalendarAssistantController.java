@@ -42,7 +42,7 @@ import java.util.stream.IntStream;
  *
  * 這裡是一段對話 —— 助理可能先反問、可能去查行程或找空檔，也可能提議新增、修改、刪除。
  * 提議的行程跟 POST /events 收的是同一個形狀（EventFields），畫面顯示卡片、使用者確認後送 POST /events 才存。
- * 修改（changes）、刪除（removals）也一樣只是卡片（#259）：使用者按確認才送 PUT、DELETE /events/{id}。
+ * 修改（changes）、刪除（removals）也一樣只是卡片：使用者按確認才送 PUT、DELETE /events/{id}。
  * 修改卡片的 before 原樣當 PUT 的 expected 送回來，卡片顯示之後那筆被改過，PUT 就會 409，不會蓋掉別人的改動。
  *
  * 多輪對話靠 conversationId（UUID）：第一句不帶，回應裡會拿到一個；之後每句帶著它。歷史存在伺服器。
@@ -50,13 +50,13 @@ import java.util.stream.IntStream;
  * 沒有 DELETE：「清空」是前端丟掉 conversationId、下一句開新的一段；舊的那段留給每天的歸檔排程（AssistantMemoryArchive）。
  * 紀錄只由排程按保留期限刪，不讓一個按鈕（或任何拿得到 id 的請求）把它抹掉。
  *
- * 對話屬於登入者（#104）：拿別人的 conversationId 來讀是空的、拿來說話是在自己名下開一段新的，碰不到別人的那段。
+ * 對話屬於登入者：拿別人的 conversationId 來讀是空的、拿來說話是在自己名下開一段新的，碰不到別人的那段。
  *
- * 卡片的去向記成產品指標（#36）：回覆時每張卡片發一個 proposalId 並記下來（#223）；
+ * 卡片的去向記成產品指標：回覆時每張卡片發一個 proposalId 並記下來；
  * 按「加入行事曆」走 POST /events，每筆帶著它的 proposalId；按「取消」「移除」只改畫面，所以前端另外送 POST /dismissals 帶那幾張的 id。
  * 伺服器只認自己發過、屬於登入者、還沒表態過的卡片，前端說了不算。
  *
- * 失敗一律回 AssistantFailure：error 給人看，code 給程式判斷（前端依它決定怎麼顯示、要不要讓使用者重試，#43）。
+ * 失敗一律回 AssistantFailure：error 給人看，code 給程式判斷（前端依它決定怎麼顯示、要不要讓使用者重試）。
  * <pre>
  * 400  INVALID_REQUEST    訊息空白、conversationId 不是 UUID。改了請求才會好
  * 502  ASSISTANT_FAILED   這一次叫模型（或資料庫）失敗了。可以馬上再試
@@ -167,7 +167,7 @@ public final class CalendarAssistantController {
         return ResponseEntity.badRequest().body(AssistantFailure.of(e.getMessage(), "INVALID_REQUEST"));
     }
 
-    // 模型沒被叫就擋下（#44）。比下面的 IllegalStateException 具體，Spring 會先挑這個。
+    // 模型沒被叫就擋下。比下面的 IllegalStateException 具體，Spring 會先挑這個。
     // 只記一行 warn、不印 stack：熔斷打開時每個請求都會走到這裡，原因已經在「熔斷狀態改變」那行 log 和指標上了
     @ExceptionHandler(ModelUnavailableException.class)
     public ResponseEntity<AssistantFailure> onModelUnavailable(ModelUnavailableException e) {
@@ -182,7 +182,7 @@ public final class CalendarAssistantController {
                 .body(new AssistantFailure(e.getMessage(), code, seconds));
     }
 
-    // 只攔 IllegalStateException（CalendarAssistant 把上游的各種例外都包成這個），理由同 CalendarController
+    // 只攔 IllegalStateException（CalendarAssistant 把上游的各種例外都包成這個），理由見 CalendarController 的 onUpstreamFailure
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<AssistantFailure> onUpstreamFailure(IllegalStateException e) {
         log.error("AI 助理失敗，回 502", e);
@@ -221,7 +221,7 @@ public final class CalendarAssistantController {
 
     /**
      * 助理的錯誤回應。error 跟 CalendarController 的 CalendarFailure 同名同義，只看 error 的前端不必改；
-     * 多出來的 code、retryAfterSeconds 給要分辨「這次失敗」和「現在不能用」的前端（#43）。
+     * 多出來的 code、retryAfterSeconds 給要分辨「這次失敗」和「現在不能用」的前端。
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record AssistantFailure(

@@ -6,7 +6,7 @@ import com.openai.errors.UnprocessableEntityException;
 import java.util.function.Predicate;
 
 /**
- * 叫模型的這個失敗，算不算「模型出事」、要不要記進斷路器（#44）。
+ * 叫模型的這個失敗，算不算「模型出事」、要不要記進斷路器。
  *
  * 不算的只有「這一個請求本身有問題」：400（例如對話太長超過 context）、422。換一個請求就會好，
  * 算進去的話，一個使用者一直送超長的對話就能把所有人的助理關掉。

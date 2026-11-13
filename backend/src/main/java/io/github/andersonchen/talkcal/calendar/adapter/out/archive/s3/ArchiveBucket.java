@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 歸檔用的那一個 bucket（#54）：放一包、讀一包、列出某個前綴底下的、刪掉某個前綴底下的。
+ * 歸檔用的那一個 bucket：放一包、讀一包、列出某個前綴底下的、刪掉某個前綴底下的。
  *
  * S3 的 API 是物件儲存的共通語言：雲端是 AWS S3，本機是 RustFS（deploy/compose.yaml），只差 endpoint 和帳密。
  * SDK 的型別、例外只留在這個類別裡，外面拿到的是 key 和 byte[]；S3 的錯一律翻成 IllegalStateException（port 的約定）。
@@ -30,7 +30,7 @@ import java.util.Objects;
  * AI 助理的對話（app.job.AssistantMemoryArchive）共用同一個 bucket、同一套讀寫。
  *
  * key 的排法也只在這裡：&lt;root&gt;owner=&lt;擁有者&gt;/month=&lt;yyyy-MM&gt;/&lt;檔名&gt;（root 是 calendar-event/、assistant-conversation/）。
- * - 擁有者在最前面：一個人的全部歸檔就是一個前綴，查看、還原只列自己的前綴，刪帳號（#52）整個前綴刪掉，列不到、也刪不到別人的
+ * - 擁有者在最前面：一個人的全部歸檔就是一個前綴，查看、還原只列自己的前綴，刪帳號時整個前綴刪掉，列不到、也刪不到別人的
  * - owner=、month= 是 Hive 的分區慣例：哪天要用 Athena 直接查歸檔，不必搬資料就能依人、依月份過濾
  * 行程和對話共用這一套，刪帳號時兩邊的前綴長一樣，不會有一邊漏刪。
  *

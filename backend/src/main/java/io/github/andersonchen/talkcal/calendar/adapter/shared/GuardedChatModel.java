@@ -86,7 +86,7 @@ public final class GuardedChatModel implements ChatModel {
     }
 
     /**
-     * 預設選項：照原本的（模型名稱、max-tokens…，呼叫端靠它沿用 application.properties 的設定），只多帶上每一次呼叫的逾時。
+     * 預設選項：沿用被包住的那個模型的（模型名稱、max-tokens…，呼叫端靠它沿用 application.properties 的設定），只多帶上每一次呼叫的逾時。
      *
      * 為什麼要在這裡補：Spring AI 2.0.1 的逾時有兩層，spring.ai.openai.chat.timeout 是建 client 時的，
      * 每一次呼叫另外帶選項裡的 timeout，而且會蓋掉前者。自動組裝的預設選項不會帶上任何逾時

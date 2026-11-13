@@ -18,7 +18,7 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 /**
- * 歸檔的格式（#54）：一行一筆 JSON（JSON Lines），整包 gzip。
+ * 歸檔的格式：一行一筆 JSON（JSON Lines），整包 gzip。
  *
  * 為什麼是這個格式：
  * - 不靠這個 app 也讀得懂：zcat 一下就是看得懂的文字，jq、Athena、DuckDB 都直接吃。
