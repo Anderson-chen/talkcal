@@ -23,7 +23,7 @@ public record ScheduledEvent(EventId id, CalendarEvent event) {
 
     /**
      * 把確認過的行程排進行事曆，發一個新的身分。
-     * 這是整個模組唯一發 id 的地方，對應 conversation 的 Conversation.start()。
+     * 這是整個模組唯一發 id 的地方。
      */
     public static ScheduledEvent schedule(CalendarEvent event) {
         return new ScheduledEvent(EventId.newId(), event);

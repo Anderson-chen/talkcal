@@ -18,9 +18,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/**
- * 組裝 auth 模組的 use case 和 adapter
- */
 @Configuration(proxyBeanMethods = false)
 class AuthConfiguration {
 

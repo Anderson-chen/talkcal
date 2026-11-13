@@ -5,7 +5,7 @@ import java.util.UUID;
 /**
  * 一個已排進行事曆的行程的身分。
  *
- * 跟 conversation 的 ConversationId 同一套理由（兩個模組不共用類別，所以各寫一份）：
+ * 這樣定的理由：
  * - 包成自己的型別：方法簽章上看得出「這裡要的是行程的 ID」，不會跟別種 UUID 傳錯
  * - 用 UUID 不用資料庫流水號：ID 在 domain 裡、存檔之前就要有（ScheduledEvent.schedule() 當下）；
  *   流水號也會洩漏「總共有幾筆行程」，外人猜得到別人的行程編號
