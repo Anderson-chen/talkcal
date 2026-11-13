@@ -12,7 +12,7 @@ import java.util.Objects;
 
 /**
  * 實作「把自然語言解析成行程」。
- * 約定跟 conversation 一樣：service 只呼叫 model 的方法與 port，不自己判斷業務規則。
+ * service 只呼叫 model 的方法與 port，不自己判斷業務規則。
  *
  * 時鐘從建構子收 java.time.Clock，而不是直接呼叫 LocalDateTime.now()：
  * Clock 是 JDK 的型別（不是 Spring 的），core 可以放心依賴；

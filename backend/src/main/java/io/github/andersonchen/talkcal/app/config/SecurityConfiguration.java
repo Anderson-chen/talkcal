@@ -27,9 +27,9 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 
 /**
- * Spring Security 的接線：帳密登入，加上有設定的 Google、GitHub 登入（#105）。auth 模組的 use case 在 AuthConfiguration。
+ * Spring Security 的接線：帳密登入，加上有設定的 Google、GitHub 登入。auth 模組的 use case 在 AuthConfiguration。
  *
- * 瀏覽器和後端之間只有一個 session cookie（HttpOnly，JavaScript 讀不到），前端不碰任何 token ——
+ * 瀏覽器和後端之間只有一個 session cookie（HttpOnly，JavaScript 讀不到），前端不碰任何 token。
  * 用 Google 登入時也一樣：Google 給的 token 留在後端的 session 裡，換完使用者資料就沒再用。
  * 前端和後端在同一個網域（nginx 把 /api 轉過來），所以不需要 CORS，cookie 也自然帶得上。
  *
@@ -38,7 +38,7 @@ import org.springframework.security.web.authentication.logout.HttpStatusReturnin
  * - 會改東西的請求（POST、DELETE）要帶 CSRF token：別的網站騙使用者的瀏覽器送請求時，cookie 會自動帶上，
  *   但它讀不到我們這個網域的 XSRF-TOKEN cookie，送不出對的 header
  * - API 文件不擋：它不經過 nginx（nginx 只轉 /api），外面連不到
- * - actuator 不擋：它只開在不發佈到主機的 management 埠（#33），由網路決定誰連得到；Alloy 抓指標不必登入。
+ * - actuator 不擋：它只開在不發佈到主機的 management 埠，由網路決定誰連得到；Alloy 抓指標不必登入。
  *   用 EndpointRequest 而不是寫死 /actuator/**：它跟著 management 的設定走，只認 management 埠上的請求，
  *   API 埠上打 /actuator 照樣要登入
  */
@@ -47,16 +47,12 @@ class SecurityConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(SecurityConfiguration.class);
 
-    // 登入時 Spring Security 用它查帳號、再用 PasswordHashingConfiguration 的 PasswordEncoder 比對密碼
+    // 程式裡沒有地方注入它：Spring Security 登入時自己從 context 拿它查帳號
     @Bean
     UserDetailsService userDetailsService(FindAccountUseCase findAccount) {
         return new AccountUserDetailsService(findAccount);
     }
 
-    /**
-     * 有設定 client id 的 Google、GitHub。值寫在 application.properties，再從環境變數 GOOGLE_CLIENT_ID 這類名字接進來，
-     * 沒設就是空字串 → 那個 provider 不開。
-     */
     @Bean
     OAuth2Registrations oauth2Registrations(
             @Value("${talkcal.auth.google.client-id:}") String googleClientId,
@@ -86,7 +82,7 @@ class SecurityConfiguration {
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated())
                 // 登入：前端用表單格式送 username、password 到 /api/auth/login。
-                // 成功、失敗都只回狀態碼和 JSON，不轉址 —— 預設的轉址是給伺服器畫頁面用的，SPA 用不到
+                // 成功、失敗都只回狀態碼和 JSON，不轉址：預設的轉址是給伺服器畫頁面用的，SPA 用不到
                 .formLogin(login -> login
                         .loginProcessingUrl("/api/auth/login")
                         .successHandler((request, response, authentication) -> response.setStatus(HttpStatus.NO_CONTENT.value()))
@@ -107,7 +103,7 @@ class SecurityConfiguration {
                         .accessDeniedHandler((request, response, e) -> json(response, HttpStatus.FORBIDDEN, "請重新整理頁面再試一次")));
 
         if (!oauth2Registrations.isEmpty()) {
-            // 用 Google、GitHub 登入（#105）。跟帳密登入不同，整個流程是整頁轉址，不是 fetch：
+            // 用 Google、GitHub 登入。跟帳密登入不同，整個流程是整頁轉址，不是 fetch：
             // 1. 前端的按鈕連到 /api/auth/oauth2/authorization/google → 轉址到 Google 的登入頁（帶著 state，防 CSRF）
             // 2. 使用者在 Google 同意 → Google 轉回 /api/auth/oauth2/callback/google?code=...
             // 3. 後端拿 code 換 token、驗 ID token，交給 AccountOidcUserService 對到帳號 → 轉回首頁，這時已經登入

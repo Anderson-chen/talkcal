@@ -14,11 +14,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * 依賴的斷路器、bulkhead 的共用規則（#44）。怎麼包住模型見 GuardedChatModel。
+ * 依賴的斷路器、bulkhead 的共用規則。怎麼包住模型見 GuardedChatModel。
  *
- * 斷路器和 bulkhead 本身由 Resilience4j 的 starter 照 application.properties 的 resilience4j.* 建：
- * 規則全部集中在那一段（configs.default 是所有依賴共用的預設，instances.<名字> 只寫不一樣的地方），
- * 多一個依賴只要加設定、在它的 adapter 依名字取出來用，不必再寫一套組裝和指標。
+ * 斷路器和 bulkhead 本身由 Resilience4j 的 starter 照 application.properties 的 resilience4j.* 建，規則怎麼分見那一段。
+ * 多一個依賴只要加設定、依名字取出來用，不必再寫一套組裝和指標。
  *
  * 只用 starter 建好的 registry，不用 @CircuitBreaker 註解：要保護的地方明寫一個 decorator，
  * 比在方法上掛註解、多一層 AOP 代理好追。

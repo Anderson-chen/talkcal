@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 從自然語言裡抽出行程（outbound port）：由核心定義、由 Adapter（llama.cpp、OpenAI、Claude）實作。
+ * 從自然語言裡抽出行程（outbound port）：由核心定義、由 adapter 實作，叫哪一家的模型是 adapter 的事。
  *
  * now 由呼叫端給，不讓 adapter 自己讀時鐘：
  * 模型不知道今天幾號，「明天」「下週三」都要靠這個值才算得出來；

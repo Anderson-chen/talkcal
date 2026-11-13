@@ -48,8 +48,7 @@ import java.util.stream.Collectors;
  *
  * 每一句 SQL 都帶著 owner_id 條件（#104）：授權不是另外一道「先查再比對」的檢查，而是查詢本身就只碰得到這個人的資料。
  *
- * 寫法跟 conversation 的 JdbcConversationAdapter 一致：JdbcClient 手寫 SQL、
- * 交易用 TransactionTemplate（類別是 final，@Transactional 的代理包不了）。
+ * JdbcClient 手寫 SQL、交易用 TransactionTemplate（類別是 final，@Transactional 的代理包不了）。
  *
  * 一個類別實作讀、存、刪幾個 port：碰的是同一張表，「這張表長什麼樣」的知識只該在一個地方。
  * 冪等鍵的表也在這裡：記下的是「哪一批行程」，要跟 calendar_event 在同一個交易裡一起寫。

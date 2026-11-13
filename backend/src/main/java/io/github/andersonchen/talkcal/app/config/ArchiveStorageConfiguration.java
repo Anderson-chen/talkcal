@@ -6,16 +6,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * 歸檔用的物件儲存（#54），誰在用、key 怎麼排見 ArchiveBucket。
- */
 @Configuration(proxyBeanMethods = false)
 class ArchiveStorageConfiguration {
 
-    /**
-     * 建這個物件不會連線，連不上要到真的上傳時才知道 ——
-     * 物件儲存掛了不該讓整個 app 起不來，歸檔晚一天沒關係（沒存好的不會被刪）。
-     */
+    // 建這個物件不會連線，原因見 ArchiveBucket.connect
     @Bean
     ArchiveBucket archiveBucket(@Value("${talkcal.archive.endpoint}") String endpoint,
                                 @Value("${talkcal.archive.region}") String region,
