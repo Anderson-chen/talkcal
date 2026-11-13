@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# 部署的冒煙測試：確認「這個環境」真的能用。CI 測得到程式和設定的邏輯，測不到環境的差異
-# （SSM 拉下來的 .env、網路、憑證、真的 SMTP），這些只有部署當下在機器上才驗得到。
-# deploy.sh 呼叫兩次，任何一項沒過就結束碼 1，deploy.sh 跟著失敗：
+# 部署的冒煙測試：在機器上確認這個環境真的能用。SSM 拉下來的 .env、網路、憑證、真的 SMTP，CI 都測不到。
+# 分兩段跑，任何一項沒過就結束碼 1：
 #
 #   bash smoke.sh env deploy/.env        # 啟動容器之前：.env 的換行、告警收件人
 #   bash smoke.sh services deploy/.env   # 全部起來之後：網站、觀測、Bedrock、告警寄信
 #
-# compose 檔裡 ${X:?} 的必要 key 不在這裡列：deploy.sh 用 `docker compose config -q` 讓 compose 自己查，清單只有一份。
-# 只印 key 的名字和檢查結果，不印任何值。
-# 每次部署都寄一封測試信（主旨是 DeploySmokeTest）：部署是手動、偶爾才做，多一封信的代價小，
-# 換來每次都證明 SMTP 帳密還能用。同一天要連續部署好幾次時，用 SMOKE_SEND_EMAIL=0 關掉。
+# compose 檔裡 ${X:?} 的必要 key 不在這裡查：`docker compose config -q` 會查，清單只留 compose 檔那一份。
+# 只印 key 的名字和結果，不印值。
+# 每次部署都寄一封測試信（主旨 DeploySmokeTest）：部署是手動、偶爾才做，多一封信換來每次都證明 SMTP 帳密還能用。
+# 同一天要連續部署好幾次時，用 SMOKE_SEND_EMAIL=0 關掉
 set -euo pipefail
 
 usage="用法：smoke.sh env|services <.env 路徑>"

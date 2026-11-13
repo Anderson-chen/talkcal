@@ -17,7 +17,7 @@ set -euo pipefail
 PG_CONTAINER="${PG_CONTAINER:-talkcal-postgres}"
 PG_USER="${PG_USER:-talkcal}"
 PG_DB="${PG_DB:-talkcal}"
-# 還原時要先停掉的 app 容器（它握著連線，資料庫改不了名）。設成空字串就不停（演練用）
+# app 握著連線，資料庫改不了名，換上之前要先停。設成空字串就不停
 APP_CONTAINER="${APP_CONTAINER-talkcal-app}"
 
 log() { echo "[pg-restore] $*" >&2; }
@@ -33,7 +33,7 @@ scratch="${PG_DB}_restore"
 psql_db() { local db=$1; shift; docker exec -i "$PG_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U "$PG_USER" -d "$db" "$@"; }
 psql_admin() { psql_db postgres -q "$@"; }
 row_counts() {
-  # 每張表的筆數（精確的 count，不是統計估計值），兩邊並排給人看還原的是不是預期的那份
+  # 每張表精確的筆數（不用統計估計值），備份和線上並排印出來，給人確認還原的是預期的那一份
   psql_db "$1" -At <<'SQL'
 SELECT format('%s=%s', table_name,
               (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', table_schema, table_name), false, true, '')))[1]::text)
@@ -56,7 +56,7 @@ docker exec -i "$PG_CONTAINER" pg_restore --list < "$dump" > /dev/null \
 
 log "3/4 還原到暫存庫 $scratch"
 psql_admin -c "DROP DATABASE IF EXISTS $scratch" -c "CREATE DATABASE $scratch OWNER $PG_USER"
-# --single-transaction + --exit-on-error：一個錯誤就整份撤回，不會留下一個「還原了一半」的暫存庫被誤當成好的
+# --single-transaction + --exit-on-error：一個錯誤就整份撤回，不會留下還原一半的暫存庫被當成好的
 if ! docker exec -i "$PG_CONTAINER" pg_restore -U "$PG_USER" -d "$scratch" \
        --single-transaction --exit-on-error --no-owner < "$dump"; then
   psql_admin -c "DROP DATABASE IF EXISTS $scratch"
@@ -82,7 +82,7 @@ if [ -n "$APP_CONTAINER" ] && [ "$(docker inspect -f '{{.State.Running}}' "$APP_
   docker stop "$APP_CONTAINER" > /dev/null
   restart_app=1
 fi
-# 第 4 步停掉的 app 要起回來：換上成功或失敗都要
+# 換上成功或失敗都要把 app 起回來
 start_app() { if [ "${restart_app:-}" = 1 ]; then log "起 $APP_CONTAINER"; docker start "$APP_CONTAINER" > /dev/null; fi; }
 # 資料庫名稱沒加引號會被轉成小寫，所以時間格式只用數字和底線，印出來的跟實際的名稱一樣
 old="${PG_DB}_before_$(date -u +%Y%m%d_%H%M%S)"
