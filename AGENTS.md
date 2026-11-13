@@ -6,28 +6,13 @@
 
 回答用繁體中文。
 
-## 指令
-
-改完程式碼用這張表驗證，都在 repo 根目錄下打；每種測試要先準備什麼，見 [docs/testing.md](docs/testing.md)。
-前端指令要先裝好依賴（`corepack enable`、`pnpm --dir web install`，見 [web/README.md](web/README.md)）：
-
-| 要做什麼 | 指令 |
-|---|---|
-| 跟 CI 一模一樣的整輪檢查（要開 Docker） | `ci/run.sh` |
-| 後端單元測試、架構規則 | `cd backend && ./gradlew test` |
-| 後端整合測試（要開 Docker） | `cd backend && ./gradlew integrationTest` |
-| 前端單元測試 | `pnpm --dir web test` |
-| 前端 E2E | `pnpm --dir web run e2e` |
-| 前端 lint | `pnpm --dir web run lint` |
-| 後端 lint（Error Prone，編譯時檢查） | `cd backend && ./gradlew classes testClasses` |
-| 架構圖的錨點都對得上檔案 | `node docs/architecture/lines.mjs --check` |
-
 ## 動手前要讀的規則
 
 規則只有一份，放在 `.agents/rules/`。其他工具要在做這些事之前自己讀；Claude Code 經由 [CLAUDE.md](CLAUDE.md) 讀到這份檔案時，會把表格裡 `@` 開頭的路徑整份載入。
 
 | 要做什麼 | 先讀 |
 |---|---|
+| 跑測試、檢查、腳本 | [@.agents/rules/commands.md](.agents/rules/commands.md) |
 | 換到別的分支做事、發現 commit 落錯分支 | [@.agents/rules/branch.md](.agents/rules/branch.md) |
 | commit | [@.agents/rules/commit.md](.agents/rules/commit.md) |
 | 開或改 PR | [@.agents/rules/pr.md](.agents/rules/pr.md) |
