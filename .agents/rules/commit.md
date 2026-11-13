@@ -1,6 +1,6 @@
 # commit 規則
 
-- commit 前先用 `git branch --show-current` 確認是這次工作的分支：同一個資料夾可能被別的 session 切走。不對的話停下來問使用者，不要直接切回去。
+- commit 前先用 `git branch --show-current` 確認是這次工作的分支：同一個資料夾可能被別的 session 切走。不對的話停下來問使用者，不要直接切回去。名稱不是 `類型/issue編號-英文短名` 的話，先照 `branch.md` 改名再 commit。
 - commit 和 PR 標題：`類型(範圍): 改完之後變成怎樣`，例如 `feat(alerting): 資料庫連不上、備份失敗都會寄信`。
   - 類型：`feat`、`fix`、`test`（只動測試）、`docs`、`refactor`、`ci`、`chore`、`agents`；範圍用英文小寫（`auth`、`deploy`…），跨好幾塊就省略。
   - `agents`：改 `AGENTS.md`、`CLAUDE.md`、`.agents/rules/`。這些是 AI 工具開工前讀的規則，改了 AI 做事的方式就會變；`docs` 看起來只是說明，`chore` 看起來像雜事，都看不出這點。這個類型不在 Conventional Commits 裡，repo 沒有工具從類型推版號，加了不影響發版。
