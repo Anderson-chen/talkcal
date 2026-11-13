@@ -1,7 +1,7 @@
 # SLO 的 burn-rate 告警：error budget 燒得太快就叫人。目標、數字的理由見 docs/slo.md。
 #
-# 只有規則，不管「告警送去哪」：contact point 和 notification policy 由 #121 那份檔案負責。
-# 每條規則都帶 severity 標籤，用跟 #121 基本告警同一套值：critical（快燒，Workbook 說的 page，現在就要處理）、
+# 只有規則，不管「告警送去哪」：見 contact-points.yaml、policies.yaml。
+# 每條規則都帶 severity 標籤，跟 rules.yaml 同一套值：critical（快燒，Workbook 說的 page，現在就要處理）、
 # warning（慢燒，Workbook 說的 ticket，上班時間處理）。policy 要分流時用它比對。
 # policies.yaml 目前把所有告警（不分 severity）都寄到同一個信箱；沒設 SMTP 時不寄，規則照樣評估、狀態照樣看得到。
 #
@@ -55,7 +55,7 @@ groups:
               conditions:
                 - evaluator: { type: gt, params: [0] }
         # 沒查到東西 = 沒有 SLO 在快燒，是正常狀態，不是「資料斷了」。
-        # 資料斷掉（app 沒被抓到）要靠 up == 0 那類告警（#121），不是這條的責任。
+        # 資料斷掉（app 沒被抓到）要靠 up == 0 那類告警（rules.yaml），不是這條的責任。
         noDataState: OK
         execErrState: Error
         # 不另外等：短視窗本身就是「確認現在還在燒」，Workbook 的做法不加 for。
@@ -64,7 +64,6 @@ groups:
           severity: critical   # Workbook 說的 page：現在就要處理
           team: talkcal
         annotations:
-          # 告警信裡直接有連結：照著做的步驟（#41）
           runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/slo-fast-burn.md
           summary: '{{ $labels.slo }} 的 error budget 燒太快（{{ $labels.window }} 視窗 burn rate {{ printf "%.1f" $values.A.Value }}）'
           description: >-
@@ -104,7 +103,6 @@ groups:
           severity: warning    # Workbook 說的 ticket：上班時間處理
           team: talkcal
         annotations:
-          # 告警信裡直接有連結：照著做的步驟（#41）
           runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/slo-slow-burn.md
           summary: '{{ $labels.slo }} 的 error budget 持續在燒（{{ $labels.window }} 視窗 burn rate {{ printf "%.2f" $values.A.Value }}）'
           description: >-

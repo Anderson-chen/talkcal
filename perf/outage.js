@@ -1,7 +1,7 @@
-// outage —— 模型掛掉演練（#44）：模型斷線或卡住的時候，助理是不是快速失敗、行程 API 是不是照常可用。
+// outage —— 模型掛掉演練：模型斷線或卡住的時候，助理是不是快速失敗、行程 API 是不是照常可用。
 //
 // 同時跑兩群人：
-//   assistant —— 每分鐘 RATE_PER_MIN 個人跟助理說一句（跟 deploy.js 一樣用 constant-arrival-rate：
+//   assistant —— 每分鐘 RATE_PER_MIN 個人跟助理說一句（用 constant-arrival-rate：
 //                模型掛了也不會因此多來人，數字才能直接比）
 //   calendar  —— 每秒 1 個人讀一個月的行程（GET /api/calendar/events），不經過模型
 //
@@ -31,7 +31,7 @@ import { sleep } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
 import { ASSISTANT_URL, MESSAGES, field, jsonParams, listMonth, signIn, useSession } from './lib/assistant.js';
 
-const RATE_PER_MIN = Number(__ENV.RATE_PER_MIN || 20); // 要低於容量，理由同 deploy.js
+const RATE_PER_MIN = Number(__ENV.RATE_PER_MIN || 20); // 要低於容量：量的是故障的影響，不是過載
 const DURATION_S = Number(__ENV.DURATION_S || 300);
 
 // ── 故障注入（Toxiproxy）──
@@ -51,9 +51,9 @@ const FAULTS = {
     recover: () => setEnabled(true),
   },
   hang: {
-    // 用超長的 latency，不用 Toxiproxy 的 timeout 毒（「資料不轉、連線不關」）：實測 timeout 毒擋不住「關連線」——
+    // 用超長的 latency，不用 Toxiproxy 的 timeout 毒（「資料不轉、連線不關」）：timeout 毒擋不住「關連線」——
     // 加在 downstream，模型回完就關連線；加在 upstream，請求到不了模型，llama-server 對閒置 5 秒的連線也會關掉。
-    // 兩種 Toxiproxy 都把關閉傳回 app，app 幾秒就收到「連線中斷」，那是斷線不是卡住（2026-10-29 兩種都踩過）。
+    // 兩種 Toxiproxy 都把關閉傳回 app，app 幾秒就收到「連線中斷」，那是斷線不是卡住。
     // latency 毒會把回應連同關閉一起延後，app 這端就真的是一直等
     inject: () => addToxic('latency', { latency: HANG_MS }, 'downstream'),
     recover: removeToxic,

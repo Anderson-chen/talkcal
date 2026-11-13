@@ -46,7 +46,7 @@ export const options = {
   thresholds: {
     http_req_failed: ['rate<0.01'],
     checks: ['rate>0.99'],
-    // 沿用 load.js 的離譜線：尖峰時最後幾個人本來就會等比較久，這裡只要求別卡死
+    // 60 秒是只抓卡死的離譜線：尖峰時最後幾個人本來就會等比較久
     http_req_duration: ['p(95)<60000'],
   },
 };

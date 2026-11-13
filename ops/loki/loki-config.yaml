@@ -29,7 +29,7 @@ schema_config:
         prefix: index_
         period: 24h          # 保存期限要靠 24h 的索引週期才能用（見下面的 compactor）
 
-# 保存期限（#270）：超過 30 天的 log 由 compactor 刪掉，不設的話永久保留。為什麼要設見 ops/README.md。
+# 保存期限：超過 30 天的 log 由 compactor 刪掉，不設的話永久保留。為什麼要設見 ops/README.md。
 # 30 天跟 mimir.yaml 的指標一樣長：指標查得到的範圍，那段時間的 log 一定還在。
 # 以 chunk 為單位刪：一個 chunk 裡最新的一筆也超過 30 天，整個 chunk 才會刪，所以剛過 30 天的 log 可能還查得到一陣子。
 compactor:
@@ -39,6 +39,6 @@ compactor:
 limits_config:
   retention_period: 30d
 
-# 關掉「用量回報」，跟 Grafana 那邊同個理由：學習環境不往外送任何東西
+# 關掉「用量回報」：學習環境不往外送任何東西
 analytics:
   reporting_enabled: false

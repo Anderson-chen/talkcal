@@ -34,7 +34,7 @@ backend_worker:
   compaction:
     block_retention: 72h
 
-# ── metrics-generator（#31）────────────────────────────────────────
+# ── metrics-generator ────────────────────────────────────────────
 # 從收到的 span 算出指標、寫進 Mimir。trace 一次只看得到一個請求；把所有 span 加總成指標，才看得出
 # 「哪兩個服務之間有流量、那條邊多慢、錯多少」。Grafana 的 service map 就是拿這些指標畫的。
 #   service-graphs：一對 client span ↔ server span 是一條邊（nginx → app），算出

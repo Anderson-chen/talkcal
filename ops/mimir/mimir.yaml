@@ -3,8 +3,8 @@
 #
 # 為什麼用 Mimir 而不是 Prometheus：見 ops/README.md 的「選型理由」。
 #
-# 這是「單機 / 學習」用的最小設定，跟 loki/loki-config.yaml 是同一個思路 ——
-# Mimir 和 Loki 是 Grafana 用同一套分散式骨架做的，所以這份設定大半也在「把分散式關掉」：
+# 這是「單機 / 學習」用的最小設定。Mimir、Loki、Tempo 是 Grafana 用同一套分散式骨架做的，
+# 所以這份設定大半在「把分散式關掉」：
 # 所有元件（distributor、ingester、querier、compactor…）跑在同一個程序裡（-target=all，預設值），
 # 資料寫本機檔案，不接 S3 那類物件儲存。正式環境會拆元件、各自擴充、接物件儲存。
 
@@ -34,7 +34,7 @@ compactor:
 
 # 錄製規則（recording rules）：Mimir 的 ruler 定時跑 PromQL，把結果寫回成新的時間序列。
 # 目前只有 SLO 那一份（rules/anonymous/slo.yaml，理由見 docs/slo.md）。
-# local = 從掛進來的資料夾讀、唯讀：規則跟 dashboard 一樣進版控，不走 API 上傳（那樣的規則只存在容器的資料裡，重建就沒了）。
+# local = 從掛進來的資料夾讀、唯讀：規則進版控，不走 API 上傳（那樣的規則只存在容器的資料裡，重建就沒了）。
 # 改了規則不用重啟：ruler 每 10 分鐘（-ruler.poll-interval 的預設值）重讀一次；要馬上生效就 restart mimir。
 # 資料夾底下一層是租戶名稱：關掉多租戶時只有 anonymous 一個。
 ruler_storage:
@@ -67,11 +67,11 @@ distributor:
 # 數字是「整個租戶最多同時記住幾個 exemplar」，學習環境的量很小，給一個寬鬆的上限就好。
 limits:
   max_global_exemplars_per_user: 100000
-  # 保存期限（#270）：超過 30 天的區塊由 compactor 刪掉，預設 0 是永久保留。為什麼要設見 ops/README.md。
+  # 保存期限：超過 30 天的區塊由 compactor 刪掉，預設 0 是永久保留。為什麼要設見 ops/README.md。
   # 至少要 28 天：SLO 的 error budget 是滾動 28 天（rules/anonymous/slo.yaml 的 ratio_rate28d），留得比它短就算不出來；再多留 2 天當緩衝。
   # Mimir 也用這個值限制查詢範圍：超過 30 天的時間查不到資料，就算區塊還沒刪。
   compactor_blocks_retention_period: 30d
 
-# Mimir 本身也會回報用量給 Grafana Labs，跟 Loki、Grafana 那邊同個理由關掉
+# Mimir 本身也會回報用量給 Grafana Labs。學習環境不往外送任何東西，關掉
 usage_stats:
   enabled: false

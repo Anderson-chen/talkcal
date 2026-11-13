@@ -6,7 +6,7 @@
 #   Mimir 圖上的慢點（exemplar）──點──▶ Tempo 看那個請求的 trace
 #   Loki 的一行 log（含 trace id）──點──▶ Tempo 看那個請求的 trace
 #   Tempo 的 trace ──點──▶ Loki 看那個請求印了哪些 log
-#   Tempo 的 span  ──點──▶ Mimir 看那段時間的延遲、錯誤率、連線池（#31）
+#   Tempo 的 span  ──點──▶ Mimir 看那段時間的延遲、錯誤率、連線池
 #
 # 每個資料源都釘死 uid：沒指定的話 Grafana 會隨機產一個，
 # 那 dashboard JSON 和上面那些互相跳轉的設定就對不到它。
@@ -14,7 +14,7 @@
 
 apiVersion: 1
 
-# 以前存指標的是 Prometheus（已換成 Mimir）。provisioning 只會新增/更新，不會自動刪掉檔案裡消失的資料源，
+# 下面的 Prometheus 是換成 Mimir 之前存指標的資料源。provisioning 只會新增/更新，不會自動刪掉檔案裡消失的資料源，
 # 所以明寫要刪；不然 grafana-data volume 裡會一直留著一個連不上的 Prometheus。
 deleteDatasources:
   - name: Prometheus
@@ -55,7 +55,7 @@ datasources:
           datasourceUid: tempo
           url: '$${__value.raw}'
           urlDisplayLabel: 到 Tempo 看這個請求
-        # 同一個 trace id 再做一顆按鈕，打開「單一請求」dashboard（#31）：trace、log、當時的指標放在同一個畫面。
+        # 同一個 trace id 再做一顆按鈕，打開「單一請求」dashboard：trace、log、當時的指標放在同一個畫面。
         # 沒有 datasourceUid 就是一般網址；時間範圍沿用目前畫面的
         - name: TraceID
           matcherRegex: '"traceId":"(\w+)"'
@@ -79,10 +79,10 @@ datasources:
         spanEndTimeShift: 1m
         customQuery: true
         query: '{service="app"} |= "$${__trace.traceId}"'
-      # trace → 指標（#31）：看到一個慢的 span，一鍵看「那時候整個系統是什麼狀態」——
+      # trace → 指標：看到一個慢的 span，一鍵看「那時候整個系統是什麼狀態」——
       # 是只有這個請求慢，還是當時大家都慢、連線池都在排隊。時間範圍是 span 前後各 5 分鐘。
       # 只對 talkcal 的 span 有意義：這些查詢都是 app 吐的指標（job="talkcal-app"），不帶 span 的標籤去過濾，
-      # 因為 trace 上的服務叫 talkcal、指標上的 job 叫 talkcal-app，跟上面 log 那段是同一個對不起來的問題
+      # 因為 trace 上的服務叫 talkcal、指標上的 job 叫 talkcal-app，對不起來
       tracesToMetrics:
         datasourceUid: mimir
         spanStartTimeShift: -5m

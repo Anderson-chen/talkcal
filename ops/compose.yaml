@@ -11,7 +11,7 @@
 #   tempo   —— 存追蹤(traces)。一個請求經過每一段的耗時樹，靠 trace id 找。
 #   grafana —— 畫圖。它自己不存資料，只去跟三個資料庫要資料來畫，並在三者之間互相跳轉。
 #
-# 刻意不寫 version: 欄位 —— Compose v2 已經不看它了，寫了反而跳 warning。
+# 不寫 version: 欄位：Compose v2 不看它，寫了會跳 warning。
 
 # 給這組容器一個共同名字前綴，跟別的專案的容器分開；也讓 `docker compose down` 一次收乾淨。
 name: talkcal-observability
@@ -20,7 +20,7 @@ services:
   # ── 指標資料庫 ────────────────────────────────────────────────
   # 只存不抓：指標由 Alloy 抓完用 remote_write 推進來。為什麼不用 Prometheus 見 README 的「選型理由」。
   mimir:
-    image: grafana/mimir:3.2.3        # 釘死版本，換機器也拉到同一版（跟 build.gradle 釘 JDK 版本同個道理）
+    image: grafana/mimir:3.2.3        # 釘死版本，換機器也拉到同一版
     container_name: talkcal-mimir
     command:
       - -config.file=/etc/mimir/mimir.yaml
@@ -75,9 +75,9 @@ services:
       # 雲端機器上要看，用 SSM 的 port forwarding 接回本機（見 infra/envs/1-ec2/README.md）。
       - "127.0.0.1:3000:3000"
     environment:
-      # 監控本身掛掉（#40）的外部 heartbeat 網址。現在沒人讀：Watchdog 會寄 email，先拿掉了（#243），#40 會加回來。
-      # 值在不進 git 的 deploy/.env，起這組要帶 --env-file ../deploy/.env；#40 做完之前留空。
-      # 沒設就給 .invalid（保留的網域，永遠解析不到）：#40 的 webhook contact point 收到空字串會驗證不過、Grafana 起不來
+      # 監控本身掛掉時，Watchdog 要打的外部 heartbeat 網址。Watchdog 還沒啟用，現在沒有東西讀它，
+      # 設計見 README 的「監控本身掛掉：誰來發現」。值在不進 git 的 deploy/.env，起這組要帶 --env-file ../deploy/.env；平常留空。
+      # 沒設就給 .invalid（保留的網域，永遠解析不到）：讀它的 webhook contact point 收到空字串會驗證不過、Grafana 起不來
       - HEARTBEAT_URL=${HEARTBEAT_URL:-http://heartbeat-not-configured.invalid/}
       # 學習用、只在 localhost 跑，關掉登入省事：一開網頁就是 Admin，不必記帳密。
       # 要練權限管理再把這三行拿掉，改用預設帳密 admin / admin 登入。
@@ -86,7 +86,7 @@ services:
       - GF_AUTH_DISABLE_LOGIN_FORM=true
       # 少一個「要不要回報使用狀況」的背景行為
       - GF_ANALYTICS_REPORTING_ENABLED=false
-      # 告警寄信（#121）。值在不進 git 的 deploy/.env（範本 deploy/.env.example），所以起這組要帶上它：
+      # 告警寄信。值在不進 git 的 deploy/.env（範本 deploy/.env.example），所以起這組要帶上它：
       #   docker compose --env-file ../deploy/.env up -d
       # 沒帶或 ALERT_SMTP_HOST 沒填：SMTP 關著，告警照樣評估、在 Grafana 上看得到，只是不寄信。
       # :+ 是「有值才換成 true」，沒值就是空字串（Grafana 當 false）。
@@ -137,13 +137,13 @@ services:
       # 本機學習可接受；雲端上不這樣做，而是每台機器跑一個 Alloy 直接讀節點上的 log 檔（k8s DaemonSet）。
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - alloy-data:/var/lib/alloy/data
-      # 備份腳本寫的 .prom（最後一次成功備份的時間），Alloy 讀了變成指標，備份太久沒成功就告警（#39）。
+      # 備份腳本寫的 .prom（最後一次成功備份的時間），Alloy 讀了變成指標，備份太久沒成功就告警（見 grafana/provisioning/alerting/respond.yaml）。
       # 本機沒有備份排程，掛一個空的具名 volume；雲端由 infra/envs/1-ec2/compose.ops.yaml 換成 backup-to-s3.sh 寫的資料夾
       - alloy-textfile:/var/lib/alloy/textfile:ro
     networks:
       # default：這組自己的網路，用服務名稱找 mimir、loki、tempo。
       # talkcal-deploy：deploy/ 那組的網路。接上後就能直接用服務名稱抓 app:8090、llm-chat:8080，
-      #   不繞主機、不看 ports 發佈成幾號——跟 deploy/ 裡 app 找模型是同一套規則。
+      #   不繞主機、不看 ports 發佈成幾號。
       #   反方向也通：deploy/ 的 app 用 http://alloy:4318 把 trace 送過來。
       - default
       - talkcal-deploy

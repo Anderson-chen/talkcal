@@ -10,14 +10,14 @@
 #   C：threshold 運算，A 超過門檻就算成立；condition 指向 C
 #   for：要連續成立這麼久才真的觸發（Pending → Firing），擋掉一兩次評估的抖動
 #
-# 查詢用 job="talkcal-app"（Alloy 設的 job_name），不寫埠號：actuator 搬到哪個埠（#33）都不受影響。
+# 查詢用 job="talkcal-app"（Alloy 設的 job_name），不寫埠號：actuator 搬到哪個埠都不受影響。
 
 apiVersion: 1
 
-# 以前在這裡、改由 SLO 接手的三條（5xx 比例、行程 API p95、AI 助理 p95）。
+# 下面三個 uid 是改由 SLO 告警接手的舊規則（5xx 比例、行程 API p95、AI 助理 p95）。
 # provisioning 只會新增、更新，檔案裡拿掉的規則不會從 Grafana 消失（存在 grafana-data volume 裡），
 # 不明寫刪除的話，已經起過的 Grafana 會一直留著舊規則、跟 SLO 告警重複寄信。
-# 全新的 Grafana 裡本來就沒有這三條，刪不存在的 uid 不會報錯（實測過）。所有環境都重啟過一次之後就可以拿掉這段。
+# 全新的 Grafana 裡本來就沒有這三條，刪不存在的 uid 不會報錯。所有環境都重啟過一次之後就可以拿掉這段。
 deleteRules:
   - orgId: 1
     uid: talkcal-5xx-ratio
@@ -62,7 +62,6 @@ groups:
         labels:
           severity: critical
         annotations:
-          # 告警信裡直接有連結：照著做的步驟（#41）
           runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/talkcal-app-down.md
           summary: talkcal app 連續 1 分鐘抓不到指標
           description: >-

@@ -1,4 +1,4 @@
-// db-pool —— 把 app 的資料庫連線池（HikariCP，預設 10 條）壓到不夠用，看 dashboard 上 pending 從 0 爬起來（#32）。
+// db-pool —— 把 app 的資料庫連線池（HikariCP，預設 10 條）壓到不夠用，看 dashboard 上 pending 從 0 爬起來。
 //
 // 其他腳本都壓 AI 助理，瓶頸在模型（一輪好幾秒），資料庫連線只借幾毫秒，池子永遠用不滿。
 // 這支改壓只碰資料庫的 GET /api/calendar/events（月曆一頁）：不叫模型，一個請求就是「借連線 → 查 → 還」。

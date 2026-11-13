@@ -2,7 +2,7 @@
 //
 // smoke 證明路是通的；這支回答下一個問題：併發變多時，延遲怎麼變？
 //
-// 刻意設計成三段平台（plateau），而不是一路往上加：
+// 設計成三段平台（plateau），而不是一路往上加：
 //   below —— 1 個 VU：低於容量，當基準線
 //   at    —— SLOTS 個 VU：剛好等於 llama-server 的 slot 數，每個請求都有位子
 //   above —— SLOTS×2 個 VU：超過容量，多出來的請求只能排隊（requests_deferred 會離開 0）
@@ -73,7 +73,7 @@ export const options = {
     // 30 秒是暫定的服務目標（使用者願意等多久），跑過一輪看到實際數字再調。
     'http_req_duration{scenario:below}': ['p(95)<30000'],
     'http_req_duration{scenario:at}': ['p(95)<30000'],
-    // 超過容量本來就會變慢，這段只要求「別卡死」：用跟 smoke 一樣的離譜線
+    // 超過容量本來就會變慢，這段只要求「別卡死」：60 秒是只抓卡死的離譜線
     'http_req_duration{scenario:above}': ['p(95)<60000'],
   },
 };

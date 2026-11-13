@@ -1,4 +1,4 @@
-// tokens —— 量「AI 助理一個請求平均燒掉多少 token」，成本分析（docs/cost.md）的輸入就從這裡來（#35）。
+// tokens —— 量「AI 助理一個請求平均燒掉多少 token」，成本分析（docs/cost.md）的輸入就從這裡來。
 //
 // 不是壓力測試：1 個虛擬使用者，訊息池（lib/assistant.js 的 MESSAGES，查詢和提議都有）照順序每句說 ROUNDS 輪。
 // 一句一句來，不併發：要量的是「一個請求的份量」，併發只會讓 llama.cpp 排隊，token 數不會變。

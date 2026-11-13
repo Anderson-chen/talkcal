@@ -1,11 +1,11 @@
 // 跟 AI 助理（POST /api/calendar/assistant）講話的共用零件 —— 每支腳本都從這裡拿。
 //
-// 為什麼抽出來：smoke 之外有了第二支腳本（load.js），同樣的位址、參數、檢查寫兩份就會開始各自走樣。
+// 抽出來的理由：同樣的位址、參數、檢查在每支腳本各寫一份，就會開始各自走樣。
 //
 // 這裡只放「怎麼跟這個 endpoint 講話」：位址、請求參數、正常回覆長什麼樣。
 // 「打多少、打多久、門檻多少」是各腳本自己的決定，不放這裡。
 //
-// 跟以前壓 /api/chat（一問一答、叫一次模型）不同，助理的一個請求是一段 agent loop：
+// 助理的一個請求是一段 agent loop，不是一問一答、叫一次模型：
 //   - 可能叫模型好幾次：先決定要用哪個工具，工具回來再生成回覆；提議行程時工具本身還會再叫一次模型抽行程。
 //     所以同一個併發數下，延遲比一問一答長，而且看句子差很多（查行程 vs 提議新行程）。
 //   - 會讀寫 PostgreSQL：讀行程、存這段對話的記憶。資料庫要先起來。
@@ -20,8 +20,8 @@ import { check } from 'k6';
 export const BASE_URL = __ENV.BASE_URL || 'http://localhost:8090';
 export const ASSISTANT_URL = `${BASE_URL}/api/calendar/assistant`;
 
-// 訊息池。刻意短，讓生成長度有上界；
-// 刻意多樣，避免併發時大家說同一句、命中 llama.cpp 的 prompt 快取而測出不真實的「假快」。
+// 訊息池。句子短，讓生成長度有上界；
+// 句子多樣，避免併發時大家說同一句、命中 llama.cpp 的 prompt 快取而測出不真實的「假快」。
 // 查詢（list_events、find_free_slots）和提議（propose_events）都有。
 export const MESSAGES = [
   '明天有什麼行程？',
@@ -40,13 +40,13 @@ export const MESSAGES = [
 // 共用的部分不必每支腳本重寫。
 export function jsonParams(extra) {
   const headers = { 'Content-Type': 'application/json' };
-  // 登入之後（#103）：會改東西的請求要帶 CSRF token，見下面的 signIn / useSession
+  // 會改東西的請求要帶 CSRF token，見下面的 signIn / useSession
   if (csrfToken) headers['X-XSRF-TOKEN'] = csrfToken;
   return Object.assign(
     {
       headers,
       // app 叫一次模型最多等 2 分鐘，k6 這端要比它長一點：剛好 120 秒的話兩邊同時到點，
-      // 模型卡住時 app 回的 502 常常被 k6 自己的斷線搶先，演練記成「沒拿到回應」（#231 修好逾時後實際碰到）。
+      // 模型卡住時 app 回的 502 常常被 k6 自己的斷線搶先，演練記成「沒拿到回應」。
       // 不設的話 k6 預設 60 秒就自己斷線，會把「模型還在想」誤判成「app 掛了」。
       // 助理一輪可能叫好幾次模型，這個上限擋的是「卡死」，不保證每輪都在這個時間內。
       timeout: '150s',
@@ -83,7 +83,7 @@ export function listMonth() {
   return http.get(`${BASE_URL}/api/calendar/events?from=2026-10-01&to=2026-11-01`);
 }
 
-// ── 登入（#103）────────────────────────────────────────────────────────
+// ── 登入 ──────────────────────────────────────────────────────────────
 // /api 要登入才用得了。在 setup() 裡只登入一次，把 session cookie 和 CSRF token 分給所有 VU 共用：
 // nginx 對登入限流（每個 IP 每分鐘 5 次），上千個 VU 各自登入會被 429 擋下；
 // 這裡要測的是助理，不是登入流程，大家共用一個帳號就好。
@@ -121,7 +121,7 @@ export function signIn() {
 
 /**
  * 在每一次迭代的開頭呼叫：把 setup 給的登入狀態放進這個 VU 的 cookie jar。
- * 每次都要放：k6 預設每次迭代開始時會清空 cookie jar（實測只放一次的話，第二次迭代起都是 401）。
+ * 每次都要放：k6 預設每次迭代開始時會清空 cookie jar（只放一次的話，第二次迭代起都是 401）。
  */
 export function useSession(session) {
   http.cookieJar().set(BASE_URL, 'JSESSIONID', session.session);
