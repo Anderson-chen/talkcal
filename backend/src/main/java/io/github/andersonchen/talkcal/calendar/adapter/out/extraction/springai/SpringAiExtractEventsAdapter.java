@@ -15,7 +15,7 @@ import java.util.Objects;
 /**
  * 用 Spring AI 的 ChatModel 把自然語言抽成行程。
  *
- * ChatModel 由組裝根注入：連到哪、等多久、HTTP 怎麼送都是它的事，這裡不再有一行 HTTP 程式碼。
+ * ChatModel 由組裝根注入：連到哪、等多久、HTTP 怎麼送都是它的事。
  * 留在這裡的只有「這件工作」的知識，分在兩塊 package-private 的零件裡：
  * ExtractionRequest 組 prompt（日期表、JSON Schema、溫度 0），
  * ExtractionResponse 把模型輸出翻成 CalendarEvent（含結束時間的核對）。

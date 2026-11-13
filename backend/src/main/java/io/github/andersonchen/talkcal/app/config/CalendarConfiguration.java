@@ -63,9 +63,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.ZoneId;
 
-/**
- * 組裝 calendar 模組的 use case 和 adapter
- */
 @Configuration(proxyBeanMethods = false)
 class CalendarConfiguration {
 
@@ -129,7 +126,7 @@ class CalendarConfiguration {
 
     // ── 新增行程、記下卡片的去向 ───────────────────────────────────────────
 
-    // 助理發出的提議卡片（#223）：ProposalStorePort 的實作，歸檔排程也用它刪舊卡片
+    // 助理發出的提議卡片：ProposalStorePort 的實作，歸檔排程也用它刪舊卡片
     @Bean
     JdbcAssistantProposalAdapter assistantProposals(JdbcClient jdbcClient) {
         return new JdbcAssistantProposalAdapter(jdbcClient);
@@ -183,7 +180,7 @@ class CalendarConfiguration {
         return new ActiveUsersMetrics(countActiveUsers, Duration.ofMinutes(1), Clock.systemUTC());
     }
 
-    // ── 資料歸檔（#54）─────────────────────────────────────────────────────
+    // ── 資料歸檔 ────────────────────────────────────────────────────────
 
     // 歸檔的檔名帶著「存的時間」，用 UTC：跟 S3 自己記的時間同一個基準，不必換算
     @Bean
@@ -203,7 +200,7 @@ class CalendarConfiguration {
         return new ListArchivedEventsService(eventArchive);
     }
 
-    // 還原 API 放回的對話（行程不放回，見 listArchivedEvents）：controller 不認識 app.job，這裡把方法接過去（跟 assistantMemory::of 同一個做法）
+    // 還原 API 放回的對話（行程不放回，見 listArchivedEvents）：controller 不認識 app.job，這裡把方法接過去
     @Bean
     ArchiveController.RestoreConversations restoreConversations(AssistantMemoryArchive assistantMemoryArchive) {
         return assistantMemoryArchive::restore;
