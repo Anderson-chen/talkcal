@@ -8,12 +8,12 @@ import org.springframework.security.config.oauth2.client.CommonOAuth2Provider;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 
 /**
- * Google、GitHub 這兩個 OAuth 應用程式的設定（#105），從 talkcal.auth.google.*、talkcal.auth.github.* 組出來。
+ * Google、GitHub 這兩個 OAuth 應用程式的設定，從 talkcal.auth.google.*、talkcal.auth.github.* 組出來。
  *
  * 為什麼不用 Spring Boot 現成的 spring.security.oauth2.client.registration.*：
  * - 它的回呼網址預設在 /login/oauth2/code/*，但 nginx 只把 /api 轉給 app，要改到 /api 底下就得每個 provider 都寫一次 redirect-uri
- * - 寫了 redirect-uri 卻沒給 client id，它會在啟動時直接失敗 —— 沒申請 OAuth 應用程式的人連 app 都起不來。
- *   這裡改成「有給 client id 才開那個 provider」，什麼都沒設就跟以前一樣只有帳密登入
+ * - 寫了 redirect-uri 卻沒給 client id，它會在啟動時直接失敗，沒申請 OAuth 應用程式的人連 app 都起不來。
+ *   這裡只開有給 client id 的 provider，什麼都沒設就只有帳密登入
  *
  * client secret 只從設定讀（application.properties 再從環境變數接），不寫進程式碼或 repo。
  * 授權網址、token 網址、scope 這些公開的資訊用 Spring Security 內建的 CommonOAuth2Provider，不自己抄一份。
