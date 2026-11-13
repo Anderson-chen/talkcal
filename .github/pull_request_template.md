@@ -1,34 +1,37 @@
-## Summary
+## 摘要
 
-<!-- One plain-language paragraph for a reader who hasn't read this code (how: .agents/rules/pr.md); leave details in the issue -->
+<!-- 條列，給沒讀過這段程式碼的人看。問題和背景寫在 issue，這裡不重寫（分工見 .agents/rules/pr.md） -->
 
-## Dependencies
+- **改了什麼：**
+- **誰會感覺到差別：**
 
-<!-- Only when stacked on other PRs: which PRs to wait for, suggested merge order, and which commits belong to this PR. Otherwise remove this section -->
+## 相依的 PR
 
-## Evidence
+<!-- 只有疊在別的 PR 上時才寫：要等哪些 PR、建議的合併順序、哪些 commit 屬於這個 PR。不然整段拿掉 -->
 
-<!-- One point per change, as Before / After; paste screenshots or numbers if any. Put anything intentionally skipped under Deliberately left out -->
+## 證據
 
-- **Before:**
-- **After:**
+<!-- 一個改動一點，寫改之前／改之後；有截圖或數字就貼上。刻意沒做的放在「刻意不做」 -->
 
-Deliberately left out:
+- **改之前：**
+  **改之後：**
 
-## Test Plan
+刻意不做：
 
-<!-- Steps a reviewer can follow to reproduce -->
+## 測試方式
+
+<!-- 審的人照著做就能重現的步驟 -->
 
 - [ ]
 
-> Revert-proof: <!-- Which tests or checks fail when the change is reverted (proves they actually guard it) -->
+> 還原驗證：<!-- 把改動拿掉，哪些測試或檢查會失敗（證明它們真的擋得住） -->
 
-## Risk
+## 風險
 
-**Door:** <!-- two-way: a revert undoes it; one-way: data migrations, deleted resources, anything that can't be rolled back -->
+**能不能還原：** <!-- 可以：revert 就回去；不行：資料遷移、刪掉的資源，這類收不回來的 -->
 
-**Blast Radius:** <!-- Who and which features are affected -->
+**影響範圍：** <!-- 影響到誰、哪些功能 -->
 
 Closes #
 
-<!-- Fill in the issue number above. GitHub closes it on merge; without it the PR issue check fails -->
+<!-- 上面填 issue 編號。合併時 GitHub 會自動關掉它；沒寫的話 PR issue 檢查會紅燈 -->
