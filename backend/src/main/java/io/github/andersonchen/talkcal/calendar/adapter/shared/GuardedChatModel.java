@@ -15,7 +15,7 @@ import java.time.Duration;
 import java.util.Objects;
 
 /**
- * 包在真正的 ChatModel 外面的兩道保護（#44）：模型掛了，助理快速失敗，其他功能照常可用。
+ * 包在真正的 ChatModel 外面的兩道保護：模型掛了，助理快速失敗，其他功能照常可用。
  *
  * <pre>
  * 請求 ─→ bulkhead：同時在等模型的已經滿了？ ─滿了→ 立刻拒絕（BUSY）
@@ -26,7 +26,7 @@ import java.util.Objects;
  * </pre>
  *
  * 兩道擋的是不同的事：
- * - circuit breaker 擋「明知道會失敗還叫」：模型掛了之後，每個請求都還要各自等一次失敗（最久 2 分鐘逾時），
+ * - circuit breaker 擋「明知道會失敗還叫」：模型掛了之後，每個請求都還要各自等一次失敗（最久等到 spring.ai.openai.chat.timeout），
  *   breaker 打開後直接回 503，等一段時間再放少數幾個請求去試，試成功了才關回來
  * - bulkhead 擋「卡住的請求把執行緒吃光」：模型沒死、只是不回（卡住）的時候，breaker 要等請求逾時才知道失敗，
  *   這段期間每個助理請求都佔著一條 Tomcat 執行緒。上限擋住之後，行程 CRUD 永遠留得到執行緒
@@ -35,10 +35,10 @@ import java.util.Objects;
  *
  * breaker、bulkhead 由 Resilience4j 的 starter 照 application.properties 的 resilience4j.*.instances.chat-model 建好，
  * app.config 依名字取出來交進來（門檻是部署決定，理由寫在 application.properties）；
- * 助理和抽行程各包一個 GuardedChatModel，但共用同一組 breaker、bulkhead —— 背後是同一顆模型，壞就一起壞。
+ * 所有叫模型的地方共用這一組 breaker、bulkhead：背後是同一顆模型，壞就一起壞。
  * 什麼失敗算模型出事，見 ModelFailurePredicate。
  *
- * 另外補上每一次呼叫最多等多久，見 getOptions（#231）。
+ * 另外補上每一次呼叫最多等多久，見 getOptions。
  */
 public final class GuardedChatModel implements ChatModel {
 
@@ -88,7 +88,7 @@ public final class GuardedChatModel implements ChatModel {
     /**
      * 預設選項：照原本的（模型名稱、max-tokens…，呼叫端靠它沿用 application.properties 的設定），只多帶上每一次呼叫的逾時。
      *
-     * 為什麼要在這裡補（#231）：Spring AI 2.0.1 的逾時有兩層，spring.ai.openai.chat.timeout 是建 client 時的，
+     * 為什麼要在這裡補：Spring AI 2.0.1 的逾時有兩層，spring.ai.openai.chat.timeout 是建 client 時的，
      * 每一次呼叫另外帶選項裡的 timeout，而且會蓋掉前者。自動組裝的預設選項不會帶上任何逾時
      * （spring.ai.openai.chat.options.timeout 綁得進去、但組選項時沒讀它），於是每次呼叫都用 Spring AI 預設的 60 秒。
      * 助理和抽行程都從這份預設開始組自己的選項，在這裡補一次兩邊都拿到。
