@@ -131,7 +131,7 @@ gh release create v0.2.0 --verify-tag --generate-notes   # 依合併的 PR 自�
 | 要另外設定的 | release-please 的 PR 沒連 issue，[`pr-issue`](../.github/workflows/pr-issue.yml) 檢查要像 Renovate 一樣開例外 | 不用 |
 | 適合 | 發佈套件、release 很頻繁的團隊 | 一個人、偶爾 release 的服務 |
 
-commit 標題照 `.claude/rules/commit.md` 寫成 `類型(範圍):`，跟 Conventional Commits 同一個格式，自動工具推得出版號。
+commit 標題照 `.agents/rules/commit.md` 寫成 `類型(範圍):`，跟 Conventional Commits 同一個格式，自動工具推得出版號。
 不用它們是因為 tag 要打在確認過的 commit 上：檢查交給腳本，按下去的時機留給人。
 
 ## 給 rollback（#19）的介面

@@ -26,7 +26,7 @@
   minimumReleaseAge: '14 days',
 
   // ── PR 長什麼樣 ──────────────────────────────────────────────────
-  // commit 標題照 repo 的慣例 `類型(範圍): …`（.claude/rules/commit.md）：依賴升級是 chore(deps)
+  // commit 標題照 repo 的慣例 `類型(範圍): …`（.agents/rules/commit.md）：依賴升級是 chore(deps)
   semanticCommits: 'enabled',
   semanticCommitType: 'chore',
   semanticCommitScope: 'deps',

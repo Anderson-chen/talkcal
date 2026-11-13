@@ -24,16 +24,18 @@
 
 ## 動手前要讀的規則
 
-規則只有一份，放在 `.claude/rules/`。Claude Code 會自動載入；其他工具要在做這些事之前自己讀：
+規則只有一份，放在 `.agents/rules/`。Claude Code 透過 [CLAUDE.md](CLAUDE.md) 自動載入；其他工具要在做這些事之前自己讀：
 
 | 要做什麼 | 先讀 |
 |---|---|
-| 換到別的分支做事、發現 commit 落錯分支 | [.claude/rules/branch.md](.claude/rules/branch.md) |
-| commit | [.claude/rules/commit.md](.claude/rules/commit.md) |
-| 開或改 PR | [.claude/rules/pr.md](.claude/rules/pr.md) |
-| 開或改 issue | [.claude/rules/issue.md](.claude/rules/issue.md) |
-| 寫或改文件、程式碼註解、issue、PR、commit 的文字 | [.claude/rules/writing.md](.claude/rules/writing.md) |
-| 寫或改程式碼註解 | [.claude/rules/comments.md](.claude/rules/comments.md) |
+| 換到別的分支做事、發現 commit 落錯分支 | [.agents/rules/branch.md](.agents/rules/branch.md) |
+| commit | [.agents/rules/commit.md](.agents/rules/commit.md) |
+| 開或改 PR | [.agents/rules/pr.md](.agents/rules/pr.md) |
+| 開或改 issue | [.agents/rules/issue.md](.agents/rules/issue.md) |
+| 寫或改文件、程式碼註解、issue、PR、commit 的文字 | [.agents/rules/writing.md](.agents/rules/writing.md) |
+| 寫或改程式碼註解 | [.agents/rules/comments.md](.agents/rules/comments.md) |
+
+新增規則檔時，這張表和 CLAUDE.md 的 `@` 引入各加一行。
 
 `pr.md` 裡的 `/code-review`、`/simplify`、`/security-review` 是 Claude Code 的指令；其他工具用自己的審查功能，審同樣的範圍。
 

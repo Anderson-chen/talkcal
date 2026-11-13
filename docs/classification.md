@@ -1,6 +1,6 @@
 # issue 怎麼分類
 
-開 issue 時「放在哪」的 label 照這份判斷（規則見 [.claude/rules/issue.md](../.claude/rules/issue.md)）：工程怎麼做到的貼 `stage:`，看[上線準備怎麼分類](#上線準備怎麼分類)；產品要做到什麼的貼 `product:`，看[產品範圍怎麼分類](#產品範圍怎麼分類)。PR 不貼 label，跟著它 `Closes` 的 issue。
+開 issue 時「放在哪」的 label 照這份判斷（規則見 [.agents/rules/issue.md](../.agents/rules/issue.md)）：工程怎麼做到的貼 `stage:`，看[上線準備怎麼分類](#上線準備怎麼分類)；產品要做到什麼的貼 `product:`，看[產品範圍怎麼分類](#產品範圍怎麼分類)。PR 不貼 label，跟著它 `Closes` 的 issue。
 
 ## 上線準備怎麼分類
 
@@ -37,7 +37,7 @@
 
 ITIL 4 已經把 v3 的五段改成不分先後的價值鏈，這裡對照 v3，是因為它的分段最常被拿來講服務的生命週期。
 
-為什麼不像 Mercari 那樣照屬性（Observability、Security…）分：被問到「上線要注意什麼」時，照時間走一輪，比較不會整塊漏掉。改到哪塊技術（CI、前端、資料庫…）改用 `area:` label 標，一張 issue 可以貼好幾個（見 [`.claude/rules/issue.md`](../.claude/rules/issue.md)）。
+為什麼不像 Mercari 那樣照屬性（Observability、Security…）分：被問到「上線要注意什麼」時，照時間走一輪，比較不會整塊漏掉。改到哪塊技術（CI、前端、資料庫…）改用 `area:` label 標，一張 issue 可以貼好幾個（見 [`.agents/rules/issue.md`](../.agents/rules/issue.md)）。
 
 一件事碰到好幾段時：
 
