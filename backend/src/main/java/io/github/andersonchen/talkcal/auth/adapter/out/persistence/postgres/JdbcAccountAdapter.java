@@ -18,7 +18,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * 帳號存 PostgreSQL（表的定義在 db/migration/V9、V10）。寫法跟 calendar 的 JdbcCalendarEventAdapter 一致。
+ * 帳號存 PostgreSQL（表的定義在 db/migration/V9、V10）。
  */
 public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPort {
 

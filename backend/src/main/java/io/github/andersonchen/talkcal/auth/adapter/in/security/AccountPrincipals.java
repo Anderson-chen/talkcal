@@ -14,7 +14,7 @@ import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 /**
  * 登入之後 Spring Security 記在 session 裡的「目前是誰」。三種登入方式都要長得一樣：
  * getName() 是我們的帳號 ID（不是 Google 的 sub、不是 GitHub 的 id），權限一律是 USER。
- * 這樣 /api/auth/me、之後的授權（#104）只認帳號 ID，不必知道這個人是怎麼登入的。
+ * 這樣 /api/auth/me、比對資料擁有者時只認帳號 ID，不必知道這個人是怎麼登入的。
  */
 public final class AccountPrincipals {
 

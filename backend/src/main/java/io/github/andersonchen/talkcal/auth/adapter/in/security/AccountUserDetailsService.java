@@ -15,8 +15,8 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
  * 在架構上它是 inbound adapter：呼叫端是 Spring Security 的登入 filter，它只認得 use case。
  *
  * 回給 Spring Security 的「username」放的是帳號 ID，不是帳號名稱：
- * 登入之後 Authentication.getName() 拿到的就是 ID —— 授權（#104）比對擁有者、
- * Google／GitHub 登入（#105，見 AccountPrincipals）對應到同一個人，用的都是這個值。帳號名稱只是登入時打的字。
+ * 登入之後 Authentication.getName() 拿到的就是 ID：比對資料擁有者、
+ * Google／GitHub 登入對應到同一個人（見 AccountPrincipals），用的都是這個值。帳號名稱只是登入時打的字。
  */
 public final class AccountUserDetailsService implements UserDetailsService {
 
