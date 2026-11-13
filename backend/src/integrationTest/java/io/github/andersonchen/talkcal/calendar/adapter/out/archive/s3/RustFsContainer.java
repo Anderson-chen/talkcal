@@ -13,7 +13,7 @@ import java.net.URI;
  * 歸檔的整合測試用的 S3 相容儲存：跟 deploy/compose.yaml 同一個 RustFS 映像檔。
  *
  * 為什麼不是 MinIO（Testcontainers 有現成的模組）：MinIO 已經不發社群版的映像檔，
- * Docker Hub 上的 minio/minio 拉不到了（2026-10 實測）。RustFS 是 Apache-2.0、講同一套 S3 API 的替代品。
+ * Docker Hub 上的 minio/minio 拉不到了。RustFS 是 Apache-2.0、講同一套 S3 API 的替代品。
  * 跟真的 S3 一樣走 HTTP、一樣驗簽章 —— 用假的 S3 client 測不出「endpoint、path-style、checksum 設錯」這類問題。
  */
 public final class RustFsContainer extends GenericContainer<RustFsContainer> {

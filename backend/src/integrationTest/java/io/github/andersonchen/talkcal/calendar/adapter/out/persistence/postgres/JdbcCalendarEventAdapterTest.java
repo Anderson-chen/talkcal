@@ -54,7 +54,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * JdbcCalendarEventAdapter 對真的 PostgreSQL（做法同 JdbcConversationAdapterTest）。
+ * JdbcCalendarEventAdapter 對真的 PostgreSQL。
+ *
+ * 做法：Testcontainers 起一個 PostgreSQL，Flyway 跑完正式的 migration，adapter 自己 new、不起 Spring，
+ * 測的就是正式的表結構和 SQL，又不必等整個 app 起來。
  *
  * 讀取這半邊的重點是邊界：「有重疊」的定義在 port 上寫成一句話，
  * 但它其實是 SQL 的 && 加上 tsrange 預設的 [) 邊界一起決定的 —— 只有真的 PostgreSQL 驗得準。
@@ -397,7 +400,7 @@ class JdbcCalendarEventAdapterTest {
         @Test
         @DisplayName("資料庫裡有 domain 不接受的資料：讀出來時被擋下，丟 IllegalStateException（502，不是 400）")
         void corruptRowBecomesUpstreamFailure() {
-            // V4 之後，資料庫的 CHECK 跟 domain 一樣嚴，正常的 INSERT 已經塞不進空白標題了。
+            // 資料庫的 CHECK（V4）跟 domain 一樣嚴，正常的 INSERT 塞不進空白標題。
             // 要模擬「資料庫裡有壞資料」（例如規則變嚴之前就存在的舊資料、有人手動改過），
             // 就在一個交易裡暫時拆掉 CHECK、塞一筆、讀讀看，最後 rollback。
             // PostgreSQL 的 DDL 也在交易裡，所以 rollback 連拆掉的 CHECK 都會裝回去，不影響其他測試。
@@ -424,7 +427,7 @@ class JdbcCalendarEventAdapterTest {
     class DatabaseChecks {
 
         /**
-         * V2 的 btrim 只去掉半形空格，這三種都放得進來；V4 改成 title ~ '\S' 之後跟 domain 的 isBlank 一致。
+         * 用 btrim 檢查的話只去掉半形空格，換行、tab、全形空白都放得進來；title ~ '\S'（V4）才跟 domain 的 isBlank 一致。
          */
         @Test
         @DisplayName("空白標題一律擋下：半形空格、換行、tab、全形空白")
@@ -544,11 +547,11 @@ class JdbcCalendarEventAdapterTest {
     }
 
     /**
-     * 冪等寫入（#51，表和理由見 V13）。前幾題經過 AddEventsService 打真的資料庫：測的是使用者實際遇到的「按兩次加入」，
+     * 冪等寫入（表和理由見 V13）。前幾題經過 AddEventsService 打真的資料庫：測的是使用者實際遇到的「按兩次加入」，
      * 不只是 adapter 的某個方法。
      *
      * 怎麼證明這些題目真的抓得到重複：withoutKeyDuplicates 示範同樣的操作不帶鍵就是兩筆（偵測方法是對的）；
-     * 把 saveOnce 搶鍵的那句拿掉（每次都當成第一次），sameKeyTwiceSavesOnce、concurrentRetriesSaveOnce 等題會紅（PR 描述有實際跑的結果）。
+     * 把 saveOnce 搶鍵的那句拿掉（每次都當成第一次），sameKeyTwiceSavesOnce、concurrentRetriesSaveOnce 等題會紅。
      */
     @Nested
     @DisplayName("#51 冪等鍵：同一個鍵只存一次")

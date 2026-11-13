@@ -40,7 +40,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * 行程歸檔的整條路（#54、#274）：真的 PostgreSQL、真的 S3 相容儲存（RustFS），中間是正式的 use case 和 adapter，跟 app 裡接的一樣。
+ * 行程歸檔的整條路：真的 PostgreSQL、真的 S3 相容儲存（RustFS），中間是正式的 use case 和 adapter，跟 app 裡接的一樣。
  *
  * 每個規則都配一個反例：
  * - 舊的搬走 ↔ 不舊的（昨天、剛好在期限上）留著

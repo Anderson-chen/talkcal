@@ -63,7 +63,7 @@ class CalendarAssistantTest {
     private final List<OwnerId> memoryOwners = new ArrayList<>();
     private final List<OwnerId> listOwners = new ArrayList<>();
     // 行事曆上已經有的那筆：修改、刪除的工具用編號找得到它
-    // plan_events 背後排出來的時段（#261）；預設沒有，要測的那題自己放
+    // plan_events 背後排出來的時段；預設沒有，要測的那題自己放
     private List<FreeSlot> plannedSlots = List.of();
     private final List<OwnerId> planOwners = new ArrayList<>();
     private static final ScheduledEvent SAVED = ScheduledEvent.schedule(new CalendarEvent("開會", LocalDateTime.of(2026, 10, 7, 19, 0), LocalDateTime.of(2026, 10, 7, 20, 0)));
@@ -133,7 +133,7 @@ class CalendarAssistantTest {
     @Test
     @DisplayName("模型沿用設定檔的預設：Spring AI 2.0 不會替請求自帶的選項補上預設，沒帶就變成 gpt-5-mini")
     void keepsDefaultModel() {
-        // 2026-10-14 雲端改打 Bedrock 才發現：本機的 llama-server 不看模型名稱，一直送 gpt-5-mini 也沒事（#76）
+        // 本機的 llama-server 不看模型名稱，送錯也照樣回；雲端（Bedrock）會因為名稱不對而失敗，所以要在這裡守著
         ChatModel script = scripted(says("好的"));
         ChatModel withDefaults = new ChatModel() {
             @Override
@@ -208,7 +208,7 @@ class CalendarAssistantTest {
     @DisplayName("#50 同一段對話同時送兩句：先送的還在跑模型、後送的就存好了，兩句和兩個回覆都留著")
     void concurrentRepliesKeepBothTurns() {
         // 用重入代替兩條執行緒，順序固定、每次都一樣：第一句讀完歷史、正在等模型的時候，第二句從頭跑到存好，第一句才回來存。
-        // 反例：原本存檔是把「讀到的歷史 + 這一輪」整段寫回（saveAll），第一句存的時候把第二句那一輪蓋掉，這個測試是紅的
+        // 反例：存檔寫成把「讀到的歷史 + 這一輪」整段寫回（saveAll）的話，第一句存的時候會把第二句那一輪蓋掉，這個測試會紅
         CalendarAssistant[] self = new CalendarAssistant[1];
         ChatModel model = new ChatModel() {
             @Override

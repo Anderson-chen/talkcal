@@ -41,7 +41,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 /**
- * ArchiveController 走一遍真的 Spring MVC（#54、#274）：日期、月份怎麼綁，範圍不合規回 400，儲存出事回 502，擁有者只從登入者來。
+ * ArchiveController 走一遍真的 Spring MVC：日期、月份怎麼綁，範圍不合規回 400，儲存出事回 502，擁有者只從登入者來。
  *
  * 查看封存用正式的 ListArchivedEventsService，只把物件儲存換成手寫的假物件：範圍的規則（400）是真的那一套，
  * 假的歸檔記下被要了誰的、哪幾個月。對話的還原也由假物件扮演，記下被叫了幾次、拿到什麼參數。
@@ -70,7 +70,7 @@ class ArchiveControllerTest {
 
     MockMvc mockMvc;
 
-    // 跟 CalendarControllerTest 一樣：每個請求預設已登入、帶著 CSRF token
+    // 每個請求預設已登入、帶著 CSRF token，理由見 CalendarControllerTest 的 signedIn
     @BeforeEach
     void signedIn() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context)

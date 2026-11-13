@@ -39,7 +39,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * AI 助理對話的歸檔（#54）：真的 PostgreSQL、真的 S3 相容儲存（RustFS）。
+ * AI 助理對話的歸檔：真的 PostgreSQL、真的 S3 相容儲存（RustFS）。
  *
  * 跟行程那邊（EventArchiveFlowTest）同一組規則、同一組反例：
  * 存好才刪 ↔ 上傳失敗一列都不少；歸檔 → 還原後讀出來一樣；只還原得到自己的；不舊的不搬。

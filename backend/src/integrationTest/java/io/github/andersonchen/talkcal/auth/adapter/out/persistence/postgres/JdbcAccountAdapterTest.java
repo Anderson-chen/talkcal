@@ -28,7 +28,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * JdbcAccountAdapter 對真的 PostgreSQL（做法同 JdbcCalendarEventAdapterTest）。
+ * JdbcAccountAdapter 對真的 PostgreSQL（做法見 JdbcCalendarEventAdapterTest）。
  * 重點是 Google、GitHub 登入那半邊：撞 identity 時整筆撤掉、V10 的約束真的擋得住。
  */
 @Testcontainers

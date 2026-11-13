@@ -35,11 +35,11 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 封存接起來的樣子（#274）：真的 SecurityFilterChain、session、PostgreSQL、S3 相容儲存（RustFS），中間是 app 裡接好的 bean。
+ * 封存接起來的樣子：真的 SecurityFilterChain、session、PostgreSQL、S3 相容儲存（RustFS），中間是 app 裡接好的 bean。
  *
  * - 兩個人封存了同一段期間的行程，各自登入照日期查，只看得到自己的：擁有者從登入者一路帶到物件儲存的前綴，中間哪一層漏了這裡都會紅燈
  * - 查看不寫資料庫：查完之後 calendar_event 的筆數不變，月曆上也沒有冒出來
- * - 行程的還原拿掉之後，對話的還原照常可用
+ * - 行程不能還原，對話的還原照常可用
  *
  * 排程不等到凌晨：直接叫 app 裡同一個 ArchiveEventsUseCase、AssistantMemoryArchive。
  * 每一題都註冊新的 amy、bob，帳號 id 每次不同，歸檔的前綴也不同，所以不必清物件儲存。
@@ -163,7 +163,7 @@ class ArchiveSystemTest {
     void conversationRestoreStillWorks() throws Exception {
         String amyId = getJson(amy, "/api/auth/me").at("/id").asString();
         String conversation = UUID.randomUUID().toString();
-        // 不叫模型：直接寫一段 amy 名下的對話（跟 AuthorizationSystemTest 同一個寫法）
+        // 不叫模型：直接寫一段 amy 名下的對話，形狀照 JdbcAssistantMemoryRepository 存的
         jdbc.sql("""
                         INSERT INTO calendar_assistant_message (owner_id, conversation_id, position, type, content)
                         VALUES (:owner, :id, 0, 'USER', '明天幫我約牙醫'), (:owner, :id, 1, 'ASSISTANT', '早上還是下午？')

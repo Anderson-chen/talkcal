@@ -41,7 +41,6 @@ class ArchitectureTest {
 
     /**
      * 最重要的一條：依賴方向只能由外往內。
-     * 這正是目前唯一沒人守、而且實測會通過編譯的漏洞。
      */
     @ArchTest
     static final ArchRule coreMustNotDependOnAdapters =
@@ -77,7 +76,7 @@ class ArchitectureTest {
      * 守住的是「換一行 new 就能換掉實作」這個承諾 —— 一旦有第二個地方 import 它，那個承諾就破了。
      *
      * adapter.out 底下每個 package 是「某一種往外的實作們」，例如 persistence 放 Save / Load / DeleteEventPort 的。
-     * 這條不點名子樹，新加的子樹不用另外寫規則就被守住；一個子樹寫一條的時候，auth 的 security 就漏掉了（#268）。
+     * 這條不點名子樹，新加的子樹不用另外寫規則就被守住；一個子樹寫一條的話，新加的子樹（例如 auth 的 security）沒人補規則就漏掉了。
      *
      * adapter.out 裡的類別互相依賴不受這條管，子樹之間互不認識由 outboundAdapterSubtreesMustNotDependOnEachOther 管。
      * app.job 的 AssistantMemoryArchive 也用 archive 的零件（ArchiveBucket、JsonLinesGzip）：它在組裝根裡，所以可以。
@@ -145,7 +144,7 @@ class ArchitectureTest {
                     .because("怎麼把提問送出去是 adapter 的事，core 只知道有個 port");
 
     /**
-     * core 不准碰 AWS SDK（#54）。跟上一條同一個道理：歸檔放在 S3 是 adapter 的事，
+     * core 不准碰 AWS SDK：歸檔放在 S3 是 adapter 的事，
      * core 只知道「一個人、一個月的行程存一包」（EventArchivePort）。
      */
     @ArchTest
@@ -169,10 +168,10 @@ class ArchitectureTest {
                     .because("業務規則綁死在框架上，就換不掉框架、也沒法脫離容器單獨測 domain");
 
     /**
-     * core 不准依賴 Jackson。跟上一條同一個道理，只是換成序列化函式庫。
+     * core 不准依賴 Jackson。
      *
      * 兩個套件都要擋：Jackson 3 把 core/databind 搬到 tools.jackson，
-     * 但註解（@JsonProperty 那些）刻意留在 com.fasterxml.jackson.annotation 沒動。
+     * 但註解（@JsonProperty 那些）留在 com.fasterxml.jackson.annotation 沒動。
      *
      * 這條擋的是最常見的那種滲透：為了讓 CalendarEvent 能直接丟給 Jackson 序列化，
      * 在 domain 的欄位上加 @JsonProperty、@JsonIgnore。那看起來只是「加個註解」，
@@ -187,7 +186,7 @@ class ArchitectureTest {
                     .because("資料在線路上長什麼樣是 adapter 的事，不該反過來決定 Entity 的形狀");
 
     /**
-     * core 不准依賴 OpenAPI 的註解。跟 Jackson 那條同一個道理，只是換成 API 文件。
+     * core 不准依賴 OpenAPI 的註解。
      *
      * @Schema、@Operation 描述的是「HTTP 上長什麼樣」，那是 controller 這種 adapter 的事。
      * 一旦為了讓文件好看就在 CalendarEvent 上加 @Schema，domain 就開始替某一種協定打扮了。
@@ -200,7 +199,7 @@ class ArchitectureTest {
                     .because("API 文件描述的是線路格式，屬於 inbound adapter，不該滲進業務規則");
 
     /**
-     * core 不准依賴 Resilience4j（#44）。跟 Spring、Jackson 那幾條同一個道理，只是換成容錯的函式庫。
+     * core 不准依賴 Resilience4j。
      *
      * 斷路器、bulkhead 保護的是「呼叫外面的依賴」這件事，那是 adapter 的工作（見 GuardedChatModel）；
      * 規則寫在 application.properties，之後上 k8s 還可能整個交給 service mesh。

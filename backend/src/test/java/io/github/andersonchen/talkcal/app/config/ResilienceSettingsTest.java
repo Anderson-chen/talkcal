@@ -21,13 +21,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 
 /**
- * application.properties 的 resilience4j.* 真的被讀進去了（#44）。
+ * application.properties 的 resilience4j.* 真的被讀進去了。
  *
  * 為什麼要測：starter 對設定很寬容 —— 名字打錯、key 拼錯、沒寫在設定裡的依賴，都會靜靜用 Resilience4j 內建的預設建一個，
  * 不報錯。那樣斷路器照樣「有」，只是門檻全錯（內建是 100 次的視窗、60 秒才算慢、bulkhead 25 個），
  * 從外面看不出來。所以拿 app 實際建出來的那一組，逐項對設定檔寫的值。
  *
- * 起整個容器、不連資料庫，理由同 OpenApiDocumentationTest。
+ * 起整個容器、不連資料庫，理由見 OpenApiDocumentationTest。
  */
 @SpringBootTest(properties = "spring.flyway.enabled=false")
 // 用不到 MockMvc，加上它只為了跟 OpenApiDocumentationTest 的設定一模一樣：Spring 測試會重用同一個容器，不必再起一次

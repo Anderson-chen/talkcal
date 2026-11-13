@@ -25,7 +25,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 /**
- * 每叫一次模型，token 用量變成指標，帶著模型名稱和 model.backend —— 成本 dashboard 全靠它（#35）。
+ * 每叫一次模型，token 用量變成指標，帶著模型名稱和 model.backend —— 成本 dashboard 全靠它。
  *
  * 為什麼起整個 Spring：要驗的是「接起來之後」真的有記到。token 指標是 Spring AI 的 handler 記的，
  * 標籤是我們的 ObservationFilter 貼的，兩者都要被 Boot 註冊進同一個 ObservationRegistry 才成立；
@@ -33,9 +33,9 @@ import org.springframework.test.context.DynamicPropertySource;
  *
  * 模型用一個假的 OpenAI server（JDK 內建的 HttpServer）代替：回一個寫死的 Chat Completions JSON，
  * 讓真的 OpenAiChatModel 和 openai-java SDK 去解析 usage —— 這樣連「SDK 有沒有把 usage 交給 Spring AI」也一起驗到。
- * 不需要資料庫：只叫 ChatModel，不經過助理和記憶；Flyway 關掉，理由同 AccessLogTraceIdTest。
+ * 不需要資料庫：只叫 ChatModel，不經過助理和記憶；Flyway 關掉，理由見 AccessLogTraceIdTest。
  *
- * backend 刻意設成 bedrock 而不是用預設的 llama-cpp：證明標籤的值是從設定來的，不是程式裡寫死的。
+ * backend 設成 bedrock 而不是用預設的 llama-cpp：證明標籤的值是從設定來的，不是程式裡寫死的。
  * 每個測試讓假 server 回不同的模型名稱，指標靠 gen_ai.response.model 分開，測試之間不會互相加到同一個 counter。
  */
 @SpringBootTest(properties = {"spring.flyway.enabled=false", "talkcal.ai.backend=bedrock"})

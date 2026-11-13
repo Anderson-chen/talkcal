@@ -68,7 +68,7 @@ class CalendarAssistantControllerTest {
     // 另一個登入的人（預設的請求是 ...0001）
     private static final String ME = "3f1c8a2e-0000-4000-8000-000000000001";
     private static final String OTHER = "3f1c8a2e-0000-4000-8000-000000000002";
-    // 行事曆上已經有的那筆（#259）：假的助理說「改」「刪」時拿它的編號呼叫工具
+    // 行事曆上已經有的那筆：假的助理說「改」「刪」時拿它的編號呼叫工具
     static final ScheduledEvent LUNCH = new ScheduledEvent(EventId.of("3f1c8a2e-6b0d-4d7e-9a51-2c4e8f7b9d99"),
             CalendarEvent.startingAt("午餐", LocalDateTime.of(2026, 10, 7, 12, 0)).withDetails("拉麵店", null));
     private static final String UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
@@ -78,7 +78,7 @@ class CalendarAssistantControllerTest {
 
     MockMvc mockMvc;
 
-    // 跟 CalendarControllerTest 一樣：每個請求預設已登入、帶著 CSRF token
+    // 每個請求預設已登入、帶著 CSRF token，理由見 CalendarControllerTest 的 signedIn
     @BeforeEach
     void signedIn() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context)

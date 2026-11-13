@@ -181,7 +181,7 @@ class ExtractionResponseTest {
                 "{\"events\":[{\"title\":\"事\",\"start\":\"2026-10-07T12:00\",\"end\":null,\"category\":\"work\",\"location\":42}]}")));
     }
 
-    // ── 結束時間要拿原句核對（使用者回報的 bug：「明天下午3點和 Amy 開會」） ─────────────
+    // ── 結束時間要拿原句核對（例如「明天下午3點和 Amy 開會」） ─────────────
 
     private static ChatResponse oneEvent(String end, String endSaid) {
         String endJson = end == null ? "null" : "\"" + end + "\"";
@@ -224,7 +224,7 @@ class ExtractionResponseTest {
     }
 
 
-    // ── 沒講上下午的 1～6 點當成下午（使用者定的規則；規則本身的細節測在 SaidTimesTest） ─────────
+    // ── 沒講上下午的 1～6 點當成下午（規則本身的細節測在 SaidTimesTest） ─────────
 
     private static ChatResponse timed(String start, String end, String startSaid, String endSaid) {
         String endJson = end == null ? "null" : "\"" + end + "\"";

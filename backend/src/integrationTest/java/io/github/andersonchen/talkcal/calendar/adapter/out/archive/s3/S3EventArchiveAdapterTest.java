@@ -33,7 +33,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * 行程的歸檔放進真的 S3 相容儲存（RustFS）、讀回來（#54）。
+ * 行程的歸檔放進真的 S3 相容儲存（RustFS）、讀回來。
  * 驗的是：讀回來跟存進去一樣、格式不靠這個 app 也讀得懂、不同人的不混、存不進去一定是例外（不會「看起來成功」）。
  */
 @Testcontainers

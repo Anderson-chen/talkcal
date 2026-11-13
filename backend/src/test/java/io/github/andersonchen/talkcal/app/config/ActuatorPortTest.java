@@ -25,7 +25,7 @@ import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
 /**
- * actuator 只在 management 埠上（#33）：API 埠打不到，management 埠打得到。
+ * actuator 只在 management 埠上：API 埠打不到，management 埠打得到。
  *
  * 為什麼起真的 server：要驗的是「哪個埠回什麼」，MockMvc 沒有埠，驗不到。
  * RANDOM_PORT 時 Spring Boot 會把 management 埠也換成隨機的（設定檔寫死 8091 也一樣），

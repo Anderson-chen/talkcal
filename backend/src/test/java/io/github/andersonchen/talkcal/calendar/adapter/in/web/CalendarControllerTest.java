@@ -373,7 +373,7 @@ class CalendarControllerTest {
     }
 
     /**
-     * Idempotency-Key header（#51）：controller 只負責把 header 交給 use case、把結果翻成狀態碼和 Idempotent-Replayed。
+     * Idempotency-Key header：controller 只負責把 header 交給 use case、把結果翻成狀態碼和 Idempotent-Replayed。
      * 「同一個鍵真的只存一次」在 JdbcCalendarEventAdapterTest 對真的 PostgreSQL 測。
      */
     @Nested
@@ -383,7 +383,7 @@ class CalendarControllerTest {
         private static final String DINNER_JSON =
                 "{\"events\":[{\"title\":\"吃飯\",\"start\":\"2026-10-06T15:00\",\"end\":\"2026-10-06T16:00\"}]}";
         // 一看就是測試值，而且不到 10 個字：gitleaks 的 generic-api-key 會把「名字有 key、值 10 個字以上」的字串當成真的 key
-        // （長得像 UUID 的、test-idempotency-key-1 都被抓過，PR #156 的 secrets 檢查紅燈）
+        // （長得像 UUID 的、test-idempotency-key-1 都會被抓）
         private static final String IDEMPOTENCY_KEY = "test-key";
 
         @Test

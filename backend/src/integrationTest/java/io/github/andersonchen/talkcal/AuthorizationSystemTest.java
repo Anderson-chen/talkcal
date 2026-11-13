@@ -21,7 +21,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 授權接起來的樣子（#104）：兩個人各自登入，只看得到、改得到自己的行程和對話。
+ * 授權接起來的樣子：兩個人各自登入，只看得到、改得到自己的行程和對話。
  *
  * 真的 SecurityFilterChain、真的 session、真的 PostgreSQL —— 擁有者從登入者一路帶到 SQL 的 WHERE，
  * 中間任何一層漏了（controller 沒拿登入者、service 沒往下傳、SQL 少了 owner_id 條件），這裡都會紅燈。

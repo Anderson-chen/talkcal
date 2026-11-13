@@ -32,7 +32,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 整個應用接起來跑：真的 HTTP、真的 Spring 組裝、真的 PostgreSQL（啟動時 Flyway 照正式流程跑完 V1–V8），助理那一題再加上真的模型。
+ * 整個應用接起來跑：真的 HTTP、真的 Spring 組裝、真的 PostgreSQL（啟動時 Flyway 照正式流程跑完全部 migration），助理那一題再加上真的模型。
  *
  * 其他測試各自只接一段真的東西（controller 用 MockMvc、adapter 直接呼叫、對話測試的行事曆是假的），
  * 各段單獨都對，不代表接起來會動。這裡抓的是「接起來才壞」的那一類：
@@ -43,11 +43,11 @@ import tools.jackson.databind.ObjectMapper;
  *
  * 兩題分工：
  * - 行程的新增、讀取、刪除：不需要模型，GitHub 上的 CI 也會跑
- * - 問助理：需要真的 llama-server，沒開就跳過（跟 CalendarAssistantConversationTest 一樣，只在本機真的跑）
+ * - 問助理：需要真的 llama-server，沒開就跳過，只在本機真的跑
  * 模型沒開也起得來：ChatModel 是第一次呼叫時才連線，啟動時不碰它。
  *
- * 物件儲存刻意指到一個連不上的位址：歸檔的 bucket 也是第一次用到才連線，app 照樣起得來，
- * 順便驗「物件儲存掛了，只有查看封存失敗，月曆照常」（#274）。真的接上儲存的情境在 ArchiveSystemTest。
+ * 物件儲存指到一個連不上的位址：歸檔的 bucket 也是第一次用到才連線，app 照樣起得來，
+ * 順便驗「物件儲存掛了，只有查看封存失敗，月曆照常」。真的接上儲存的情境在 ArchiveSystemTest。
  */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -81,7 +81,7 @@ class SystemTest {
         jdbc.sql("DELETE FROM calendar_event").update();
         jdbc.sql("DELETE FROM calendar_assistant_message").update();
         jdbc.sql("DELETE FROM account").update();
-        // /api 要登入才用得了（#103）：每一題先註冊、登入，之後的請求都帶著這個 session
+        // /api 要登入才用得了：每一題先註冊、登入，之後的請求都帶著這個 session
         user = new BrowserSession(port).signUpAndLogIn("system-test", "system-test-pass");
     }
 

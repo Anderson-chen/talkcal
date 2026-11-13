@@ -141,7 +141,7 @@ class GuardedChatModelTest {
                         // 建議多久再試 = 斷路器保持打開的時間，直接從它的設定讀
                         assertThat(e.retryAfter()).isEqualTo(OPEN_FOR);
                     })
-                    // 舊的契約照樣成立：沒認得它的呼叫端當成一般的失敗
+                    // 也還是 IllegalStateException：不認得 ModelUnavailableException 的呼叫端當成一般的失敗
                     .isInstanceOf(IllegalStateException.class);
         }
         assertThat(model.calls).as("打開之後一次都沒叫到模型").hasValue(5);

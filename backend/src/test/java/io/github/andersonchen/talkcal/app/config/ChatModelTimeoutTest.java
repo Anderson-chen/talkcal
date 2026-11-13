@@ -15,10 +15,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 
 /**
- * 每一次叫模型帶的逾時，真的是設定的值（#231；為什麼要自己補見 GuardedChatModel.getOptions）。
+ * 每一次叫模型帶的逾時，真的是設定的值（為什麼要自己補見 GuardedChatModel.getOptions）。
  * 助理和抽行程用的是包好保護的那個模型，都從它的 getOptions() 開始組選項，所以看它就知道兩者實際等多久。
  *
- * 起整個容器、不連資料庫，理由同 OpenApiDocumentationTest；設定一模一樣，Spring 測試會重用同一個容器。
+ * 起整個容器、不連資料庫，理由見 OpenApiDocumentationTest；設定一模一樣，Spring 測試會重用同一個容器。
  */
 @SpringBootTest(properties = "spring.flyway.enabled=false")
 @AutoConfigureMockMvc

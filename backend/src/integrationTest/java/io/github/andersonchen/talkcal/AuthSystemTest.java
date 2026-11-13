@@ -21,7 +21,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 認證接起來的樣子（#103）：真的 SecurityFilterChain、真的 session cookie、真的 CSRF、真的 account 表。
+ * 認證接起來的樣子：真的 SecurityFilterChain、真的 session cookie、真的 CSRF、真的 account 表。
  *
  * 每條規則都配一個反例：證明該擋的會擋，也證明正常的請求沒被誤擋。
  * 用 BrowserSession 照前端的方式送請求（記 cookie、從 XSRF-TOKEN 讀 token 放進 header），測的就是前端會遇到的流程。

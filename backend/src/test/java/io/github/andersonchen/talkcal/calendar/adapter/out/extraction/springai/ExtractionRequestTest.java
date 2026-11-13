@@ -68,7 +68,7 @@ class ExtractionRequestTest {
         @Test
         @DisplayName("模型沿用設定檔的預設：Spring AI 2.0 不會替請求自帶的選項補上預設，沒帶就變成 gpt-5-mini")
         void keepsDefaultModel() {
-            // 2026-10-14 雲端改打 Bedrock 才發現：本機的 llama-server 不看模型名稱，一直送 gpt-5-mini 也沒事（#76）
+            // 為什麼要守著：見 CalendarAssistantTest 的 keepsDefaultModel
             assertEquals("qwen-from-properties", prompt.getOptions().getModel());
         }
     }

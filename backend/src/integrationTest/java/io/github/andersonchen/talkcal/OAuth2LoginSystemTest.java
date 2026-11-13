@@ -25,7 +25,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 設了 Google、GitHub 的 client id 之後，app 這一側接起來的樣子（#105）。
+ * 設了 Google、GitHub 的 client id 之後，app 這一側接起來的樣子。
  *
  * 測不到的部分：真的到 Google 登入、Google 轉回來帶著 code、拿 code 換 token —— 那要真的 OAuth 應用程式和真人按同意。
  * 那一段之後「對帳號」的邏輯由 ExternalUserServicesTest、JdbcAccountAdapterTest 測；這裡測的是頭尾：

@@ -195,7 +195,7 @@ class AddEventsServiceTest {
     }
 
     /**
-     * 帶冪等鍵的那條路（#51）。「同一個鍵真的只存一次」是資料庫的唯一約束保證的，
+     * 帶冪等鍵的那條路。「同一個鍵真的只存一次」是資料庫的唯一約束保證的，
      * 在 JdbcCalendarEventAdapterTest 對真的 PostgreSQL 測；這裡只測 service 把 port 的三種結果翻成什麼、指標記不記。
      */
     @Nested
