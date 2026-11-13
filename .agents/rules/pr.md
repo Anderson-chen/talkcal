@@ -3,7 +3,7 @@
 - PR 標題跟 commit 標題同一種寫法（見 `commit.md`）。
 - PR 描述照 `.github/pull_request_template.md`：大標題用英文（`Summary`、`Dependencies`、`Evidence`、`Test Plan`、`Risk`），
   內文用中文，不適用的段落整段拿掉。演練時間軸這類很長的紀錄收進 `<details>`。
-  - `Summary` 寫一段，讀完標題和它就要知道哪裡有問題、改完會怎樣：依序講原本哪裡有問題或會讓人誤會、改了什麼、改完誰會感覺到差別（使用者、開發者，或都不會）。用字照 `writing.md` 的「issue 和 PR」。
+  - `Summary` 寫一段，讀完標題和它就要知道哪裡有問題、改完會怎樣：依序講原本哪裡有問題或會讓人誤會、改了什麼、改完誰會感覺到差別（使用者、開發者，或都不會）。用字照 `writing.md`。
 - PR 描述的截圖直接傳進 PR，不 commit 進分支：圖只有審查當下有用，一進 master 就永遠留在歷史裡，每次 clone 都要下載。
   - 用 `gh pr create` 或 `gh pr edit` 的 `--attach <檔案>`（gh 2.99.0 起才有）。描述裡先寫 `![說明](<本機路徑>)`，
     gh 上傳後會換成 GitHub 的網址；網頁上直接拖進描述也一樣。圖片最多 10 MB，影片（MP4、MOV、WebM）也能傳。
