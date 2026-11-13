@@ -21,7 +21,7 @@ class ObservationConfiguration {
     //
     // 為什麼要多這個標籤：本機 llama-server 和雲端 Bedrock 都是用 OpenAI 的 client 打的，
     // Spring AI 內建的 provider 標籤（gen_ai.system）兩邊都是 openai，分不出來；模型名稱也只分得出「哪一顆」。
-    // 值是部署決定，從設定讀。各個值是什麼、算錢怎麼用，見 application.properties 的 talkcal.ai.backend。
+    // 各個值是什麼、算錢怎麼用，見 application.properties 的 talkcal.ai.backend。
     //
     // 只貼在叫模型的觀測上：http.server.requests 這些多一個永遠同值的標籤沒有意義，只會讓每條時間序列變長
     @Bean

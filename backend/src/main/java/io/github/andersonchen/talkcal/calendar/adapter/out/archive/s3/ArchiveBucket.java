@@ -56,6 +56,9 @@ public final class ArchiveBucket {
     /**
      * 連到 S3 或 S3 相容的儲存。
      *
+     * 建這個物件不會連線，連不上要到真的用到才知道：物件儲存掛了不該讓整個 app 起不來，
+     * 歸檔晚一天沒關係（沒存好的不會被刪）。
+     *
      * @param endpoint  空白 = AWS S3 本身；給了就是 S3 相容的服務（本機的 RustFS），並改用 path-style
      *                  （http://host/bucket/key）：自架的服務通常沒有「bucket 名稱當子網域」的 DNS
      * @param accessKey 空白 = SDK 的預設憑證鏈（環境變數、EC2 角色…）；給了就用這組固定的

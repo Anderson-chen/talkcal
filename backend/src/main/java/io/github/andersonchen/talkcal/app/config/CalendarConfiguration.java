@@ -200,7 +200,7 @@ class CalendarConfiguration {
         return new ListArchivedEventsService(eventArchive);
     }
 
-    // 還原 API 放回的對話（行程不放回，見 listArchivedEvents）：controller 不認識 app.job，這裡把方法接過去
+    // 還原 API 放回的對話（行程不放回，見 ArchiveController）：controller 不認識 app.job，這裡把方法接過去
     @Bean
     ArchiveController.RestoreConversations restoreConversations(AssistantMemoryArchive assistantMemoryArchive) {
         return assistantMemoryArchive::restore;

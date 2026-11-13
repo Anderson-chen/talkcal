@@ -6,13 +6,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * 連到 S3 或 RustFS 的設定
- */
 @Configuration(proxyBeanMethods = false)
 class ArchiveStorageConfiguration {
 
-    /** 透過 application.properties 取得連線時需要的資訊 */
+    // 建這個物件不會連線，原因見 ArchiveBucket.connect
     @Bean
     ArchiveBucket archiveBucket(@Value("${talkcal.archive.endpoint}") String endpoint,
                                 @Value("${talkcal.archive.region}") String region,
