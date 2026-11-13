@@ -5,7 +5,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * SQL 的 span 只留「某個請求或排程裡」的那些（#31）。
+ * SQL 的 span 只留「某個請求或排程裡」的那些。
  *
  * datasource-micrometer 替每次拿連線、每條 SQL 開一個 Observation（設定在 application.properties 的 jdbc.*）。
  * 在請求裡，它們接在 HTTP 的 span 下面，正是要看的東西。但有些 SQL 不在任何請求裡：
@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Configuration;
  * 一小時幾百個只有一個「connection」span 的 trace，真正的請求在 Tempo 上就被淹掉了；
  * service map 上 talkcal → postgresql 那條邊的流量也會被灌水，看不出請求實際打了資料庫幾次。
  *
- * 排程（AssistantMemoryArchive、EventArchiveJob）不受影響：Spring 替 @Scheduled 開了 Observation，它的 SQL 有上層。
+ * 排程不受影響：Spring 替 @Scheduled 開了 Observation，排程裡的 SQL 有上層。
  */
 @Configuration(proxyBeanMethods = false)
 class JdbcTracingConfiguration {
