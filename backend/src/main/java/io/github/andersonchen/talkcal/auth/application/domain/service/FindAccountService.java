@@ -9,7 +9,6 @@ import io.github.andersonchen.talkcal.auth.application.port.out.LoadAccountPort;
 import java.util.Objects;
 import java.util.Optional;
 
-/** 實作「查帳號」。 */
 public final class FindAccountService implements FindAccountUseCase {
 
     private final LoadAccountPort loadAccountPort;
@@ -24,7 +23,7 @@ public final class FindAccountService implements FindAccountUseCase {
         try {
             name = Username.of(username);
         } catch (IllegalArgumentException e) {
-            // 不合規則的名字不可能註冊過，就是查不到；不丟錯，登入失敗時才不會透露是哪一欄錯
+            // 不合規則的名字不可能註冊過；不丟錯，登入失敗時才不會透露是哪一欄錯
             return Optional.empty();
         }
         return loadAccountPort.load(name);

@@ -7,8 +7,7 @@ import java.util.Objects;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
- * 用 Spring Security 的 PasswordEncoder 算密碼雜湊。
- * 登入時比對密碼的是同一個 PasswordEncoder（app.config 裡只建一個），註冊和登入才會用同一套演算法。
+ * 登入時比對密碼的是同一個 PasswordEncoder（app.config 只建一個），註冊和登入才會用同一套演算法。
  */
 public final class SpringPasswordHasher implements HashPasswordPort {
 

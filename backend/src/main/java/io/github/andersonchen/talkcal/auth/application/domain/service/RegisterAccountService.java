@@ -10,9 +10,7 @@ import io.github.andersonchen.talkcal.auth.application.port.out.SaveAccountPort;
 
 import java.util.Objects;
 
-/**
- * 實作「註冊」：先檢查規則，規則都過了才算雜湊（BCrypt 故意算得很慢，不合規的請求不必浪費這個時間），再存。
- */
+/** 規則都過了才算雜湊：BCrypt 故意算得很慢，不合規的請求不必花這個時間。 */
 public final class RegisterAccountService implements RegisterAccountUseCase {
 
     private final SaveAccountPort saveAccountPort;

@@ -5,32 +5,27 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * 一個帳號。登入的方式有兩種，同一個帳號可以有其中一種或兩種：
- * - 帳密：passwordLogin 有值（帳號名稱＋密碼的雜湊）
- * - Google、GitHub：記在另一張表（ExternalIdentity 對到這個帳號），只用這種方式登入的帳號 passwordLogin 是 null
+ * 同一個帳號可以用帳密、Google、GitHub 其中幾種登入：
+ * - 帳密：passwordLogin 有值
+ * - Google、GitHub：記在另一張表（ExternalIdentity 對到這個帳號）；只用這種方式登入的帳號 passwordLogin 是 null
  *
- * displayName 是給人看的名字：帳密登入的就是帳號名稱，Google、GitHub 登入的取對方給的名字。
- * 它不是身分（可能重複、可能改），身分是 id。
+ * displayName 是給人看的名字，可能重複、可能改，不能當身分；身分是 id。
  */
 public record Account(AccountId id, String displayName, PasswordLogin passwordLogin) {
 
     /**
-     * 密碼的長度規則，以 UTF-8 的 bytes 算：
+     * 以 UTF-8 的 bytes 算：
      * - 至少 8：太短的密碼幾秒就猜得到
-     * - 最多 72：BCrypt 只看前 72 bytes，後面的會被默默忽略 —— 兩個前 72 bytes 一樣的密碼會被當成同一個。
-     *   用 bytes 不用字數：中文一個字是 3 bytes，「24 個中文字」就到上限了
+     * - 最多 72：BCrypt 只看前 72 bytes，後面的默默忽略，前 72 bytes 一樣的兩個密碼會被當成同一個。
+     *   中文一個字是 3 bytes，24 個中文字就到上限
      */
     public static final int MIN_PASSWORD_BYTES = 8;
     public static final int MAX_PASSWORD_BYTES = 72;
 
-    /** 顯示名稱最多幾個字：畫面右上角放得下，也不讓對方給的超長名字灌進資料庫。 */
+    /** 畫面右上角放得下，也不讓對方給的超長名字灌進資料庫。 */
     public static final int MAX_DISPLAY_NAME_LENGTH = 64;
 
-    /**
-     * 帳密登入要的兩樣東西。存的是密碼的雜湊值，不是密碼本身。
-     *
-     * 雜湊怎麼算（BCrypt）是框架的事，domain 只知道「這是一串雜湊值」，由 HashPasswordPort 的實作算好交進來。
-     */
+    /** 存的是 HashPasswordPort 算好的雜湊值，domain 不知道是哪種演算法。 */
     public record PasswordLogin(Username username, String passwordHash) {
 
         public PasswordLogin {
@@ -51,16 +46,15 @@ public record Account(AccountId id, String displayName, PasswordLogin passwordLo
         }
     }
 
-    /** 用帳密註冊的帳號：顯示名稱就是帳號名稱。 */
     public static Account withPassword(AccountId id, Username username, String passwordHash) {
         return new Account(id, username.value(), new PasswordLogin(username, passwordHash));
     }
 
     /**
-     * 用 Google、GitHub 第一次登入時建的帳號：沒有帳號名稱和密碼 ——
-     * 他從沒在這裡設過密碼，給他一個用不到的密碼只會多一個可以被猜的入口。
+     * Google、GitHub 第一次登入時建的帳號，沒有帳號名稱和密碼：這個人從沒在這裡設過密碼，
+     * 給他一個用不到的密碼只會多一個能被猜的入口。
      *
-     * 名字是對方給的，不一定合我們的規則，所以先整理：去頭尾空白、太長截掉；整理完是空的（GitHub 沒填名字）就用 fallback。
+     * 對方給的名字不一定合規則：去頭尾空白、太長截掉；整理完是空的（GitHub 沒填名字）就用 fallback。
      */
     public static Account external(AccountId id, String name, String fallback) {
         String cleaned = name == null ? "" : name.strip();
@@ -74,12 +68,11 @@ public record Account(AccountId id, String displayName, PasswordLogin passwordLo
         return new Account(id, cleaned, null);
     }
 
-    /** 帳密登入的資料；只用 Google、GitHub 登入的帳號是 empty。 */
     public Optional<PasswordLogin> password() {
         return Optional.ofNullable(passwordLogin);
     }
 
-    /** 新密碼合不合規則；不合規丟 IllegalArgumentException，訊息直接給使用者看。 */
+    /** 不合規丟 IllegalArgumentException，訊息直接給使用者看。 */
     public static void checkNewPassword(String password) {
         if (password == null) {
             throw new IllegalArgumentException("請輸入密碼");
