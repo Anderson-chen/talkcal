@@ -1,15 +1,15 @@
 // 跟後端講話的共用部分：每個 API（行事曆、助理、帳號）都經過這裡的 send()。
 //
-// 認證（#103）帶來的兩件事集中在這裡，各 API 不必各自處理：
+// 認證帶來的兩件事集中在這裡，各 API 不必各自處理：
 // - CSRF：會改東西的請求（POST、DELETE）要把 XSRF-TOKEN cookie 的值放進 X-XSRF-TOKEN header（Spring Security 的 csrf.spa()）。
-//   別的網站騙瀏覽器送請求時 cookie 照樣會帶上，但它讀不到我們網域的 cookie，送不出對的 header —— 所以擋得住
+//   別的網站騙瀏覽器送請求時 cookie 照樣會帶上，但它讀不到我們網域的 cookie，送不出對的 header，所以擋得住
 // - 401：登入過期（或從沒登入）時，通知 App 換回登入畫面
 //
 // 登入狀態本身是 HttpOnly 的 session cookie，JavaScript 讀不到、也不用讀：瀏覽器自己會帶。
 
 /**
  * 後端（或中間的 nginx）回了錯誤，或根本連不上。message 是給人看的話；
- * detail 給畫面決定「怎麼說、可以怎麼做」（#43）：
+ * detail 給畫面決定「怎麼說、可以怎麼做」：
  * - status：HTTP 狀態碼；null 是根本沒拿到回應（網路斷了、伺服器整台連不上）
  * - code：後端分類好的原因（助理的 AssistantFailure.code），例如 MODEL_UNAVAILABLE；nginx 自己回的錯誤沒有
  * - retryAfterSeconds：幾秒後再試才有意義。body 的 retryAfterSeconds 優先，沒有就看 Retry-After header（nginx 的 429 只有 header）

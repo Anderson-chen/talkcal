@@ -1,11 +1,11 @@
-// 跟後端 /api/auth/* 的契約，以及「目前是誰」的狀態（#103）。
+// 跟後端 /api/auth/* 的契約，以及「目前是誰」的狀態。
 //
 // 登入狀態存在後端的 session，瀏覽器只拿到一個 HttpOnly cookie，這裡讀不到也不用讀；
 // 前端要知道「有沒有登入、是誰」，就問 GET /api/auth/me。
 //
 // 登入、登出走 Spring Security 的 /api/auth/login、/api/auth/logout：登入要送表單格式（不是 JSON），成功回 204。
 //
-// 用 Google、GitHub 登入（#105）不經過這裡的 fetch：那是整頁轉址（到 Google 同意、再轉回首頁），
+// 用 Google、GitHub 登入不經過這裡的 fetch：那是整頁轉址（到 Google 同意、再轉回首頁），
 // 回到首頁時 session 已經是登入的，App 照常 loadMe() 就知道是誰。
 
 import { ref } from 'vue'
@@ -53,8 +53,8 @@ onUnauthorized(() => {
 })
 
 /**
- * 打開頁面時問不到「我是誰」的原因（#43）。null 是沒出事。
- * 只有 401 才代表「沒登入」；連不上、伺服器出錯時就說連不上，不畫登入頁 —— 登入著的人在伺服器重啟時重新整理，
+ * 打開頁面時問不到「我是誰」的原因。null 是沒出事。
+ * 只有 401 才代表「沒登入」；連不上、伺服器出錯時就說連不上，不畫登入頁：登入著的人在伺服器重啟時重新整理，
  * 看到登入頁會以為被登出、去重打密碼，而那時候登入也一樣會失敗
  */
 export const meUnreachable = ref<string | null>(null)

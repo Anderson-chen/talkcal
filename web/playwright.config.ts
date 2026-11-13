@@ -3,7 +3,7 @@
 //
 // 後端不開：每個測試用 page.route 把 /api 攔下來回假資料（見 e2e/fakeApi.ts）。
 // 這樣不需要資料庫和模型、GitHub 上也能跑，「API 失敗」這種情況一行就造得出來。
-// 代價是測不到前後端格式對不對得上 —— 那是後端 SystemTest 的事。
+// 代價是測不到前後端格式對不對得上：那歸後端的 SystemTest（backend/src/integrationTest）測。
 import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({

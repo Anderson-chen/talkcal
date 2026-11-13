@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 行程詳情。桌面版是右側抽屜、手機版是整頁，內容一樣，只有外框和按鈕排法不同（variant）。
 //
-// 「修改」打開同一個表單（EventForm），存檔時送 PUT（#259）。
+// 「修改」打開同一個表單（EventForm），存檔時送 PUT。
 // 刪除要按兩次（「刪除」→「確定刪除？」）：設計稿是按一下就刪，但這裡是真的刪資料庫，沒有復原。
 import { computed, ref, watch } from 'vue'
 import { addDays, dayLabel, timeOf, weekdayName } from '../monthGrid'
@@ -19,7 +19,7 @@ const error = ref<string | null>(null)
 
 const event = computed(() => calendar.detail.value)
 
-// 換看另一筆行程時，「確定刪除？」不能留著 —— 不然一不小心就刪錯筆
+// 換看另一筆行程時，「確定刪除？」不能留著，不然一不小心就刪錯筆
 watch(() => event.value?.id, () => {
   confirming.value = false
   error.value = null
@@ -49,7 +49,7 @@ function showDay() {
   if (event.value) calendar.pickDate(event.value.start.slice(0, 10), 'day')
 }
 
-// 打開表單改這一筆（#259）：表單帶著現在的樣子，存的時候拿它核對這之間有沒有被別人改過
+// 打開表單改這一筆：表單帶著現在的樣子，存的時候拿它核對這之間有沒有被別人改過
 function edit() {
   if (event.value) calendar.openEdit(event.value.id, event.value)
 }

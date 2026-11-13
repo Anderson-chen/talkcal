@@ -1,11 +1,11 @@
 <script setup lang="ts">
-// 登入／註冊（#103）。沒登入時 App 只畫這一頁，行事曆整個不出現。
+// 登入／註冊。沒登入時 App 只畫這一頁，行事曆整個不出現。
 //
 // 一個表單兩種模式：帳號名稱、密碼兩欄都一樣，只差送去哪裡。註冊成功會接著登入（auth.ts 的 signUp），
 // 使用者感覺上是一步。錯誤訊息直接顯示後端回的那句（「帳號或密碼錯誤」「帳號名稱已經有人用了」……），
 // 規則（長度、字元）只寫在後端一份，這裡不重複一份會漂移的規則。
 //
-// 下面的「用 Google／GitHub 登入」（#105）只在後端有設定時才出現（問 /api/auth/providers）。
+// 下面的「用 Google／GitHub 登入」只在後端有設定時才出現（問 /api/auth/providers）。
 // 它們是一般的連結、不是 fetch：要整頁轉到 Google 去同意，再轉回首頁。失敗時後端轉回 /?login_error=oauth。
 import { computed, onMounted, ref } from 'vue'
 import { loadProviders, logIn, providerLoginUrl, signUp, type Provider } from './auth'

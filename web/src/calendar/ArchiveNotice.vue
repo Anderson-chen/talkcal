@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 月曆翻到 2 年以前的月份時的說明列（#274），桌面、手機共用：那個月的行程已經封存、月曆上看不到，
+// 月曆翻到 2 年以前的月份時的說明列，桌面、手機共用：那個月的行程已經封存、月曆上看不到，
 // 不說的話使用者會以為行程不見了。按鈕打開查看封存的畫面（ArchiveViewer），開在哪裡由版面決定。
 import { ARCHIVE_NOTICE } from './archive'
 import { useCalendarState } from './useCalendar'

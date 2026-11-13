@@ -14,7 +14,7 @@ export type View = 'month' | 'week' | 'day'
 
 /**
  * 表單的初始值：手動新增是空白的，從 AI 卡片「修改」過來的帶著草稿。
- * editing（#259）：改已經存好的那一筆，存檔時送 PUT 而不是新增。id 是哪一筆，expected 是改之前看到的樣子，
+ * editing：改已經存好的那一筆，存檔時送 PUT 而不是新增。id 是哪一筆，expected 是改之前看到的樣子，
  * 存的時候一起送出去，那筆在這之後被別人改過就會失敗（409），不會蓋掉別人的改動。
  */
 export interface FormRequest {
@@ -62,7 +62,7 @@ export function useCalendar() {
 
   const reload = () => version.value++
 
-  // 讀失敗之後網路回來了（瀏覽器的 online 事件），自己重讀一次，不必等使用者按「重新讀取」（#43）
+  // 讀失敗之後網路回來了（瀏覽器的 online 事件），自己重讀一次，不必等使用者按「重新讀取」
   const reloadIfFailed = () => {
     if (loadError.value) reload()
   }
@@ -97,7 +97,7 @@ export function useCalendar() {
 
   const detail = computed(() => events.value.find((e) => e.id === detailId.value) ?? null)
 
-  // 看的這個月有沒有已經封存的日子（#274）：有的話月曆上要註明，並放查看封存的入口
+  // 看的這個月有沒有已經封存的日子：有的話月曆上要註明，並放查看封存的入口
   const archived = computed(() => isArchivedMonth(shown.value.year, shown.value.month, today))
 
   // ── 導覽 ──────────────────────────────────────────────
@@ -126,8 +126,8 @@ export function useCalendar() {
 
   // ── 新增、修改、刪除 ─────────────────────────────────────────
   /**
-   * 存起來、跳到第一筆那天、重讀這一頁。存進去的分類如果被篩掉了，打開它 —— 不然使用者會以為沒存到。
-   * idempotencyKey 由呼叫端（表單、助理的卡片）管：它們才知道「再按一次」是不是同一次新增（#51）。
+   * 存起來、跳到第一筆那天、重讀這一頁。存進去的分類如果被篩掉了，打開它：不然使用者會以為沒存到。
+   * idempotencyKey 由呼叫端（表單、助理的卡片）管：它們才知道「再按一次」是不是同一次新增。
    */
   async function add(drafts: EventFields[], idempotencyKey?: string): Promise<SavedEvent[]> {
     const saved = await addEvents(drafts, idempotencyKey)
@@ -144,7 +144,7 @@ export function useCalendar() {
     reload()
   }
 
-  /** 改成 event 的樣子（#259）。存好之後跟新增一樣（showSaved） */
+  /** 改成 event 的樣子。存好之後見 showSaved */
   async function update(id: string, expected: EventFields, event: EventFields): Promise<SavedEvent> {
     const saved = await updateEvent(id, expected, event)
     showSaved([saved])
@@ -168,7 +168,7 @@ export function useCalendar() {
   }
 
   /**
-   * 打開表單改已經存好的那一筆（#259）。initial 不給就是它現在的樣子；助理的修改卡片會給「要改成的樣子」。
+   * 打開表單改已經存好的那一筆。initial 不給就是它現在的樣子；助理的修改卡片會給「要改成的樣子」。
    * expected 是改之前看到的樣子，存的時候拿它核對那筆有沒有在這之間被改過。
    */
   function openEdit(id: string, expected: EventFields, initial: EventFields = expected, onSaved?: (saved: SavedEvent) => void) {
@@ -202,5 +202,5 @@ export function monthOf(day: string) {
   return { year: Number(day.slice(0, 4)), month: Number(day.slice(5, 7)) }
 }
 
-// 錯誤變成一句話的共用函式在 http.ts（auth.ts 也用），這裡轉出去，元件照舊從這裡 import
+// 錯誤變成一句話的函式定義在 http.ts（每個 API 共用）；轉出去，元件從這個檔案一起 import
 export { message }

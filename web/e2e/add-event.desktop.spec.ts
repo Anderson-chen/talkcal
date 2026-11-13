@@ -14,7 +14,7 @@ test('新增一筆行程：送出填的資料，存好之後出現在月曆上',
   await page.goto('/')
 
   // 找元素都用使用者看得到的東西：按鈕上的字、欄位的 label、對話框的標題。
-  // exact：name 預設是「包含」就算 —— 月曆每一格都有「在10月6日新增行程」，不加會找到 43 個按鈕。
+  // exact：name 預設是「包含」就算：月曆每一格都有「在10月6日新增行程」，不加會找到 43 個按鈕。
   // 找到不只一個時 Playwright 直接報錯、不會隨便挑一個點（strict mode），點錯了才不會沒人發現
   await page.getByRole('button', { name: '新增行程', exact: true }).click()
   const form = page.getByRole('dialog', { name: '新增行程' })

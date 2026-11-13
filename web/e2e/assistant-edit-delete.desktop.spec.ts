@@ -1,4 +1,4 @@
-// 修改、刪除已經在行事曆上的行程（#259）：助理給的是卡片，按了確認才送 PUT、DELETE；行程詳情也能直接「修改」。
+// 修改、刪除已經在行事曆上的行程：助理給的是卡片，按了確認才送 PUT、DELETE；行程詳情也能直接「修改」。
 // 助理本身是假的（這裡直接決定它回哪張卡片），測的是前端：送出去的內容對不對、畫面跟著變、失敗時說得出原因。
 import { expect, test, type Page } from '@playwright/test'
 import { fakeApi, type FakeEvent } from './fakeApi'

@@ -205,7 +205,7 @@ const dotColor = (category: Category) => theme.colors.value[category].color
           <button type="button" class="done" @click="themeOpen = false">完成</button>
         </div>
         <ThemePicker large />
-        <!-- 目前是誰、登出（#103）：手機版頁首放不下，跟主題一起放在這個面板 -->
+        <!-- 目前是誰、登出：手機版頁首放不下，跟主題一起放在這個面板 -->
         <div v-if="me" class="account">
           <span class="account-name">{{ me.name }}</span>
           <button type="button" class="logout" @click="logOut()">登出</button>

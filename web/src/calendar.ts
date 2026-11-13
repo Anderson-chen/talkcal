@@ -1,6 +1,6 @@
 import { send } from './http'
 
-// 404 的錯誤型別搬到 http.ts（每個 API 共用），這裡轉出去，useCalendar 照舊從這裡 import
+// 404 的錯誤型別定義在 http.ts（每個 API 共用）；轉出去，用行事曆 API 的地方從這個檔案一起 import
 export { NotFoundError } from './http'
 
 // 跟後端 /api/calendar/* 的契約。形狀照抄 CalendarController 的巢狀 record，
@@ -24,7 +24,7 @@ export interface EventFields {
   // 沒有就是 null（後端把空白一律當成沒有）
   location: string | null
   note: string | null
-  // 從哪張助理提議卡片來的：助理回覆的每張卡片都有，確認時原樣帶回去才算採納（#223）。手動填的沒有這個欄位
+  // 從哪張助理提議卡片來的：助理回覆的每張卡片都有，確認時原樣帶回去才算採納。手動填的沒有這個欄位
   proposalId?: string
 }
 
@@ -33,7 +33,7 @@ export interface SavedEvent extends EventFields {
   id: string
 }
 
-/** 助理提議的一個修改（#259）：行事曆上現在的樣子 → 要改成的樣子。確認後送 updateEvent 才改。 */
+/** 助理提議的一個修改：行事曆上現在的樣子 → 要改成的樣子。確認後送 updateEvent 才改。 */
 export interface AssistantChange {
   eventId: string
   before: EventFields
@@ -84,7 +84,7 @@ export async function assistantHistory(conversationId: string): Promise<Assistan
  * 把確認過的草稿（或手動表單）存起來。全部存或全部不存；有一筆不合規就整批 400。
  * 從助理卡片來的那幾筆帶著 proposalId，後端核對過才算採納（只用在產品指標，不影響存檔）。
  *
- * idempotencyKey（#51）：這一次新增的名字（submitOnce.ts 的 retryKey）。失敗後再送同樣的內容帶同一個，
+ * idempotencyKey：這一次新增的名字（submitOnce.ts 的 retryKey）。失敗後再送同樣的內容帶同一個，
  * 上次其實存好了的話後端只回原本那幾筆、不會多存一份。同一個鍵帶了不同內容後端回 422。
  */
 export async function addEvents(events: EventFields[], idempotencyKey?: string): Promise<SavedEvent[]> {
@@ -107,7 +107,7 @@ export function listEvents(from: string, to: string): Promise<SavedEvent[]> {
 }
 
 /**
- * 已經封存的行程（#274）：結束超過 2 年、被搬到封存的那些，月曆的 listEvents 讀不到。只能看，不能改、不能刪。
+ * 已經封存的行程：結束超過 2 年、被搬到封存的那些，月曆的 listEvents 讀不到。只能看，不能改、不能刪。
  * from、to 都含（看一天就是同一天），格式 yyyy-MM-dd；跟範圍有重疊的都算。範圍不合規後端回 400，封存讀不到回 502。
  */
 export function listArchivedEvents(from: string, to: string): Promise<SavedEvent[]> {
@@ -122,7 +122,7 @@ async function eventsBetween(path: string, from: string, to: string): Promise<Sa
 }
 
 /**
- * 把一個行程改成 event 的樣子（#259）。expected 是改之前看到的樣子（讀回來的那筆、或助理卡片的 before）：
+ * 把一個行程改成 event 的樣子。expected 是改之前看到的樣子（讀回來的那筆、或助理卡片的 before）：
  * 那筆在你看到之後被改過了，後端回 409、這次不改（ApiError，status 409）；已經不在了丟 NotFoundError。
  */
 export async function updateEvent(id: string, expected: EventFields, event: EventFields): Promise<SavedEvent> {
@@ -146,7 +146,7 @@ export async function removeEvent(id: string): Promise<void> {
  * 收到的行程把缺的欄位補齊：分類不在就算 PERSONAL（跟後端的 Category.DEFAULT 一致），地點、備註不在就是 null。
  *
  * 新版後端一定會帶這幾個欄位，這是給「前端先更新、後端還是舊版」的時候用的：
- * 前後端不一定同時部署，舊版後端回的行程沒有 category，畫面不該因此整個壞掉（實際發生過：分類圓點拿不到顏色就丟例外）。
+ * 前後端不一定同時部署，舊版後端回的行程沒有 category，畫面不該因此整個壞掉：分類圓點拿不到顏色就會丟例外。
  */
 function normalize<T extends EventFields>(event: T): T {
   return { ...event, category: event.category ?? 'PERSONAL', location: event.location ?? null, note: event.note ?? null }

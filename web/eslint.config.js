@@ -1,4 +1,4 @@
-// ESLint 只抓「會出錯的寫法」，不管格式（縮排、引號、換行）：格式之後交給 Prettier 一次全面排好（#179）。
+// ESLint 只抓「會出錯的寫法」，不管格式（縮排、引號、換行）：格式之後交給 Prettier，還沒接上。
 // 選型理由見 ci/README.md 的「lint」。
 import { globalIgnores } from 'eslint/config'
 import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript'
@@ -27,12 +27,12 @@ export default defineConfigWithVueTs(
       // 元件名要兩個字以上，免得跟 HTML 原生標籤撞名。Icon 不會撞（沒有 <icon>），改名只是製造 diff
       'vue/multi-word-component-names': ['error', { ignores: ['Icon'] }],
       // v-html 把字串當 HTML 插進頁面，內容只要有一點來自使用者（行程標題、AI 的回答）就是 XSS。
-      // CodeQL（ci/sast.sh）追不到 .vue 模板裡的 v-html（#235 實測），所以在這裡一律擋，不管內容從哪來。
+      // CodeQL（ci/sast.sh）追不到 .vue 模板裡的 v-html，所以在這裡一律擋，不管內容從哪來。
       // 真的要用時（例如 sanitize 過的 markdown），在那一行上面寫 eslint-disable-next-line 並附理由
       'vue/no-v-html': 'error',
     },
   },
 
-  // E2E：Playwright 最常見的錯是 expect(...) 忘了 await —— 測試照樣綠，其實什麼都沒等到
+  // E2E：Playwright 最常見的錯是 expect(...) 忘了 await：測試照樣綠，其實什麼都沒等到
   { ...pluginPlaywright.configs['flat/recommended'], files: ['e2e/**/*.ts'] },
 )

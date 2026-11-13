@@ -1,6 +1,6 @@
-# talkcal 前端的映像檔。跟 app 的 Dockerfile（backend/Dockerfile）一樣是兩段式——
-#   build   —— Node + pnpm，把 .vue / .ts 編成靜態檔（dist/）
-#   runtime —— 只有 nginx，送靜態檔、把 /api 轉給 app。Node、node_modules、原始碼都不會跟著上雲端。
+# talkcal 前端的映像檔，分兩段：
+#   build：Node + pnpm，把 .vue / .ts 編成靜態檔（dist/）
+#   runtime：只有 nginx，送靜態檔、把 /api 轉給 app。Node、node_modules、原始碼都不會跟著上雲端。
 
 # ════════════════════════════════════════════════════════════════════
 # 跟本機開發同一個大版本（node -v 是 22）
@@ -15,7 +15,7 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 COPY package.json ./
 RUN corepack enable && corepack install
 
-# 再放其餘「決定依賴是什麼」的檔案——只改 src/ 時這層快取不失效，不必每次重裝依賴。
+# 再放其餘「決定依賴是什麼」的檔案：只改 src/ 時這層快取不失效，不必每次重裝依賴。
 # --frozen-lockfile：嚴格照 pnpm-lock.yaml 裝，lock 跟 package.json 對不上就直接失敗，
 # 不會偷偷升級（TypeScript 釘在 5.9 的理由見 web/README.md）。
 # store 放 BuildKit 的快取：依賴改了重裝時，沒變的套件不必重新下載
@@ -27,14 +27,14 @@ COPY . .
 RUN pnpm run build
 
 # ════════════════════════════════════════════════════════════════════
-# 1.30 是 nginx 的 stable 線，只收安全和錯誤修補；原本的 1.29 是 mainline，已被 1.31 取代、不再更新（#85）。
+# 1.30 是 nginx 的 stable 線，只收安全和錯誤修補；mainline（奇數小版本）一出下一版，上一版就不再更新。
 # 寫到小版本而不是 1.30.5：官方會用新的 Alpine 重 build 同一個 tag，重新 build 就拿到作業系統的修補
 # -otel 是同一版 nginx 多裝了官方的 OpenTelemetry 模組（ngx_otel_module）：nginx 自己開一個 span、
-# 把 traceparent 傳給 app，trace 才從 nginx 開始，而不是從 app 才開始（#31，設定見 nginx.conf 開頭）
+# 把 traceparent 傳給 app，trace 才從 nginx 開始，而不是從 app 才開始（設定見 nginx.conf 開頭）
 FROM nginx:1.30-alpine-otel AS runtime
 
 # 官方映像檔重 build 之前，Alpine 已經發了修補的套件（expat、pcre2、tiff…）先自己升。
-# 代價是同一份 Dockerfile 不同天 build 出的套件版本可能不同 —— 換來的是不必等上游
+# 代價是同一份 Dockerfile 不同天 build 出的套件版本可能不同，換來的是不必等上游
 RUN apk upgrade --no-cache
 
 # 模組裝了但沒載入：load_module 只能寫在主設定檔的最上層，conf.d 裡的檔案是被 include 在 http { } 裡面的，寫不進去。
@@ -47,7 +47,7 @@ COPY --from=build /src/dist /usr/share/nginx/html
 
 # 不必自己寫 ENTRYPOINT / USER：官方映像檔的 nginx 主程序以 root 起來只為了綁 80 埠，
 # 真正處理請求的 worker 是 nginx 這個一般使用者。
-# 版本（#25）：跟 app 映像檔同一組，由 compose 的 build.args 傳進來（cd/version.sh 算的）。
+# 版本：跟 app 映像檔同一組，由 compose 的 build.args 傳進來（cd/version.sh 算的）。
 # 前端只貼 label、不寫進頁面：版本給維運的人查，不給使用者看（理由見 cd/release.md）
 ARG APP_VERSION=local
 ARG GIT_COMMIT=unknown

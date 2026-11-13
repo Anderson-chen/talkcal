@@ -2,7 +2,7 @@
 //
 // 日期一律用 'YYYY-MM-DD' 字串當 key，跟後端 LocalDate 的格式一樣。
 // 需要算「下一天」時才暫時建 Date，而且只用本地時間的建構子（new Date(y, m, d)）和 getter（getFullYear…），
-// 絕不用 toISOString()：它會先換成 UTC —— 在台灣，早上八點以前呼叫，日期就變成前一天。
+// 絕不用 toISOString()：它會先換成 UTC，在台灣早上八點以前呼叫，日期就變成前一天。
 
 /** 一頁月曆是固定的 6 週 × 7 天，不管這個月幾天、從星期幾開始，格子數都一樣，版面才不會跳。 */
 export const GRID_DAYS = 42

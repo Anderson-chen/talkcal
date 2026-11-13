@@ -1,9 +1,9 @@
 // AI 助理：跟後端的 agent（POST /api/calendar/assistant）對話。
 //
 // 助理自己決定要做什麼：時間不確定就反問、查行程、找空檔，或提議行程。
-// 提議的行程顯示成卡片 —— 還是「先預覽再確認」：按了「加入行事曆」才送 /events 存起來。
+// 提議的行程顯示成卡片，先預覽再確認：按了「加入行事曆」才送 /events 存起來。
 // 一句話可以提議好幾筆，每筆一張卡片；可以先「修改」（帶到新增表單）或「移除」某一筆，再一次全部加入。
-// 要改、要刪已經在行事曆上的行程（#259），助理給的是修改卡片（原本 → 改成）和刪除卡片，一樣按了確認才送 PUT、DELETE。
+// 要改、要刪已經在行事曆上的行程，助理給的是修改卡片（原本 → 改成）和刪除卡片，一樣按了確認才送 PUT、DELETE。
 // 這兩種卡片一張一張確認：改錯一筆比漏加一筆麻煩，不做「全部確認」。
 //
 // 對話的記憶在後端，這裡只記 conversationId（存在 localStorage）和畫面上的訊息。
@@ -11,7 +11,7 @@
 // 後端那段不刪：清空是「這台瀏覽器不再接那段」，不是銷毀紀錄；沒人接的舊對話由後端每天的清理排程處理（30 天）。
 // 讀回來的舊訊息不帶卡片：卡片當時是加入還是取消，後端沒有記，顯示可能已過時的卡片不如不顯示。
 //
-// 回不了的時候（#43，每一種怎麼說見 assistantFailure.ts）：
+// 回不了的時候（每一種怎麼說見 assistantFailure.ts）：
 // - 使用者那句留在對話裡、標成「沒送出」，底下的說明附「再試一次」：打的字不會不見，也不必重打
 // - 後端說要等幾秒（模型連不上 30 秒、忙碌 5 秒、問太快 60 秒），就倒數，倒數完之前送不出去；輸入框照樣可以先打字
 // - 等模型等很久時，「思考中」會說已經等了幾秒：模型最久可能想 2 分鐘，使用者要知道它還活著
@@ -58,9 +58,9 @@ export interface ChatMessage {
   removals: RemovalCard[]
   // 加入行事曆失敗時的原因，顯示在卡片下面；草稿留著讓使用者再按一次
   error: string | null
-  // 使用者這句沒送成功（#43）：泡泡標成「沒送出」
+  // 使用者這句沒送成功：泡泡標成「沒送出」
   failed?: boolean
-  // 助理回不了的說明（#43）：canRetry 是原封不動再送有沒有意義（400 沒有，要先改）
+  // 助理回不了的說明：canRetry 是原封不動再送有沒有意義（400 沒有，要先改）
   failure?: { kind: FailureKind; canRetry: boolean }
 }
 
@@ -72,12 +72,12 @@ export const SUGGESTIONS = ['明天下午3點和 Amy 開會', '明天有什麼�
 
 const GREETING = '嗨！我是你的行事曆助理。可以幫你新增、修改、刪除行程，查某天的安排，或找出空檔。不管哪一種，我都會整理成卡片讓你確認後才動行事曆。'
 
-// conversationId 存在這台瀏覽器：跟主題一樣是個人的東西，不必存到後端。
-// 私密視窗、被封鎖的網站資料都可能讓 localStorage 丟例外，一律吞掉 —— 最壞就是重新整理後開新對話
-// 每個人各存各的（key 帶著登入者的 id，#103）：換人登入不會接回上一個人的對話。
-// 真正擋住「讀別人的對話」的是後端的授權（#104），這裡只是前端不主動去要
+// conversationId 存在這台瀏覽器：只跟這個人有關，不必存到後端。
+// 私密視窗、被封鎖的網站資料都可能讓 localStorage 丟例外，一律吞掉：最壞就是重新整理後開新對話。
+// 每個人各存各的（key 帶著登入者的 id）：換人登入不會接回上一個人的對話。
+// 真正擋住「讀別人的對話」的是後端的授權，這裡只是前端不主動去要
 const storageKey = () => `talkcal.calendar.assistant.conversation.${me.value?.id ?? 'anonymous'}`
-// 還沒送出的字：只存在這個分頁（sessionStorage），關掉分頁就沒了 —— 草稿不必跟著瀏覽器一輩子。
+// 還沒送出的字：只存在這個分頁（sessionStorage），關掉分頁就沒了：草稿不必跟著瀏覽器一輩子。
 // key 在建立助理時就決定，不每次現算：登入過期時 me 會先變成 null（401 的通知比例外早到），那時才算就存到別人的 key 去了
 const draftKey = (userId: string | undefined) => `talkcal.calendar.assistant.draft.${userId ?? 'anonymous'}`
 
@@ -147,7 +147,7 @@ export function useAssistant(calendar: CalendarState) {
   /** 這一句已經等了幾秒（沒在等就是 0） */
   const waitedSeconds = computed(() => (typing.value ? Math.max(0, Math.floor((now.value - typingSince) / 1000)) : 0))
 
-  // 每則訊息的「加入行事曆」各有自己的冪等鍵（#51）：A 訊息失敗、先去加 B，再回來重按 A，帶的還是 A 當時那把
+  // 每則訊息的「加入行事曆」各有自己的冪等鍵：A 訊息失敗、先去加 B，再回來重按 A，帶的還是 A 當時那把
   const addKeys = new Map<number, RetryKey>()
   // 後端那段對話的身分：第一句之後才有，之後每句都帶著；重新整理後從 localStorage 拿回來
   let conversationId = loadConversationId()
@@ -247,7 +247,7 @@ export function useAssistant(calendar: CalendarState) {
 
   /**
    * 把這則訊息裡還沒處理的草稿一次存起來（後端是全部存或全部不存）。
-   * 防重複（#51）：送出中再按不會送第二次（oneAtATime）；失敗後再按帶同一把冪等鍵，上次其實存好了也不會多一份。
+   * 防重複：送出中再按不會送第二次（oneAtATime）；失敗後再按帶同一把冪等鍵，上次其實存好了也不會多一份。
    */
   const confirm = oneAtATime(saving, async (msg: ChatMessage) => {
     const pending = msg.proposals.filter((p) => p.status === 'pending')
@@ -293,7 +293,7 @@ export function useAssistant(calendar: CalendarState) {
     })
   }
 
-  // ── 修改、刪除卡片（#259）──────────────────────────────
+  // ── 修改、刪除卡片──────────────────────────────────
   // 送出中再按不會送第二次（跟「加入行事曆」共用 saving：同一時間只做一件事，畫面上的按鈕一起停用）
 
   // 照卡片做一件事：成功就標成 done；失敗把原因寫在卡片上、卡片留著。不自動重試：

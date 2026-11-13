@@ -1,6 +1,5 @@
-// 封存（#274）：結束超過 2 年的行程，後端每天會搬到封存，月曆上就看不到了，只能照日期查看。
+// 封存：結束超過 2 年的行程，後端每天會搬到封存，月曆上就看不到了，只能照日期查看。
 // 這裡是純函式：哪幾個月要註明「已自動封存」、查詢的日期合不合規、查到的行程時間怎麼寫。
-// 畫面在 ArchiveNotice.vue（說明和入口）、ArchiveViewer.vue（查詢和結果）。
 
 import { dayLabel, timeOf, toIsoDate } from '../monthGrid'
 
@@ -12,7 +11,7 @@ export const ARCHIVE_NOTICE = `結束超過 ${ARCHIVE_YEARS} 年的行程已自�
 
 /**
  * 今天往前推 2 年的那一天：比它早結束的行程都已經封存了。
- * 2/29 往前推到沒有 2/29 的那年算 2/28，跟後端 LocalDateTime.minus(Period) 一樣。
+ * 2/29 往前推到沒有 2/29 的那年算 2/28，跟後端 LocalDateTime.minus(Period) 一致。
  */
 export function archiveCutoff(today: string): string {
   const year = Number(today.slice(0, 4)) - ARCHIVE_YEARS

@@ -3,9 +3,9 @@
 //
 // 每個解析出的行程一張卡片，卡片上可以「修改」（帶到新增表單）或「移除」；
 // 訊息底下的「加入行事曆」把還沒處理的那幾筆一次存起來。
-// 修改、刪除卡片（#259）每張有自己的按鈕：「確認修改」「自己調整」（帶到修改表單）「確定刪除」「取消」。
+// 修改、刪除卡片每張有自己的按鈕：「確認修改」「自己調整」（帶到修改表單）「確定刪除」「取消」。
 //
-// 回不了的時候（#43）：沒送出的那句標「沒送出」，助理那邊是一則說明＋「再試一次」。
+// 回不了的時候：沒送出的那句標「沒送出」，助理那邊是一則說明＋「再試一次」。
 // 要等的話按鈕上倒數，送出鈕、建議說法也一起停用，輸入框照樣可以打字。
 import { computed } from 'vue'
 import { addDays, dayLabel, timeOf } from '../monthGrid'
@@ -144,7 +144,7 @@ const thinking = computed(() =>
 .large .primary, .large .secondary { height: 44px; font-size: 14px; }
 .secondary { height: 40px; padding: 0 12px; border: 1px solid var(--field); border-radius: 9px; background: transparent; color: var(--ink); font-size: 13px; }
 .error { font-size: 13px; color: var(--danger); }
-/* 修改、刪除卡片（#259）：最上面標明是哪一種，原本的樣子劃掉 */
+/* 修改、刪除卡片：最上面標明是哪一種，原本的樣子劃掉 */
 .kind { font-size: 12px; font-weight: 700; color: var(--accent); }
 .kind.danger { color: var(--danger); }
 .before { font-size: 13px; color: var(--muted); text-decoration: line-through; }
