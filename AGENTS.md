@@ -8,7 +8,7 @@
 
 ## 回覆格式
 
-在對話裡回覆使用者時，內容用表格呈現，分成詳細版和白話版。寫進 repo 的文字（文件、註解、issue、PR、commit）不套用，照 [writing.md](.agents/rules/writing.md)。
+在對話裡回覆使用者時，內容放在一張表格裡，欄位是「項目」「詳細」「白話」，每一列同時寫兩種說法。寫進 repo 的文字（文件、註解、issue、PR、commit）不套用，照 [writing.md](.agents/rules/writing.md)。
 
 ## 動手前要讀的規則
 
