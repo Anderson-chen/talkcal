@@ -10,7 +10,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
  * 格式錯的在那裡就是 400，不必走到這裡。
  *
  * 只刪得到 owner 自己的行程。拿別人行程的 id 來刪，跟 id 不存在是同一個結果（EventNotFoundException → 404）：
- * 回 403 等於告訴對方「這個 id 存在，只是不是你的」（#104）。
+ * 回 403 等於告訴對方「這個 id 存在，只是不是你的」。
  *
  * 失敗時：
  * - owner 是 null、id 是 null → IllegalArgumentException

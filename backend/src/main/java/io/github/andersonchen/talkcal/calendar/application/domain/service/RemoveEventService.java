@@ -15,7 +15,7 @@ import java.util.Objects;
  * 直接刪、看有沒有刪到，一次就知道結果。
  *
  * 擁有者也是同一句 SQL 的條件，不是先查出這筆是誰的再比對：別人的行程跟不存在的行程走同一條路、回同一個例外，
- * 從回應分不出「這個 id 存在但不是你的」（#104）。
+ * 從回應分不出「這個 id 存在但不是你的」。
  */
 public final class RemoveEventService implements RemoveEventUseCase {
 

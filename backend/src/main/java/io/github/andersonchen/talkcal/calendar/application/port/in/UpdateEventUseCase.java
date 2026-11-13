@@ -9,9 +9,9 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Schedule
  * 把行事曆上的一個行程改成另一個樣子（inbound port）。
  *
  * 除了新的內容，還要帶「改之前看到的樣子」（expected）：資料庫裡的那筆跟它不一樣，就是在你看到之後有人改過了，
- * 這次不改、丟 EventChangedException，不讓晚送的那一邊把先存的改動蓋回去（#50 的同一類問題）。
+ * 這次不改、丟 EventChangedException，不讓晚送的那一邊把先存的改動蓋回去。
  *
- * 跟刪除一樣只改得到 owner 自己的行程，別人的跟不存在的同一個結果（#104）。
+ * 只改得到 owner 自己的行程，別人的跟不存在的同一個結果，理由見 RemoveEventUseCase。
  *
  * 失敗時：
  * - 參數是 null → IllegalArgumentException

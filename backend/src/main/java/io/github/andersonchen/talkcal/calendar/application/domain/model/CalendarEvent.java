@@ -8,7 +8,7 @@ import java.util.Optional;
 /**
  * 行事曆上的一個行程：什麼事、從幾點到幾點、哪一類、在哪裡、備註。
  *
- * 這是 calendar 模組的第一個 class，後面的解析（自然語言 → 行程）、存檔、HTTP 入口都繞著它轉：
+ * 解析（自然語言 → 行程）、存檔、HTTP 入口都繞著它轉：
  * 不管行程是 LLM 解析出來的、使用者在預覽畫面上改過的、還是手動表單填的，進到系統之前都要先過這裡的規則。
  *
  * 時間用 LocalDateTime（牆上時間，不帶時區）而不是 Instant：
@@ -18,7 +18,7 @@ import java.util.Optional;
  * 地點和備註是選填，用 Optional 表達「可以沒有」；空白一律當成沒有 ——
  * 表單送來的空字串、LLM 給的 null，進來之後是同一件事，後面的程式不必分兩種情況處理。
  *
- * 刻意還沒有 id：預覽階段的行程還沒存，不該有身分。存檔時再長出來。
+ * 沒有 id，理由見 ScheduledEvent。
  */
 public record CalendarEvent(String title, LocalDateTime start, LocalDateTime end,
                             Category category, Optional<String> location, Optional<String> note) {
@@ -54,7 +54,6 @@ public record CalendarEvent(String title, LocalDateTime start, LocalDateTime end
 
     /**
      * 只有標題和時間的行程：分類用預設、沒有地點和備註。
-     * 加分類之前的程式碼（和測試）都是這樣建行程的，意思不變。
      */
     public CalendarEvent(String title, LocalDateTime start, LocalDateTime end) {
         this(title, start, end, Category.DEFAULT, Optional.empty(), Optional.empty());

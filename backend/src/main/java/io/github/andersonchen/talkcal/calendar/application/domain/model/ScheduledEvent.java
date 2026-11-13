@@ -4,7 +4,7 @@ package io.github.andersonchen.talkcal.calendar.application.domain.model;
  * 已經排進行事曆的行程：一個身分，加上行程本身。
  *
  * 用組合包住 CalendarEvent，而不是在 CalendarEvent 上加 id 欄位：
- * 預覽階段（解析出來、使用者還沒確認）的行程不該有身分，CalendarEvent 刻意沒有 id；
+ * 預覽階段（解析出來、使用者還沒確認）的行程不該有身分，所以 CalendarEvent 沒有 id；
  * 確認之後才「排進去」，排進去的那一刻才發 id。兩個階段用兩個型別，
  * 方法簽章就說得出收的是哪一種 —— 存檔只收 ScheduledEvent，預覽的行程根本傳不進去。
  *

@@ -13,7 +13,7 @@ import java.util.List;
  * 由 service 交給 DateRange 檢查，呼叫端不必先知道有這個型別。
  *
  * 「在期間裡」指的是跟期間有重疊：跨夜、跨月的行程，前後兩段期間都看得到它。
- * 依開始時間排序。只有 owner 自己的行程，別人的看不到（#104）。
+ * 依開始時間排序。只有 owner 自己的行程，別人的看不到。
  *
  * 失敗時：
  * - owner 是 null、期間不合規 → IllegalArgumentException

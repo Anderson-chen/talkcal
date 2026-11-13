@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * 數出幾個時間點之後各有幾個擁有者有動作（outbound port，#36 的活躍使用者）。
+ * 數出幾個時間點之後各有幾個擁有者有動作（outbound port）。
  *
  * 「有動作」= 跟助理說過話，或存過行程。只看月曆不算：讀取沒有留下紀錄，要算就得另外記每次讀取，不划算。
  *

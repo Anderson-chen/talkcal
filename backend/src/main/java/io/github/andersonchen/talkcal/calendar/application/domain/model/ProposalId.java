@@ -3,10 +3,10 @@ package io.github.andersonchen.talkcal.calendar.application.domain.model;
 import java.util.UUID;
 
 /**
- * AI 助理發出去的一張提議卡片的身分（#223）。
+ * AI 助理發出去的一張提議卡片的身分。
  *
  * 伺服器發卡片時給，前端在採納（存檔）、拒絕時原樣帶回來，伺服器才核對得了「真的有這張卡片、而且是你的」。
- * 用 UUID 的理由同 EventId：猜不到別人的卡片編號，也不洩漏總共發過幾張。
+ * 用 UUID：猜不到別人的卡片編號，也不洩漏總共發過幾張。
  */
 public record ProposalId(UUID value) {
 

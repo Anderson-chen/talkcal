@@ -3,9 +3,9 @@ package io.github.andersonchen.talkcal.calendar.application.port.in;
 import java.time.LocalDateTime;
 
 /**
- * 把舊行程搬到歸檔（inbound port，#54）：結束時間早於 cutoff 的，壓縮後放進物件儲存，存好了才從行事曆刪掉。
+ * 把舊行程搬到歸檔（inbound port）：結束時間早於 cutoff 的，壓縮後放進物件儲存，存好了才從行事曆刪掉。
  *
- * 由排程每天呼叫一次（app.job.EventArchiveJob），不是使用者的請求，所以不分擁有者。
+ * 由排程呼叫，不是使用者的請求，所以不分擁有者。
  * cutoff 由呼叫端算（「現在」減掉保留期限）：保留多久是設定，不是業務規則。
  *
  * 一個人、一個月一包：其中一包存不進去，只有那一包的行程留在資料庫裡，其他包照常搬。

@@ -18,7 +18,7 @@ import java.util.Objects;
 
 /**
  * 實作「找空檔」：讀出那幾天的行程，交給 FreeSlots 算。
- * 跟 ParseEventsService 一樣從 Clock 取「現在」：時區由組裝根決定，測試給固定時鐘。
+ * 從 Clock 取「現在」，理由見 ParseEventsService。
  */
 public final class FindFreeSlotsService implements FindFreeSlotsUseCase {
 

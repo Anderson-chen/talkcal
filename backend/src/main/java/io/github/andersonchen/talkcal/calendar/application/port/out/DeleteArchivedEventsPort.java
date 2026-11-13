@@ -6,7 +6,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Schedule
 import java.util.List;
 
 /**
- * 刪掉已經歸檔好的行程（outbound port，#54）。只在 EventArchivePort.store 成功之後呼叫。
+ * 刪掉已經歸檔好的行程（outbound port）。只在 EventArchivePort.store 成功之後呼叫。
  *
  * 約定：
  * - 只刪 owner 的、而且資料庫裡「現在」跟 archived 裡那一份一模一樣（標題、起訖、分類、地點、備註）的那幾筆。

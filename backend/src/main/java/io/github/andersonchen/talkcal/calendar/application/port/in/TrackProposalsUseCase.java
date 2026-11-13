@@ -6,7 +6,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.Proposal
 import java.util.List;
 
 /**
- * 助理提議的卡片（inbound port，#36、#223）：發出去時記下來、被拒絕時核對後才算。
+ * 助理提議的卡片（inbound port）：發出去時記下來、被拒絕時核對後才算。
  *
  * 被採納的不在這裡：採納就是存進行事曆，由 AddEventsUseCase 帶著卡片的 id 一起核對。
  * 拒絕要另外講，是因為按「取消」只改前端的畫面、不經過任何存檔，後端不被告知就永遠不知道。

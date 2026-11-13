@@ -5,12 +5,12 @@ import java.time.LocalDateTime;
 import java.time.YearMonth;
 
 /**
- * 查看封存時的一段日期（#274）：from 到 to，兩端都含，只看一天就是 from = to。
+ * 查看封存時的一段日期：from 到 to，兩端都含，只看一天就是 from = to。
  *
  * 跟 DateRange 分開：月曆一頁是「to 不含、最多 100 天」，這裡是使用者自己選的日期，選一天時兩端同一天比較直覺。
- * 上限跟 MonthRange 一樣 24 個月：每多一個月就要多讀幾包物件儲存。
+ * 上限用 MonthRange 的 MAX_MONTHS：每多一個月就要多讀幾包物件儲存。
  *
- * 「在這段日期裡」跟月曆同一個定義（LoadEventsPort）：跟這段時間有重疊就算。
+ * 「在這段日期裡」的定義見 LoadEventsPort：跟這段時間有重疊就算。
  */
 public record ArchivePeriod(LocalDate from, LocalDate to) {
 

@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 找出該歸檔的行程（outbound port，#54）：結束時間早於 cutoff 的，不分擁有者，依擁有者分好。
+ * 找出該歸檔的行程（outbound port）：結束時間早於 cutoff 的，不分擁有者，依擁有者分好。
  *
  * 不分擁有者：這是排程的維護工作，不是誰的請求。分好再交回來，是因為歸檔一定一個人一包（見 EventArchivePort）。
  *

@@ -28,11 +28,11 @@ import java.util.Set;
  *
  * 流程：每筆排進去（發 id）→ 一次存起來 → 核對帶來的提議卡片 → 記下用量（採納幾筆、手動幾筆）。
  * 用量在存好之後才記：存檔失敗的不算數，不然「採納」會把沒存進去的也算進來。
- * 採納不信呼叫端說的，交給 ProposalStorePort 核對：是 owner 的、還沒表態過的卡片才算（#223）。
+ * 採納不信呼叫端說的，交給 ProposalStorePort 核對：是 owner 的、還沒表態過的卡片才算。
  * 行程本身的規則已經在 CalendarEvent 建構時檢查過，這裡不再看第二次。
  *
  * 帶冪等鍵時改走 SaveEventsOncePort：「這個鍵存過沒有」由它在存的那一刻決定，這裡只把三種結果翻成 use case 的回答。
- * 重送（之前存過）不再記採納和用量：那幾筆第一次存的時候已經記過了，再記一次會把同一筆算成兩筆
+ * 重送（之前存過）不記採納和用量：那幾筆第一次存的時候已經記過了，再記一次會把同一筆算成兩筆
  * （卡片已經表態過，第二次會被算成手動新增）。
  */
 public final class AddEventsService implements AddEventsUseCase {
