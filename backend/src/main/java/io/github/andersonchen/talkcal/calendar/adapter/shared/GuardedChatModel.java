@@ -91,7 +91,7 @@ public final class GuardedChatModel implements ChatModel {
      * 為什麼要在這裡補：Spring AI 2.0.1 的逾時有兩層，spring.ai.openai.chat.timeout 是建 client 時的，
      * 每一次呼叫另外帶選項裡的 timeout，而且會蓋掉前者。自動組裝的預設選項不會帶上任何逾時
      * （spring.ai.openai.chat.options.timeout 綁得進去、但組選項時沒讀它），於是每次呼叫都用 Spring AI 預設的 60 秒。
-     * 助理和抽行程都從這份預設開始組自己的選項，在這裡補一次兩邊都拿到。
+     * 叫模型的地方都從這份預設開始組自己的選項，在這裡補一次，每個地方都拿到。
      */
     @Override
     public ChatOptions getOptions() {

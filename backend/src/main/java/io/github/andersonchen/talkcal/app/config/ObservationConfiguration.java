@@ -16,7 +16,7 @@ import org.springframework.context.annotation.Configuration;
 class ObservationConfiguration {
 
     // token 用量本身不必自己記：Spring AI 每次叫完模型會把回應裡的 usage 記成 gen_ai.client.token.usage
-    // （input、output、total 各一個 counter），標籤照抄這次觀測的 low-cardinality 標籤，所以在這裡多貼一個，
+    // （input、output、total 各一個 counter），標籤照抄這次觀測的 low-cardinality 標籤，所以在這裡多貼一個 model.backend，
     // token 指標、gen_ai.client.operation 的延遲、trace 上的 span 就都帶著它。
     //
     // 為什麼要多這個標籤：本機 llama-server 和雲端 Bedrock 都是用 OpenAI 的 client 打的，
