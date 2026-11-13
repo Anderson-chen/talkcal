@@ -1,32 +1,25 @@
-# PR 一定要連到 issue（描述裡寫「Closes #<issue 編號>」），沒有就紅燈。
+# PR 沒連到 issue（描述裡寫「Closes #<issue 編號>」）就紅燈，再由 branch protection 設成必過。
+# 合併時自動關 issue、看板移到 Done、之後從 PR 點回當初的需求，都靠這個連結。
 #
-# 為什麼要擋：issue 和 PR 的連動全靠這個連結 —— 合併時 GitHub 自動關 issue、
-# 看板自動移到 Done、半年後從 PR 點回當初的需求。忘了寫，整條就斷了。
-# 靠人記得一定會漏，所以寫成檢查，再由 branch protection 設成必過。
+# 問 GitHub 這個 PR 合併時會關哪些 issue（closingIssuesReferences），不自己用 regex 掃描述：
+# 大小寫、Fixes、Resolves 這些變體、側欄手動連的，判斷都跟 GitHub 實際的行為一樣。
 #
-# 為什麼不自己用 regex 掃描述：問 GitHub「這個 PR 合併時會關哪些 issue」（closingIssuesReferences），
-# 判斷規則就跟 GitHub 真的會做的事一模一樣 —— 大小寫、Fixes/Resolves 這些變體、
-# 在側欄手動連的，都不用自己猜。
-#
-# 為什麼不放進 ci/checks.sh：PR 只有 GitHub 上才有，本機 push 時根本還沒有 PR。
-# 這是平台那一層的事（分層理由見 ci/README.md）。
+# 不放進 ci/checks.sh：PR 只存在 GitHub 上，本機 push 時還沒有 PR。
 
 name: PR issue
 
 on:
   pull_request:
-    # edited：補上 Closes #N 之後要重跑，不然還是紅的
+    # edited：補上 Closes #N 之後要重跑
     types: [opened, edited, synchronize, reopened]
 
-# 只要讀 PR，不寫任何東西
 permissions:
   pull-requests: read
 
 jobs:
   pr-issue:
-    # Renovate 開的套件升級 PR 不用連 issue：它們沒有對應的需求，追蹤的地方是 Renovate 自己的
-    # Dependency Dashboard issue，PR 描述裡也寫了升了什麼、release notes 在哪。
-    # job 被 if 跳過時，GitHub 把它當成通過，branch protection 的必過檢查不會卡住
+    # Renovate 的套件升級 PR 沒有對應的需求，追蹤在它的 Dependency Dashboard issue，不用連。
+    # job 被 if 跳過時 GitHub 當成通過，必過檢查不會卡住
     if: github.event.pull_request.user.login != 'renovate[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 1

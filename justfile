@@ -1,20 +1,20 @@
-# 本機常用腳本的入口：`just` 或 `just --list` 列出全部指令和說明，`just <指令> [參數]` 執行。
-# 這裡只轉呼叫 repo 裡的腳本，做法、參數的意思寫在各腳本開頭；直接執行腳本也可以。
+# 本機常用腳本的入口：`just` 列出全部指令和說明，`just <指令> [參數]` 執行。
+# 每個指令只轉呼叫 repo 裡的腳本，做法和參數的意思寫在腳本開頭，直接執行腳本也一樣。
 #
-# 需要：just（winget install Casey.Just）、Git Bash。just 在 Windows 上用 PATH 裡的 `sh` 跑每一行，
-# 在 Git Bash 裡就找得到；要從 PowerShell、VS Code 的 task 跑，把 <Git 安裝目錄>\bin 加進使用者的 PATH。
-# 不寫死 bash 的路徑：Git 不一定裝在 C:\Program Files，PATH 裡第一個 bash 也可能是 WSL 的（見 cd/triggers/install-local.ps1）。
+# 需要 just（winget install Casey.Just）和 Git Bash。just 在 Windows 上用 PATH 裡的 `sh` 跑每一行：
+# 在 Git Bash 裡找得到；從 PowerShell、VS Code 的 task 跑的話，要把 <Git 安裝目錄>\bin 加進使用者的 PATH。
+# 不寫死 bash 的路徑：Git 不一定裝在 C:\Program Files，PATH 裡第一個 bash 也可能是 WSL 的。
 #
-# 只在 EC2 上跑、由 systemd 或 user_data 呼叫的（infra/envs/1-ec2/deploy.sh、backup-to-s3.sh、smoke.sh）不放進來。
+# 只在 EC2 上由 systemd、user_data 呼叫的腳本（infra/envs/1-ec2/deploy.sh、backup-to-s3.sh、smoke.sh）不放進來。
 #
-# 退版、真的還原、EC2 關機加了 [confirm]，執行前先問（--yes 跳過）。只擋從 just 進來的；直接跑腳本不會問。
+# 退版、真的還原、EC2 關機加了 [confirm]，執行前先問（--yes 跳過）；直接跑腳本不會問。
 # 同一支腳本的安全模式（--list、--unpin、--verify-only、start）拆成獨立的指令，才不必每次都回答。
 
 # 參數用 "$@" 原樣交給腳本：用 {{ }} 內插的話，帶空白、引號的參數會被拆開
 set positional-arguments
 
-# 收檔案路徑的指令加 [no-cd]，在使用者所在的目錄跑：just 預設會先切到 repo 根目錄，
-# 在子目錄給的相對路徑就會指錯地方。這時腳本要用 repo 的完整路徑叫
+# 收檔案路徑的指令加 [no-cd]，在使用者所在的目錄跑：just 預設先切到 repo 根目錄，
+# 在子目錄給的相對路徑就會指錯地方。這些指令要用 {{repo}} 叫腳本
 repo := justfile_directory()
 
 [private]

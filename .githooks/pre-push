@@ -1,31 +1,29 @@
 #!/usr/bin/env bash
-# git push 之前，在乾淨的容器裡把 CI 跑一遍（ci/run.sh）。沒過就不推。
+# git push 之前先掃祕密、在乾淨的容器裡跑一遍 CI（ci/run.sh），沒過就不推。
+# GitHub 的 CI 沒有 GPU，模型相關的測試只有在這台開著 llama-server 的電腦上才會真的跑到。
 #
-# 為什麼本機也要擋：GitHub 上的 CI 沒有 GPU，模型相關的測試在那裡永遠是跳過。
-# 這台電腦有模型，llama-server 開著的時候，那些測試只有在這裡才會真的跑到。
-#
-# 啟用（每個 clone 做一次；hook 不會跟著 git clone 自動生效）：
+# 每個 clone 要自己啟用一次，git clone 不會帶上 hook：
 #   git config core.hooksPath .githooks
-# 急著推、確定要跳過檢查：
+# 確定要跳過檢查：
 #   git push --no-verify
 
 set -euo pipefail
 
-# git 從 stdin 給「每個要推的 ref」：<本機 ref> <本機 sha> <遠端 ref> <遠端 sha>。
-# 測的是要推上去的那個 commit，不一定是 HEAD（例如推別的分支時）
+# git 從 stdin 給每個要推的 ref：<本機 ref> <本機 sha> <遠端 ref> <遠端 sha>。
+# 測的是要推的那個 commit，不一定是 HEAD（例如推別的分支時）
 zero=0000000000000000000000000000000000000000
-# 改到這些就要跑 AI eval：助理和工具（system prompt 在這裡）、抽取（它也有 prompt）、eval 自己的題目和評分、
+# 改到這些就要跑 AI eval：助理和工具（system prompt 在這裡）、抽取（它也有 prompt）、eval 的題目和評分、
 # application.properties（用哪個模型、溫度、max-tokens）
 EVAL_PATHS='^backend/src/main/java/io/github/andersonchen/talkcal/calendar/adapter/(in/assistant|out/extraction)/|^backend/src/eval/|^backend/src/main/resources/application[^/]*\.properties$'
-while read -r local_ref local_sha _ _; do  # 後兩個是遠端的 ref、sha，用不到
+while read -r local_ref local_sha _ _; do
     # 刪除遠端分支時本機 sha 是全 0，沒有東西要測
     [ "$local_sha" = "$zero" ] && continue
     echo "pre-push：檢查 ${local_ref#refs/heads/} ($(git rev-parse --short "$local_sha"))"
-    # 祕密先掃：幾秒就好，而且推上去就收不回來了 —— 測試紅了可以再推一次修，key 外洩只能作廢重發。
-    # 範圍是「還不在任何遠端分支上的 commit」，也就是這次真的會送出去的那些；新分支、舊分支都適用
+    # 祕密先掃：只要幾秒，而且測試紅了可以再推一次修，key 送出去就只能作廢重發。
+    # --not --remotes 是還不在任何遠端分支上的 commit，也就是這次真的會送出去的那些
     ci/secrets.sh "$local_sha" --not --remotes </dev/null
-    # AI eval 只在改到 prompt 或模型相關的檔案時跑（一分多鐘，每次都跑太慢；但改了 prompt 卻忘了跑，模型的回答變差了也沒人發現）。
-    # 看的是這次真的會送出去的 commit 改了哪些檔案
+    # AI eval 要一分多鐘，只在這次送出去的 commit 改到 prompt 或模型相關的檔案時跑。
+    # 改了 prompt 卻沒跑的話，模型的回答變差也沒人發現
     if git log --name-only --format= "$local_sha" --not --remotes | grep -qE "$EVAL_PATHS"; then
         echo "pre-push：改到 prompt 或模型相關的檔案，這次也跑 AI eval"
         RUN_EVAL=1 ci/run.sh "$local_sha" </dev/null

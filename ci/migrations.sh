@@ -1,33 +1,29 @@
 #!/usr/bin/env bash
-# 檢查這次新增、改動的 DB migration 會不會讓「新舊版本同時在線」的時候壞掉。
+# 檢查這次新增、改動的 DB migration，會不會在新舊版本同時在線時壞掉。
 #
-#   ci/migrations.sh                 跟 origin/master 比（PR、本機用）
-#   ci/migrations.sh <base>          跟指定的 commit 比（push 到 master 時用推之前那個 commit）
+#   ci/migrations.sh            跟 origin/master 比
+#   ci/migrations.sh <base>     跟指定的 commit 比
 #
 # 兩道檢查：
-#   1. 已經在 <base> 裡的 migration 不能改、不能刪、不能改名。
-#      Flyway 會比對每支跑過的檔案的 checksum，改了舊檔，已經跑過的資料庫一啟動就驗證失敗 ——
-#      也就是部署到一半才發現。在這裡擋，PR 上就看得到。
-#   2. 新增的 migration 給 squawk 看：直接 DROP / RENAME COLUMN、改型別、不帶 CONCURRENTLY 建索引、
-#      ADD CONSTRAINT 沒有 NOT VALID、ALTER TABLE 前沒設 lock_timeout…… 這些在舊版還在線上時會壞掉或鎖住整張表。
-#      每一條規則的理由、安全的替代做法，見 https://squawkhq.com/docs/rules。
+#   1. <base> 裡已經有的 migration 不能改、刪、改名：Flyway 會比對跑過的檔案的 checksum，
+#      改了舊檔，已經跑過的資料庫一啟動就驗證失敗，要部署到一半才發現。
+#   2. 新增的 migration 給 squawk 看：直接 DROP、RENAME COLUMN、改型別、不帶 CONCURRENTLY 建索引這類寫法，
+#      舊版還在線上時會壞掉或鎖住整張表。每條規則的理由和安全的替代做法見 https://squawkhq.com/docs/rules
+# squawk 只看新增的檔案：已經跑過的改不了，掃出來的警告也修不掉，只會把新的問題淹沒。
 #
-# 只看新增的檔案，不回頭掃已經在 <base> 裡的：那些已經跑過、改不了（第 1 道就是在擋這件事），
-# 掃出來的警告也修不掉，只會讓真正新的問題淹沒在舊的裡面。
-#
-# 真的要做危險的變更（例如 contract 那一步刪掉已經沒人用的欄位）：在那一句上面加
+# 真的要做危險的變更（例如刪掉已經沒人用的欄位），在那一句上面加
 #   -- squawk-ignore ban-drop-column
-# 並在註解寫清楚「為什麼現在刪是安全的」（哪個版本起就沒人讀寫它了）。ignore 本身在 PR 的 diff 裡看得到，就是審查的重點。
+# 並寫清楚為什麼現在刪是安全的（從哪個版本起就沒人讀寫它）。
 #
-# 不放進 checks.sh：那邊的容器只有某一個 commit 的檔案、沒有 .git，比不出「這次改了哪些」。
+# 不放進 checks.sh：那邊的容器沒有 .git，比不出這次改了哪些。
 
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 base=${1:-origin/master}
 dir=backend/src/main/resources/db/migration
-# 版本釘死。npm 上同一個版本號發布後不能被換掉；squawk 的執行檔也是 npm 套件（@squawk-cli/<平台>），
-# 安裝時不另外下載東西。升級時看 changelog：新版常常會多規則，舊的 migration 不受影響（只掃新增的）
+# 版本釘死。npm 上發布過的版本號不能換內容；squawk 的執行檔也是 npm 套件（@squawk-cli/<平台>），安裝時不另外下載。
+# 升級前看 changelog：新版常多規則，但只掃新增的檔案，舊的不受影響
 squawk='squawk-cli@2.66.0'
 
 if ! git rev-parse --verify --quiet "$base^{commit}" >/dev/null; then
@@ -38,7 +34,7 @@ fi
 status=0
 
 echo "── 已經跑過的 migration 不能改 ──"
-# --no-renames：改名也當成「刪掉舊的 + 新增」，舊的那支照樣算被刪
+# --no-renames：改名會變成「刪掉舊的、新增一支」，舊的那支照樣算被刪
 changed=$(git diff --no-renames --name-only --diff-filter=MD "$base"...HEAD -- "$dir")
 if [ -n "$changed" ]; then
     echo "這些 migration 在 $base 裡就有了，不能改也不能刪（要改資料庫，加一支新的 V 檔）："
@@ -56,7 +52,7 @@ if [ -z "$added" ]; then
 else
     # shellcheck disable=SC2001  # 同上
     echo "$added" | sed 's/^/  /'
-    # 規則、PostgreSQL 版本、「每支 migration 都在交易裡跑」（Flyway 的預設）寫在 ci/squawk.toml
+    # 規則和 PostgreSQL 版本設定在 ci/squawk.toml
     # shellcheck disable=SC2086 # 檔名一行一個、沒有空白（Flyway 的命名規則），要拆成多個參數
     npx --yes "$squawk" --config ci/squawk.toml $added || status=1
 fi

@@ -1,25 +1,23 @@
-# IntelliJ 自己編譯時的輸出資料夾。開頭加 / 錨定在那一層：寫成 out/ 的話會忽略「任何一層」叫 out 的資料夾，
-# 連六角架構的 application/port/out/、adapter/out/ 原始碼也被忽略，新檔案進不了 git，
-# 移除 worktree 時還會被當成可以丟的檔案一起刪掉
+# IntelliJ 自己編譯的輸出。開頭的 / 要留著：寫成 out/ 會忽略每一層叫 out 的資料夾，
+# 六角架構的 application/port/out/、adapter/out/ 原始碼也跟著進不了 git
 /out/
 /backend/out/
 
-# Gradle
 build/
 .gradle/
 
-# IntelliJ：IDE 狀態不進版控，專案結構由 build.gradle 描述就夠了
+# IDE 的狀態，專案結構由 build.gradle 描述
 .idea/
 *.iml
 
-# Claude 桌面版的預覽設定：寫的是這台電腦的路徑（C:\llm\...），換一台電腦就不對
+# Claude 桌面版的預覽設定，寫的是這台電腦的路徑（C:\llm\...）
 .claude/launch.json
 
-# 平行工作開的 worktree（見 .agents/rules/branch.md）：每一個都是整份 repo 的另一個 checkout，不能被主 checkout 收進 commit
+# 平行工作開的 worktree（見 .agents/rules/branch.md），每一個都是整份 repo 的另一個 checkout
 .claude/worktrees/
 
-# Terraform：provider 快取、state、計畫檔、各自的變數值都不進版控。
-# .terraform.lock.hcl 要進：它釘住 provider 的版本和雜湊，換台電腦 init 拿到同一份。
+# Terraform 的 provider 快取、state、計畫檔、各自的變數值。
+# .terraform.lock.hcl 要進 git：它釘住 provider 的版本和雜湊，換台電腦 init 拿到同一份
 .terraform/
 *.tfstate
 *.tfstate.*
@@ -28,8 +26,8 @@ tfplan
 *.tfvars
 backend.hcl
 
-# 祕密：本機自己填的、雲端 deploy.sh 從 SSM 拉下來的 .env（DB 密碼、OAuth secret）。
-# 不錨定在 deploy/：哪一層多出一份 .env 都不該進 git。範本 .env.example 要進
+# .env 放祕密（DB 密碼、OAuth secret），本機自己填、雲端由 deploy.sh 從 SSM 拉下來。
+# 不限定在 deploy/：哪一層多出一份 .env 都不該進 git。範本 .env.example 要進
 .env
 .env.*
 !.env.example

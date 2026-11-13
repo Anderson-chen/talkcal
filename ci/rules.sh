@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
-# 檢查 Mimir 的錄製規則（ops/mimir/rules/）：語法對不對、算出來的 SLI、burn rate 對不對。用 promtool，在容器裡跑。
+# 用 promtool 檢查 Mimir 的錄製規則（ops/mimir/rules/）。promtool 和 Mimir 用同一套 PromQL 引擎，算出來的值一樣。
 #
 #   ci/rules.sh
 #
-# 兩步：
-#   1. promtool check rules：語法、PromQL 寫錯、同一組裡名稱重複。
-#   2. promtool test rules ops/mimir/slo.test.yaml：餵假的請求序列，比對錄出來的值（例如 1/64 的 5xx → burn rate 3.125）。
-#      改了範圍、門檻、算式卻沒想到某個情況（沒流量、不在範圍內的路徑），這一步會紅。
+# check rules 抓語法、PromQL 寫錯、名稱重複；test rules 餵 ops/mimir/slo.test.yaml 的假請求，比對錄出來的值。
+# 改了範圍、門檻、算式卻漏想某個情況（沒流量、不在範圍內的路徑），第二步會紅。
 #
-# 為什麼不放進 checks.sh：那邊的容器是 JDK + Node，沒有 promtool；這支只要一個 Prometheus 映像檔，幾秒就跑完。
-# promtool 是 Prometheus 的 PromQL 引擎，Mimir 用的是同一套，算出來的值一樣。
+# 不放進 checks.sh：那邊的容器沒有 promtool，這支只要一個 Prometheus 映像檔，幾秒就跑完。
 
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"

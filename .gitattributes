@@ -1,15 +1,15 @@
-# 從設計畫布匯出的打包檔（9MB，內含執行環境與字型），要跟匯出時一個 byte 都不差：
-# 當成二進位檔，git 不做換行轉換（這台機器 core.autocrlf=true，不設的話取出時會變成 CRLF）、也不嘗試算文字 diff。
+# 設計畫布匯出的打包檔（9 MB，內含執行環境和字型），要跟匯出時一個 byte 都不差：
+# 當成二進位檔，不做換行轉換、不算文字 diff。core.autocrlf=true 的機器（Windows 的 Git 預設）不設的話，取出時會變成 CRLF
 docs/design/calendar/prototype.html -text -diff
 
-# shell script 一律 LF：這台機器 core.autocrlf=true，不釘的話 checkout 出來會變成 CRLF，
-# bash 讀到行尾的 \r 會報 "$'\r': command not found"（ci/run.sh、pre-push hook 都是在 Git Bash 裡跑）
+# 下面這些要給 bash 讀，一律 LF：core.autocrlf=true 的機器 checkout 出來會變成 CRLF，
+# bash 讀到行尾的 \r 會報 "$'\r': command not found"
 *.sh text eol=lf
 .githooks/* text eol=lf
 cd/envs/*.env text eol=lf
 backend/gradlew text eol=lf
-# Terraform 範本裡的 user_data：Terraform 在 Windows 上讀檔、原樣送到 EC2 給 bash 跑，CRLF 一樣會壞
+# Terraform 在 Windows 上讀 user_data 範本，原樣送到 EC2 給 bash 跑
 *.tftpl text eol=lf
-# .tf 也是：secrets.tf 的 heredoc 原樣寫進 SSM 的 .env，CRLF 讓每行多一個 \r，
+# secrets.tf 的 heredoc 原樣寫進 SSM 的 .env。CRLF 會讓每行多一個 \r，
 # deploy.sh 用 grep 取出的 DB 密碼就多一個字元，ALTER ROLE 設錯密碼、app 連不上資料庫
 *.tf text eol=lf

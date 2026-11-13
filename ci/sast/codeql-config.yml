@@ -1,7 +1,7 @@
-# ci/sast/analyze.sh 給 CodeQL 的設定（格式同 GitHub code scanning 的 config file）。
+# CodeQL 的設定（ci/sast/analyze.sh 用，格式是 GitHub code scanning 的 config file）。
 # 每一條排除都要寫理由：排除的路徑之後出了真的問題也看不到。
 
 paths-ignore:
-  # 設計稿：畫布工具匯出的單一 HTML，裡面的 JS 是工具自己的 bundler，不是我們寫的，也不會上線。
-  # 會上線的 docs/architecture/（GitHub Pages）照樣掃
+  # 設計稿是畫布工具匯出的 HTML，裡面的 JS 是那個工具的，不會上線。
+  # 會發佈到 GitHub Pages 的 docs/architecture/ 照樣掃
   - docs/design/**

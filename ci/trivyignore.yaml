@@ -1,19 +1,20 @@
-# ci/vulns.sh 評估過、決定接受的漏洞。每一條都要寫理由，而且一定要有到期日：
-# 到期後掃描會重新報出來、CI 變紅，逼人再看一次，不會變成「忽略了就永遠忘了」。
+# ci/vulns.sh 評估過、決定接受的漏洞和設定。每一條都寫理由（statement）和到期日：
+# 到期後掃描會重新報出來、CI 變紅，逼人再評估一次。
 #
-# gosu（postgres 官方映像檔裡的小工具）的 Go 標準函式庫漏洞 —— 2026-10-14 評估：
-#   - 修不了：gosu 是上游編好放進去的 Go 執行檔，postgres 最新的 18 也一樣；deploy/postgres/Dockerfile 只用 apk 升作業系統套件，升不到它
-#   - 碰不到：gosu 只在容器啟動時把 root 切成 postgres 使用者，接著就 exec 成 postgres 本身，
-#     不開網路、不讀外部輸入；標準函式庫的漏洞要被利用，得先有程式拿它去處理攻擊者給的資料
-#   - postgres 的埠只綁在 127.0.0.1（deploy/compose.yaml），外面連不到
-# paths 限定在 gosu：同一個 CVE 出現在別的地方（例如 app 自己的程式）照樣會報
+# paths 盡量限定：同一個 CVE、同一條規則出現在別的地方照樣會報。
+# 作業系統套件的漏洞限定不到映像檔，會套用到每個掃的映像檔，所以這類的到期日都給短的。
 #
-# 第三方映像檔，2026-11-10 評估。已升到發布滿 14 天的最新版（.github/renovate.json5 的 minimumReleaseAge），剩下的分三種：
-#   - Caddy 2.11.6：唯一對外的服務，HTTP/2、Range 的 DoS 外面碰得到，這裡是「接受到升版為止」，不是「碰不到」。
-#     2.11.9 已修掉除了 x/net/html 以外的全部，2026-11-20 滿 14 天，Renovate 下一個週一（11-23）開 PR（patch 不用勾選）；到期日給到合併的隔天
-#   - 觀測堆疊：Grafana 只綁 127.0.0.1、其他只在 compose 網路裡，沒有對外的路；這幾版上游還沒帶修補，給一個月
-#   - postgres-exporter：v0.20.1 已是最新版，上游沒發新版就沒得升。不發佈埠，只有 Alloy 會來抓；給兩個月
-# 限制：作業系統套件的例外限定不到映像檔，會套用到每個掃的映像檔，所以 OS 套件那幾條到期日都給短的
+# gosu（postgres 映像檔裡切換使用者的小工具）的 Go 標準函式庫漏洞，2026-10-14 評估：
+#   - 修不了：gosu 是上游編好的執行檔，最新的 postgres 18 也一樣；deploy/postgres/Dockerfile 用 apk 只升得到作業系統套件
+#   - 碰不到：gosu 只在容器啟動時把 root 切成 postgres，接著就 exec 成 postgres，不開網路、不讀外部輸入。
+#     標準函式庫的漏洞要被利用，得先有程式拿它處理攻擊者給的資料
+#   - postgres 的埠只綁 127.0.0.1（deploy/compose.yaml）
+#
+# 第三方映像檔，2026-11-10 評估。都已升到發布滿 14 天的最新版（.github/renovate.json5 的 minimumReleaseAge）：
+#   - Caddy 2.11.6：對外的服務只有它，HTTP/2、Range 的 DoS 外面碰得到，只接受到升版為止。
+#     2.11.9 修掉了 x/net/html 以外的全部，2026-11-20 發布滿 14 天，Renovate 11-23 開 PR；到期日給到合併的隔天
+#   - 觀測堆疊：Grafana 只綁 127.0.0.1、其他只在 compose 網路裡，外面連不到；上游還沒帶修補，給一個月
+#   - postgres-exporter：v0.20.1 已是最新版，不發佈埠，只有 Alloy 會來抓；給兩個月
 vulnerabilities:
   - id: CVE-2025-61726
     paths: [usr/local/bin/gosu]
@@ -237,52 +238,47 @@ vulnerabilities:
     expired_at: 2027-01-10
 
 # ── 設定檢查（trivy config）──────────────────────────────────────────────
-# 規則：Trivy 內建的（DS-*：Dockerfile、AWS-*：Terraform）和 ci/config-checks/ 自己寫的（TALKCAL-COMPOSE-*：compose）。
-# 都限定 paths：同一條規則出現在新的檔案照樣會報。設計上就要這樣的給一年，到期重看一次；等著修的給短的
+# 規則：Trivy 內建的 DS-*（Dockerfile）、AWS-*（Terraform），和 ci/config-checks/ 的 TALKCAL-COMPOSE-*（compose）。
+# 本來就要這樣設計的給一年，到期重看一次；等著修的給短的
 misconfigurations:
-  # CI 的容器要掛主機的 docker.sock（Testcontainers、Trivy 讀映像檔），拿到它就等同主機 root，容器內改用一般使用者擋不住什麼
+  # 容器已經拿到等同主機 root 的 docker.sock，裡面改用一般使用者也擋不住什麼
   - id: DS-0002
     paths: [ci/Dockerfile, ci/sast/Dockerfile]
     statement: CI 容器掛 docker.sock，等同主機 root；只在 CI 跑完就丟
     expired_at: 2027-10-30
-  # nginx 的 master 是 root（只用來開 80 埠），處理請求的 worker 是 nginx 使用者。
-  # 改成整個非 root 要換成 8080 埠，Caddy、compose、架構頁都要跟著改，另外做；到期日給短的逼自己回來
+  # master 用 root 只為了開 80 埠。整個改成非 root 要換成 8080 埠，Caddy、compose、架構頁都要跟著改
   - id: DS-0002
     paths: [web/Dockerfile]
     statement: nginx master 是 root、worker 不是；改成非 root 要換埠，另外做
     expired_at: 2027-01-31
-  # postgres 照官方 entrypoint：以 root 準備 PGDATA 再用 gosu 換使用者（見檔案開頭 gosu 那段）
   - id: DS-0002
     paths: [deploy/postgres/Dockerfile]
     statement: 官方 entrypoint 以 root 準備資料夾權限，再用 gosu 換成 postgres 執行
     expired_at: 2027-11-12
-  # model-seed：volume 剛建好時擁有者是 root，複製模型檔這一步要 root；跑完就結束，長駐的模型服務是一般使用者（見 compose 的註解）
+  # 剛建好的 volume 擁有者是 root，複製模型檔要 root；長駐的模型服務是一般使用者
   - id: TALKCAL-COMPOSE-003
     paths: [deploy/compose.yaml]
     statement: model-seed 跑完就結束，只為了寫進 root 擁有的 volume
     expired_at: 2027-10-30
-  # 演練紀錄（docs/drills/）用的 compose：只在本機起、跑完就刪，密碼是寫明 local-only 的假值
   - id: TALKCAL-COMPOSE-005
     paths: [docs/drills/**]
     statement: 本機演練用的假密碼，不是任何環境的真密碼
     expired_at: 2027-10-30
-  # Alloy 讀 docker.sock 才能收各容器的 log；風險和替代做法寫在 ops/compose.yaml 的註解
   - id: TALKCAL-COMPOSE-002
     paths: [ops/compose.yaml]
     statement: Alloy 收容器 log 要用 Docker API，見 ops/compose.yaml
     expired_at: 2027-10-30
-  # S3 用 SSE-S3（AES256）而不是自己的 KMS key：一把 key 每月 1 美元加 API 費用，
-  # 換到的是 key 的輪替、存取政策自己管 —— 單人專案、bucket 本來就鎖在自己的帳號，用不到
+  # 自管 KMS key 每把每月 1 美元加 API 費用，換到的是自己管輪替和存取政策；bucket 只有自己的帳號存取得到，用不到
   - id: AWS-0132
     paths: [infra/bootstrap/main.tf, infra/envs/1-ec2/backups.tf, infra/envs/1-ec2/archive.tf]
     statement: SSE-S3 已加密；自管 KMS key 的好處這個規模用不到
     expired_at: 2027-10-30
-  # 出網全開：要拉映像檔、模型、套件、Let's Encrypt，目的地太多。只開 443 這條規則一樣會報（它看的是 0.0.0.0/0）
+  # 出網的目的地太多（映像檔、模型、套件、Let's Encrypt）。只開 443 也一樣會報：這條規則看的是 0.0.0.0/0
   - id: AWS-0104
     paths: [infra/envs/1-ec2/security-groups.tf]
     statement: EC2 要對外拉映像檔、模型、憑證；入站才是要鎖的，只開 80/443（SSH 要明確開、限定來源 IP）
     expired_at: 2027-10-30
-  # 公開子網配公開 IP：不建 NAT Gateway（每月固定費用），理由見 infra/envs/1-ec2/vpc.tf 開頭
+  # 為什麼不建 NAT Gateway 見 infra/envs/1-ec2/vpc.tf 開頭
   - id: AWS-0164
     paths: [infra/envs/1-ec2/vpc.tf]
     statement: 刻意不用 NAT Gateway 省錢，EC2 直接用公開 IP；入站由 security group 鎖

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# 把這台機器上的 app、web 退回某個已經部署過的版本，並釘住，watcher 不會自己再部署新的上來。
+# 把這台機器上的 app、web 退回一個部署過的版本並釘住，watcher 就不會再自動部署新版上來。
 #
 #   cd/rollback.sh local --list          機器上有哪些版本退得回去、現在跑哪個、有沒有釘住
 #   cd/rollback.sh local 3f9c2ab         退到指定版本（版本號就是映像檔的 tag，見 cd/release.md）
 #   cd/rollback.sh local --previous      退到 GitHub Deployments 上一個成功、機器上也還有映像檔的版本
 #   cd/rollback.sh local --unpin         解除釘住，watcher 下一輪照常部署最新的綠燈版本
 #
-# 為什麼 --no-build --pull never、為什麼先換 web、起不來為什麼換回：cd/rollback.md「選型」。
+# 為什麼 --no-build --pull never、為什麼先換 web、起不來為什麼換回原本的：見 cd/rollback.md「選型」。
 # 鎖和釘住的檔名（.git/cd-<env>.lock、.pin）跟 cd/triggers/watch.sh 是同一組，改名要兩邊一起改。
 
 set -euo pipefail
@@ -24,7 +24,6 @@ source "$env_file"
 compose_args=()
 for f in $COMPOSE_FILES; do compose_args+=(-f "$f"); done
 
-# 釘住、鎖、紀錄都放在 watcher 用的同一個地方：.git 裡，不會被 checkout 動到、也不會被 commit
 git_dir="$(git rev-parse --absolute-git-dir)"
 pin="$git_dir/cd-$env_name.pin"
 lock="$git_dir/cd-$env_name.lock"
@@ -32,7 +31,7 @@ history="$git_dir/cd-$env_name.history"
 
 revision_label=org.opencontainers.image.revision
 
-# Windows 的 gh 輸出可能帶 CR，混進 id 會變成不合法的網址：所有 gh 呼叫都經過這裡
+# Windows 的 gh 輸出可能帶 CR，混進 id 會變成不合法的網址。gh 的輸出要拿來用的，都經過這裡
 gh_() {
   gh "$@" | tr -d '\r'
 }
@@ -43,7 +42,7 @@ repo_name() {
   [ -n "$repo" ]
 }
 
-# 正在跑的那個服務是哪個版本：容器用的映像檔 tag。沒在跑就是空的
+# 正在跑的服務用的映像檔 tag；沒在跑就印空的
 running_version() {
   local id
   id="$(docker compose "${compose_args[@]}" ps -q "$1" 2>/dev/null || true)"
@@ -51,8 +50,8 @@ running_version() {
   docker inspect --format '{{.Config.Image}}' "$id" | sed 's/^.*://'
 }
 
-# app 映像檔 label 上的 commit，只認 40 碼：沒有 label、或沒經過 apply.sh 直接 build 的
-# （Dockerfile 的預設值 unknown）都當成沒有 —— 不知道裡面是哪個 commit，退過去等於賭
+# app 映像檔 label 上的 commit，只認 40 碼。沒有 label、或沒經過 apply.sh 直接 build 的
+# （Dockerfile 的預設值是 unknown）都當成沒有：不知道裡面是哪個 commit，退過去等於賭
 revision_of() {
   local rev
   rev="$(docker image inspect --format "{{index .Config.Labels \"$revision_label\"}}" "talkcal/app:$1" 2>/dev/null || true)"
@@ -60,12 +59,12 @@ revision_of() {
   return 0
 }
 
-# -dirty：從有沒 commit 改動的 clone build 的，label 寫的 commit 跟內容不一樣（規則在 cd/version.sh）
+# -dirty 的映像檔是從有沒 commit 改動的 clone build 的，內容跟 label 上的 commit 不一樣（規則在 cd/version.sh）
 is_dirty() {
   [[ "$1" == *-dirty ]]
 }
 
-# 退得回去：app 帶著 commit（上面那條規則），web 也在。印出 commit
+# app 帶著 commit、web 也在才退得回去。印出 commit
 deployable() {
   local rev
   rev="$(revision_of "$1")"
@@ -87,13 +86,13 @@ list_versions() {
   return 0
 }
 
-# GitHub Deployments 上，現在這版之前最近一次成功部署的 commit，再找機器上 label 是那個 commit 的映像檔。
-# 不用映像檔的建立時間排「上一版」：build 有快取時，舊 commit 的映像檔可能比新的還「新」。
-# 結果直接寫進 target，不用 $(...) 接：在子 shell 裡跑的話，查到的 repo 帶不回來，記錄時又要再查一次
+# 找 GitHub Deployments 上，現在這版之前最近一次成功部署的 commit，再找機器上 label 是那個 commit 的映像檔。
+# 不用映像檔的建立時間排上一版：build 有快取時，舊 commit 的映像檔可能比新的還新。
+# 結果直接寫進 target，不用 $(...) 接：在子 shell 裡查到的 repo 帶不回來，記錄時又要再查一次
 previous_version() {
   local current_rev deployments id sha state v
   current_rev="$(revision_of "$(running_version app)")"
-  # 每一步失敗都要停：在 if 裡呼叫時 set -e 不算數，不擋的話 repo 是空的也會一路查下去
+  # 每一步失敗都要自己停：在 if 裡呼叫時 set -e 不生效，repo 是空的也會一路查下去
   repo_name || return 1
   deployments="$(gh_ api "repos/$repo/deployments?environment=$env_name&per_page=30" \
                    --jq '.[] | "\(.id) \(.sha)"')" || return 1
@@ -101,8 +100,8 @@ previous_version() {
     [ -n "$id" ] && [ "$sha" != "$current_rev" ] || continue
     state="$(gh_ api "repos/$repo/deployments/$id/statuses?per_page=1" --jq '.[0].state // empty')" || return 1
     [ "$state" = success ] || continue
-    # 同一個 commit 可能有好幾個映像檔（例如 3b28b34 和打了 release tag 之後的 v0.1.0）：
-    # 先挑 release tag（LC_ALL=C 下 v 排在數字、a-f 後面，sort -r 讓 v* 在前），-dirty 不挑
+    # 同一個 commit 可能有好幾個映像檔（例如 3b28b34 和之後打了 release tag 的 v0.1.0）。
+    # 先挑 release tag：LC_ALL=C 下 v 排在數字、a-f 後面，sort -r 讓 v* 在前。-dirty 不挑
     for v in $(docker images talkcal/app --filter "label=$revision_label=$sha" --format '{{.Tag}}' | LC_ALL=C sort -r); do
       is_dirty "$v" && continue
       if deployable "$v" >/dev/null; then
@@ -114,8 +113,9 @@ previous_version() {
   return 1
 }
 
-# 把 web、app 各換成指定的版本，等 healthy。先換 web 再換 app，跟 apply.sh 相反（理由見 cd/rollback.md「為什麼先換 web 再換 app」）。
-# 兩個版本分開給：換回原本的時候，web 和 app 原本不一定是同一版（例如只用 apply.sh 換過 web）
+# switch_to <web 版本> <app 版本>：先換 web 再換 app，各自等 healthy。順序跟 apply.sh 相反，
+# 理由見 cd/rollback.md「為什麼先換 web 再換 app」。
+# 兩個版本分開給：換回原本的時候，web 和 app 不一定是同一版（例如只用 apply.sh 換過 web）
 switch_to() {
   local web_version="$1" app_version="$2" svc version timeout now
   for svc in web app; do
@@ -127,7 +127,7 @@ switch_to() {
     echo "── $svc → $version（最多等 ${timeout} 秒）"
     APP_VERSION="$version" docker compose "${compose_args[@]}" \
       up -d --no-build --pull never --no-deps --wait --wait-timeout "$timeout" "$svc" || return 1
-    # 確認真的換上了：compose 檔的 image 沒有用 ${APP_VERSION} 的話，up 成功但什麼都沒換
+    # compose 檔的 image 沒用 ${APP_VERSION} 的話，up 會成功但什麼都沒換
     now="$(running_version "$svc")"
     if [ "$now" != "$version" ]; then
       echo "$svc 跑的是 $now，不是 $version：compose 檔的 image 有沒有用 \${APP_VERSION}？" >&2
@@ -140,9 +140,9 @@ record() {
   echo "$(date '+%F %T') $*" >> "$history"
 }
 
-# 在 GitHub Deployments 記一筆，頁面上看得到「這時候退回了哪一版」。
-# 跟 watch.sh 的 create_deployment、set_status 是同一種紀錄：watch.sh 跑的是 .git 裡的副本，不能 source 共用檔，所以各寫一份。
-# 連不上 GitHub 也不算失敗：服務已經退好了，本機的 history 檔有同樣的內容
+# 在 GitHub Deployments 記一筆退版。跟 watch.sh 的 create_deployment、set_status 做的事一樣，
+# 但 watch.sh 跑的是 .git 裡的副本，沒辦法 source 共用的檔案，所以各寫一份。
+# 連不上 GitHub 不算失敗：服務已經退好了，本機的 history 檔也有記
 record_github() {
   local version="$1" from="$2" sha id
   sha="$(revision_of "$version")"
@@ -193,13 +193,13 @@ case "$target" in
     ;;
 esac
 
-# 版本號就是 docker tag：只允許 tag 合法的字元，也擋掉被當成選項或路徑的輸入
+# 版本號就是 docker tag：只允許 tag 合法的字元，也擋掉會被當成選項或路徑的輸入
 if ! [[ "$target" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
   echo "不是合法的版本號：$target" >&2
   exit 1
 fi
 
-# 1. 退得回去才開始。這一步之前什麼都還沒動
+# 1. 確定退得回去才開始，在這之前什麼都沒動
 if ! target_rev="$(deployable "$target")"; then
   echo "$target 退不回去（talkcal/app:$target 要帶 commit label、talkcal/web:$target 也要在），什麼都沒動。" >&2
   echo "要部署機器上沒有的舊版本，見 cd/rollback.md「映像檔不在了」。" >&2
@@ -216,10 +216,10 @@ if [ "$target" = "$from" ] && [ "$from_web" = "$target" ]; then
   echo "現在跑的就是 $target，不用退"
   exit 0
 fi
-shown_from="${from:-（沒在跑）}"   # 只用在訊息和紀錄；判斷能不能換回看 from 本身
+shown_from="${from:-（沒在跑）}"   # 只用在訊息和紀錄；能不能換回要看 from 本身
 
-# 退的是映像檔，compose 設定用的是目前 checkout 的：兩版之間 compose 檔改過的話，舊映像檔會配上新的設定
-# （例如改名的環境變數）。從 checkout 拿舊版的 compose 檔不行：相對路徑、.env 的位置都綁在這個 checkout 上，所以只提醒
+# 退的是映像檔，compose 設定還是目前 checkout 的：兩版之間 compose 檔改過的話，舊映像檔會配上新的設定
+# （例如改名的環境變數）。不改用舊版的 compose 檔：相對路徑、.env 的位置都綁在這個 checkout 上，所以只提醒
 # shellcheck disable=SC2086
 if ! git cat-file -e "$target_rev^{commit}" 2>/dev/null; then
   echo "注意：這個 clone 沒有 ${target_rev:0:7} 這個 commit，比對不了兩版的 compose 設定"
@@ -228,8 +228,8 @@ elif ! git diff --quiet "$target_rev" HEAD -- $COMPOSE_FILES; then
   git diff --stat "$target_rev" HEAD -- $COMPOSE_FILES
 fi
 
-# 2. 拿 watcher 的鎖：換的途中 watcher 不會插進來
-# 超過 60 分鐘的鎖當成上一輪被砍掉留下的（門檻跟 watch.sh 一致）：出事要退版時不該被殘留的鎖擋住
+# 2. 拿 watcher 的鎖，換到一半 watcher 不會插進來。
+# 殘留的鎖照 watch.sh 的規則清掉（超過 60 分鐘）：出事要退版時不該被它擋住
 if [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +60)" ]; then
   echo "鎖超過 60 分鐘，當成殘留清掉：$lock"
   rmdir "$lock"
@@ -242,7 +242,7 @@ trap 'rmdir "$lock"' EXIT
 
 echo "══ rollback $env_name：$shown_from → $target"
 if switch_to "$target" "$target"; then
-  # 3. 換好了才釘住：鎖還拿著，watcher 不會在這之前部署；失敗的話就不用還原釘住
+  # 3. 換好了才釘住：鎖還拿著，watcher 在這之前不會部署；換失敗也就不必還原釘住
   echo "$target $(date '+%F %T') 從 $shown_from 退回" > "$pin"
   record "rollback $shown_from -> $target"
   echo "✅ 退回 $target。watcher 已釘住，修好之後：cd/rollback.sh $env_name --unpin"
@@ -254,7 +254,7 @@ if switch_to "$target" "$target"; then
   exit 0
 fi
 
-# 4. 換上去起不來：換回原本的版本，不留一個掛掉的服務
+# 4. 新的起不來就換回原本的版本，不留一個掛掉的服務
 echo "❌ $target 起不來，換回原本的 $shown_from" >&2
 if [ -n "$from" ] && [ -n "$from_web" ] && switch_to "$from_web" "$from"; then
   echo "已換回 $from（web $from_web），服務照舊。$target 為什麼起不來：docker compose logs app" >&2

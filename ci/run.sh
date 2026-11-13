@@ -1,27 +1,18 @@
 #!/usr/bin/env bash
-# 在乾淨的容器裡跑 CI 檢查（ci/checks.sh），跑完就把容器丟掉。
-# 本機手動跑、pre-push hook、GitHub Actions 都走這一支，三邊跑的是同一件事、同一個環境（理由見 docs/adr/0008-ci-same-script-in-container.md）。
+# 把一個 commit 放進 ci/Dockerfile 的容器跑 ci/checks.sh，跑完刪掉容器，摘要和報告複製回 ci/build/。
+# 本機、pre-push hook、GitHub Actions 都跑這一支，理由見 docs/adr/0008-ci-same-script-in-container.md。
 #
 #   ci/run.sh            測 HEAD
-#   ci/run.sh <commit>   測指定的 commit（pre-push hook 用：測的是「要推上去的那個」）
+#   ci/run.sh <commit>   測指定的 commit
 #
-# 跟主機隔離的方式：
-#   - 程式碼：用 git archive 只複製那個 commit 的內容進容器。沒 commit 的檔案、殘留的 build/、node_modules
-#             都不會進去 —— 測的就是會推上去的東西。也不掛資料夾：Windows 掛進容器很慢（約 20 MB/s）。
-#   - 環境：JDK、Node 都在 ci/Dockerfile 裡，不用主機裝的版本。
-#   - 跑完：容器整個刪掉，只把摘要和測試報告複製回主機的 ci/build/。
-#
-# 跟主機共用的只有這三樣：
-#   - 依賴快取（具名 volume talkcal-ci-gradle、talkcal-ci-pnpm）：不共用的話每次都要重新下載幾百 MB。
-#     Gradle 本體不在這裡，它烤在映像檔裡（見 ci/Dockerfile）
-#   - Docker（docker.sock）：讓 Testcontainers 開 PostgreSQL。開在主機上、跟這個容器並排，而不是容器裡再包一層
-#   - 主機上的 llama-server（host.docker.internal:8080）：有開就真的跑模型測試，沒開就跳過
+# 程式碼用 git archive 複製進容器，不掛資料夾：沒 commit 的檔案、殘留的 build/、node_modules 才不會混進來，
+# 而且 Windows 掛資料夾進容器只有約 20 MB/s。
 
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-# Windows 的 Git Bash 會把看起來像路徑的參數（/var/run/docker.sock、/work）改寫成 C:/Program Files/Git/...，
-# 傳給 docker 就全錯了。關掉這個改寫；在 Linux、macOS 上這個變數沒有作用
+# Git Bash 會把看起來像路徑的參數（/var/run/docker.sock、/work）改寫成 C:/Program Files/Git/...，傳給 docker 就錯了。
+# Linux、macOS 上這個變數沒有作用
 export MSYS_NO_PATHCONV=1
 
 commit=$(git rev-parse --verify "${1:-HEAD}^{commit}")
@@ -39,22 +30,17 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 echo "── 準備 CI 映像檔 ──"
-# build context 也從那個 commit 取：只要 Dockerfile 和 Gradle wrapper 那幾個檔案，不送整個資料夾給 Docker。
-# 這幾個檔案沒變時整個映像檔直接用快取，幾秒就好；升級 Gradle 後的第一次才會重新下載 Gradle 本體
+# build context 也從那個 commit 取，而且只給 ci/Dockerfile 會 COPY 的檔案：這幾個檔案沒變，整個映像檔都用快取
 git archive "$commit" ci/Dockerfile backend/gradlew backend/gradle/wrapper web/package.json \
     | docker build --quiet --tag "$image" --file ci/Dockerfile - >/dev/null
 
-# 不管成功、失敗、中途 Ctrl+C，容器都要刪掉
 trap 'docker rm --force "$container" >/dev/null 2>&1 || true' EXIT
 
-# host.docker.internal：容器裡用這個名字找主機。Docker Desktop 本來就有；
-# Linux（包括 GitHub 的機器）要用 --add-host 對到 host-gateway 才有
-#
-# TESTCONTAINERS_HOST_OVERRIDE：Testcontainers 開的 PostgreSQL 在主機的 Docker 上，埠也發佈在主機上，
-# 所以從這個容器裡要經由主機去連，而不是連 localhost（那是這個容器自己）
-#
-# SPRING_AI_OPENAI_CHAT_BASEURL：模型測試連哪台 llama-server（backend/build.gradle 會把它傳進測試）。
-# 可以從外面覆蓋，沒給就連主機上的 8080
+# docker.sock：Testcontainers 開的 PostgreSQL 跟這個容器並排開在主機的 Docker 上，不在容器裡再包一層 Docker。
+#   所以 TESTCONTAINERS_HOST_OVERRIDE 要指向主機：資料庫的埠發佈在主機上，localhost 是這個容器自己
+# host.docker.internal：容器裡找主機的名字。Docker Desktop 內建，Linux（GitHub 的 runner）要 --add-host 才有
+# 兩個 volume 是依賴快取，跨次保留，不然每次都重新下載幾百 MB。Gradle 只掛 caches/：Gradle 本體烤在映像檔的 wrapper/，掛整個家目錄會蓋掉它
+# SPRING_AI_OPENAI_CHAT_BASEURL：模型測試連的 llama-server，預設是主機的 8080。連不到的話那些測試跳過，不算失敗
 docker create --name "$container" \
     --volume /var/run/docker.sock:/var/run/docker.sock \
     --volume talkcal-ci-gradle:/opt/gradle-home/caches \
@@ -70,15 +56,14 @@ git archive "$commit" | docker cp - "$container:/work"
 status=0
 docker start --attach "$container" || status=$?
 
-# 摘要和報告拿回主機：GitHub 要貼到結果頁、上傳成 artifact；本機失敗時要打開 HTML 報告看哪一題紅
+# 前面某一步沒跑到的話，對應的報告不存在，跳過不算錯。
+# 前端 E2E 的報告這樣開：pnpm --dir web exec playwright show-report ../ci/build/playwright-report
 rm -rf "$out"
 mkdir -p "$out"
 docker cp "$container:/work/ci/build/summary.md" "$out/summary.md" >/dev/null 2>&1 || true
 docker cp "$container:/work/backend/build/reports" "$out/reports" >/dev/null 2>&1 || true
 docker cp "$container:/work/backend/build/eval" "$out/eval" >/dev/null 2>&1 || true
-# 前端 E2E 失敗時的 HTML 報告（每一步的截圖、trace）：pnpm --dir web exec playwright show-report ../ci/build/playwright-report
 docker cp "$container:/work/web/playwright-report" "$out/playwright-report" >/dev/null 2>&1 || true
-# 前端的覆蓋率報告；後端的在上面的 reports/jacoco/ 裡一起拿回來了
 docker cp "$container:/work/web/coverage" "$out/web-coverage" >/dev/null 2>&1 || true
 
 if [ $status -eq 0 ]; then
