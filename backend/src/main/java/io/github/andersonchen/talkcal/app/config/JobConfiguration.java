@@ -19,14 +19,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
-/**
- * 排程在這裡開，因為 @Scheduled 只出現在 app.job 的工作類別上。工作要用的 adapter、use case、bucket 都從別的設定檔注入，這裡只建工作本身。
- */
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
 class JobConfiguration {
 
-    // 時鐘帶 calendar.zone：對話歸檔的 key 依「最後說話的月份」分，月份要用使用者看到的那個時區算
+    // 對話歸檔的 key 依最後說話的月份分，月份要照使用者的時區算
     @Bean
     AssistantMemoryArchive assistantMemoryArchive(JdbcAssistantMemoryRepository assistantMemory,
                                                   JdbcAssistantProposalAdapter assistantProposals, ArchiveBucket archiveBucket,
