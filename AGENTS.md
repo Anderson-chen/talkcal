@@ -6,19 +6,19 @@
 
 回答用繁體中文。
 
-## 動手前要讀的規則
+## 工作流程
 
-規則只有一份，放在 `.agents/rules/`。其他工具要在做這些事之前自己讀；Claude Code 經由 [CLAUDE.md](CLAUDE.md) 讀到這份檔案時，會把表格裡 `@` 開頭的路徑整份載入。
+規則只有一份，放在 `.agents/rules/`。照下表的順序做，每一步動手前先讀那一列的規則；其他工具要自己讀，Claude Code 經由 [CLAUDE.md](CLAUDE.md) 讀到這份檔案時，會把表格裡 `@` 開頭的路徑整份載入。
 
-| 要做什麼 | 先讀 |
-|---|---|
-| 跑測試、檢查、腳本 | [@.agents/rules/commands.md](.agents/rules/commands.md) |
-| 換到別的分支做事、發現 commit 落錯分支 | [@.agents/rules/branch.md](.agents/rules/branch.md) |
-| commit | [@.agents/rules/commit.md](.agents/rules/commit.md) |
-| 開或改 PR | [@.agents/rules/pr.md](.agents/rules/pr.md) |
-| 開或改 issue | [@.agents/rules/issue.md](.agents/rules/issue.md) |
-| 寫或改文件、issue、PR、commit 的文字 | [@.agents/rules/writing.md](.agents/rules/writing.md) |
-| 寫或改程式碼註解 | [@.agents/rules/comments.md](.agents/rules/comments.md) |
+| 步驟 | 做什麼 | 先讀 |
+|---|---|---|
+| 1 | 開分支；發現 commit 落錯分支 | [@.agents/rules/branch.md](.agents/rules/branch.md) |
+| 2 | 改程式碼、寫註解；改到基礎設施另見下面「改基礎設施」 | [@.agents/rules/comments.md](.agents/rules/comments.md) |
+| 3 | 照改到的地方跑測試、檢查 | [@.agents/rules/commands.md](.agents/rules/commands.md) |
+| 4 | commit | [@.agents/rules/commit.md](.agents/rules/commit.md) |
+| 5 | 審查、開或改 PR | [@.agents/rules/pr.md](.agents/rules/pr.md) |
+| 隨時 | 開或改 issue | [@.agents/rules/issue.md](.agents/rules/issue.md) |
+| 每一步 | 寫文件、註解、issue、PR、commit 的文字 | [@.agents/rules/writing.md](.agents/rules/writing.md) |
 
 新增規則檔時在這張表加一行，寫成 `[@.agents/rules/<檔名>](.agents/rules/<檔名>)`：`@` 讓 Claude Code 載入，連結讓 GitHub 上點得到。`@` 緊接在「：」這類字後面，Claude Code 不會載入。
 
