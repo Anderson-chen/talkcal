@@ -6,6 +6,10 @@
 
 回答用繁體中文。
 
+## 回覆格式
+
+在對話裡回覆使用者時，內容用表格呈現，分成詳細版和白話版。寫進 repo 的文字（文件、註解、issue、PR、commit）不套用，照 [writing.md](.agents/rules/writing.md)。
+
 ## 動手前要讀的規則
 
 規則只有一份，放在 `.agents/rules/`。其他工具要在做這些事之前自己讀；Claude Code 經由 [CLAUDE.md](CLAUDE.md) 讀到這份檔案時，會把表格裡 `@` 開頭的路徑整份載入。
