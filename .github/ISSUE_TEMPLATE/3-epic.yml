@@ -15,7 +15,7 @@ body:
 
         **Labels:** `epic` is added for you; also add the matching `stage:` or `product:` and one of `p0`/`p1`. Sub-issues use the same `stage:` or `product:` label as their epic.
 
-        **Wording:** write for a reader who hasn't read this code (how: .claude/rules/writing.md, section "issue 和 PR").
+        **Wording:** write for a reader who hasn't read this code (how: .agents/rules/writing.md, section "issue 和 PR").
   - type: textarea
     id: goal
     attributes:

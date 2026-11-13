@@ -1,6 +1,6 @@
 ## Summary
 
-<!-- One plain-language paragraph for a reader who hasn't read this code (how: .claude/rules/pr.md); leave details in the issue -->
+<!-- One plain-language paragraph for a reader who hasn't read this code (how: .agents/rules/pr.md); leave details in the issue -->
 
 ## Dependencies
 

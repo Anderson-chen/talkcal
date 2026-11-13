@@ -3,7 +3,7 @@
 // 前提：compose.yaml 那組 talkcal43-* 已經起來（web 18443、app 18843），模型是 llm-proxy 裡的假模型（fake-model.conf）。
 // 跑：cd web && node ../docs/drills/2026-10-19-failure-ux/shoot.mjs before|after [截圖資料夾]
 //   before = 改之前的前端（現況），after = 這個 PR 的前端。兩次用同一組步驟，截圖檔名只差前綴
-//   截圖預設存到系統暫存資料夾的 talkcal-failure-ux/，不進 repo：圖用 gh --attach 傳進 PR（.claude/rules/pr.md）
+//   截圖預設存到系統暫存資料夾的 talkcal-failure-ux/，不進 repo：圖用 gh --attach 傳進 PR（.agents/rules/pr.md）
 //
 // 故障都打在容器上（見 compose.yaml），真正的模型和共用的 talkcal-* 都不動。
 // 帳號每次現註冊一個用完即丟的（隨機名稱、隨機密碼，不寫下來）；登入直接打 app 的埠，不經過 nginx 的登入限流。

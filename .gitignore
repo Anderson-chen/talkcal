@@ -15,7 +15,7 @@ build/
 # Claude 桌面版的預覽設定：寫的是這台電腦的路徑（C:\llm\...），跟 .idea/ 一樣是個人工具的設定
 .claude/launch.json
 
-# 平行工作開的 worktree（見 .claude/rules/branch.md）：每一個都是整份 repo 的另一個 checkout，不能被主 checkout 收進 commit
+# 平行工作開的 worktree（見 .agents/rules/branch.md）：每一個都是整份 repo 的另一個 checkout，不能被主 checkout 收進 commit
 .claude/worktrees/
 
 # Terraform：provider 快取、state、計畫檔、各自的變數值都不進版控。
