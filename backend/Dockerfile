@@ -1,12 +1,12 @@
 # talkcal app 的映像檔。放在 backend/：build 要看得到 src/、build.gradle、gradle wrapper。
-# 跟 deploy/llama-server/Dockerfile 同樣是兩段式——
+# 兩段式：
 #   build   —— 完整 JDK + Gradle，把程式編成一個可執行的 jar
 #   runtime —— 只有 JRE，把 jar 搬過去跑。JDK、Gradle、原始碼都不會跟著上雲端。
 
 # ════════════════════════════════════════════════════════════════════
 # 用 Docker Hub 上官方的 Gradle 映像檔，不用 ./gradlew：
-# wrapper 第一次執行要下載 Gradle 本體，而 Gradle 的下載點現在轉到 GitHub，本機實測 0.17 MB/s
-# （跟 ghcr 同一個慢法），140MB 要十幾分鐘。這個映像檔已經裝好 Gradle，從 Docker Hub 拉很快。
+# wrapper 第一次執行要從 GitHub 下載 Gradle 本體（140 MB），GitHub 慢的時候要十幾分鐘。
+# 這個映像檔已經裝好 Gradle，從 Docker Hub 拉很快。
 # 版本要跟 gradle/wrapper/gradle-wrapper.properties 對齊（9.2.1）：本機 ./gradlew 和容器 build 用同一版 Gradle。
 # JDK 25 跟 build.gradle 的 toolchain 同一版，Gradle 找得到符合的 JDK 就直接用，不會再去下載。
 FROM gradle:9.2.1-jdk25-noble AS build
@@ -44,7 +44,7 @@ RUN apt-get update \
 
 COPY --from=build /app.jar /app/app.jar
 
-# 版本（#25）：由 compose 的 build.args 傳進來（cd/version.sh 算的），貼成 OCI 標準名稱的 label。
+# 版本：由 compose 的 build.args 傳進來（cd/version.sh 算的），貼成 OCI 標準名稱的 label。
 # 容器建立時會帶著映像檔的 label，`docker inspect talkcal-app` 看的就是正在跑的那個容器是哪個 commit。
 # 只放在這最後一層：jar 跟版本無關，只改了 web/、docs/ 的 commit，上面編譯那層照樣吃快取。
 # 預設值 local / unknown：直接 docker build 沒帶參數，就誠實地說不知道是哪一版
@@ -55,11 +55,11 @@ LABEL org.opencontainers.image.title="talkcal-app" \
       org.opencontainers.image.version="$APP_VERSION" \
       org.opencontainers.image.revision="$GIT_COMMIT"
 
-# 不跑 root：映像檔內建 uid 1000 的 ubuntu 使用者，直接用（跟 llama-server 那個一樣）
+# 不跑 root：映像檔內建 uid 1000 的 ubuntu 使用者，直接用
 USER ubuntu
 WORKDIR /app
 
-# 容器內部的埠。刻意跟本機開發一樣是 8090——埠在容器裡是隔離的，不會跟你本機的 bootRun 撞；
+# 容器內部的埠。跟本機開發一樣是 8090：埠在容器裡是隔離的，不會跟你本機的 bootRun 撞；
 # 對外發佈成哪一號是 compose 的 ports 決定的（deploy/compose.yaml 發佈成 18090）。
 EXPOSE 8090
 
