@@ -18,6 +18,7 @@ commit 前不用跑，等要開 PR 時一起跑。這些可以直接跑，不用
 | `infra/`、`deploy/`、`ops/`、`web/nginx.conf`、`docs/architecture/` | `node docs/architecture/lines.mjs --check` |
 | `ops/mimir/rules/` | `ci/rules.sh` |
 | 跨好幾塊、準備 push | `ci/run.sh`（要開 Docker）：跟 CI 同一套檢查 |
+| 演練還原資料庫，不碰線上資料庫 | `just restore-verify` |
 
 前端指令要先裝好依賴：`corepack enable`、`pnpm --dir web install`。前端用 `pnpm`，不用 `npx`，理由見 [web/README.md](../../web/README.md#測試)。
 
@@ -28,7 +29,7 @@ commit 前不用跑，等要開 PR 時一起跑。這些可以直接跑，不用
 | 做什麼 | 指令 |
 |---|---|
 | 部署、發版、退版 | `just deploy`、`just release`、`just rollback`、`just unpin`、`just watch` |
-| 還原資料庫 | `just restore`；只演練、不碰線上資料庫的 `just restore-verify` 可以直接跑 |
+| 還原線上資料庫 | `just restore` |
 | EC2 開關機 | `just ec2-start`、`just ec2-stop` |
 | 壓力測試 | `just perf <腳本>`、`k6 run perf/<腳本>` |
 | 告警端到端測試（約 15 分鐘） | `just alerting` |
