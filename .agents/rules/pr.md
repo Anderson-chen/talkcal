@@ -23,6 +23,12 @@
 - PR 描述不要有 `Generated with Claude Code`。
 - PR 不貼 label：分類（`stage:`／`product:`、`p0`／`p1`、`area:`）都看它 `Closes` 的 issue，只維護一份。
   做的過程發現 issue 放錯段或少了 `area:`，回去改 issue 的 label。
+- 文案審查：要開 PR、跑測試之前，先讓文案審查員審這個分支改到的中文。寫的人重看自己的句子，會照寫的時候的意思去讀，讀不出哪裡不通順。
+  - Claude Code 用 `copy-reviewer` subagent（[.claude/agents/copy-reviewer.md](../../.claude/agents/copy-reviewer.md)）。subagent 開始時不帶主 session 的對話；呼叫時只給分支名稱，不附這次改了什麼、為什麼這樣寫。
+  - 其他工具開新的對話，貼 `copy-reviewer.md` 的內文。
+  - 審查員只回報，不改檔案。列出的句子在同一個分支改；不改的，在 PR 裡寫為什麼。改完又動了文字就重審。
+  - 結果寫成 PR 描述「證據」的一點：審到哪個 commit、列了幾句、改了幾句、不改的理由。
+  - 沒有改到中文的分支不用審。
 - 開 PR 之前先做一輪獨立審查，審這個分支相對 `master` 的 diff：
   - 審多深看改到什麼，一個 PR 跨好幾級就照最高的那級：
 

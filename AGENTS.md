@@ -16,8 +16,9 @@
 | 2 | 開分支 | [@.agents/rules/branch.md](.agents/rules/branch.md) |
 | 3 | 改程式碼、寫註解；改到基礎設施另見下面「改基礎設施」 | [@.agents/rules/comments.md](.agents/rules/comments.md) |
 | 4 | commit | [@.agents/rules/commit.md](.agents/rules/commit.md) |
-| 5 | 要開 PR 時，照改到的地方跑測試、檢查 | [@.agents/rules/commands.md](.agents/rules/commands.md) |
-| 6 | 審查、開或改 PR | [@.agents/rules/pr.md](.agents/rules/pr.md) |
+| 5 | 要開 PR 時，先審改到的中文：見 `pr.md` 以「文案審查：」起頭的那一點 | [@.agents/rules/pr.md](.agents/rules/pr.md) |
+| 6 | 照改到的地方跑測試、檢查 | [@.agents/rules/commands.md](.agents/rules/commands.md) |
+| 7 | 審查、開或改 PR | [@.agents/rules/pr.md](.agents/rules/pr.md) |
 | 每一步 | 寫文件、註解、介面文字、prompt、issue、PR、commit 的文字 | [@.agents/rules/writing.md](.agents/rules/writing.md) |
 
 新增規則檔時在這張表加一行，寫成 `[@.agents/rules/<檔名>](.agents/rules/<檔名>)`：`@` 讓 Claude Code 載入，連結讓 GitHub 上點得到。`@` 緊接在「：」這類字後面，Claude Code 不會載入。
