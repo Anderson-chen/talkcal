@@ -12,46 +12,31 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
 /**
- * 把架構規則寫成會失敗的測試。
+ * Java 的 package 沒有依賴方向：package-private 擋得住別人看見 ExtractionRequest，
+ * 擋不住 ParseEventsService 去 import 一個 Spring AI 的 Adapter，編譯和其他測試都不會發現。
  *
- * 為什麼需要這個檔案：Java 的 package 沒有依賴方向的概念。
- * package-private 擋得住「別人看見 ExtractionRequest 這個 class」，
- * 但擋不住 ParseEventsService 去 import 一個 Spring AI 的 Adapter ——
- * 那樣寫編譯器一聲不吭，測試照樣全綠，架構就是這樣一點一點爛掉的。
+ * 每條規則的理由寫在 because(...)，違規時錯誤訊息直接印出來。
+ * Javadoc 只寫 because 放不下的事：規則的範圍怎麼切、跟其他規則怎麼分工。
  *
- * 規則大多寫成 noClasses(...)，也就是「不准出現」的形式。
- * 每條都帶 because(...)，違規時錯誤訊息會直接說出理由，
- * 不必回來翻這個檔案才知道為什麼不行。
- *
- * 只掃正式程式（DoNotIncludeTests）：測試本來就要能碰到所有層，
- * 例如 Adapter 的測試同時碰 domain 和協定，那是合理的。
+ * 只掃正式程式（DoNotIncludeTests）：Adapter 的測試同時碰 domain 和協定是正常的。
  */
 @AnalyzeClasses(packages = ArchitectureTest.ROOT, importOptions = ImportOption.DoNotIncludeTests.class)
 class ArchitectureTest {
 
-    // 根 package：只有 Application。底下是 app（組裝根，代表整個應用程式）和各業務模組
+    // 根 package 只有 Application，底下第一層是 app 和各業務模組
     static final String ROOT = "io.github.andersonchen.talkcal";
 
-    // app 裡唯一可以認識 adapter 具體類別、也可以同時認識好幾個模組的兩個 package：
-    //   app.config —— 所有 @Configuration（誰接誰）
-    //   app.job    —— 排程工作（直接做某張表的維護，例如清過期的冪等鍵）
-    // app.observability 也在 app 裡，但它是全站共用的觀測，不需要、也不准認識任何一門業務
+    // 組裝根：app 裡只有 config（@Configuration）和 job（排程，直接維護某張表）可以認識 adapter 的具體類別、
+    // 同時認識好幾個模組。app.observability 不算：它是全站共用的觀測，不准認識任何一門業務
     static final String CONFIG = ROOT + ".app.config..";
     static final String JOB = ROOT + ".app.job..";
 
-    /**
-     * 最重要的一條：依賴方向只能由外往內。
-     */
     @ArchTest
     static final ArchRule coreMustNotDependOnAdapters =
             noClasses().that().resideInAPackage("..application..")
                     .should().dependOnClassesThat().resideInAPackage("..adapter..")
                     .because("core 定義 port、adapter 實作 port；反過來就失去替換實作的能力");
 
-    /**
-     * domain model 是最內圈，連自己家的 port 和 service 都不該認識。
-     * CalendarEvent 這些只該依賴 Java 標準函式庫。
-     */
     @ArchTest
     static final ArchRule domainModelMustStayInnermost =
             noClasses().that().resideInAPackage("..application.domain.model..")
@@ -60,10 +45,7 @@ class ArchitectureTest {
                     .because("業務規則不該知道誰在呼叫它，也不該知道資料從哪來");
 
     /**
-     * 兩側的 adapter 互不認識。
-     * 入口那側（目前是 HTTP 的 controller 和 AI 助理的工具）換成別的、模型換成別家，都不該牽動另一側。
-     *
-     * onlyTheCompositionRootMayKnowOutboundAdapters 也擋得到同一種 import；這條另外留著，錯誤訊息才會講 inbound 該怎麼做。
+     * onlyTheCompositionRootMayKnowOutboundAdapters 也擋得到同一種 import。這條另外留著，錯誤訊息才會講 inbound 該怎麼做。
      */
     @ArchTest
     static final ArchRule inboundAdaptersMustNotDependOnOutboundAdapters =
@@ -72,14 +54,9 @@ class ArchitectureTest {
                     .because("inbound 只該透過 port 使喚 core，core 才決定要不要呼叫 outbound");
 
     /**
-     * 只有組裝根裡的 app.config、app.job 可以認識 adapter.out 的具體類別。
-     * 守住的是「換一行 new 就能換掉實作」這個承諾 —— 一旦有第二個地方 import 它，那個承諾就破了。
-     *
-     * adapter.out 底下每個 package 是「某一種往外的實作們」，例如 persistence 放 Save / Load / DeleteEventPort 的。
-     * 這條不點名子樹，新加的子樹不用另外寫規則就被守住；一個子樹寫一條的話，新加的子樹（例如 auth 的 security）沒人補規則就漏掉了。
-     *
-     * adapter.out 裡的類別互相依賴不受這條管，子樹之間互不認識由 outboundAdapterSubtreesMustNotDependOnEachOther 管。
-     * app.job 的 AssistantMemoryArchive 也用 archive 的零件（ArchiveBucket、JsonLinesGzip）：它在組裝根裡，所以可以。
+     * 不點名 adapter.out 底下的子樹（persistence、extraction…）：一個子樹寫一條的話，
+     * 新加的子樹（例如 auth 的 security）忘了補規則就沒人守。
+     * adapter.out 裡的類別互相依賴不歸這條管，見 outboundAdapterSubtreesMustNotDependOnEachOther。
      */
     @ArchTest
     static final ArchRule onlyTheCompositionRootMayKnowOutboundAdapters =
@@ -89,13 +66,9 @@ class ArchitectureTest {
                             + "別的地方一認識具體類別，換實作就不只是改 app.config");
 
     /**
-     * adapter.out 的子樹之間互不認識。
-     *
-     * 每個子樹的細節只該出現在自己那一包，例如 SQL 和表的長相只在 persistence，
-     * 日期表、JSON Schema 這些只對某顆模型有效的手法只在 extraction。
-     * 要兩個子樹合作，由 core 的 use case 分別呼叫兩個 port。
-     *
-     * ROOT.(*).adapter.out.(*).. 把每個模組的每個子樹各切成一片，calendar 的 persistence 和 auth 的 persistence 是兩片。
+     * 例如 SQL 和表的長相只在 persistence，日期表、JSON Schema 這些只對某顆模型有效的做法只在 extraction。
+     * 兩個子樹要合作，由 core 的 use case 分別呼叫兩個 port。
+     * 每個模組的每個子樹各一片：calendar 的 persistence 和 auth 的 persistence 是兩片。
      */
     @ArchTest
     static final ArchRule outboundAdapterSubtreesMustNotDependOnEachOther =
@@ -104,11 +77,9 @@ class ArchitectureTest {
                     .because("一個子樹的細節漏進另一個子樹，換掉其中一家就得改兩包");
 
     /**
-     * adapter.out 的類別一律放在「子樹.供應商」這一層，例如 persistence.postgres、security.spring。
-     * 第二家供應商來的時候放在隔壁，不用先搬動第一家。
-     *
-     * 這條也補上一道縫：直接放在 adapter.out 底下的類別不屬於任何子樹，
-     * onlyTheCompositionRootMayKnowOutboundAdapters 放過它，outboundAdapterSubtreesMustNotDependOnEachOther 也切不到它。
+     * 例如 persistence.postgres、security.spring：第二家供應商來的時候放隔壁，不用先搬第一家。
+     * 直接放在 adapter.out 底下的類別不屬於任何子樹，outboundAdapterSubtreesMustNotDependOnEachOther 切不到它，
+     * 每個子樹都能 import 它，這條把它擋下來。
      */
     @ArchTest
     static final ArchRule outboundAdaptersSitUnderAVendorPackage =
@@ -117,11 +88,7 @@ class ArchitectureTest {
                     .because("供應商各自一包，換一家只動一包；放在子樹或 adapter.out 底下的類別看不出是哪一家的");
 
     /**
-     * Adapter 這個字尾是有意義的，不是隨手加的裝飾。
-     *
-     * adapter 圈裡有兩種類別：一種實作 core 的 outbound port（換掉它 core 無感），
-     * 另一種是 adapter 內部的零件（例如 ExtractionRequest、ExtractionResponse 這些協定翻譯）。
-     * 兩種都在 adapter.out 底下，從 package 看不出差別 —— 所以用字尾區分，並用這條規則守著。
+     * 實作 port 的類別和 adapter 內部的零件都在 adapter.out 底下，從 package 看不出差別，只能靠字尾。
      */
     @ArchTest
     static final ArchRule adapterSuffixIsReservedForPortImplementations =
@@ -133,9 +100,7 @@ class ArchitectureTest {
                             + "不然從名字看不出它站在哪一層");
 
     /**
-     * core 不准碰 HTTP。
-     * 這條是前面那幾條的補充：就算沒有 import adapter，
-     * 只要 core 自己開始用 java.net.http，協定細節一樣滲進來了。
+     * 沒 import adapter，core 自己用 java.net.http 的話，協定細節一樣滲進來。
      */
     @ArchTest
     static final ArchRule coreMustNotTouchHttp =
@@ -143,24 +108,12 @@ class ArchitectureTest {
                     .should().dependOnClassesThat().resideInAnyPackage("java.net..", "javax.net..")
                     .because("怎麼把提問送出去是 adapter 的事，core 只知道有個 port");
 
-    /**
-     * core 不准碰 AWS SDK：歸檔放在 S3 是 adapter 的事，
-     * core 只知道「一個人、一個月的行程存一包」（EventArchivePort）。
-     */
     @ArchTest
     static final ArchRule coreMustNotTouchAwsSdk =
             noClasses().that().resideInAPackage("..application..")
                     .should().dependOnClassesThat().resideInAPackage("software.amazon..")
                     .because("放在哪一家的物件儲存是 adapter 的事；core 綁上 S3 的型別，就換不掉儲存、也沒法不連 AWS 單獨測");
 
-    /**
-     * core 不准依賴 Spring。這條是「導入 Spring」這件事的護欄。
-     *
-     * Spring 是組裝時的框架 —— 它負責把 bean 兜起來、把 web 請求接進來，這些都是最外圈的事。
-     * 一旦 @Component、@Autowired、@Service 爬進 application/domain，業務規則就跟框架焊死了：
-     * 想單獨用純 JUnit 測一個 CalendarEvent 得先起半個容器，想換框架得改動核心。
-     * 允許 Spring 待在 adapter 和組裝根（那本來就是它的地盤），但到 core 的門口為止。
-     */
     @ArchTest
     static final ArchRule coreMustNotDependOnSpring =
             noClasses().that().resideInAPackage("..application..")
@@ -168,16 +121,9 @@ class ArchitectureTest {
                     .because("業務規則綁死在框架上，就換不掉框架、也沒法脫離容器單獨測 domain");
 
     /**
-     * core 不准依賴 Jackson。
-     *
-     * 兩個套件都要擋：Jackson 3 把 core/databind 搬到 tools.jackson，
-     * 但註解（@JsonProperty 那些）留在 com.fasterxml.jackson.annotation 沒動。
-     *
-     * 這條擋的是最常見的那種滲透：為了讓 CalendarEvent 能直接丟給 Jackson 序列化，
-     * 在 domain 的欄位上加 @JsonProperty、@JsonIgnore。那看起來只是「加個註解」，
-     * 實際上是讓「資料怎麼在線路上呈現」這件事跑進了業務規則裡 ——
-     * 從此改一個 JSON 欄位名要動 Entity，而 Entity 的形狀開始被外部格式牽著走。
-     * 要序列化就在 adapter 自己定義一份 wire format（CalendarController 的 request / response record 就是這樣做的）。
+     * 兩個套件都要擋：Jackson 3 把 core、databind 搬到 tools.jackson，註解（@JsonProperty 那些）還在 com.fasterxml.jackson.annotation。
+     * 最容易滲進來的是在 domain 欄位上加 @JsonProperty、@JsonIgnore，好讓 CalendarEvent 直接丟給 Jackson。
+     * 要序列化，就在 adapter 定義自己的 wire format，例如 CalendarController 的 request、response record。
      */
     @ArchTest
     static final ArchRule coreMustNotDependOnJackson =
@@ -186,11 +132,7 @@ class ArchitectureTest {
                     .because("資料在線路上長什麼樣是 adapter 的事，不該反過來決定 Entity 的形狀");
 
     /**
-     * core 不准依賴 OpenAPI 的註解。
-     *
-     * @Schema、@Operation 描述的是「HTTP 上長什麼樣」，那是 controller 這種 adapter 的事。
-     * 一旦為了讓文件好看就在 CalendarEvent 上加 @Schema，domain 就開始替某一種協定打扮了。
-     * 要寫文件，就寫在 adapter 自己的 wire format（例如 CalendarController.EventFields）上。
+     * API 文件的 @Schema 寫在 adapter 自己的 wire format 上，例如 CalendarController.EventFields。
      */
     @ArchTest
     static final ArchRule coreMustNotDependOnOpenApi =
@@ -199,12 +141,7 @@ class ArchitectureTest {
                     .because("API 文件描述的是線路格式，屬於 inbound adapter，不該滲進業務規則");
 
     /**
-     * core 不准依賴 Resilience4j。
-     *
-     * 斷路器、bulkhead 保護的是「呼叫外面的依賴」這件事，那是 adapter 的工作（見 GuardedChatModel）；
-     * 規則寫在 application.properties，之後上 k8s 還可能整個交給 service mesh。
-     * core 一旦直接用它（例如在 use case 裡包一個 CircuitBreaker），業務規則就跟「怎麼呼叫外面」焊在一起，
-     * 換成 mesh 那天得改到核心。
+     * 斷路器、bulkhead 包在 adapter 裡，見 GuardedChatModel。
      */
     @ArchTest
     static final ArchRule coreMustNotDependOnResilience4j =
@@ -213,17 +150,9 @@ class ArchitectureTest {
                     .because("容錯是呼叫外部依賴時的事，屬於 adapter；core 綁上它，之後就沒辦法交給平台（service mesh）處理");
 
     /**
-     * 模組之間互不認識：不同的業務各自一個模組。
-     *
-     * AI 助理遲早也要拆成自己的模組（見 AssistantMemoryArchive 的註解）。
-     *
-     * ROOT.(*).. 把根 package 底下第一層的 package 各切成一片（一個模組一片），app 也是一片。
-     * app 裡的 config、job 是組裝根，本來就要認識各個模組 —— 從它們出發的依賴不算；
-     * app.observability 沒有這個豁免：它是全站共用的觀測，同樣不准認識任何一門業務。
-     *
-     * 哪天一個模組需要另一個模組的能力，該做的是在自己模組裡定義一個 outbound port，
-     * 由 app.config 接上另一個模組的 use case，而不是直接 import 對方的類別。
-     * calendar 怎麼不認得 auth 也拿得到登入者，見 SignedIn。
+     * 根 package 底下第一層各一片，app 也是一片。從組裝根出發的依賴不算，app.observability 沒有這個豁免。
+     * 一個模組要用另一個模組的能力，在自己模組定義 outbound port，由 app.config 接上對方的 use case；
+     * 例子見 SignedIn（calendar 不認得 auth，也拿得到登入者）。AI 助理之後要拆成自己的模組，見 AssistantMemoryArchive。
      */
     @ArchTest
     static final ArchRule modulesMustNotDependOnEachOther =
@@ -232,14 +161,9 @@ class ArchitectureTest {
                     .ignoreDependency(resideInAnyPackage(CONFIG, JOB), alwaysTrue())
                     .because("模組直接互相 import，就再也沒辦法單獨改動、單獨拆出去其中一個");
 
-    /**
-     * package 之間不可以繞成環。
-     * 循環依賴是「這兩包其實分不開」的訊號，而且會讓任何一邊都無法單獨測試。
-     */
     @ArchTest
     static final ArchRule packagesMustBeFreeOfCycles =
-            // ROOT.(*).(**)：每個模組裡的每個 package 各切一片。
-            // 模組之間的依賴由上面的 modulesMustNotDependOnEachOther 管，這條只看模組內部
+            // 每個模組裡的每個 package 各一片，只看模組內部；模組之間見 modulesMustNotDependOnEachOther
             slices().matching(ROOT + ".(*).(**)")
                     .should().beFreeOfCycles()
                     .because("繞成環的兩個 package 實際上是同一個，拆開只是假象");

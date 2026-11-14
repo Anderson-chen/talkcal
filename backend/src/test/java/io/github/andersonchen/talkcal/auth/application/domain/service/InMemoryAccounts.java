@@ -14,16 +14,15 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 假的帳號儲存：跟資料庫一樣，帳號名稱、identity 撞了就回 false。
- * saved 依序記下存成功的帳號，測試用來檢查「有沒有存、存了什麼」。
+ * 照 port 的約定，帳號名稱、identity 撞了就回 false，不丟例外。
  */
 final class InMemoryAccounts implements SaveAccountPort, LoadAccountPort {
 
     final List<Account> saved = new ArrayList<>();
     final Map<ExternalIdentity, AccountId> identities = new HashMap<>();
-    /** 查 identity 的次數：測同時登入時「第一次查不到、存的時候已經有了」 */
+    /** 測同時登入用：第一次查不到、存的時候已經有了 */
     int identityLookups;
-    /** 模擬另一個請求在「查」和「存」之間搶先建好的帳號 */
+    /** 另一個請求在查和存之間搶先建好的帳號 */
     Account createdConcurrently;
 
     @Override

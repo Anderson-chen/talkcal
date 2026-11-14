@@ -25,7 +25,7 @@ class ParseEventsServiceTest {
 
     private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
 
-    // 台北 2026-10-05 09:30（UTC 01:30）。固定下來，「現在」在每次測試都一樣
+    // 台北 2026-10-05 09:30（UTC 01:30）
     private static final Clock FIXED = Clock.fixed(Instant.parse("2026-10-05T01:30:00Z"), TAIPEI);
 
     private static final CalendarEvent DINNER =
@@ -33,7 +33,6 @@ class ParseEventsServiceTest {
     private static final CalendarEvent DENTIST =
             CalendarEvent.startingAt("看牙醫", LocalDateTime.of(2026, 10, 7, 9, 0));
 
-    // 假模型：記下收到的描述和時間，回傳事先給好的行程
     private static final class RecordingPort implements ExtractEventsPort {
         final List<CalendarEvent> result;
         EventDescription description;
@@ -69,7 +68,7 @@ class ParseEventsServiceTest {
 
         new ParseEventsService(port, FIXED).parseEvents("明天三點跟小明吃飯");
 
-        // UTC 01:30 在台北是 09:30：時區由時鐘決定，service 自己不知道是台北
+        // 時區來自時鐘，service 自己不知道是台北
         assertEquals(LocalDateTime.of(2026, 10, 5, 9, 30), port.now);
     }
 

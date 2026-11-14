@@ -31,9 +31,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
 
 /**
- * 兩道保護的行為：該打開的時候打開、不該打開的時候不打開（反例）、恢復後關回來、滿載時立刻拒絕。
- *
- * 門檻用跟 application.properties 一樣的形狀（10 次裡至少 5 次、一半失敗），只有時間縮短，測試才不必等 30 秒。
+ * 門檻照 application.properties 的形狀（10 次裡至少 5 次、一半失敗），只有時間縮短，測試才不必等 30 秒。
  */
 @DisplayName("GuardedChatModel")
 class GuardedChatModelTest {
@@ -43,7 +41,7 @@ class GuardedChatModelTest {
     private static final Duration CALL_TIMEOUT = Duration.ofMinutes(2);
     private static final Prompt PROMPT = new Prompt("明天有什麼行程？");
 
-    /** 假模型：照 behavior 決定這一次成功、失敗還是卡住；數自己被叫了幾次，才看得出「被擋下來的沒有叫到模型」。 */
+    /** 數自己被叫了幾次，才看得出被擋下來的請求沒有叫到模型。 */
     static final class FakeModel implements ChatModel {
         final AtomicInteger calls = new AtomicInteger();
         final AtomicReference<Runnable> behavior = new AtomicReference<>(() -> { });
@@ -93,7 +91,7 @@ class GuardedChatModelTest {
         try {
             guarded.call(PROMPT);
         } catch (RuntimeException ignored) {
-            // 這裡只在乎 breaker 記了什麼
+            // 只看 breaker 記了什麼
         }
     }
 
@@ -138,7 +136,7 @@ class GuardedChatModelTest {
             assertThatThrownBy(() -> guarded.call(PROMPT))
                     .isInstanceOfSatisfying(ModelUnavailableException.class, e -> {
                         assertThat(e.reason()).isEqualTo(ModelUnavailableException.Reason.CIRCUIT_OPEN);
-                        // 建議多久再試 = 斷路器保持打開的時間，直接從它的設定讀
+                        // 建議多久再試，就是斷路器保持打開的時間
                         assertThat(e.retryAfter()).isEqualTo(OPEN_FOR);
                     })
                     // 也還是 IllegalStateException：不認得 ModelUnavailableException 的呼叫端當成一般的失敗
@@ -168,7 +166,7 @@ class GuardedChatModelTest {
         }
 
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
-        // 包了一層也認得出來
+        // 被包在別的例外裡也要認得
         assertThat(new ModelFailurePredicate().test(new RuntimeException("包一層", tooLong))).isFalse();
         assertThat(new ModelFailurePredicate().test(new RuntimeException("包一層", connectionRefused()))).isTrue();
     }
@@ -244,7 +242,6 @@ class GuardedChatModelTest {
         stuck.get(5, TimeUnit.SECONDS);
         assertThat(breaker.getMetrics().getNumberOfFailedCalls()).isZero();
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
-        // 位子空出來之後又收得進去
         model.works();
         oneAtATime.call(PROMPT);
     }
@@ -260,7 +257,7 @@ class GuardedChatModelTest {
 
             @Override
             public ChatOptions getOptions() {
-                // Spring AI 自動組裝的預設選項長這樣：有模型名稱、max-tokens，逾時是它自己的預設 60 秒
+                // 跟 Spring AI 自動組裝的一樣：有模型名稱、max-tokens，沒有設定的逾時
                 return OpenAiChatOptions.builder().model("qwen3-8b").maxTokens(2048).build();
             }
         };

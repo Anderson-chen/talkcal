@@ -22,7 +22,7 @@ class RegisterAccountServiceTest {
     private final InMemoryAccounts accounts = new InMemoryAccounts();
     private final List<Account> saved = accounts.saved;
     private final List<String> hashed = new ArrayList<>();
-    // 假的雜湊：記下被算過哪些密碼，好檢查「規則沒過就不算雜湊」
+    // 記下算過哪些密碼，才驗得出規則沒過就不雜湊
     private final HashPasswordPort hasher = raw -> {
         hashed.add(raw);
         return "hash(" + raw + ")";

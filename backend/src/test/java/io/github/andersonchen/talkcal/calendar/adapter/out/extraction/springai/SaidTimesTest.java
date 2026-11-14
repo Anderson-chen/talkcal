@@ -23,7 +23,7 @@ class SaidTimesTest {
             assertTrue(SaidTimes.endIsGrounded("14:00", "16:00", "週六 14:00-16:00 打球"));
             // 中間夾著要做的事也算同一個子句
             assertTrue(SaidTimes.endIsGrounded("三點", "五點", "明天三點開會到五點"));
-            // 模型連「到」一起抄也認得
+            // 模型會連「到」一起抄進 endSaid
             assertTrue(SaidTimes.endIsGrounded("九點", "到十點半", "九點到十點半看牙醫"));
         }
 

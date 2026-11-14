@@ -25,25 +25,24 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 /**
- * 每叫一次模型，token 用量變成指標，帶著模型名稱和 model.backend —— 成本 dashboard 全靠它。
+ * 成本 dashboard 靠這些 token 指標和它們的標籤。
  *
- * 為什麼起整個 Spring：要驗的是「接起來之後」真的有記到。token 指標是 Spring AI 的 handler 記的，
- * 標籤是我們的 ObservationFilter 貼的，兩者都要被 Boot 註冊進同一個 ObservationRegistry 才成立；
- * 少註冊一個不會有任何錯誤訊息，指標只是悄悄少一個標籤，或整個不見。
+ * 起整個 Spring：token 指標是 Spring AI 的 handler 記的，標籤是 ObservationConfiguration 的 filter 貼的，
+ * 兩個都要被 Boot 註冊進同一個 ObservationRegistry。少註冊一個不會有錯誤訊息，指標只會少一個標籤或整個不見。
  *
- * 模型用一個假的 OpenAI server（JDK 內建的 HttpServer）代替：回一個寫死的 Chat Completions JSON，
- * 讓真的 OpenAiChatModel 和 openai-java SDK 去解析 usage —— 這樣連「SDK 有沒有把 usage 交給 Spring AI」也一起驗到。
- * 不需要資料庫：只叫 ChatModel，不經過助理和記憶；Flyway 關掉，理由見 AccessLogTraceIdTest。
+ * 模型換成 JDK 內建 HttpServer 做的假 OpenAI server，回寫死的 Chat Completions JSON，
+ * usage 由真的 OpenAiChatModel 和 openai-java SDK 解析，SDK 有沒有把 usage 交給 Spring AI 也一起驗到。
+ * 只叫 ChatModel、不碰資料庫，所以 Flyway 關掉（見 AccessLogTraceIdTest）。
  *
- * backend 設成 bedrock 而不是用預設的 llama-cpp：證明標籤的值是從設定來的，不是程式裡寫死的。
- * 每個測試讓假 server 回不同的模型名稱，指標靠 gen_ai.response.model 分開，測試之間不會互相加到同一個 counter。
+ * backend 設成 bedrock，不用預設的 llama-cpp：值跟預設不同，才驗得出標籤是從設定讀的。
+ * 每個測試讓假 server 回不同的模型名稱，counter 靠 gen_ai.response.model 分開，測試之間不會加到同一個。
  */
 @SpringBootTest(properties = {"spring.flyway.enabled=false", "talkcal.ai.backend=bedrock"})
 @DisplayName("模型的 token 用量指標")
 class ModelTokenUsageMetricsTest {
 
     private static final HttpServer FAKE_OPENAI = startFakeOpenAi();
-    // 下一次 /chat/completions 要回什麼；每個測試自己設
+    // 假 server 下一次回什麼，每個測試自己設
     private static volatile String nextResponse;
 
     @Autowired
@@ -80,7 +79,7 @@ class ModelTokenUsageMetricsTest {
         assertNotNull(output, "沒有 output 的 token 指標，現有的是：" + tokenMeters());
         assertEquals(120, input.count());
         assertEquals(34, output.count());
-        // 送出去的模型名稱（application.properties 的 qwen3-8b）也在，dashboard 依它分顆
+        // application.properties 設的模型名稱，dashboard 用它分模型
         assertEquals("qwen3-8b", input.getId().getTag("gen_ai.request.model"));
     }
 
@@ -91,13 +90,12 @@ class ModelTokenUsageMetricsTest {
 
         chatModel.call(new Prompt("明天下午三點開會"));
 
-        // Spring AI 沒拿到 usage 時用 EmptyUsage（0、0、0），counter 照樣建、加 0。
-        // 意思是：哪天供應商不回 usage（例如改成串流又沒開 include_usage），dashboard 上的錢會悄悄變少而不是報錯。
-        // 成本 dashboard 的「每次叫模型平均 token」掉到 0 就是這個訊號（見 docs/cost.md）
+        // Spring AI 沒拿到 usage 就記 0，不報錯。供應商不回 usage 時（例如串流又沒開 include_usage），
+        // dashboard 上的花費會悄悄變少；能看出來的只有「每次叫模型平均 token」掉到 0（見 docs/cost.md）
         Counter input = tokens("qwen-no-usage", "input");
         assertNotNull(input, "現有的是：" + tokenMeters());
         assertEquals(0, input.count());
-        // 這次呼叫本身有被觀測到，也帶著 backend
+        // 呼叫有被觀測到，上面的 0 才不是因為根本沒記
         Timer call = meters.find("gen_ai.client.operation").tag("gen_ai.response.model", "qwen-no-usage").timer();
         assertNotNull(call, "這次呼叫根本沒被觀測到，上面的斷言不算數");
         assertEquals("bedrock", call.getId().getTag("model.backend"));
@@ -119,7 +117,7 @@ class ModelTokenUsageMetricsTest {
                 .tag("gen_ai.token.type", type)
                 .counter();
         if (counter != null) {
-            // 每個 token counter 都要能分出在哪裡跑、哪一顆，少一個標籤 dashboard 就算錯錢
+            // 少一個標籤，dashboard 就分不出是哪個後端、哪個模型花的錢
             assertEquals("bedrock", counter.getId().getTag("model.backend"), "標籤：" + counter.getId().getTags());
             assertNotNull(counter.getId().getTag("gen_ai.request.model"), "標籤：" + counter.getId().getTags());
         }
@@ -130,7 +128,6 @@ class ModelTokenUsageMetricsTest {
         return meters.find("gen_ai.client.token.usage").counters().stream().map(c -> c.getId().toString()).toList().toString();
     }
 
-    /** 一個最小的 Chat Completions 回應；usage 那段由呼叫的人決定要不要帶。 */
     private static String completion(String model, String usage) {
         return """
                 {"id":"chatcmpl-test","object":"chat.completion","created":1760000000,"model":"%s",\

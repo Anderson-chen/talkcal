@@ -88,7 +88,7 @@ class OAuth2LoginSystemTest {
     @Test
     @DisplayName("#127 雲端前面有 Caddy 解 HTTPS：nginx 帶著 X-Forwarded-Proto: https 轉過來，回呼網址要是 https://（反例：上面沒帶的那題還是 http://）")
     void callbackUsesSchemeFromProxy() throws Exception {
-        // 照雲端上 nginx 轉給 app 的樣子送：app 自己收到的是 http，原本的 scheme 在 header 裡
+        // 雲端上 nginx 轉給 app 的是 http，原本的 https 只在 header 裡
         HttpResponse<String> response = HttpClient.newHttpClient().send(
                 HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/auth/oauth2/authorization/google"))
                         .header("X-Forwarded-Proto", "https")
@@ -123,7 +123,7 @@ class OAuth2LoginSystemTest {
         HttpResponse<String> cancelled = amy.get("/api/auth/oauth2/callback/google?error=access_denied&state=forged-state");
 
         assertEquals(302, forged.statusCode());
-        // 轉回同一個網址的首頁（Tomcat 會補成完整網址，host 是請求進來時的那個）
+        // Tomcat 把 Location 補成完整網址，host 用請求進來時的那個
         assertEquals("http://localhost:" + port + "/?login_error=oauth", forged.headers().firstValue("Location").orElseThrow());
         assertEquals("http://localhost:" + port + "/?login_error=oauth", cancelled.headers().firstValue("Location").orElseThrow());
         assertEquals(401, amy.get("/api/auth/me").statusCode());

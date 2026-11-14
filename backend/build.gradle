@@ -6,16 +6,11 @@ import org.springframework.boot.gradle.plugin.SpringBootPlugin
 
 plugins {
     id 'java'
-    // 測試覆蓋率，設定在下面 jacocoTestReport 那段
     id 'jacoco'
-    // 讓 ./gradlew run 能直接啟動組裝根
     id 'application'
-    // Spring Boot 只負責「組裝」這件事：把散落的 bean 兜起來、打包成可執行 jar、提供 bootRun。
-    // 業務規則一個字都不會碰到它，ArchitectureTest 的 coreMustNotDependOnSpring 守著這件事。
     id 'org.springframework.boot' version '4.1.1'
-    // 靜態分析：Error Prone 掛在 javac 上，編譯時就抓常見的 bug（忘了用回傳值、equals 比錯型別…）
     id 'net.ltgt.errorprone' version '5.1.1'
-    // 依賴的授權清單和檢查：會打包進 jar 的依賴不能是 GPL、AGPL 這類授權。設定在檔案最後
+    // 會打包進 jar 的依賴不能是 GPL、AGPL 這類授權，設定在檔案最後
     id 'com.github.jk1.dependency-license-report' version '3.1.4'
 }
 
@@ -25,24 +20,20 @@ repositories {
 
 java {
     toolchain {
-        // 指定編譯用的 JDK 版本，而不是「拿執行 Gradle 的那個 JVM 將就」——
-        // 換一台機器、換一個 IDE 都編出同樣的結果。
-        // 25 是這台機器上裝的版本（也是 LTS）；程式用到的語法 21 起就支援
+        // 不用執行 Gradle 的那個 JVM 編譯，換機器、換 IDE 編出來都一樣。
+        // 改版本時 Dockerfile 的 build 映像檔（gradle:…-jdk25）要一起改，不然容器裡會另外下載 JDK
         languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
 dependencies {
-    // Spring Boot 的 BOM：一次釘住所有 spring-boot-* 與其傳遞依賴的版本，下面就不必寫版號。
-    // 用 Gradle 原生的 platform() 吃 BOM，而不是額外掛 io.spring.dependency-management 外掛 ——
-    // 後者在 Gradle 9 上會踩到已被移除的 API，platform() 是 Gradle 自己的機制，乾淨。
-    // BOM 座標直接取自上面套用的 Boot 外掛版本，不必再寫一次版號，改版只改一個地方。
+    // 用 Gradle 自己的 platform() 吃 BOM，不掛 io.spring.dependency-management 外掛：那個外掛在 Gradle 9 上會用到已移除的 API。
+    // BOM 座標從 Boot 外掛取，升 Boot 只改 plugins 那一行
     implementation platform(SpringBootPlugin.BOM_COORDINATES)
 
-    // 安全修補：Boot 4.1.1 帶的 Tomcat、Jackson 有已知漏洞（ci/vulns.sh 掃得到）。
-    // 同一個套件有兩個版本要求時，Gradle 挑高的那個 —— 所以這裡寫較高的版本就蓋過 BOM，不必動 Boot 本身。
-    // 只升 patch、不換小版本線，行為不會變。等 Boot 的 BOM 追上這些版本，這一段就整段刪掉。
-    // Jackson 2、3 都有：Boot 4 自己用 3（tools.jackson），Spring AI、springdoc 還在用 2（com.fasterxml）
+    // 蓋過 Boot BOM 帶的 Tomcat、Jackson 版本，修 ci/vulns.sh 掃到的漏洞：同一個套件有兩個版本要求時，Gradle 挑高的。
+    // 只升 patch，行為不變。Boot 的 BOM 追上這些版本之後，這段整段刪掉。
+    // Jackson 2、3 都要：Boot 4 用 3（tools.jackson），Spring AI、springdoc 還在用 2（com.fasterxml）
     implementation platform('com.fasterxml.jackson:jackson-bom:2.22.3')
     implementation platform('tools.jackson:jackson-bom:3.1.7')
     constraints {
@@ -52,145 +43,102 @@ dependencies {
         }
     }
 
-    // web starter：嵌入式 Tomcat + Spring MVC + Jackson（JSON 序列化）。
-    // Boot 4 把原本的 starter-web 改名成 starter-webmvc：名字直接講出是哪一套 web 堆疊（對比 webflux），
-    // 舊名字還留著但已標為 deprecated。
-    // 它涵蓋 spring-boot-starter，所以不必兩個都寫。
+    // Boot 4 把 starter-web 改名成 starter-webmvc，舊名字還在但已經 deprecated
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 
-    // 跟模型講話交給 Spring AI。它的 BOM 跟 Boot 的分開：Spring AI 自己發版，2.0.x 是對 Boot 4.1 編的。
+    // Spring AI 自己發版，BOM 跟 Boot 的分開；2.0.x 是對 Boot 4.1 編的
     implementation platform('org.springframework.ai:spring-ai-bom:2.0.1')
-    // OpenAI 相容協定的 ChatModel，由 spring.ai.openai.* 自動組裝。
-    // llama-server 本來就講 OpenAI 的 /v1/chat/completions，base-url 指過去就好；
-    // 哪天換成真的 OpenAI，改的是設定檔，不是程式。
-    // 注意底層是官方 openai-java SDK（OkHttp），不走 RestClient：沒有 http.client.requests 指標，
-    // 改由 Spring AI 自己的 gen_ai.* 觀測（每次呼叫一個 span，外加 token 用量指標）。
+    // 本機的 llama-server 和雲端的 Bedrock 都講 OpenAI 的 chat completions，換後端只改 spring.ai.openai.* 設定。
+    // 底層是 openai-java SDK（OkHttp），不走 RestClient：叫模型沒有 http.client.requests 指標，
+    // 指標和 span 來自 Spring AI 的 gen_ai.* 觀測
     implementation 'org.springframework.ai:spring-ai-starter-model-openai'
 
-    // 依賴掛了不要拖垮整個 app：斷路器（circuit breaker，連續失敗就先停叫一陣子）和 bulkhead（同時等它的上限）。
-    // 用 starter：每個依賴的規則都寫在 application.properties 的 resilience4j.*（共用的預設 + 各依賴不一樣的地方），
-    // 多一個依賴只加設定、不必再寫一套組裝；指標（breaker 狀態、bulkhead 剩幾個位子）也由它自動接上 Micrometer。
-    // 只用它建好的 registry，不用 @CircuitBreaker 註解（見 ResilienceConfiguration）。
-    // 不用 Spring Cloud Circuit Breaker：它是同一個 Resilience4j 外面再包一層抽象，還多一套 release train 要追；
-    // 設定格式一樣是 resilience4j.*，哪天要換，設定檔不用改。
-    // 版號只寫一次（不在 Boot 的 BOM 裡）。不用 resilience4j-bom：2.4.0 的 BOM 只列了 spring-boot3，沒有 spring-boot4
+    // 斷路器、bulkhead 的規則寫在 application.properties 的 resilience4j.*，starter 照設定建 registry、接上 Micrometer 指標。
+    // 不用 Spring Cloud Circuit Breaker：它是同一個 Resilience4j 外面再包一層抽象，還多一套 release train 要追。
+    // 不用 resilience4j-bom：2.4.0 的 BOM 沒有 spring-boot4 模組，所以版號在這裡寫一次
     def resilience4j = '2.4.0'
     implementation "io.github.resilience4j:resilience4j-spring-boot4:${resilience4j}"
-    // 程式直接用 CircuitBreaker、Bulkhead 這兩個型別，明寫出來，不靠 starter 間接帶進來
+    // 程式直接用 CircuitBreaker、Bulkhead 型別，明寫出來，不靠 starter 間接帶進來
     implementation "io.github.resilience4j:resilience4j-circuitbreaker:${resilience4j}"
     implementation "io.github.resilience4j:resilience4j-bulkhead:${resilience4j}"
 
-    // 認證與授權：沒登入就用不了 /api。登入的流程在 app.config 組裝，auth 模組的規則（帳號名稱、密碼長度）不碰 Spring
     implementation 'org.springframework.boot:spring-boot-starter-security'
-    // 用 Google、GitHub 帳號登入：OAuth2 的轉址、換 token、驗 ID token、拿使用者資料都交給它。
-    // 只當 client（「用別人的帳號登入」），不當 authorization server，也不驗別人發的 JWT
+    // 只當 OAuth2 client（用 Google、GitHub 帳號登入），不當 authorization server，也不驗別人發的 JWT
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
 
-    // 資料存 PostgreSQL。用 JDBC（JdbcClient）而不是 JPA：
-    // 表不多，SQL 自己寫一眼看得懂；JPA 要在 domain 物件上加 @Entity，
-    // 或另外維護一套 entity 再對映，對這個大小是多出來的一層。交易用 TransactionTemplate（也在這包裡）。
+    // 用 JdbcClient 自己寫 SQL，不用 JPA：JPA 要在 domain 物件上加 @Entity，或另外維護一套 entity 再對映
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
     runtimeOnly 'org.postgresql:postgresql'
-    // 資料表的版本控管：src/main/resources/db/migration 底下的 SQL 依檔名順序執行，跑過的會記下來不再跑。
-    // app 啟動時自動把資料庫升到最新，換一台機器、清空資料庫重來都不必手動建表。
-    // Flyway 對每種資料庫的支援拆成獨立模組，PostgreSQL 要另外加。
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
+    // Flyway 對 PostgreSQL 的支援是獨立模組，少了它 Flyway 不認得這個資料庫
     runtimeOnly 'org.flywaydb:flyway-database-postgresql'
 
-    // 資料歸檔：舊資料壓縮成 JSON Lines + gzip，放到 S3 相容的物件儲存（雲端 S3、本機 RustFS）。
-    // 用 AWS 官方的 SDK v2 而不是各家的 client：S3 的 API 已經是物件儲存的共通語言，換 RustFS、S3 只差 endpoint。
-    // BOM 跟 Boot、Spring AI 的一樣用 platform() 吃，版號只寫一次。
-    // 只要同步的 S3Client：排程一天一次，不需要 async 的那一套（netty），排掉省 10MB 依賴、少一份要追漏洞的東西
+    // 歸檔放 S3 相容的物件儲存（雲端 S3、本機 RustFS），兩邊只差 endpoint。
+    // 排掉 netty-nio-client：只用同步的 S3Client，用不到 async 的那套，少 10 MB 依賴、少一份要追的漏洞
     implementation platform('software.amazon.awssdk:bom:2.55.16')
     implementation('software.amazon.awssdk:s3') {
         exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
     }
 
-    // 打開 /actuator/*：健康檢查、指標等維運用的入口。它自動 instrument 出 HTTP 延遲、
-    // JVM、執行緒池等「通用指標」，一行採集程式都不用寫 —— 業務指標才要自己用 Micrometer 埋。
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    // 把 Micrometer 收集的指標翻成 Prometheus 文字格式，才會有 /actuator/prometheus 這頁
-    // 讓 ops/ 的 Alloy 來抓。runtimeOnly：程式碼不 import 它，只在執行期被 actuator 撿去用
-    // （版本由上面的 Boot BOM 管，不必寫版號）。
+    // 提供 /actuator/prometheus 給 ops/ 的 Alloy 來抓。程式碼不 import 它，所以 runtimeOnly
     runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 
-    // trace：每個請求一個 trace id，記下 app 內部和 app → llm-chat 每一段花多久，用 OTLP 推給 ops/ 的 Alloy。
-    // 三塊各管一段（跟指標那邊「Micrometer 埋 → registry 翻格式」同一個分工）：
-    //   spring-boot-micrometer-tracing-opentelemetry —— Boot 的自動設定：建 tracer、接上 actuator、讀 management.* 屬性
-    //   micrometer-tracing-bridge-otel —— 把 Micrometer 的 Observation（Spring 已經替每個 HTTP 請求開好的）
-    //       翻成 OpenTelemetry 的 span。程式碼只認 Micrometer，不綁死 OpenTelemetry
-    //   opentelemetry-exporter-otlp —— 把 span 用 OTLP 協定送出去
-    // 不用 spring-boot-starter-opentelemetry：它還會帶 micrometer-registry-otlp，讓 app 另外「推」一份指標，
-    // 跟 Alloy 來「抓」的那份重複。指標維持抓取模式，這裡只要 trace。
+    // trace 用 OTLP 推給 ops/ 的 Alloy，三塊各管一段：
+    //   spring-boot-micrometer-tracing-opentelemetry：Boot 的自動設定，建 tracer、讀 management.* 屬性
+    //   micrometer-tracing-bridge-otel：把 Micrometer 的 Observation 翻成 OpenTelemetry 的 span，程式碼只認 Micrometer
+    //   opentelemetry-exporter-otlp：把 span 用 OTLP 送出去
+    // 不用 spring-boot-starter-opentelemetry：它還會帶 micrometer-registry-otlp，讓 app 另外推一份指標，
+    // 跟 Alloy 抓的那份重複
     implementation 'org.springframework.boot:spring-boot-micrometer-tracing-opentelemetry'
     runtimeOnly 'io.micrometer:micrometer-tracing-bridge-otel'
     runtimeOnly 'io.opentelemetry:opentelemetry-exporter-otlp'
-    // 每條 SQL 變成 trace 上的一個 span：HTTP 請求、Spring AI 叫模型都有 Spring 自己開的 Observation，
-    // 只有 JDBC 沒有，trace 上看不出時間是花在模型還是資料庫。它把 DataSource 包一層 datasource-proxy，
-    // 每次拿連線、每次執行 SQL 開一個 Observation，接到同一個 tracer 上；指標（jdbc.query 等）也會一起有。
-    // 版號要自己寫：不在 Boot 的 BOM 裡。2.x 對 Boot 4（2.3.0 的 pom 用的正是 Boot 4.1.1）
+    // 每條 SQL 一個 span：HTTP 請求和叫模型 Spring 都會開 Observation，JDBC 不會，少了它 trace 上分不出時間花在模型還是資料庫。
+    // 不在 Boot 的 BOM 裡，版號自己寫；2.x 對應 Boot 4
     runtimeOnly 'net.ttddyy.observation:datasource-micrometer-spring-boot:2.3.0'
-    // 上面那個預設用自己的屬性名稱（jdbc.query[0]、peer.service = 資料庫名稱）。加這個改用 OpenTelemetry 的資料庫命名：
-    // db.system.name=postgresql、server.address、db.query.text（字面值換成 ?）。
-    // Tempo 畫 service map 時靠 db.system.name 造出「postgresql」這個節點（見 ops/tempo/tempo.yaml）；
-    // 只有 peer.service 的話，值是資料庫名稱 talkcal，圖上會變成 talkcal 自己連自己
+    // 改用 OpenTelemetry 的資料庫屬性名稱（db.system.name 等）。Tempo 的 service map 靠 db.system.name 畫出 postgresql 節點
+    // （見 ops/tempo/tempo.yaml）；只有預設的 peer.service 的話，值是資料庫名稱 talkcal，圖上會變成 talkcal 自己連自己
     runtimeOnly 'net.ttddyy.observation:datasource-micrometer-opentelemetry:2.3.0'
 
-    // Swagger UI + OpenAPI 文件：啟動時掃 @RestController，自動產出 /v3/api-docs（機器讀的 JSON）
-    // 與 /swagger-ui.html（人點的頁面）。文件是「從程式長出來」的，路由改了文件跟著改，不會過期。
-    // 版號要自己寫：springdoc 不在 Boot 的 BOM 裡。springdoc 的主版號跟著 Boot 走：2.x 配 Boot 3、3.x 配 Boot 4。
-    // implementation 而不是 runtimeOnly：controller 要 import 它的 @Operation 等註解來補說明。
+    // 不在 Boot 的 BOM 裡，版號自己寫；主版號跟著 Boot 走，3.x 配 Boot 4。
+    // 不是 runtimeOnly：controller 要 import @Operation 這些註解
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1'
 
-    // JUnit 的版本交給上面的 Boot BOM 管（Boot 4 帶的是 JUnit 6）。
-    // 不另外釘 junit-bom：兩份 BOM 同時存在時 Gradle 會挑較高的版本，
-    // 寫在這裡的版號看起來有效、其實沒作用。
+    // 版本由 Boot 的 BOM 管（JUnit 6）。不另外釘 junit-bom：兩份 BOM 時 Gradle 挑高的，寫低的版號看起來有效、其實沒作用
     testImplementation 'org.junit.jupiter:junit-jupiter'
-    // 執行期才需要的啟動器；沒有它 Gradle 找不到測試引擎
+    // 沒有它 Gradle 找不到測試引擎
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
-    // 把架構規則寫成測試。Java 的 package 沒有依賴方向的概念，
-    // 少了它「core 不准依賴 adapter」就只是口頭約定，編譯器不會管
     testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
 
-    // 為了 @WebMvcTest 與 MockMvc：controller 幾乎每一行都是在跟 Spring 講話
-    // （路由、@RequestBody 綁定、@ExceptionHandler），不經過 Spring 測等於沒測。
-    // 這一包也會拉進 Mockito、AssertJ、Hamcrest，但專案一律手寫假物件，不用 mock 框架 ——
-    // 拉進來只是因為它們是 starter 的傳遞依賴，用不到就當作沒有。
-    // （版本由上面的 Boot BOM 管，不必寫版號。）
+    // 會連帶拉進 Mockito，但測試一律手寫假物件，不用 mock 框架
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    // Boot 4 把測試切片拆進各自的模組：@WebMvcTest、@AutoConfigureMockMvc 不再附在 starter-test 裡，
-    // 用到哪一層的切片就引哪一層的 test starter，對應 main 的 starter-webmvc。
+    // Boot 4 把 @WebMvcTest、@AutoConfigureMockMvc 從 starter-test 拆出來，用到哪一層的切片就引哪一層的 test starter
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
-    // MockMvc 裡模擬「已經登入的使用者」、帶上 CSRF token（with(user(...))、with(csrf())）。Boot 4 把它也拆成自己的 test starter
+    // MockMvc 的 with(user(...))、with(csrf())，Boot 4 一樣拆成自己的 test starter
     testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
-    // 測試裡照樣產生 trace id、但不往外匯出：沒有它的話，起整個容器的測試會一直嘗試送 span 到 localhost:4318。
-    // AccessLogTraceIdTest 靠它在不開 ops/ 的情況下驗「access log 帶著 traceId」。
+    // 測試裡照樣產生 trace id、但不往外送：沒有它，起整個容器的測試會一直試著送 span 到 localhost:4318
     testImplementation 'org.springframework.boot:spring-boot-micrometer-tracing-test'
 
-    // Error Prone 的檢查規則本體；上面的 net.ltgt.errorprone 外掛負責把它接到每個 JavaCompile 上（main、test、integrationTest、eval 都有）。
-    // 選型理由見 ci/README.md 的「lint」
+    // net.ltgt.errorprone 外掛把它接到每個 JavaCompile 上（main、test、integrationTest、eval）。選型理由見 ci/README.md 的「lint」
     errorprone 'com.google.errorprone:error_prone_core:2.50.0'
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.errorprone {
-        // 預設就好：ERROR 等級的規則（幾乎一定是 bug）讓編譯失敗，WARNING 只印出來。
-        // 不開 -Werror 把警告也變成錯誤：開了的話，現有的警告要先全部清掉
+        // 只用預設（ERROR 讓編譯失敗、WARNING 只印出來），沒開 -Werror 的理由見 ci/README.md 的「lint」
         disableWarningsInGeneratedCode = true
     }
 }
 
-// 程式與註解都有中文，編碼一定要明寫。
-// 不寫的話 javac 會用平台預設，在 Windows 上是 cp950，中文註解會編成亂碼
+// 不寫的話 javac 用平台預設編碼，Windows 上是 cp950，中文會變成亂碼
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
-// 本機的祕密（DB 密碼、Google／GitHub 的 client secret）放在不進 git 的 deploy/.env，範本是 deploy/.env.example。
-// docker compose 自己會讀那份；bootRun 沒有這個機制，所以在這裡讀進來、當成環境變數交給 app —— 兩邊用同一份，不必各填一次。
-// 主機上已經設了同名的環境變數就以它為準（跟 compose 的規則一樣）。
-// 沒有這份、或沒填 DB_PASSWORD 就直接失敗：不然 app 會用空密碼去連，錯誤訊息只有「password authentication failed」，看不出要補什麼
+// compose 會自己讀 deploy/.env，bootRun 不會，所以在這裡讀進來當成環境變數，兩邊用同一份。
+// 主機上已經有同名的環境變數就用主機的，跟 compose 的優先順序一樣。
+// 沒有 DB_PASSWORD 就先停下來：不然 app 用空密碼去連，只看得到「password authentication failed」，看不出要補什麼
 tasks.named('bootRun') {
     def dotenv = file('../deploy/.env')
     doFirst {
@@ -202,7 +150,7 @@ tasks.named('bootRun') {
             def text = line.trim()
             int eq = text.indexOf('=')
             if (text && !text.startsWith('#') && eq > 0) {
-                // 值可以用引號包起來（compose 也接受這種寫法），包了就拿掉
+                // compose 接受用引號包住值，這裡也把引號拿掉
                 values[text.substring(0, eq).trim()] = text.substring(eq + 1).trim().replaceAll(/^(["'])(.*)\1$/, '$2')
             }
         }
@@ -224,32 +172,24 @@ tasks.named('test') {
     }
 }
 
-// 要起容器（PostgreSQL、RustFS）或真 llama-server 的整合測試，放在自己的 source set：src/integrationTest/java。
-// 用目錄分開而不是用 @Tag 過濾：./gradlew test 只看得到單元測試、保持秒回，
-// 要跑整合測試就 ./gradlew integrationTest。
-// IntelliJ 認得每個 source set 屬於哪個測試 task，所以在 src/integrationTest 裡按 ▶ 會走 :integrationTest、
-// 在 src/test 裡按 ▶ 走 :test —— 單一檔案、整個 package 都照這個分，不必任何 IDE 設定。
+// 要起容器或真模型的測試放在自己的 source set，不用 @Tag 過濾：./gradlew test 只跑單元測試，幾秒就跑完。
+// IntelliJ 照 source set 決定按 ▶ 時跑 :test 還是 :integrationTest，不必另外設定
 testing {
     suites {
         integrationTest(JvmTestSuite) {
             dependencies {
-                // 測的是正式程式，所以要看得到 main 的類別
                 implementation project()
-                // 整合測試要真的 PostgreSQL：Testcontainers 每次測試起一個乾淨的容器，測完丟掉。
-                // 不用 H2 這類記憶體資料庫：SQL 方言不同（例如 ON CONFLICT），在 H2 綠燈不代表在 PostgreSQL 會過。
-                // spring-boot-testcontainers 讓 @ServiceConnection 自動把容器的連線資訊接進 Spring，不必手寫 URL。
+                // 用真的 PostgreSQL，不用 H2：SQL 方言不同（例如 ON CONFLICT），H2 上綠燈不代表 PostgreSQL 會過
                 implementation 'org.springframework.boot:spring-boot-testcontainers'
                 implementation 'org.testcontainers:testcontainers-postgresql'
                 implementation 'org.testcontainers:testcontainers-junit-jupiter'
             }
             targets.configureEach {
                 testTask.configure {
-                    // 兩個都要跑時先跑秒回的那個，壞掉的單元測試不必等模型回完才知道
+                    // 兩個都跑時先跑快的，單元測試壞了不必等整合測試跑完才知道
                     shouldRunAfter tasks.named('test')
-                    // 模型測試從系統屬性 spring.ai.openai.chat.base-url 讀 llama-server 在哪，
-                    // 但 Gradle 不會把自己的系統屬性傳進測試 JVM，所以從環境變數接過去。
-                    // 用 Spring 本來就認得的那個名字（application.properties 也提到它），不另外發明一個。
-                    // 主要給 ci/run.sh 用：測試跑在容器裡，127.0.0.1 是容器自己，要改指到主機上的模型
+                    // Gradle 不會把自己的系統屬性傳進測試 JVM，llama-server 在哪要從環境變數接過去。
+                    // ci/run.sh 在容器裡跑測試，127.0.0.1 是容器自己，靠這個指到主機上的模型
                     def llmBaseUrl = providers.environmentVariable('SPRING_AI_OPENAI_CHAT_BASEURL')
                     if (llmBaseUrl.isPresent()) {
                         systemProperty 'spring.ai.openai.chat.base-url', llmBaseUrl.get()
@@ -263,9 +203,8 @@ testing {
     }
 }
 
-// AI 品質回歸：一整組固定題目跑真模型、計分，跟基準線比，看改了 prompt 或換了模型之後有沒有變差。
-// 跟整合測試分開成自己的 source set（src/eval）：題目多、跑一次好幾分鐘，不能拖慢 pre-push。
-// 改 prompt、換模型時手動跑：./gradlew eval；報告在 build/eval/report.md
+// AI 品質回歸：固定題目跑真模型、計分、跟基準線比。跑一次好幾分鐘，所以不放在 integrationTest 裡，免得拖慢 pre-push。
+// 改 prompt、換模型時手動跑 ./gradlew eval，報告在 build/eval/report.md
 testing {
     suites {
         eval(JvmTestSuite) {
@@ -275,11 +214,11 @@ testing {
             targets.configureEach {
                 testTask.configure {
                     shouldRunAfter tasks.named('integrationTest')
-                    // 不量覆蓋率：eval 量的是模型答得好不好，不是程式有沒有被走到（見 docs/test-coverage.md）
+                    // eval 量的是模型答得好不好，不是程式有沒有被走到（見 docs/test-coverage.md）
                     jacoco { enabled = false }
-                    // 模型在外面，程式沒變結果也可能變（換了模型檔、換了雲端模型），所以每次都真的跑，不沿用上次的結果
+                    // 程式沒變，結果也可能因為換了模型而變，所以不沿用上次的結果
                     outputs.upToDateWhen { false }
-                    // 跑哪個模型：沒給就是本機 llama-server 的 qwen3-8b。要評雲端的就給這三個（名字跟 Spring 認得的一樣）
+                    // 沒設這些環境變數就用 application.properties 的本機 llama-server；要評雲端模型就三個都設
                     ['SPRING_AI_OPENAI_CHAT_BASEURL': 'spring.ai.openai.chat.base-url',
                      'SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL': 'spring.ai.openai.chat.options.model',
                      'SPRING_AI_OPENAI_APIKEY': 'spring.ai.openai.api-key'].each { env, property ->
@@ -299,35 +238,31 @@ testing {
 }
 
 configurations {
-    // JUnit、Spring Boot Test、BOM 這些跟單元測試一樣，直接沿用而不是再抄一份
     integrationTestImplementation.extendsFrom testImplementation
     integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
     evalImplementation.extendsFrom testImplementation
     evalRuntimeOnly.extendsFrom testRuntimeOnly
 }
 
-// ── 測試覆蓋率：單元測試＋整合測試合併成一份報告 ──
-// 用法：./gradlew test integrationTest jacocoTestReport（ci/checks.sh 就是這樣跑）
-// 報告在哪、為什麼合併、為什麼不設門檻（不加 jacocoTestCoverageVerification）：見 docs/test-coverage.md
+// 單元測試和整合測試合併成一份覆蓋率報告：./gradlew test integrationTest jacocoTestReport。
+// 為什麼合併、為什麼不設門檻見 docs/test-coverage.md
 jacoco {
-    // 0.8.14 起正式支援 Java 25 的 class 檔。不寫的話用 Gradle 內建的版本，Gradle 升級時會悄悄跟著換
+    // 0.8.14 起才支援 Java 25 的 class 檔。不寫的話用 Gradle 內建的版本，升 Gradle 時會跟著變
     toolVersion = '0.8.15'
 }
 
 tasks.named('jacocoTestReport', JacocoReport) {
-    // 預設只讀 test 的結果，這裡把 integrationTest 的也加進來。傳 task 而不是寫死 exec 檔的路徑：
-    // Gradle 從 task 自己的 jacoco 設定找檔案，順便加上 mustRunAfter（不是 dependsOn）——
-    // 只跑 ./gradlew test jacocoTestReport 時不會被迫起 PostgreSQL 容器，沒跑整合測試時報告就只有單元測試的部分
+    // 傳 task，不寫死 exec 檔的路徑：Gradle 照 task 的設定找檔案，加上的是 mustRunAfter 不是 dependsOn，
+    // 所以只跑 ./gradlew test jacocoTestReport 時不會被迫起整合測試的容器
     executionData tasks.named('integrationTest').get()
     reports {
-        // HTML 預設就開著（給人看）；另外開 CSV 給 ci/checks.sh 加總貼摘要：一個類別一列、欄位有名字，比拆 XML 好讀
+        // 給 ci/checks.sh 加總：CSV 一個類別一列，比拆 XML 好處理
         csv.required = true
     }
 }
 
 tasks.named('check') {
-    // ./gradlew build 不跑整合測試（要真 server、又慢），但至少要編得過：
-    // 否則改了某個方法的簽名，只有整合測試用到的地方壞了也沒人發現，直到下次有人想跑它
+    // ./gradlew build 不跑整合測試和 eval，但要編得過：不然改了方法簽名，只有它們用到的地方壞了也沒人發現
     dependsOn tasks.named('integrationTestClasses')
     dependsOn tasks.named('evalClasses')
 }
@@ -336,14 +271,12 @@ application {
     mainClass = 'io.github.andersonchen.talkcal.Application'
 }
 
-// ── 部署：步驟寫在 cd/apply.sh，這裡只是本機的快捷鍵 ──
-// 部署邏輯只寫一份，本機和雲端共用（見 cd/README.md）。Gradle 這層只多做一件事：deployApp 先跑測試。
+// 部署步驟只寫在 cd/apply.sh（見 cd/README.md），下面幾個 task 是本機的捷徑。
 //
-// 找 Git Bash 來跑 cd/ 底下的 script。不直接寫 'bash'：Windows 的 PATH 裡第一個 bash 是
-// C:\Windows\System32\bash.exe —— 那是 WSL，WSL 裡只有 docker-desktop 這類 distro 時 script 跑不起來；
-// 從 PowerShell、IntelliJ 跑 gradlew 都會撞到。Git 裝在哪也不一定，
-// 所以問 git 自己：--exec-path 是 <Git>/mingw64/libexec/git-core，往上三層就是安裝目錄。
-// 真的找不到時：./gradlew deploy -PbashPath=<bash.exe 的路徑>
+// Windows 上不能直接寫 'bash'：PATH 裡第一個 bash 是 C:\Windows\System32\bash.exe，那是 WSL，
+// WSL 裡沒有能跑這些 script 的 distro 就會失敗。所以問 git 自己裝在哪：
+// --exec-path 是 <Git>/mingw64/libexec/git-core，往上三層是安裝目錄。
+// 找不到時：./gradlew deploy -PbashPath=<bash.exe 的路徑>
 def bashPath = providers.gradleProperty('bashPath').orElse(providers.provider {
     if (!System.getProperty('os.name').toLowerCase().contains('windows')) return 'bash'
     def gitCore = providers.exec { commandLine 'git', '--exec-path' }.standardOutput.asText.get().trim()
@@ -357,29 +290,23 @@ def registerDeploy = { String name, String service, String desc ->
     tasks.register(name, Exec) {
         group = 'deployment'
         description = desc
-        // 用專案目錄（backend/）推出 repo 根目錄，不寫死絕對路徑：換一台機器、換一個 clone 位置都能跑
         workingDir = layout.projectDirectory.dir('..')
         commandLine bashPath.get(), 'cd/apply.sh', 'local', service
         if (deployWaitTimeout.present) environment 'WAIT_TIMEOUT', deployWaitTimeout.get()
     }
 }
 
-// ./gradlew deployApp（趕時間跳過測試：./gradlew deployApp -x test）
-// 為什麼先跑測試：Dockerfile 只打包、不跑測試（理由見 Dockerfile），手動部署前「先驗過」就掛在這裡。
-// 測試沒改過的話 Gradle 會判定 up-to-date 直接跳過，不會白跑。CD（cd/triggers/watch.sh）用 CI 綠燈當這道關，不經過 Gradle。
+// Dockerfile 只打包、不跑測試，手動部署前的測試掛在這裡。趕時間可以 ./gradlew deployApp -x test
 registerDeploy('deployApp', 'app', '跑測試、build app 映像檔、換掉 deploy/ 的 app 容器，等它 healthy')
 tasks.named('deployApp') { dependsOn tasks.named('test') }
 
-// ./gradlew deployWeb
-// 不必 dependsOn 什麼：前端的型別檢查寫在 web/Dockerfile 的 pnpm run build 裡，型別錯映像檔就 build 不出來。
+// 不用 dependsOn 型別檢查：web/Dockerfile 的 pnpm run build 會跑，型別錯了映像檔就 build 不出來
 registerDeploy('deployWeb', 'web', 'build 前端映像檔（含型別檢查）、換掉 deploy/ 的 web 容器，等它 healthy')
 
-// ./gradlew deployModels：升級 llama.cpp、調 compose 裡的模型參數（-np、--temp…）之後用。
-// 刻意不放進 deploy：映像檔重 build 約十分鐘，換的期間所有請求都會失敗。改程式碼不該順便付這個代價。
+// 升級 llama.cpp、調 compose 裡的模型參數之後用。不放進 deploy：映像檔重 build 約十分鐘，換的期間所有請求都會失敗
 registerDeploy('deployModels', 'llm-chat', '重 build llama-server 映像檔、換掉 deploy/ 的模型容器，等它載好模型（healthy）')
 
-// 前後端一起部署：./gradlew deploy
-// 順序靠 mustRunAfter 而不是 dependsOn：先換 app 再換 web，但單獨跑 deployWeb 時不會被迫連 app 一起部署
+// 用 mustRunAfter 排順序，不用 dependsOn：單獨跑 deployWeb 時才不會連 app 一起部署
 tasks.register('deploy') {
     group = 'deployment'
     description = '依序部署 app 和前端'
@@ -387,13 +314,11 @@ tasks.register('deploy') {
 }
 tasks.named('deployWeb') { mustRunAfter 'deployApp' }
 
-// ── 授權：規則、理由、反例驗證都在 docs/licenses.md ──
-// ./gradlew checkLicense：runtimeClasspath 裡有授權不在 allowed-licenses.json 的依賴就失敗
-// ./gradlew generateLicenseReport：只產清單，build/reports/dependency-license/index.html（依授權分組）
+// 授權的規則、理由、反例見 docs/licenses.md。
+// ./gradlew checkLicense 檢查；./gradlew generateLicenseReport 只產清單（build/reports/dependency-license/index.html）
 
-// 只認套件自己宣告的授權（POM、jar 的 manifest），不認 jar 裡附帶的授權檔。
-// 外掛預設兩種都算，加上「宣告了好幾個授權時，其中一個允許就過」的規則，會漏掉真正該擋的：
-// itextpdf 是 AGPL，但 jar 裡附了一份給內嵌元件用的 Apache 授權檔，預設設定下它就過了
+// 只認套件宣告的授權（POM、jar 的 manifest），不認 jar 裡附帶的授權檔。外掛預設兩種都算，
+// 而一個套件有好幾個授權時只要一個在允許清單就過：itextpdf 是 AGPL，但 jar 裡附了一份給內嵌元件用的 Apache 授權檔，預設設定會放它過
 class DeclaredLicensesOnly implements DependencyFilter {
     ProjectData filter(ProjectData data) {
         data.allDependencies.each { it.licenseFiles.clear() }
@@ -402,22 +327,18 @@ class DeclaredLicensesOnly implements DependencyFilter {
 }
 
 licenseReport {
-    // 只看會打包進 bootJar 的。測試、eval 用的依賴不會上線，不散布也不對外提供服務
+    // 只看會打包進 bootJar 的。測試、eval 用的依賴不會上線
     configurations = ['runtimeClasspath']
-    // BOM 只是一張版本表，不是程式
     excludeBoms = true
-    // LicenseBundleNormalizer：同一個授權在各家 POM 裡寫法不一（「Apache 2」「The Apache Software License, Version 2.0」…），
-    // 先統一名稱，允許清單才不必把每種寫法都列一次
+    // 同一個授權在各家 POM 寫法不一（「Apache 2」「The Apache Software License, Version 2.0」…），先統一名稱，允許清單才不必列每種寫法
     filters = [new DeclaredLicensesOnly(), new LicenseBundleNormalizer()]
-    // 允許清單，不是禁止清單：沒看過的授權字串預設擋下來讓人看，而不是預設放行
+    // 允許清單，不是禁止清單：沒看過的授權字串先擋下來讓人看
     allowedLicensesFile = layout.projectDirectory.file('allowed-licenses.json').asFile
     renderers = [new InventoryHtmlReportRenderer('index.html', 'talkcal 後端依賴的授權')]
 }
 
-// 每次都重新跑（幾秒）：外掛的 up-to-date 判斷不可靠 —— 加了 GPL 的依賴，報告重新產生了，
-// checkLicense 卻顯示 UP-TO-DATE、沿用上一次「通過」的結果
+// 外掛的 up-to-date 判斷不可靠：加了 GPL 的依賴、報告也重產了，checkLicense 還是 UP-TO-DATE、沿用上次的「通過」。每次重跑只要幾秒
 ['generateLicenseReport', 'checkLicense'].each { name ->
     tasks.named(name) { outputs.upToDateWhen { false } }
 }
-// ./gradlew build 就會檢查，不必另外記得跑
 tasks.named('check') { dependsOn tasks.named('checkLicense') }

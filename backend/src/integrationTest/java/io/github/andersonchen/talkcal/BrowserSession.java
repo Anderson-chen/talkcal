@@ -27,7 +27,7 @@ final class BrowserSession {
     private final String baseUrl;
     private final CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
     private final HttpClient http;
-    // 想模擬「別的網站騙瀏覽器送請求」時關掉：cookie 照樣帶，但讀不到我們的 XSRF-TOKEN、送不出 header
+    // 關掉就是別的網站騙瀏覽器送請求：cookie 照樣帶，但別的網站讀不到 XSRF-TOKEN
     private boolean sendCsrfHeader = true;
 
     BrowserSession(int port) {
@@ -73,7 +73,6 @@ final class BrowserSession {
         return send(request("/api/auth/logout").POST(HttpRequest.BodyPublishers.noBody()), true);
     }
 
-    /** 註冊再登入，回到「已登入」的狀態。 */
     BrowserSession signUpAndLogIn(String username, String password) throws Exception {
         var registered = register(username, password);
         if (registered.statusCode() != 201) {
@@ -92,13 +91,13 @@ final class BrowserSession {
     }
 
     private HttpRequest.Builder request(String path) {
-        // 助理那一題會等模型，給到跟 app 呼叫模型一樣的兩分鐘
+        // 問助理會等模型，跟 app 的 spring.ai.openai.chat.timeout 一樣給兩分鐘
         return HttpRequest.newBuilder(URI.create(baseUrl + path)).timeout(Duration.ofMinutes(2));
     }
 
     private HttpResponse<String> send(HttpRequest.Builder request, boolean changesSomething) throws Exception {
         if (changesSomething && sendCsrfHeader) {
-            // 跟前端一樣：手上沒有 token 就先 GET 一次，讓後端發 XSRF-TOKEN cookie 過來
+            // 前端也是這樣做：還沒有 token 就先 GET 一次，後端才會發 XSRF-TOKEN cookie
             if (cookie("XSRF-TOKEN").isEmpty()) {
                 get("/api/auth/me");
             }

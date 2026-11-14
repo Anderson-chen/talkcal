@@ -29,7 +29,7 @@ class ListArchivedEventsServiceTest {
         return ScheduledEvent.schedule(new CalendarEvent(title, start, end));
     }
 
-    /** 假的歸檔：記下被要了哪幾個月，回固定的那幾筆（不照月份挑，挑重疊是 service 的事）。 */
+    /** 不照月份挑，固定回那幾筆：挑出跟範圍重疊的是 service 的事。 */
     private static class FakeArchive implements EventArchivePort {
 
         final List<String> asked = new ArrayList<>();

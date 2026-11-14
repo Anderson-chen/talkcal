@@ -119,7 +119,7 @@ class AuthorizationSystemTest {
     void cannotReadSomeoneElsesConversation() throws Exception {
         String amyId = JSON.readTree(amy.get("/api/auth/me").body()).at("/id").asString();
         String conversation = UUID.randomUUID().toString();
-        // 不叫模型：直接寫一段 amy 名下的對話（跟 JdbcAssistantMemoryRepository 存的形狀一樣）
+        // 不叫模型，直接照 JdbcAssistantMemoryRepository 存的格式寫一段 amy 的對話
         jdbc.sql("""
                         INSERT INTO calendar_assistant_message (owner_id, conversation_id, position, type, content)
                         VALUES (:owner, :id, 0, 'USER', '明天幫我約牙醫'), (:owner, :id, 1, 'ASSISTANT', '早上還是下午？')

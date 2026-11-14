@@ -92,7 +92,7 @@ class AuthSystemTest {
                 {"events": [{"title": "牙醫回診", "start": "2030-01-15T10:00:00", "end": "2030-01-15T11:00:00"}]}""";
         BrowserSession amy = browser().signUpAndLogIn("amy", PASSWORD);
 
-        // 模擬別的網站騙 amy 的瀏覽器送請求：session cookie 照樣帶上，但讀不到 XSRF-TOKEN、送不出 header
+        // 別的網站騙 amy 的瀏覽器送請求：session cookie 會帶上，但讀不到 XSRF-TOKEN，送不出 header
         BrowserSession forged = amy.withoutCsrfHeader();
         HttpResponse<String> rejected = forged.postJson("/api/calendar/events", event);
         assertEquals(403, rejected.statusCode(), rejected.body());
@@ -119,7 +119,7 @@ class AuthSystemTest {
         assertEquals(403, forged.statusCode(), forged.body());
         assertEquals("牙醫回診", jdbc.sql("SELECT title FROM calendar_event").query(String.class).single());
 
-        // withoutCsrfHeader 會改到 amy 那一份，換一個新的瀏覽器登入同一個帳號
+        // withoutCsrfHeader 改到的是 amy 這個物件本身，所以換一個瀏覽器登入同一個帳號
         BrowserSession honest = browser();
         assertEquals(204, honest.login("amy", PASSWORD).statusCode());
         HttpResponse<String> updated = honest.putJson(path, update);
@@ -158,7 +158,7 @@ class AuthSystemTest {
     void sessionIdChangesOnLogin() throws Exception {
         BrowserSession amy = browser();
         amy.register("amy", PASSWORD);
-        // 登入前先拿到一個 session（CSRF token 會存在 session 裡，所以 GET 一次就有）
+        // CSRF token 存在 session 裡，GET 一次就有登入前的 session
         amy.get("/api/auth/me");
         String before = amy.cookie("JSESSIONID").orElse("（登入前沒有 session）");
 

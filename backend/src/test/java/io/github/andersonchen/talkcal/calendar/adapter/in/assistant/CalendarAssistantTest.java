@@ -41,10 +41,8 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
 
 /**
- * 不打真模型：一個照劇本回話的假 ChatModel，看 agent loop 本身對不對 —— 工具有沒有被執行、
- * 記憶裡有沒有留著工具呼叫、截斷會不會拆散呼叫和結果、繞圈會不會停。
- *
- * 模型「會不會」反問、選不選得對工具，是 integrationTest 的 CalendarAssistantConversationTest 對真模型測的。
+ * 模型換成照劇本回話的假 ChatModel，只測 agent loop 本身。模型會不會反問、選不選得對工具，
+ * 要對真模型測，見 integrationTest 的 CalendarAssistantConversationTest。
  */
 @DisplayName("CalendarAssistant")
 class CalendarAssistantTest {
@@ -59,13 +57,13 @@ class CalendarAssistantTest {
     private final ChatMemory window = MessageWindowChatMemory.builder().chatMemoryRepository(memory).maxMessages(Integer.MAX_VALUE).build();
     private final List<Prompt> prompts = new ArrayList<>();
     private final List<String> parsed = new ArrayList<>();
-    // 助理拿了誰的記憶、工具查了誰的行事曆
+    // 記下記憶、行事曆是用誰的身分拿的
     private final List<OwnerId> memoryOwners = new ArrayList<>();
     private final List<OwnerId> listOwners = new ArrayList<>();
-    // 行事曆上已經有的那筆：修改、刪除的工具用編號找得到它
     // plan_events 背後排出來的時段；預設沒有，要測的那題自己放
     private List<FreeSlot> plannedSlots = List.of();
     private final List<OwnerId> planOwners = new ArrayList<>();
+    // 行事曆上已經有的一筆，修改、刪除的工具拿它的編號
     private static final ScheduledEvent SAVED = ScheduledEvent.schedule(new CalendarEvent("開會", LocalDateTime.of(2026, 10, 7, 19, 0), LocalDateTime.of(2026, 10, 7, 20, 0)));
 
     /** 照劇本回話：每呼叫一次拿下一句；劇本用完就一直回最後一句。 */
@@ -160,7 +158,6 @@ class CalendarAssistantTest {
         assertEquals(List.of("明天晚上七點吃飯"), parsed);
         assertEquals(List.of(DINNER), reply.proposals());
         assertEquals("請確認卡片。", reply.text());
-        // 第二次呼叫模型時，帶著工具的結果
         assertEquals(2, prompts.size());
         assertTrue(prompts.get(1).getInstructions().stream().anyMatch(m -> m instanceof ToolResponseMessage));
     }
@@ -179,7 +176,6 @@ class CalendarAssistantTest {
 
         assistant.reply(OWNER, ID, "其實是早上");
 
-        // 第三輪送給模型的歷史裡，有上一輪的工具呼叫
         assertTrue(prompts.getLast().getInstructions().stream()
                 .anyMatch(m -> m instanceof AssistantMessage a && a.hasToolCalls()), "歷史裡沒有工具呼叫");
     }
@@ -224,7 +220,7 @@ class CalendarAssistantTest {
 
         self[0].reply(OWNER, ID, "第一句");
 
-        // 第二句先存好，所以排在前面；重點是兩輪都在
+        // 第二句先存好，所以排在前面
         assertEquals(List.of("第二句", "收到第二句", "第一句", "收到第一句"),
                 memory.findByConversationId(ID).stream().map(Message::getText).toList());
     }
@@ -350,14 +346,12 @@ class CalendarAssistantTest {
     @DisplayName("使用者回報：沒呼叫工具卻說「已顯示卡片」→ 提醒它重來；它這次真的呼叫了，就照常出卡片。那句假話和提醒都不進記憶")
     void falseClaimIsCorrected() {
         CalendarAssistant.Reply reply = assistant(scripted(says("已顯示卡片，請確認。"), proposes("這週三中午寫日記"), says("請確認卡片。")))
-                // 句子裡要有時段的字：假的解析固定回 19:00，沒講早晚的話會被「先問早晚」那條擋下
+                // 假的解析固定回 19:00，句子沒講早晚的話會被「先問早晚」那條擋下
                 .reply(OWNER, ID, "晚上隨便");
 
         assertEquals(1, reply.proposals().size());
         assertEquals("請確認卡片。", reply.text());
-        // 第二次呼叫模型時，帶著那句假話和提醒
         assertTrue(prompts.get(1).getInstructions().stream().anyMatch(m -> CalendarAssistant.CORRECTION.equals(m.getText())));
-        // 記憶裡：使用者的話 → 工具呼叫 → 工具結果 → 回覆，沒有假話也沒有提醒
         List<Message> stored = memory.findByConversationId(ID);
         assertEquals(List.of(MessageType.USER, MessageType.ASSISTANT, MessageType.TOOL, MessageType.ASSISTANT),
                 stored.stream().map(Message::getMessageType).toList());

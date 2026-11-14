@@ -44,7 +44,7 @@ class AccountRulesTest {
     void passwordTooLong() {
         assertDoesNotThrow(() -> Account.checkNewPassword("a".repeat(72)));
         assertThrows(IllegalArgumentException.class, () -> Account.checkNewPassword("a".repeat(73)));
-        // 24 個中文字剛好 72 bytes；25 個就超過 —— 照「字數」算的話會以為 25 個字沒問題
+        // 上限是 bytes 不是字數：24 個中文字剛好 72 bytes，25 個就超過
         assertDoesNotThrow(() -> Account.checkNewPassword("密".repeat(24)));
         assertThrows(IllegalArgumentException.class, () -> Account.checkNewPassword("密".repeat(25)));
     }

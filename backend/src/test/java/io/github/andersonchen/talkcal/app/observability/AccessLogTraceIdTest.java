@@ -24,39 +24,32 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
 /**
- * access log 那一筆帶著 traceId —— Loki 上「到 Tempo 看這個請求」那顆按鈕就靠它。
+ * Loki 上「到 Tempo 看這個請求」的按鈕，靠 access log 帶著 traceId。AccessLogFilter 要排在 Spring 開 trace 的 filter 裡面才有，
+ * 那個 filter 排在哪由 Spring 決定。排錯了不會報錯，log 只會少一個欄位，所以測最終結果，不只相信 @Order 的常數。
  *
- * 這件事成不成立，取決於 AccessLogFilter 有沒有排在 Spring 開 trace 的那個 filter「裡面」，
- * 而那個 filter 排在哪是 Spring 決定的。順序錯了不會有任何錯誤訊息，log 只是悄悄少一個欄位，
- * 所以要有測試守著最終結果，而不是只相信 @Order 上的那個常數。
+ * 起真的 server：MockMvc 自己組 filter 鏈，驗到的不一定是 Servlet 容器裡那一條。
+ * 請求沒登入也沒帶 CSRF token，在 Spring Security 就被擋下，用不到模型和資料庫。
+ * 資料庫指到沒人在聽的埠、Flyway 關掉（啟動時只有它會連資料庫）；properties 要跟 ActuatorPortTest 一字不差，兩個測試才共用同一個 context。
  *
- * 為什麼起真的 server（RANDOM_PORT）而不用 MockMvc：要驗的正是 Servlet 容器裡 filter 的真實排序，
- * MockMvc 自己組 filter 鏈，驗到的可能不是正式環境那一條。
- * 不需要模型也不需要資料庫：送空白訊息，助理在讀記憶、叫模型之前就回 400。
- * 資料庫連線池要等第一次查詢才真的連，只有 Flyway 會在啟動時連，所以把它關掉；資料庫位址指到連不到的地方，
- * 證明真的不需要它，properties 也就跟 ActuatorPortTest 一字不差，兩個測試共用同一個 Spring context。
+ * 看 log 事件的 MDC，不把輸出改成 ECS JSON 再找 traceId：ECS 的 traceId 就是從 MDC 抄的。
+ * 而且改了 log 格式會留在整個測試 JVM，之後跑的 AccessLogFilterTest 會看到 JSON 而失敗。
  *
- * 為什麼看 log 事件的 MDC，而不是把輸出開成 ECS JSON 再找 "traceId"：
- * ECS 的 traceId 欄位就是從 MDC 照抄的，看 MDC 等於看源頭。而改 log 格式會留在整個測試 JVM 裡，
- * 排在後面的 AccessLogFilterTest 會突然看到 JSON 而失敗 —— 測試之間不該互相影響。
- *
- * trace 不會真的往外送：spring-boot-micrometer-tracing-test 在測試裡把匯出關掉，但 trace id 照樣產生。
+ * spring-boot-micrometer-tracing-test 在測試裡關掉匯出，trace id 照樣產生。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {"spring.flyway.enabled=false", "spring.datasource.url=jdbc:postgresql://localhost:1/talkcal"})
 @DisplayName("access log 帶著 traceId")
 class AccessLogTraceIdTest {
 
-    // OpenTelemetry 的 trace id：16 byte，印成 32 個十六進位字元
+    // OpenTelemetry 的 trace id 是 16 byte，印成 32 個十六進位字元
     private static final Pattern TRACE_ID = Pattern.compile("[0-9a-f]{32}");
 
-    // AccessLogFilter 是先把回應送出、再記 log，所以客戶端收到回應時那筆可能還沒記，要等一下
+    // AccessLogFilter 送出回應之後才記 log，客戶端收到回應時那筆可能還沒到
     private static final Duration WAIT_FOR_LOG = Duration.ofSeconds(5);
 
     @LocalServerPort
     int port;
 
-    // 直接掛在 "access" 這個 logger 上收事件，不碰 stdout
     private final Logger accessLogger = (Logger) LoggerFactory.getLogger("access");
     private final ListAppender<ILoggingEvent> captured = new ListAppender<>();
 
@@ -90,7 +83,7 @@ class AccessLogTraceIdTest {
     private ILoggingEvent awaitAccessLog() throws InterruptedException {
         Instant deadline = Instant.now().plus(WAIT_FOR_LOG);
         while (Instant.now().isBefore(deadline)) {
-            // ListAppender 的 list 會被 Tomcat 的執行緒寫入，複製一份再讀
+            // Tomcat 的執行緒會同時往 list 寫，複製一份再讀
             List<ILoggingEvent> events = List.copyOf(captured.list);
             if (!events.isEmpty()) {
                 return events.getLast();

@@ -17,11 +17,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 /**
- * AccessLogFilter 的測試，直接餵 Mock 的 request/response，不起 Spring。
- *
- * 跟 CalendarControllerTest 這類 web 切片不同：這個 filter 只用到 Servlet API，路由、綁定都跟它無關，
- * 起 MockMvc 驗不到更多東西。要驗的只有「有沒有寫出那一行、不該記的有沒有記」，
- * 所以用 OutputCaptureExtension 抓 stdout 來看。
+ * 不起 Spring，直接餵 Mock 的 request、response：這個 filter 只用到 Servlet API，起 MockMvc 也驗不到更多東西。
  */
 @ExtendWith(OutputCaptureExtension.class)
 @DisplayName("AccessLogFilter")
@@ -48,8 +44,8 @@ class AccessLogFilterTest {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/calendar/assistant");
         request.setContentType("application/json");
         request.setContent("{\"message\":\"明天七點和 Amy 見面\"}".getBytes(StandardCharsets.UTF_8));
-        // 扮演 controller：把 body 整條讀完。ContentCachingRequestWrapper 是「讀了才存」，
-        // 用不讀 body 的 MockFilterChain 會測不出東西
+        // ContentCachingRequestWrapper 是讀了才存，chain 要像 controller 一樣把 body 讀完，
+        // 換成不讀 body 的 MockFilterChain 就什麼都記不到
         FilterChain readsBody = (req, res) -> req.getInputStream().readAllBytes();
 
         filter.doFilter(request, new MockHttpServletResponse(), readsBody);
@@ -73,7 +69,7 @@ class AccessLogFilterTest {
         filter.doFilter(login, new MockHttpServletResponse(), readsBody);
 
         assertFalse(output.getOut().contains("secret-pass"), output.getOut());
-        // 請求本身照樣有紀錄（誰在試登入要看得到），只是內容換成說明
+        // 請求照樣要有紀錄，誰在試登入才看得到
         assertTrue(output.getOut().contains("/api/auth/login"), output.getOut());
         assertTrue(output.getOut().contains("不記：可能有密碼"), output.getOut());
     }
@@ -83,7 +79,6 @@ class AccessLogFilterTest {
     void logsResponseBodyAndStillSendsIt(CapturedOutput output) throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/calendar/assistant");
         MockHttpServletResponse response = new MockHttpServletResponse();
-        // 扮演 controller：寫出一段 JSON 回覆
         FilterChain writesReply = (req, res) -> {
             res.setContentType("application/json");
             res.getOutputStream().write("{\"reply\":\"幫你排好了\"}".getBytes(StandardCharsets.UTF_8));
@@ -92,7 +87,7 @@ class AccessLogFilterTest {
         filter.doFilter(request, response, writesReply);
 
         assertTrue(output.getOut().contains("{\"reply\":\"幫你排好了\"}"), output.getOut());
-        // 被攔下的內容一定要還給客戶端，不然 log 有了、回應卻是空的
+        // ContentCachingResponseWrapper 攔下的內容要寫回去，不然 log 有了，客戶端拿到的卻是空的
         assertEquals("{\"reply\":\"幫你排好了\"}", response.getContentAsString(StandardCharsets.UTF_8));
     }
 }

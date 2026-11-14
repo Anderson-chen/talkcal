@@ -28,7 +28,7 @@ class ExtractionRequestTest {
     // 2026-10-05 是星期一
     private static final LocalDateTime MONDAY_MORNING = LocalDateTime.of(2026, 10, 5, 9, 30);
 
-    // 設定檔（application.properties）給 ChatModel 的預設：模型名稱只寫在那裡
+    // 扮演 application.properties 給 ChatModel 的預設，模型名稱只寫在那裡
     private static final OpenAiChatOptions DEFAULTS = OpenAiChatOptions.builder()
             .model("qwen-from-properties")
             .temperature(0.6)
@@ -59,7 +59,7 @@ class ExtractionRequestTest {
             OpenAiChatOptions options = (OpenAiChatOptions) prompt.getOptions();
 
             assertEquals(ExtractionRequest.MAX_TOKENS, options.getMaxTokens());
-            // 溫度 0：抽行程要確定性，不用 server 替聊天調的溫度
+            // 抽行程要同樣輸入同樣輸出，不沿用設定檔給助理的溫度
             assertEquals(0.0, options.getTemperature());
             assertEquals(OpenAiChatModel.ResponseFormat.Type.JSON_SCHEMA, options.getResponseFormat().getType());
             assertEquals(ExtractionRequest.SCHEMA, options.getResponseFormat().getJsonSchema());
@@ -68,7 +68,7 @@ class ExtractionRequestTest {
         @Test
         @DisplayName("模型沿用設定檔的預設：Spring AI 2.0 不會替請求自帶的選項補上預設，沒帶就變成 gpt-5-mini")
         void keepsDefaultModel() {
-            // 為什麼要守著：見 CalendarAssistantTest 的 keepsDefaultModel
+            // 沒帶到設定檔的模型名稱會怎樣，見 CalendarAssistantTest 的 keepsDefaultModel
             assertEquals("qwen-from-properties", prompt.getOptions().getModel());
         }
     }
@@ -77,7 +77,7 @@ class ExtractionRequestTest {
     @DisplayName("JSON Schema")
     class Schema {
 
-        // 讀得成 JSON 本身就是一個檢查：SCHEMA 是字串，寫壞了編譯器不會發現
+        // SCHEMA 是字串，寫壞了編譯器不會發現，讀得成 JSON 本身就是一道檢查
         private final JsonNode schema = parse(ExtractionRequest.SCHEMA);
 
         @Test

@@ -28,8 +28,7 @@ import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 
 /**
- * Google、GitHub 登入的最後一步：provider 給的使用者資料怎麼對到帳號、session 裡記的身分長怎樣。
- * 去 provider 拿資料的那段（delegate）換成假的，不連網路。
+ * 去 provider 拿使用者資料的 delegate 換成假的，不連網路。
  */
 @DisplayName("Google、GitHub 的使用者 → 帳號")
 class ExternalUserServicesTest {
@@ -39,7 +38,6 @@ class ExternalUserServicesTest {
     private static final OAuth2AccessToken ACCESS_TOKEN =
             new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER, "access-token", NOW, NOW.plusSeconds(60));
 
-    /** 記下被叫的參數，回固定的帳號 ID */
     private record SignInCall(ExternalIdentity identity, String name, String fallbackName) {
     }
 
@@ -79,7 +77,7 @@ class ExternalUserServicesTest {
     @Test
     @DisplayName("GitHub：用數字 id 對帳號（不是 login，login 改得掉），名字用 name、沒填時用 login")
     void github() {
-        // GitHub 的 /user 回的是自己的格式：id 是數字、name 可能是 null
+        // GitHub /user 的格式：id 是數字，沒填 name 時是 null
         Map<String, Object> attributes = new java.util.HashMap<>();
         attributes.put("id", 583231);
         attributes.put("login", "amy-gh");
@@ -112,7 +110,7 @@ class ExternalUserServicesTest {
     @Test
     @DisplayName("設定裡多了一個沒寫對應方式的 provider：一樣是登入失敗，不會建出帳號")
     void unknownProvider() {
-        // 網址借 GitHub 的就好，這裡只看 registrationId
+        // 只看 registrationId，網址用哪一家的都可以
         ClientRegistration okta = registration(CommonOAuth2Provider.GITHUB, "okta");
         Map<String, Object> attributes = Map.of("sub", "okta-1");
         var service = new AccountOAuth2UserService(

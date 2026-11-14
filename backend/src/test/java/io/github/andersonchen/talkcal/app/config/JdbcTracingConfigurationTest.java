@@ -12,17 +12,15 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * SQL 的 Observation 要有上層才開（JdbcTracingConfiguration）。
- *
- * 用真的 ObservationRegistry 而不是直接呼叫 predicate：規則能不能成立，要看 Micrometer 在問 predicate 之前
- * 有沒有先把「目前的 Observation」設成上層。只測 lambda 的話，這件事變了測試也照樣綠。
- * 名稱照 datasource-micrometer 實際用的（jdbc.connection、jdbc.query）。
+ * 用真的 ObservationRegistry，不直接呼叫 predicate：規則成不成立，要看 Micrometer 問 predicate 之前
+ * 有沒有先把目前的 Observation 設成上層。只測 lambda 的話，Micrometer 改了這個順序測試也照樣綠。
+ * Observation 名稱照 datasource-micrometer 實際用的寫。
  */
 @DisplayName("SQL 的 span 只留在請求裡的")
 class JdbcTracingConfigurationTest {
 
     private final ObservationRegistry registry = ObservationRegistry.create();
-    // 真的開了的 Observation 名稱（被 predicate 擋掉的是 noop，不會走到 handler）
+    // 被 predicate 擋掉的是 noop，不會走到 handler，所以這裡只有真的開了的
     private final List<String> started = new ArrayList<>();
 
     @BeforeEach

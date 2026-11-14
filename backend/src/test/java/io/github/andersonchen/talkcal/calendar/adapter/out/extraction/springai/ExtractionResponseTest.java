@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 @DisplayName("ExtractionResponse")
 class ExtractionResponseTest {
 
-    // 把模型輸出（內層 JSON）包成 ChatModel 回來的樣子：Spring AI 拆好外層信封之後，就剩這兩樣
+    // Spring AI 拆掉 HTTP 回應的外層之後，ExtractionResponse 看得到的只有內容和 finish reason
     private static ChatResponse response(String content, String finishReason) {
         return new ChatResponse(List.of(new Generation(new AssistantMessage(content),
                 ChatGenerationMetadata.builder().finishReason(finishReason).build())));
@@ -33,7 +33,7 @@ class ExtractionResponseTest {
         return response(content, "stop");
     }
 
-    // 大部分測試不在乎原句，用一句涵蓋各種結束時間說法的話當背景
+    // 結束時間要在原句裡找得到；不測這件事的題目用這句，各種結束時間的說法都在裡面
     private static final String SAID = "明天下午三點跟小明吃飯，下週三早上九點到十點半看牙醫，晚上十點到凌晨一點唱歌";
 
     private static List<CalendarEvent> extract(ChatResponse body) {
@@ -181,7 +181,7 @@ class ExtractionResponseTest {
                 "{\"events\":[{\"title\":\"事\",\"start\":\"2026-10-07T12:00\",\"end\":null,\"category\":\"work\",\"location\":42}]}")));
     }
 
-    // ── 結束時間要拿原句核對（例如「明天下午3點和 Amy 開會」） ─────────────
+    // ── 結束時間要在原句裡找得到，例如「明天下午3點和 Amy 開會」沒講結束 ─────────────
 
     private static ChatResponse oneEvent(String end, String endSaid) {
         String endJson = end == null ? "null" : "\"" + end + "\"";
@@ -224,7 +224,7 @@ class ExtractionResponseTest {
     }
 
 
-    // ── 沒講上下午的 1～6 點當成下午（規則本身的細節測在 SaidTimesTest） ─────────
+    // ── 沒講上下午的 1～6 點當成下午，規則的細節測在 SaidTimesTest ─────────
 
     private static ChatResponse timed(String start, String end, String startSaid, String endSaid) {
         String endJson = end == null ? "null" : "\"" + end + "\"";

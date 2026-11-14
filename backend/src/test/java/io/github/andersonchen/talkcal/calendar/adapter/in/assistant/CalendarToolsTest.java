@@ -26,9 +26,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-/**
- * 工具本身：模型會怎麼呼叫不在這裡測（那是整合測試的事），這裡只測「呼叫到了之後做對事、回的話看得懂」。
- */
 @DisplayName("CalendarTools")
 class CalendarToolsTest {
 
@@ -61,11 +58,11 @@ class CalendarToolsTest {
         return List.of(new FreeSlot(LocalDateTime.of(2026, 10, 7, 13, 0), LocalDateTime.of(2026, 10, 7, 15, 0)));
     };
 
-    // 使用者說過的話：預設有講時段（「下午」），讓 propose_events 的「沒講早晚就不提議」不擋到其他測試
+    // 預設講了「下午」：propose_events 沒講早晚就不提議，不講的話其他測試都會被擋下
     private List<String> userSaid = List.of("明天下午三點跟小明吃飯");
 
     private CalendarTools tools() {
-        // 排時段接真的 service（底下是假的找空檔），測得到從工具到挑時段的整段
+        // 排時段用真的 service、假的找空檔，從工具到挑時段整段都測得到
         return new CalendarTools(OWNER, parse, list, find, free, new PlanSessionsService(free), userSaid);
     }
 
