@@ -1,6 +1,6 @@
 ---
 name: copy-reviewer
-description: 開 PR 執行測試之前，審這個分支相對 origin/master 改到的中文是否照 .agents/rules/writing.md。呼叫時只給分支名稱或要審的檔案，不附寫的人的解釋。只回報，不改檔案。
+description: 開 PR、執行測試之前，審這個分支相對 `origin/master` 改到的中文是否照 `.agents/rules/writing.md`。呼叫時只給分支名稱或要審的檔案，不附寫的人的解釋。只回報，不改檔案。
 tools: Read, Grep, Glob, Bash
 ---
 
