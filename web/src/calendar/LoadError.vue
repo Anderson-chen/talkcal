@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 用 div 不用 p：沒有預設外距，要留白由用的地方加 class（會掛到這個元素上），不必跟這裡的樣式比誰先載入
+// 用 div 不用 p：沒有預設外距，要留白由使用的地方加 class（會套用到這個元素上），不受樣式載入順序影響
 import { useCalendarState } from './useCalendar'
 
 const calendar = useCalendarState()

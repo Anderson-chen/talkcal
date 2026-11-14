@@ -8,7 +8,7 @@ export const ARCHIVE_YEARS = 2
 export const ARCHIVE_NOTICE = `結束超過 ${ARCHIVE_YEARS} 年的行程已自動封存，只能查看`
 
 /**
- * 今天往前推 2 年的那一天：比它早結束的行程都已經封存了。
+ * 今天往前推 2 年的那一天：比這天早結束的行程都已經封存了。
  * 2/29 往前推到沒有 2/29 的那年算 2/28，跟後端 LocalDateTime.minus(Period) 一致。
  */
 export function archiveCutoff(today: string): string {
@@ -33,7 +33,7 @@ function lastDayOf(year: number, month: number): number {
   return new Date(year, month, 0).getDate()
 }
 
-/** 查詢的日期哪裡不對；沒問題回 null。超過上限（24 個月）由後端擋，它回的話直接顯示 */
+/** 查詢的日期哪裡不對；沒問題回 null。超過上限（24 個月）由後端檢查，後端回的錯誤直接顯示 */
 export function rangeProblem(from: string, to: string): string | null {
   if (!from || !to) return '請選日期'
   // 'YYYY-MM-DD' 字串直接比大小就是時間順序

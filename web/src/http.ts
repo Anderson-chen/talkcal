@@ -1,12 +1,12 @@
 // 每個 API 都經過 send()，認證帶來的兩件事集中在這裡：
 // - CSRF：會改東西的請求要把 XSRF-TOKEN cookie 的值放進 X-XSRF-TOKEN header（Spring Security 的 csrf.spa()）。
-//   別的網站騙瀏覽器送請求時 cookie 照樣會帶，但它讀不到這個網域的 cookie，放不進 header
+//   別的網站誘使瀏覽器送請求時 cookie 照樣會帶，但那個網站讀不到這個網域的 cookie，放不進 header
 // - 401：通知 App 換回登入畫面
 //
 // 登入狀態是 HttpOnly 的 session cookie，JavaScript 讀不到，瀏覽器自己會帶。
 
 /**
- * 後端或中間的 nginx 回了錯誤，或根本連不上。message 給人看，detail 給畫面決定怎麼說、可以怎麼做：
+ * 後端或中間的 nginx 回了錯誤，或根本連不上。message 給人看，detail 給畫面決定顯示什麼、可以怎麼做：
  * - status：null 是沒拿到回應（網路斷了、伺服器整台連不上）
  * - code：後端分類好的原因，例如 MODEL_UNAVAILABLE；nginx 自己回的錯誤沒有
  * - retryAfterSeconds：body 的優先，沒有才看 Retry-After header（nginx 的 429 只有 header）
@@ -70,7 +70,7 @@ interface Failure {
 }
 
 export interface SendOptions {
-  // 登入要送表單：Spring Security 的 formLogin 不吃 JSON
+  // 登入要送表單：Spring Security 的 formLogin 只收表單格式
   contentType?: string
   // 登入失敗也是 401，那時不該跳走，要留在登入頁顯示錯誤
   notifyUnauthorized?: boolean

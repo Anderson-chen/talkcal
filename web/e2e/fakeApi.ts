@@ -1,7 +1,7 @@
 // 假後端：page.route 把 /api 的請求攔下來回假資料，不需要後端、資料庫、模型。
-// 照後端的規則演：存過的行程查得到、沒登入回 401、修改時 expected 對不上回 409、封存的行程只有 /archive/events 查得到。
+// 照後端的規則回應：存過的行程查得到、沒登入回 401、修改時 expected 對不上回 409、封存的行程只有 /archive/events 查得到。
 // 會改東西的請求要帶跟 XSRF-TOKEN cookie 一樣的 X-XSRF-TOKEN header，不然 403：照單全收的話，測不出前端有沒有帶 token。
-// AI 助理不打模型，每句話都回一張固定的提議卡片。
+// AI 助理不呼叫模型，每句話都回一張固定的提議卡片。
 import type { Page, Route } from '@playwright/test'
 
 export interface FakeEvent {
@@ -48,7 +48,7 @@ export async function fakeApi(page: Page, options: Options = {}) {
     // 註冊過的帳號：名稱 → 密碼
     accounts: new Map<string, string>([['amy', 'correct-horse']]),
     me: (options.loggedIn ?? true) ? 'amy' : null as string | null,
-    // 被 403 擋下的請求（沒帶或帶錯 CSRF token）：測試可以檢查它是空的
+    // 被 403 擋下的請求（沒帶或帶錯 CSRF token）：測試可以檢查清單是空的
     csrfRejected: [] as string[],
     providers: [...(options.providers ?? [])],
     // 發過幾張助理卡片；每次 POST /assistant/dismissals 收到的 proposalIds
@@ -127,7 +127,7 @@ export async function fakeApi(page: Page, options: Options = {}) {
       if (state.failNextSave) {
         const error = state.failNextSave
         state.failNextSave = null
-        // 跟後端出錯時一樣的格式：{ error }，前端會把它顯示給使用者
+        // 跟後端出錯時一樣的格式：{ error }，前端會把 error 顯示給使用者
         return json(route, 502, { error })
       }
       const created = body.events.map((e, i) => ({ ...e, id: `e${state.events.length + i + 1}` }))

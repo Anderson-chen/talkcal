@@ -31,7 +31,7 @@ const range = computed(() => (mode.value === 'day' ? { from: day.value, to: day.
 // 改了日期或換了一天／一段期間，上一次的「日期不對」就不算數了
 watch(range, () => (problem.value = null))
 
-// 查詢中「查看」按鈕停用（按 Enter 也送不出去），不會有兩次查詢同時在跑、舊的結果蓋掉新的
+// 查詢中「查看」按鈕停用（按 Enter 也送不出去），不會有兩次查詢同時執行、舊的結果蓋掉新的
 async function search() {
   problem.value = rangeProblem(range.value.from, range.value.to)
   if (problem.value) return

@@ -16,7 +16,7 @@ export type View = 'month' | 'week' | 'day'
 export interface FormRequest {
   initial: EventFields
   editing?: { id: string; expected: EventFields }
-  // AI 卡片要知道存好了，才能標成已加入、已修改
+  // AI 卡片在存好之後標成已加入、已修改
   onSaved?: (saved: SavedEvent) => void
 }
 
@@ -26,7 +26,7 @@ export function useCalendar() {
 
   const sel = ref(today)
   const view = ref<View>('month')
-  // 載入的是哪個月的月曆頁。週、日視圖也只讀這一頁：任何一天所在的那一週，一定落在它那個月的 42 格裡
+  // 載入的是哪個月的月曆頁。週、日視圖也只讀這一頁：任何一天所在的那一週，一定落在這個月的 42 格裡
   const shown = ref(monthOf(today))
   const events = ref<SavedEvent[]>([])
   const loadError = ref<string | null>(null)
@@ -68,7 +68,7 @@ export function useCalendar() {
   // ── 查詢 ──────────────────────────────────────────────
   const visible = computed(() => events.value.filter((e) => !hidden.value[e.category]))
 
-  // 跨天的行程會出現在它涵蓋的每一天
+  // 跨天的行程會出現在涵蓋的每一天
   const byDay = computed(() => {
     const map = new Map<string, SavedEvent[]>()
     for (const event of visible.value) {
@@ -119,14 +119,14 @@ export function useCalendar() {
   }
 
   // ── 新增、修改、刪除 ─────────────────────────────────────────
-  /** idempotencyKey 由呼叫端管：只有它知道再按一次是不是同一次新增 */
+  /** idempotencyKey 由呼叫端決定：只有呼叫端能判斷再按一次是不是同一次新增 */
   async function add(drafts: EventFields[], idempotencyKey?: string): Promise<SavedEvent[]> {
     const saved = await addEvents(drafts, idempotencyKey)
     showSaved(saved)
     return saved
   }
 
-  // 存進去的分類被篩掉的話打開它，不然使用者會以為沒存到
+  // 存進去的分類被篩掉的話就重新顯示，不然使用者會以為沒存到
   function showSaved(saved: SavedEvent[]) {
     const shownAgain = { ...hidden.value }
     for (const e of saved) delete shownAgain[e.category]
@@ -141,7 +141,7 @@ export function useCalendar() {
     return saved
   }
 
-  /** 已經不在（別的分頁先刪了）也算成功：使用者要的就是它不在 */
+  /** 已經不在（別的分頁先刪了）也算成功：使用者要的結果就是這筆不在 */
   async function remove(id: string) {
     try {
       await removeEvent(id)
@@ -157,7 +157,7 @@ export function useCalendar() {
     form.value = { initial: { ...blankDraft(sel.value), ...initial }, onSaved }
   }
 
-  /** initial 不給是它現在的樣子，助理的修改卡片會給要改成的樣子。expected 見 FormRequest */
+  /** initial 不給就用這筆現在的樣子，助理的修改卡片會給要改成的樣子。expected 見 FormRequest */
   function openEdit(id: string, expected: EventFields, initial: EventFields = expected, onSaved?: (saved: SavedEvent) => void) {
     detailId.value = null
     form.value = { initial: { ...initial }, editing: { id, expected }, onSaved }

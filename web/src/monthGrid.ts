@@ -1,6 +1,6 @@
 // 日期一律用 'YYYY-MM-DD' 字串，跟後端 LocalDate 的格式一樣。
 // 要算下一天時才暫時建 Date，只用本地時間的建構子（new Date(y, m, d)）和 getter（getFullYear…），
-// 不要用 toISOString()：它會先換成 UTC，在台灣早上八點以前呼叫，日期就變成前一天。
+// 不要用 toISOString()：會先換成 UTC，在台灣早上八點以前呼叫，日期就變成前一天。
 
 /** 固定 6 週 × 7 天：不管這個月幾天、從星期幾開始，格子數都一樣，版面才不會跳 */
 export const GRID_DAYS = 42
@@ -45,7 +45,7 @@ export function gridRange(days: string[]): { from: string; to: string } {
 /**
  * 一筆行程要畫在哪幾天的格子裡：從開始那天，到結束那天。
  * 跟後端「結束不含」同一套規則：剛好在 00:00 結束的行程，不算進結束那天
- * （22:00 到隔天 00:00 的行程只佔一格，不會在隔天冒出一個零長度的殘影）。
+ * （22:00 到隔天 00:00 的行程只佔一格，不會在隔天多出一段零長度的行程）。
  */
 export function daysCovered(start: string, end: string): string[] {
   const first = start.slice(0, 10)

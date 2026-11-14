@@ -1,5 +1,5 @@
 // 「哪幾個月算封存」「日期合不合規」「時間怎麼寫」在 src/calendar/archive.test.ts 測；
-// 「怎樣算重疊」是後端的規則（ArchivePeriodTest、EventArchiveFlowTest），假後端照同一套演。這裡只測接起來的樣子。
+// 「怎樣算重疊」是後端的規則（ArchivePeriodTest、EventArchiveFlowTest），假後端照同一套規則回應。這裡只測串接後的行為。
 import { expect, test, type Page } from '@playwright/test'
 import { fakeApi, type FakeEvent } from './fakeApi'
 

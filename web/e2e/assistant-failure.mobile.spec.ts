@@ -1,4 +1,4 @@
-// 每一種失敗的細節在 assistant-failure.desktop.spec.ts，這裡只確認手機版的面板也接上了。
+// 每一種失敗的細節在 assistant-failure.desktop.spec.ts，這裡只確認手機版的面板也有同樣的行為。
 import { expect, test } from '@playwright/test'
 import { assistantReplies, failure, ok } from './assistantReplies'
 import { fakeApi } from './fakeApi'

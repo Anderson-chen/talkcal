@@ -35,7 +35,7 @@ const nowMinutes = ref(minutesNow())
 let timer: number | undefined
 onMounted(() => {
   timer = window.setInterval(() => (nowMinutes.value = minutesNow()), 60_000)
-  // 打開時捲到早上七點：凌晨通常沒事，但要捲得上去看
+  // 打開時捲到早上七點：凌晨通常沒有行程，但要捲得上去看
   if (scroller.value) scroller.value.scrollTop = 7 * hourHeight.value - 8
 })
 onBeforeUnmount(() => window.clearInterval(timer))

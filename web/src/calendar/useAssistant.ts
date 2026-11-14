@@ -3,14 +3,14 @@
 // 助理提議的新增、修改、刪除都先變成卡片，使用者按了確認才送 /events。
 // 新增卡片可以整則一起加入；修改、刪除卡片要一張一張確認，因為改錯一筆比漏加一筆難收拾。
 //
-// 對話的記憶在後端，這裡只記 conversationId，重新整理後用它讀回對話的文字。
+// 對話的記憶在後端，這裡只記 conversationId，重新整理後用這個 id 讀回對話的文字。
 // 「清空」只丟掉這個 id，後端那段不刪，留給後端的清理排程。
 // 讀回來的舊訊息不帶卡片：後端沒記卡片後來加入了還是取消了，顯示出來可能已經過時。
 //
-// 回不了的時候（每一種怎麼說見 assistantFailure.ts）：
+// 回不了的時候（每一種顯示什麼見 assistantFailure.ts）：
 // - 使用者那句留在對話裡、標成「沒送出」，附「再試一次」，不必重打
 // - 後端給了要等幾秒就倒數，倒數完之前送不出去，輸入框照樣能打字
-// - 模型最久可能想 2 分鐘，等太久時「思考中」會說已經等了幾秒，讓使用者知道它還在跑
+// - 模型最久可能想 2 分鐘，等太久時「思考中」會顯示已經等了幾秒，讓使用者知道請求還在處理
 // - 還沒送出的字放 sessionStorage：登入過期跳回登入頁、或重新整理，回來時還在
 
 import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
@@ -59,7 +59,7 @@ export interface ChatMessage {
   failure?: { kind: FailureKind; canRetry: boolean }
 }
 
-/** 「思考中」超過這麼多秒就改說已經等了多久。助理平常 p95 約 3 秒，等到 10 秒已經明顯不正常 */
+/** 「思考中」超過這麼多秒就改成顯示已經等了多久。助理平常 p95 約 3 秒，等到 10 秒已經明顯不正常 */
 export const SLOW_AFTER_SECONDS = 10
 
 // 三種能做的事各舉一個例子：新增、查詢、找空檔
@@ -68,7 +68,7 @@ export const SUGGESTIONS = ['明天下午3點和 Amy 開會', '明天有什麼�
 const GREETING = '嗨！我是你的行事曆助理。可以幫你新增、修改、刪除行程，查某天的安排，或找出空檔。不管哪一種，我都會整理成卡片讓你確認後才動行事曆。'
 
 // 私密視窗、被封鎖的網站資料會讓 localStorage 丟例外，下面一律吞掉，最壞就是重新整理後開新對話。
-// key 帶登入者的 id，換人登入才不會接回上一個人的對話。擋住讀別人對話的是後端的授權，這裡只是不主動去要
+// key 帶登入者的 id，換人登入才不會讀回上一個人的對話。擋住讀別人對話的是後端的授權，這裡只是不主動去要
 const storageKey = () => `talkcal.calendar.assistant.conversation.${me.value?.id ?? 'anonymous'}`
 // key 在建立助理時算一次就好：登入過期時 401 的通知比例外早到，me 已經是 null，那時才算會存到 anonymous 的 key
 const draftKey = (userId: string | undefined) => `talkcal.calendar.assistant.draft.${userId ?? 'anonymous'}`
@@ -115,7 +115,7 @@ export function useAssistant(calendar: CalendarState) {
   const messages = ref<ChatMessage[]>([say('ai', GREETING)])
   const draft = draftKey(me.value?.id)
   const input = ref(loadDraft(draft))
-  // 送出去、還沒回成功的那一句：輸入框清掉了，草稿裡還留著它，送到一半重新整理或登入過期也拿得回來
+  // 送出去、還沒回成功的那一句：輸入框清掉了，草稿裡還留著這句，送到一半重新整理或登入過期也拿得回來
   let unsent = ''
   const keepDraft = () => saveDraft(draft, input.value || unsent)
   watch(input, keepDraft)
@@ -163,7 +163,7 @@ export function useAssistant(calendar: CalendarState) {
       typing.value = false
     }
   }
-  // 不等它，讀回來之前先顯示招呼語；restore() 自己接住錯誤
+  // 不等 restore() 完成，讀回來之前先顯示招呼語；錯誤在 restore() 裡處理
   void restore()
 
   /** 丟掉 conversationId，下一句後端就開一段新的。不呼叫後端，所以不會清空失敗 */
@@ -226,7 +226,7 @@ export function useAssistant(calendar: CalendarState) {
     const at = messages.value.length - 1
     const said = messages.value[at - 1].text
     messages.value.splice(at - 1, 2)
-    // send 自己接住所有錯誤，不必等它
+    // send 會處理所有錯誤，不必等待
     void send(said)
   }
 
@@ -265,7 +265,7 @@ export function useAssistant(calendar: CalendarState) {
     reportDismissed([proposal])
   }
 
-  // 拒絕了哪幾張告訴後端，算採納率用。不等它、失敗也不說：使用者按的是取消，不該因為指標送不出去看到錯誤
+  // 拒絕了哪幾張告訴後端，算採納率用。不等待、失敗也不顯示：使用者按的是取消，不該因為指標送不出去看到錯誤
   function reportDismissed(proposals: Proposal[]) {
     const ids = proposals.map((p) => p.draft.proposalId).filter((id): id is string => !!id)
     if (ids.length > 0) dismissProposals(ids).catch(() => {})

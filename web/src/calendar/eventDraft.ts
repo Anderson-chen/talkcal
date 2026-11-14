@@ -18,7 +18,7 @@ export interface FormFields {
   endDays?: number
 }
 
-/** 結束在開始之後的第幾天：表單記著原本的跨幾天就照它，不然結束早於開始算隔天 */
+/** 結束在開始之後的第幾天：表單記著原本跨幾天就照記的天數，不然結束早於開始算隔天 */
 export function endDayOffset(form: Pick<FormFields, 'start' | 'end' | 'endDays'>): number {
   return form.endDays ?? (isOvernight(form.start, form.end) ? 1 : 0)
 }

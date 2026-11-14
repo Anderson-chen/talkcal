@@ -1,5 +1,5 @@
 // 手機版的「新增行程」有兩個（右下角的浮動按鈕、選到沒有行程的那天時清單裡的按鈕），儲存按鈕叫「儲存」。
-// 只看原始碼的話會照桌面版寫、撞到 strict mode，改這些測試前先用瀏覽器打開手機版看。
+// 只看原始碼的話會照桌面版寫，違反 strict mode（同時找到兩個元素），改這些測試前先用瀏覽器打開手機版看。
 import { expect, test } from '@playwright/test'
 import { fakeApi } from './fakeApi'
 

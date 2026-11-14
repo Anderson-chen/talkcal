@@ -1,4 +1,4 @@
-// 只開會出錯的規則，不管格式：格式之後交給 Prettier，還沒接上。選型理由見 ci/README.md 的「lint」。
+// 只開會出錯的規則，不管格式：格式之後交給 Prettier，還沒設定。選型理由見 ci/README.md 的「lint」。
 import { globalIgnores } from 'eslint/config'
 import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript'
 import pluginVue from 'eslint-plugin-vue'
@@ -20,7 +20,7 @@ export default defineConfigWithVueTs(
   },
   {
     rules: {
-      // HTML 沒有 <icon>，Icon 不會撞名
+      // HTML 沒有 <icon>，Icon 不會跟原生標籤同名
       'vue/multi-word-component-names': ['error', { ignores: ['Icon'] }],
       // v-html 的內容只要有一點來自使用者（行程標題、AI 的回答）就是 XSS。CodeQL（ci/sast.sh）追不到 .vue 模板裡的 v-html，
       // 所以一律擋。真的要用時（例如 sanitize 過的 markdown），在那一行上面寫 eslint-disable-next-line 並附理由

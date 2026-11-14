@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { daysApart, endDayOffset, isOvernight, toDraft, type FormFields } from './eventDraft'
 
-// 一份合法的表單；每個測試只改它要測的那一欄，一眼看得出差在哪
+// 一份合法的表單；每個測試只改要測的那一欄，一眼看得出差在哪
 const valid: FormFields = {
   title: '產品週會', date: '2026-10-06', start: '09:00', end: '10:00', category: 'WORK', location: '', note: '',
 }

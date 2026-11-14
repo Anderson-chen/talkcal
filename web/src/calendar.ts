@@ -3,7 +3,7 @@ import { send } from './http'
 export { NotFoundError } from './http'
 
 // 跟後端 /api/calendar/* 的契約，形狀照 CalendarController 的 record。兩邊沒有共用的型別，
-// 後端改了欄位要在同一個 commit 改這裡，不然會悄悄對不上。
+// 後端改了欄位要在同一個 commit 改這裡，不然格式對不上，編譯也不會報錯。
 //
 // 時間是不帶時區的 ISO 牆上時間字串（例如 "2026-10-06T15:00:00"），不要轉成 Date：Date 一定帶時區，
 // 瀏覽器會用使用者電腦的時區解讀。字串原樣傳，後端存的台北三點就一直是三點。
@@ -44,7 +44,7 @@ export interface AssistantReply {
   removals: SavedEvent[]
 }
 
-/** conversationId 不帶是新對話；之後每句帶著回應裡的那一個，助理才記得前面說過什麼 */
+/** conversationId 不帶是新對話；之後每句帶著回應裡的那一個，後端才讀得到前面的對話 */
 export async function talkToAssistant(message: string, conversationId?: string): Promise<AssistantReply> {
   const res = await send('/api/calendar/assistant', { method: 'POST', body: JSON.stringify({ message, conversationId }) })
   const body = (await res.json()) as AssistantReply

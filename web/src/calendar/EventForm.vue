@@ -71,7 +71,7 @@ const save = oneAtATime(saving, async () => {
     }
     request.onSaved?.(saved)
     close()
-    // 照設計稿，存好直接打開它的詳情
+    // 照設計稿，存好直接打開這筆的詳情
     calendar.detailId.value = saved.id
   } catch (e) {
     fail(message(e))

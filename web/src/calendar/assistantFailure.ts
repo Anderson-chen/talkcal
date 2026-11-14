@@ -1,11 +1,11 @@
-// 助理回不了的時候，畫面上怎麼說、使用者可以怎麼做。
+// 助理回不了的時候，畫面上顯示什麼、使用者可以怎麼做。
 //
 // 只看後端分類好的 code 和 HTTP 狀態，不看 error 的字面：後端改個措辭，前端的行為不該跟著變。
 // 契約是後端 CalendarAssistantController 的 AssistantFailure。
 //
 // - 用使用者聽得懂的話，不說 503、熔斷、bulkhead
-// - 「行事曆照常可用」只在確定是模型出事時說，app 整個連不上時這樣說是騙人
-// - 有 retryAfterSeconds 就倒數，倒數完之前送不出去：那段時間送了也一定失敗，一群人同時狂按再試只會讓模型更起不來
+// - 「行事曆照常可用」只在確定是模型異常時說，app 整個連不上時這樣說與事實不符
+// - 有 retryAfterSeconds 就倒數，倒數完之前送不出去：那段時間送了也一定失敗，很多人同時一直按再試，模型更難恢復
 // - 不自動重送：模型一次要好幾秒、在 Bedrock 上要錢，使用者也可能已經不想問了
 import { ApiError, message } from '../http'
 
@@ -65,7 +65,7 @@ export function describeAssistantFailure(e: unknown): AssistantFailureView {
     }
   }
   if (status === 400) {
-    // 後端的話照實說（例如「對話太長了」），那句本身就是「該怎麼改」
+    // 後端的錯誤訊息照原樣顯示（例如「對話太長了」），那句本身就是「該怎麼改」
     return { kind: 'invalid', text: `這句話送不出去：${e.message}`, waitSeconds: 0, canRetry: false }
   }
   if (status === null) {

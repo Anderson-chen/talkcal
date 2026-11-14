@@ -1,7 +1,7 @@
 // 主題與分類顏色，數值照設計稿（行事曆 Prototype）。
 //
 // 主題是資料：元件裡一律寫 var(--accent)、var(--line) 這種 CSS 變數，
-// 換主題只是把根元素上的變數換掉（toCssVars），不必每個元件都知道現在是哪個主題。
+// 換主題只是把根元素上的變數換掉（toCssVars），元件不必判斷現在是哪個主題。
 // 分類顏色有深淺兩組：深色主題下，淺色底的分類標籤會刺眼，所以跟著 dark 換一組。
 
 import type { Category } from '../calendar'

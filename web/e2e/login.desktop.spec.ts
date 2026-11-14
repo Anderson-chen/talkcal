@@ -1,4 +1,4 @@
-// 後端的規則（雜湊、session、CSRF）在 AuthSystemTest 測，這裡測前端接起來的樣子。
+// 後端的規則（雜湊、session、CSRF）在 AuthSystemTest 測，這裡測前端串接後的行為。
 // fakeApi 會擋沒帶 CSRF token 的寫入，所以每一題最後都檢查沒有請求被擋：擋了代表前端沒把 token 帶上。
 import { expect, test } from '@playwright/test'
 import { fakeApi } from './fakeApi'
@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-10-06T11:30:00+08:00'))
 })
 
-// 登入、註冊兩種模式的按鈕都用 exact：登入模式下切換按鈕叫「還沒有帳號？註冊」，用「註冊」去找會撞到它
+// 登入、註冊兩種模式的按鈕都用 exact：登入模式下切換按鈕叫「還沒有帳號？註冊」，用「註冊」去找會同時找到切換按鈕
 const submit = (page: import('@playwright/test').Page, name: '登入' | '註冊') =>
   page.getByRole('button', { name, exact: true })
 

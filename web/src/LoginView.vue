@@ -2,7 +2,7 @@
 // 登入、註冊共用一個表單，只差送去哪裡。
 // 錯誤直接顯示後端回的那句：帳號名稱、密碼的規則只在後端寫一份，這裡不重複一份會漂移的。
 //
-// Google、GitHub 登入只在後端有設定時才出現。它們是一般的連結，不是 fetch：要整頁轉到對方去同意，
+// Google、GitHub 登入只在後端有設定時才出現。這兩個按鈕是一般的連結，不是 fetch：要整頁轉到對方去同意，
 // 失敗時後端轉回 /?login_error=oauth。
 import { computed, onMounted, ref } from 'vue'
 import { loadProviders, logIn, providerLoginUrl, signUp, type Provider } from './auth'
@@ -24,7 +24,7 @@ const PROVIDER_LABELS: Record<Provider, string> = { google: 'Google', github: 'G
 
 onMounted(async () => {
   // 從 Google、GitHub 轉回來但沒登入成功（按了取消、或後端對不到帳號）。後端只把原因記在 log，
-  // 這裡只說沒成功；顯示完把參數拿掉，重新整理才不會一直看到
+  // 這裡只顯示沒成功；顯示完把參數拿掉，重新整理才不會一直看到
   const params = new URLSearchParams(window.location.search)
   if (params.has('login_error')) {
     error.value = '沒有登入成功，請再試一次或改用其他方式登入'
