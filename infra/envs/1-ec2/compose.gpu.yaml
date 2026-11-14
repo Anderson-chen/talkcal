@@ -1,8 +1,8 @@
-# model_backend = gpu：在機器上自己跑 llama-server。疊在 deploy/compose.yaml、compose.ec2.yaml 上面。
+# model_backend = gpu：在機器上自己執行 llama-server。疊在 deploy/compose.yaml、compose.ec2.yaml 上面。
 
 services:
   # 模型檔改從 deploy.sh 從 S3 拉下來的資料夾播種（MODELS_DIR 見 secrets.tf）。
-  # 容器裡一樣掛在 /seed，蓋掉 deploy/compose.yaml 那行，播種的腳本不用動
+  # 容器裡一樣掛載在 /seed，蓋掉 deploy/compose.yaml 那行，播種的腳本不用動
   model-seed:
     volumes:
       - ${MODELS_DIR:?缺 MODELS_DIR}:/seed:ro

@@ -1,5 +1,5 @@
 # llama-server 的 CUDA 版。不用官方的 ghcr.io/ggml-org/llama.cpp:server-cuda：本機從 ghcr 拉太慢，
-# 自己編反而快（數字見 docs/adr/0002）。EC2 跑 gpu 時也在機器上 build 這份。
+# 自己編反而快（數字見 docs/adr/0002）。EC2 用 gpu 時也在機器上 build 這份。
 #
 # 兩段式：build 段用 devel 映像檔（有 nvcc，好幾 GB）編譯，最後的映像檔只有 runtime 段，只帶 CUDA 函式庫和編好的執行檔。
 
@@ -36,7 +36,7 @@ RUN cmake -B build \
         -DGGML_NATIVE=OFF \
         # 函式庫都靜態連進 llama-server，runtime 段只要搬這一個檔案
         -DBUILD_SHARED_LIBS=OFF \
-        # 預設會去 Hugging Face 下載網頁聊天介面；app 只打 API，用不到
+        # 預設會去 Hugging Face 下載網頁聊天介面；app 只呼叫 API，用不到
         -DLLAMA_USE_PREBUILT_UI=OFF \
         # HTTPS 用戶端只給 -hf 從網路下載模型用，這裡的模型是掛載進來的
         -DLLAMA_OPENSSL=OFF \
@@ -56,7 +56,7 @@ RUN apt-get update \
 
 COPY --from=build /src/build/bin/llama-server /usr/local/bin/llama-server
 
-# ubuntu 映像檔內建的一般使用者（uid 1000）。容器被打穿時拿到的不是 root
+# ubuntu 映像檔內建的一般使用者（uid 1000）。容器被入侵時拿到的不是 root
 USER ubuntu
 
 EXPOSE 8080

@@ -1,6 +1,6 @@
 # ── 舊資料的歸檔 ─────────────────────────────────────────────────────────
 # app 每天凌晨把舊行程、舊的 AI 助理對話壓成 JSON Lines + gzip 放進這個 bucket，存好了才從 PostgreSQL 刪。
-# 本機對應的是 deploy/compose.yaml 的 RustFS；app 用同一套 S3 API，只差 endpoint（compose.ec2.yaml 把它蓋成空白 = S3 本身）。
+# 本機對應的是 deploy/compose.yaml 的 RustFS；app 用同一套 S3 API，只差 endpoint（compose.ec2.yaml 把 endpoint 蓋成空白 = S3 本身）。
 #
 # 不跟 models bucket 共用：兩邊的存取權限、保留方式完全不同（模型檔誰都能重新上傳，歸檔是使用者的資料），
 # 而且 models 只有 gpu 才建，歸檔兩種 model_backend 都要。
@@ -50,7 +50,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "archive" {
 }
 
 # ── app 存取歸檔用的身分 ──────────────────────────────────────────────────────
-# app 跑在容器裡，而機器的 IMDS hop limit 設成 1（ec2.tf）：容器拿不到機器角色的憑證。
+# app 在容器裡執行，而機器的 IMDS hop limit 設成 1（ec2.tf）：容器拿不到機器角色的憑證。
 # 所以開一個專用 user，只准讀寫這個 bucket；key 經 SSM 的 .env 交給 app（secrets.tf）。
 # key 外流最多就是這個 bucket 被讀寫，碰不到帳號的其他東西。
 #
@@ -86,7 +86,7 @@ resource "aws_iam_user_policy" "archive" {
 }
 
 # key 的明碼會在 Terraform state 裡，靠 bootstrap 的 state bucket 加密、不公開。
-# 換 key：terraform apply -replace=aws_iam_access_key.archive，再到機器上重跑 deploy.sh
+# 換 key：terraform apply -replace=aws_iam_access_key.archive，再到機器上重新執行 deploy.sh
 resource "aws_iam_access_key" "archive" {
   user = aws_iam_user.archive.name
 }

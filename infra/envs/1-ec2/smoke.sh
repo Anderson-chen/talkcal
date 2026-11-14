@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # 部署的冒煙測試：在機器上確認這個環境真的能用。SSM 拉下來的 .env、網路、憑證、真的 SMTP，CI 都測不到。
-# 分兩段跑，任何一項沒過就結束碼 1：
+# 分兩段執行，任何一項沒過就結束碼 1：
 #
 #   bash smoke.sh env deploy/.env        # 啟動容器之前：.env 的換行、告警收件人
-#   bash smoke.sh services deploy/.env   # 全部起來之後：網站、觀測、Bedrock、告警寄信
+#   bash smoke.sh services deploy/.env   # 全部啟動之後：網站、觀測、Bedrock、告警寄信
 #
 # compose 檔裡 ${X:?} 的必要 key 不在這裡查：`docker compose config -q` 會查，清單只留 compose 檔那一份。
 # 只印 key 的名字和結果，不印值。
@@ -42,8 +42,8 @@ env_get() {
 
 # 剛 up 完的服務要一點時間：Grafana 啟動、Alloy 抓第一輪（15 秒一次）再推進 Mimir。
 # 所有檢查共用一個期限，每 5 秒試一次；期限過了，後面的檢查只試一次。
-# 預設 180 秒：全新機器第一次部署時 Mimir 從零起、Caddy 第一次申請憑證，都比平常慢。
-# 不各給一段時間：東西壞掉時每項都等滿，部署要多卡好幾分鐘才說出哪裡壞
+# 預設 180 秒：全新機器第一次部署時 Mimir 從零啟動、Caddy 第一次申請憑證，都比平常慢。
+# 不各給一段時間：東西壞掉時每項都等滿，部署要多等好幾分鐘才說出哪裡壞
 deadline=$((SECONDS + ${SMOKE_WAIT_SECONDS:-180}))
 retry() {
   until "$@"; do
@@ -85,7 +85,7 @@ check_https() {
 }
 
 # Grafana 用資料源設定去連一次，連得上才算：位址、網路、對方 ready 都包含在內。
-# Mimir（prometheus）、Loki 打 health API；Tempo 經 Grafana 的資料源 proxy 打 /ready，一樣是走 Grafana 那份設定連過去
+# Mimir（prometheus）、Loki 呼叫 health API；Tempo 經 Grafana 的資料源 proxy 呼叫 /ready，一樣是走 Grafana 那份設定連過去
 datasource_path() {
   case "$1" in
     tempo) echo "/api/datasources/proxy/uid/tempo/ready" ;;
@@ -102,7 +102,7 @@ app_scraped() {
 }
 
 # bedrock 時直接用 .env 的 key 問 Bedrock 一句：key 過期（預設 90 天）、模型名稱錯、token 配額用完，
-# 都只有真的叫一次才知道，/api 健康檢查不會叫到模型。不經過 app：要登入、會在正式資料庫留下對話；
+# 都只有真的呼叫一次才知道，/api 健康檢查不會呼叫模型。不經過 app：要登入、會在正式資料庫留下對話；
 # 代價是 app 自己的設定（例如 Spring AI 送出的選項）驗不到。max_tokens=1，一次只花幾個 token
 check_bedrock() {
   local base_url
@@ -199,7 +199,7 @@ check_services() {
   local site uid
   site="$(env_get SITE_ADDRESS)"
   check_https "網站首頁" "https://$site/"
-  # 沒登入也能打的 API：證明 nginx 轉得到 app（只看首頁的話，app 掛了首頁照樣 200）
+  # 沒登入也能呼叫的 API：證明 nginx 轉得到 app（只看首頁的話，app 停止回應時首頁照樣 200）
   check_https "/api 健康檢查" "https://$site/api/auth/providers"
 
   for uid in mimir loki tempo; do

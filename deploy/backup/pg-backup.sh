@@ -23,17 +23,17 @@ log() { echo "[pg-backup] $*" >&2; }
 # 備份裡有所有人的行程和對話
 umask 077
 mkdir -p "$BACKUP_DIR"
-# 檔名只到秒：前一份在同一秒剛做完的話，等到下一秒，不蓋掉它
+# 檔名只到秒：前一份在同一秒剛做完的話，等到下一秒，不蓋掉前一份
 while name="$PG_DB-$(date -u +%Y%m%dT%H%M%SZ).dump"; [ -e "$BACKUP_DIR/$name" ]; do sleep 1; done
 final="$BACKUP_DIR/$name"
 tmp="$BACKUP_DIR/.$name.tmp"
-# 中途失敗只會留下 .tmp，結束時清掉：目錄裡的 .dump 都是跑完、驗過的
+# 中途失敗只會留下 .tmp，結束時清掉：目錄裡的 .dump 都是完整做完、驗過的
 trap 'rm -f "$tmp"' EXIT
 
 start=$(date +%s)
 log "pg_dump $PG_CONTAINER/$PG_DB → $final"
 # -Fc：有壓縮、能只還原某幾張表，pg_restore 也讀得出目錄（下面的檢查靠這個）。
-# 在容器裡跑：pg_dump 跟伺服器同版，主機不必裝用戶端；走 local socket（官方映像檔設成 trust），不用帶密碼
+# 在容器裡執行：pg_dump 跟伺服器同版，主機不必裝用戶端；走 local socket（官方映像檔設成 trust），不用帶密碼
 docker exec "$PG_CONTAINER" pg_dump -U "$PG_USER" -d "$PG_DB" -Fc > "$tmp"
 
 # 檢查一：讀得出目錄。擋得到不是 dump 檔、檔頭壞了、空檔案；

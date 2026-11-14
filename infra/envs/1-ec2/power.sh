@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 在自己的電腦上跑（infra/envs/1-ec2 底下，要能 terraform output）：開機、關機。
+# 在自己的電腦上執行（infra/envs/1-ec2 底下，要能 terraform output）：開機、關機。
 #
 #   ./power.sh stop    # 先把 Healthchecks 的 check 暫停，再關機
 #   ./power.sh start   # 開機，等到 check 恢復監控
@@ -11,7 +11,7 @@ cd "$(dirname "$0")"
 # 預設值跟 variables.tf 的 region、aws_profile 一樣
 REGION="${AWS_REGION:-ap-northeast-1}"
 PROFILE="${AWS_PROFILE:-DEV}"
-# 自架 Healthchecks（本機驗證）時換成它的網址
+# 自架 Healthchecks（本機驗證）時換成自架的網址
 HEALTHCHECKS_API_URL="${HEALTHCHECKS_API_URL:-https://healthchecks.io}"
 HEARTBEAT_UUID=""
 
@@ -26,14 +26,14 @@ heartbeat_enabled() {
 
 # hc_api <GET|POST> [路徑後綴]：呼叫這個 check 的 Healthchecks API。
 # key 從 stdin 交給 curl（-H @-），不放在命令列：同一台電腦的其他程式用 ps 看得到命令列。
-# --max-time：Healthchecks 沒回應時不要讓開關機卡住
+# --max-time：Healthchecks 沒回應時，開關機不要一直等
 hc_api() {
   printf 'X-Api-Key: %s\n' "$HEALTHCHECKS_API_KEY" |
     curl -fsS --max-time 15 -H @- -X "$1" "$HEALTHCHECKS_API_URL/api/v3/checks/$HEARTBEAT_UUID${2:-}"
 }
 
 pause_heartbeat() {
-  # 暫停失敗也照樣關機：關機是為了省錢，不該被監控卡住；只是會收到一封信
+  # 暫停失敗也照樣關機：關機是為了省錢，不該被監控擋住；只是會收到一封信
   if hc_api POST /pause >/dev/null; then
     echo "Healthchecks：已暫停，開機後第一個 heartbeat 會自己恢復"
   else
@@ -41,11 +41,11 @@ pause_heartbeat() {
   fi
 }
 
-# 開機後等 check 回到 up。暫停中的 check 要收到 heartbeat 才會恢復：Grafana 起不來的話它會一直停在 paused、
-# 不會寄信，正好漏掉這套要抓的「Grafana 掛了」。所以開機這一步自己盯到恢復為止
+# 開機後等 check 回到 up。暫停中的 check 要收到 heartbeat 才會恢復：Grafana 無法啟動的話 check 會一直停在 paused、
+# 不會寄信，正好漏掉這套要抓的「Grafana 停止運作」。所以開機這一步自己盯到恢復為止
 wait_heartbeat() {
   local status=""
-  # 15 秒一次、最多 10 分鐘：開機、容器起來、Grafana 送出第一個 heartbeat 通常 2～3 分鐘
+  # 15 秒一次、最多 10 分鐘：開機、容器啟動、Grafana 送出第一個 heartbeat 通常 2～3 分鐘
   for _ in $(seq 1 "${HEARTBEAT_WAIT_TRIES:-40}"); do
     status="$(hc_api GET | sed -n 's/.*"status": *"\([a-z]*\)".*/\1/p')" || true
     if [ "$status" = up ]; then

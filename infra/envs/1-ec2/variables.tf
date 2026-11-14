@@ -181,10 +181,10 @@ variable "alert_email_to" {
   default     = ""
 }
 
-# ── 監控本身掛掉 ──────────────────────────────────────────────────
-# Healthchecks.io 那類外部服務的 ping 網址（https://hc-ping.com/<uuid>）。現在不要給：Grafana 還沒有打 heartbeat 的 Watchdog 規則（為什麼見 ops/README.md）。
+# ── 監控本身停止運作 ──────────────────────────────────────────────
+# Healthchecks.io 那類外部服務的 ping 網址（https://hc-ping.com/<uuid>）。現在不要給：Grafana 還沒有送 heartbeat 的 Watchdog 規則（為什麼見 ops/README.md）。
 # 網址本身就是祕密：拿到就能假裝我們還活著。用 *.auto.tfvars 或 TF_VAR_heartbeat_url 給，不進 git。
-# 沒給 → 雲端不送 heartbeat，Grafana 自己掛掉時沒有人知道（其他告警不受影響）。
+# 沒給 → 雲端不送 heartbeat，Grafana 自己停止運作時沒有人知道（其他告警不受影響）。
 variable "heartbeat_url" {
   description = "外部 dead man's switch 的 ping 網址，例如 https://hc-ping.com/<uuid>"
   type        = string

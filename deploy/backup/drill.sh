@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 還原演練：在一組獨立的容器上跑「備份 → 誤刪 → 還原」，量時間，再跑反例證明壞掉的備份會被擋下。
-# 不碰正在用的 talkcal-postgres：另外起 talkcaldrill-postgres（15432）和一個假 app，跑完全部刪掉。
+# 還原演練：在一組獨立的容器上執行「備份 → 誤刪 → 還原」，量時間，再用反例證明壞掉的備份會被擋下。
+# 不碰正在用的 talkcal-postgres：另外啟動 talkcaldrill-postgres（15432）和一個假 app，結束時全部刪掉。
 #
 #   bash deploy/backup/drill.sh
 #
@@ -55,14 +55,14 @@ docker run -d --name "$pg" --network "$net" -p 127.0.0.1:15432:5432 \
 wait_pg
 sleep 2   # 官方映像檔初始化時會重啟一次伺服器，等它真的穩定
 migrations="$repo/backend/src/main/resources/db/migration"
-# 照 Flyway 的版本順序跑（V2 在 V10 前面：sort -V 才排得對）
+# 照 Flyway 的版本順序執行（V2 在 V10 前面：sort -V 才排得對）
 # shellcheck disable=SC2012  # 檔名是自己的 V<n>__*.sql，要的是 sort -V 的版本順序；find 一樣得接 sort
 for f in $(ls "$migrations" | sort -V); do
   sql -q -1 < "$migrations/$f"   # -1：一個檔一個交易，跟 Flyway 一樣
 done
 # shellcheck disable=SC2012  # 同上
 echo "migration：$(ls "$migrations" | sort -V | paste -sd' ')"
-# 假 app：跟真的 app 一樣一直握著連線、斷了就重連。還原那一步要能把它停掉、踢掉它的連線。
+# 假 app：跟真的 app 一樣一直握著連線、斷了就重連。還原那一步要能停掉假 app、踢掉假 app 的連線。
 # 收到 SIGTERM 馬上結束（真的 app 也會處理 SIGTERM，只是要等手上的請求做完）：不處理的話 docker stop 要白等 10 秒才 SIGKILL
 docker run -d --name "$app" --network "$net" -e PGPASSWORD=drill "$image" \
   sh -c 'trap "exit 0" TERM; while true; do psql -h talkcaldrill-postgres -U talkcal -d talkcal -c "SELECT pg_sleep(30)" >/dev/null 2>&1 & wait $!; sleep 1; done' > /dev/null
@@ -103,7 +103,7 @@ DB=postgres sql -q -c "DROP DATABASE talkcal_restore"
 step "備份之後又寫進一則對話、改了一個帳號的名字、建了一張表（還原會讓它們從線上消失：這就是 RPO）"
 sql -q -c "INSERT INTO calendar_assistant_message (owner_id, conversation_id, position, type, content) VALUES (md5('acct1')::uuid, md5('after')::uuid, 0, 'USER', '備份之後才寫的')"
 sql -q -c "UPDATE account SET display_name = '備份之後改的名字' WHERE username = 'user1'"
-# 備份之後才建的表（像新的 migration），而且沒有主鍵、有三列一模一樣：pg-diff 要比到它、也要算成 3 列
+# 備份之後才建的表（像新的 migration），而且沒有主鍵、有三列一模一樣：pg-diff 要比到這張表、也要算成 3 列
 sql -q -c "CREATE TABLE drill_after_backup (v int); INSERT INTO drill_after_backup VALUES (1), (1), (1)"
 
 step "事故：誤刪 —— DELETE 忘了加 WHERE"
@@ -184,7 +184,7 @@ check "指紋還是 $final（線上資料沒變）" [ "$final" = "$before" ]
 
 step "退回（runbook「還原之後發現選錯備份」）：換回被換下來的那份"
 docker stop "$app" > /dev/null
-# 模擬 postgres-exporter：app 停了還有別的連線連著 talkcal。runbook 的 SQL 不先踢掉它的話，改名會失敗
+# 模擬 postgres-exporter：app 停了還有別的連線連著 talkcal。runbook 的 SQL 不先踢掉這條連線的話，改名會失敗
 docker exec -d "$pg" psql -U talkcal -d talkcal -c "SELECT pg_sleep(300)"
 sleep 1
 DB=postgres sql -q > /dev/null <<SQL

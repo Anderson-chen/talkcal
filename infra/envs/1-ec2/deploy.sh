@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# 在 EC2 上把指定版本部署起來。第一次開機由 user_data 跑，之後要更新就連進機器手動重跑：
+# 在 EC2 上把指定版本部署起來。第一次開機由 user_data 執行，之後要更新就連進機器手動重新執行：
 #
 #   aws ssm start-session --target <instance-id> ...
 #   sudo bash /opt/talkcal/repo/infra/envs/1-ec2/deploy.sh
 #   sudo GIT_REF=some-branch bash /opt/talkcal/repo/infra/envs/1-ec2/deploy.sh   # 部署別的分支
 #
-# 跟本機一樣起 deploy/、ops/ 兩組 compose，多疊雲端的差異（compose.ec2.yaml、compose.<MODEL_BACKEND>.yaml），
+# 跟本機一樣啟動 deploy/、ops/ 兩組 compose，多疊雲端的差異（compose.ec2.yaml、compose.<MODEL_BACKEND>.yaml），
 # 另外多做這幾件事：從 SSM 拉 .env、gpu 時從 S3 拉模型、換新版前備份資料庫、裝備份排程。
 set -euo pipefail
 
-# 設定由 user_data 寫好；GIT_REF 有從環境變數給的話以它為準
+# 設定由 user_data 寫好；GIT_REF 有從環境變數給的話，以環境變數為準
 DEPLOY_ENV=/opt/talkcal/deploy.env
 if [ -f "$DEPLOY_ENV" ]; then
   override_ref="${GIT_REF:-}"
@@ -26,8 +26,8 @@ REPO="$ROOT/repo"
 MODELS_DIR="$ROOT/models"
 
 echo "── 1. 原始碼：$GIT_REF"
-# checkout 會換掉正在跑的這支腳本，但 git 是刪舊檔、寫新檔，bash 讀的還是舊檔，不會跑到一半換內容；新版下次部署才生效。
-# --tags：連 release tag 一起拉，cd/version.sh 才認得出這個 commit 是不是某個 v<版本>。
+# checkout 會換掉正在執行的這支腳本，但 git 是刪舊檔、寫新檔，bash 讀的還是舊檔，不會執行到一半換內容；新版下次部署才生效。
+# --tags：連 release tag 一起拉，cd/version.sh 才判斷得出這個 commit 是不是某個 v<版本>。
 # 淺 clone 就夠：version.sh 只看指著 HEAD 的 tag
 git -C "$REPO" fetch --depth 1 --tags origin "$GIT_REF"
 git -C "$REPO" checkout --detach FETCH_HEAD
@@ -57,8 +57,8 @@ umask 077
 aws ssm get-parameter --name "$DOTENV_PARAM" --with-decryption \
   --region "$AWS_REGION" --query Parameter.Value --output text > "$REPO/deploy/.env"
 umask 022
-# .env 是空的、行尾帶 \r、少了 SMTP 收件人，在起任何容器之前就擋下並說出是哪一項。
-# 不擋的話要等 app 起不來、--wait 判 unhealthy 才失敗，看不出原因
+# .env 是空的、行尾帶 \r、少了 SMTP 收件人，在啟動任何容器之前就擋下並說出是哪一項。
+# 不擋的話要等 app 無法啟動、--wait 判 unhealthy 才失敗，看不出原因
 bash "$REPO/infra/envs/1-ec2/smoke.sh" env "$REPO/deploy/.env"
 
 cd "$REPO"
@@ -68,11 +68,11 @@ compose_files=(
   -f infra/envs/1-ec2/compose.ec2.yaml
   -f "infra/envs/1-ec2/compose.$MODEL_BACKEND.yaml"
 )
-# 必要的 key 讓 compose 自己查（compose 檔裡的 ${X:?}），不另外維護清單。config 不起容器
+# 必要的 key 讓 compose 自己查（compose 檔裡的 ${X:?}），不另外維護清單。config 不啟動容器
 docker compose "${compose_files[@]}" config -q
 
 echo "── 4. 服務（deploy/ + compose.ec2.yaml + compose.$MODEL_BACKEND.yaml）"
-# 映像檔先準備好：這一段只拉、只 build，registry 連不到或 build 失敗時，在跑的容器都還沒被換掉。
+# 映像檔先準備好：這一段只拉、只 build，registry 連不到或 build 失敗時，運作中的容器都還沒被換掉。
 # 拉新的 digest、基底重拉，是為了跟 CI 的漏洞掃描（.github/workflows/ci.yml 的 --pull）掃到的一樣新
 docker compose "${compose_files[@]}" pull --quiet --ignore-buildable  # 第三方：同一個 tag 官方重新 build 過，就換成新的 digest
 docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml pull --quiet
@@ -91,7 +91,7 @@ for svc in web postgres; do
 done
 
 # postgres 只在第一次初始化時讀 POSTGRES_PASSWORD。Terraform 換了密碼的話，app 拿新的、資料庫還是舊的，app 就連不上，
-# 所以先只起 postgres，把密碼設成 .env 這一份，再起 app。密碼沒換時就是設成同一組
+# 所以先只啟動 postgres，把密碼設成 .env 這一份，再啟動 app。密碼沒換時就是設成同一組
 docker compose "${compose_files[@]}" up -d --wait postgres
 # 走 local socket（官方映像檔設成 trust），不用知道舊密碼。密碼從 stdin 送：放在指令參數的話 ps 看得到。
 # 密碼只有英數字（secrets.tf 的 special = false），直接放進 SQL 字串不用跳脫
@@ -111,7 +111,7 @@ echo "── 5. 觀測（ops/ + compose.ops.yaml）"
 docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml up -d
 
 echo "── 6. 備份排程（#45）：每小時一次、關機前一次"
-# 裝在這裡不裝在 user_data：user_data 只在第一次開機跑，已經在跑的機器拿不到改過的排程。每次部署都覆寫
+# 裝在這裡不裝在 user_data：user_data 只在第一次開機執行，已經在運作的機器拿不到改過的排程。每次部署都覆寫
 cat > "/etc/systemd/system/$PROJECT-backup.service" <<UNIT
 [Unit]
 Description=$PROJECT: back up PostgreSQL to S3
@@ -134,8 +134,8 @@ Persistent=false
 [Install]
 WantedBy=timers.target
 UNIT
-# 開機時 ExecStart 什麼都不做，關機時 systemd 停這個 service，跑的是 ExecStop。
-# 關機的順序跟開機相反，After=docker.service 讓它在 Docker（和裡面的 postgres）停掉之前跑
+# 開機時 ExecStart 什麼都不做，關機時 systemd 停這個 service，執行的是 ExecStop。
+# 關機的順序跟開機相反，After=docker.service 讓備份在 Docker（和裡面的 postgres）停掉之前執行
 cat > "/etc/systemd/system/$PROJECT-backup-on-shutdown.service" <<UNIT
 [Unit]
 Description=$PROJECT: back up PostgreSQL to S3 before shutdown

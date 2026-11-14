@@ -39,7 +39,7 @@ resource "aws_s3_bucket_public_access_block" "backups" {
   restrict_public_buckets = true
 }
 
-# 保留多久：由 S3 自己刪，不靠機器（機器平常關機，靠它清的話關機期間永遠不會清）。
+# 保留多久：由 S3 自己刪，不靠機器（機器平常關機，靠機器清的話，關機期間永遠不會清）。
 # 機器沒有刪除權限，所以也只能由這裡刪
 resource "aws_s3_bucket_lifecycle_configuration" "backups" {
   bucket = aws_s3_bucket.backups.id

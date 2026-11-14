@@ -1,6 +1,6 @@
 #!/bin/bash
-# 第一次開機時跑一次：確認 AMI 帶的東西都在、補齊缺的、clone repo、跑第一次部署。
-# 之後的部署都是重跑 deploy.sh，不再經過這裡。
+# 第一次開機時執行一次：確認 AMI 帶的東西都在、補齊缺的、clone repo、執行第一次部署。
+# 之後的部署都是重新執行 deploy.sh，不再經過這裡。
 # 這是 Terraform 範本：$${...} 會被 Terraform 代換，所以下面的 bash 變數一律寫成 $VAR，不加大括號。
 set -euxo pipefail
 exec > >(tee /var/log/user-data.log | logger -t user-data) 2>&1
@@ -13,7 +13,7 @@ nvidia-smi
 command -v docker
 command -v nvidia-ctk
 
-# 讓 Docker 認得 GPU（AMI 通常已經設好；重跑一次無害，只會確保 daemon.json 有 nvidia runtime）
+# 讓 Docker 認得 GPU（AMI 通常已經設好；重新執行一次無害，只會確保 daemon.json 有 nvidia runtime）
 nvidia-ctk runtime configure --runtime=docker
 %{ else ~}
 # 一般的 Ubuntu 沒帶 Docker，從 Docker 官方的 apt 套件庫裝（Ubuntu 自己的 docker.io 版本舊、沒有 compose 外掛）。
@@ -56,7 +56,7 @@ PY
 systemctl restart docker
 
 # compose 和 buildx 是 Docker CLI 的外掛。沒有的話（AMI 沒帶）補裝固定版本：
-#   compose：deploy/ 和 ops/ 兩組都靠它
+#   compose：deploy/ 和 ops/ 兩組都要用
 #   buildx ：backend 的 Dockerfile 用了 RUN --mount=type=cache，要 BuildKit 才 build 得動
 PLUGINS=/usr/local/lib/docker/cli-plugins
 mkdir -p $PLUGINS
@@ -73,7 +73,7 @@ fi
 docker compose version
 docker buildx version
 
-# ── 2. 部署設定：寫成檔案，之後手動重跑 deploy.sh 時自動讀 ────────────────────────
+# ── 2. 部署設定：寫成檔案，之後手動重新執行 deploy.sh 時自動讀 ────────────────────
 mkdir -p /opt/${project}
 cat > /opt/${project}/deploy.env <<'ENV'
 PROJECT=${project}
@@ -92,6 +92,6 @@ git -C /opt/${project}/repo fetch --depth 1 origin ${git_ref}
 git -C /opt/${project}/repo checkout --detach FETCH_HEAD
 
 # ── 4. 第一次部署 ────────────────────────────────────────────────────────────
-# 第一次要 build 映像檔、拉映像檔，會跑很久（gpu 還要編 llama-server 的 CUDA、複製模型，十幾分鐘）。
+# 第一次要 build 映像檔、拉映像檔，會執行很久（gpu 還要編 llama-server 的 CUDA、複製模型，十幾分鐘）。
 # 進度看 /var/log/user-data.log。
 bash /opt/${project}/repo/infra/envs/1-ec2/deploy.sh

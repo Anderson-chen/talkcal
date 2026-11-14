@@ -1,11 +1,11 @@
-# 本機用容器跑整套服務：模型、PostgreSQL、歸檔、app、nginx。觀測那組在 ops/，雲端的差異疊在 infra/envs/1-ec2/compose.*.yaml。
-# 服務之間用服務名稱連（app 打 http://llm-chat:8080），跟下面 ports 發佈成幾號無關。
+# 本機用容器執行整套服務：模型、PostgreSQL、歸檔、app、nginx。觀測那組在 ops/，雲端的差異疊在 infra/envs/1-ec2/compose.*.yaml。
+# 服務之間用服務名稱連線（app 呼叫 http://llm-chat:8080），跟下面 ports 發佈成幾號無關。
 #
 # 發佈到主機的埠都只綁 127.0.0.1：
-#   8080        模型。跟原生 llama-server 同一個埠，本機 bootRun 的 app 不用改設定；兩邊不能同時開。
+#   8080        模型。跟原生 llama-server 同一個埠，本機 bootRun 的 app 不用改設定；兩邊不能同時啟動。
 #   18090       容器裡的 app。不用 8090：那是本機 bootRun 的，兩個要能同時開著比對。
 #   18080       容器裡的前端，/api 由 nginx 轉給 app。
-#   9100 / 9101 歸檔的 RustFS（S3 API / 管理頁面）。不用 9000：太多工具預設佔它。
+#   9100 / 9101 歸檔的 RustFS（S3 API / 管理頁面）。不用 9000：很多工具預設占用 9000。
 
 name: talkcal-deploy
 
@@ -19,7 +19,7 @@ x-gpu: &gpu
   resources:
     reservations:
       devices:
-        # 沒有這段的話容器看不到顯卡，-ngl 99 會不報錯地退回 CPU 跑，慢十倍以上。
+        # 沒有這段的話容器看不到顯卡，-ngl 99 會不報錯地退回 CPU 執行，慢十倍以上。
         # Docker Desktop 不切分 GPU，多個服務共用同一張卡的 12 GB VRAM；換到 k8s 的 nvidia.com/gpu 是一個服務獨佔一張
         - driver: nvidia
           count: 1
@@ -31,8 +31,8 @@ x-version-args: &version-args
   - GIT_COMMIT
 
 services:
-  # ── 模型播種：把模型檔從 Windows 資料夾複製進 volume，跑完就結束 ──────────────
-  # 模型服務直接掛 C:/llm/models 的話，每次載入都要經過 Windows → WSL2 的檔案通道（約 20 MB/s），
+  # ── 模型播種：把模型檔從 Windows 資料夾複製進 volume，複製完就結束 ────────────
+  # 模型服務直接掛載 C:/llm/models 的話，每次載入都要經過 Windows → WSL2 的檔案通道（約 20 MB/s），
   # llama.cpp 用 mmap 零碎讀又更慢，5 GB 的模型要載好幾分鐘。volume 在 WSL2 的檔案系統上，只有第一次複製走慢的通道。
   model-seed:
     <<: *llama-server               # 用模型服務的映像檔：裡面有 bash、sha256sum，不必多拉一個
@@ -72,7 +72,7 @@ services:
     <<: *llama-server
     container_name: talkcal-llm-chat
 
-    # EC2 用 GPU 跑模型時（compose.gpu.yaml）也是這組參數。.claude/launch.json 的原生 llama-server 是另一組，例如沒帶 -np
+    # EC2 用 GPU 執行模型時（compose.gpu.yaml）也是這組參數。.claude/launch.json 的原生 llama-server 是另一組，例如沒帶 -np
     command:
       - -m
       - /models/Qwen3-8B-Q4_K_M.gguf
@@ -113,7 +113,7 @@ services:
 
     depends_on:
       model-seed:
-        # 播種失敗（例如 SHA256 對不上）就不起模型服務，不拿壞掉的模型檔回答
+        # 播種失敗（例如 SHA256 對不上）就不啟動模型服務，不用壞掉的模型檔產生回覆
         condition: service_completed_successfully
 
     deploy: *gpu
@@ -155,14 +155,14 @@ services:
 
   # ── 資料庫那一端的指標：postgres_exporter ────────────────────────
   # app 的連線池只看得到自己借了幾條；max_connections、各狀態的連線數（pg_stat_activity）要從資料庫那頭問，
-  # PostgreSQL 又不吐 Prometheus 格式，所以掛一個 exporter，ops/ 的 Alloy 在這組網路上抓它的 :9187。
-  # 放在 deploy/ 不放 ops/：它要用 deploy/.env 的 DB_PASSWORD
+  # PostgreSQL 又不輸出 Prometheus 格式，所以加一個 exporter，ops/ 的 Alloy 在這組網路上抓 exporter 的 :9187。
+  # 放在 deploy/ 不放 ops/：exporter 要用 deploy/.env 的 DB_PASSWORD
   postgres-exporter:
     image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
     container_name: talkcal-postgres-exporter
     command:
       # 逐表統計（pg_stat_user_tables）的查詢要對每張表拿鎖。有人對表下 ACCESS EXCLUSIVE 鎖（例如 migration 改表）時
-      # 它會卡住，整次抓取逾時，連 pg_stat_activity 都拿不到；每 15 秒一次的抓取還各佔一條連線卡在那。
+      # 這個查詢會停住等鎖，整次抓取逾時，連 pg_stat_activity 都拿不到；每 15 秒一次的抓取還各占一條連線一直等著。
       # 代價：看不到每張表的 seq scan、dead tuple，要查時直接下 SQL
       - --no-collector.stat_user_tables
     environment:
@@ -199,8 +199,8 @@ services:
       retries: 10
     restart: unless-stopped
 
-  # 建 bucket，跑完就結束。app 的權限不含建 bucket（雲端由 Terraform 建），本機就由這個容器建。
-  # 用 RustFS 映像檔裡的 curl 簽 S3 請求，不必多拉 aws-cli。bucket 已經在的話 PUT 也回 200，每次 up 都跑沒關係
+  # 建 bucket，建完就結束。app 的權限不含建 bucket（雲端由 Terraform 建），本機就由這個容器建。
+  # 用 RustFS 映像檔裡的 curl 簽 S3 請求，不必多拉 aws-cli。bucket 已經在的話 PUT 也回 200，每次 up 都執行沒關係
   archive-init:
     image: rustfs/rustfs:1.0.3
     container_name: talkcal-archive-init
@@ -240,14 +240,14 @@ services:
 
     ports:
       # 不發佈 actuator 的 8091（management 埠）：只給同網路的 Alloy 和下面的 healthcheck 用。
-      # 有 nginx 還發佈 18090：perf/ 的 k6 直接打 app，量到的不含 nginx
+      # 有 nginx 還發佈 18090：perf/ 的 k6 直接呼叫 app，量到的不含 nginx
       - "127.0.0.1:18090:8090"
 
     depends_on:
-      # app 啟動時不打模型，等模型載完是為了第一個請求不撞上還在載入的模型
+      # app 啟動時不呼叫模型，等模型載完是為了第一個請求不會遇到還在載入的模型
       llm-chat:
         condition: service_healthy
-      # 啟動時 Flyway 就要連資料庫，連不上 app 起不來
+      # 啟動時 Flyway 就要連資料庫，連不上的話 app 無法啟動
       postgres:
         condition: service_healthy
 
@@ -279,12 +279,12 @@ services:
       - "127.0.0.1:18080:80"
 
     depends_on:
-      # nginx 自己不需要 app 先起來（請求來了才連），等 app healthy 是免得頁面先開好、一問就拿到 502
+      # nginx 本身不需要 app 先啟動（請求來了才連），等 app healthy 是免得頁面先開好、一發問就拿到 502
       app:
         condition: service_healthy
 
     healthcheck:
-      # 只看 nginx 送得出首頁，不打 /api：app 掛掉時不要連 web 一起被判成 unhealthy
+      # 只看 nginx 送得出首頁，不呼叫 /api：app 停止回應時，web 不要跟著被判成 unhealthy
       test: ["CMD", "curl", "-fsS", "http://localhost/"]
       interval: 10s
       timeout: 3s

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 在 EC2 上跑：備份資料庫、傳到 S3。不必手動跑，三個時機會自動叫它：
+# 在 EC2 上執行：備份資料庫、傳到 S3。不必手動執行，這三個時機會自動執行：
 #   hourly      systemd timer，開機期間每小時一次
 #   shutdown    關機時（systemd 在停 Docker 之前），所以「關機前最後寫進去的」也有備份
 #   pre-deploy  deploy.sh 在換新版之前（新版的 Flyway migration 改壞資料時，回得去部署前那一刻）
@@ -15,15 +15,15 @@ DEPLOY_ENV=/opt/talkcal/deploy.env
 # shellcheck source=/dev/null
 [ -f "$DEPLOY_ENV" ] && source "$DEPLOY_ENV"
 : "${PROJECT:?}" "${AWS_REGION:?}"
-# bucket 名稱照 backups.tf 的命名規則推出來，不寫進 deploy.env：那份由 user_data 寫，只在第一次開機跑，
-# 已經在跑的機器拿不到；改 user_data 還會讓 Terraform 停機更新。get-caller-identity 不需要任何 IAM 權限
+# bucket 名稱照 backups.tf 的命名規則推出來，不寫進 deploy.env：那份由 user_data 寫，只在第一次開機執行，
+# 已經在運作的機器拿不到；改 user_data 還會讓 Terraform 停機更新。get-caller-identity 不需要任何 IAM 權限
 BACKUPS_BUCKET="$PROJECT-backups-$(aws sts get-caller-identity --region "$AWS_REGION" --query Account --output text)"
 
 ROOT="/opt/$PROJECT"
 # 容器名稱用 pg-backup.sh 的預設（talkcal-postgres）：deploy/compose.yaml 的 container_name 是寫死的，不跟著 PROJECT 變
 export BACKUP_DIR="$ROOT/backups" KEEP_DAYS=2 KEEP_MIN=3
 
-# 三個時機可能撞在一起（整點剛好在部署、或部署時關機）：同一時間只跑一份，後到的等前一份做完再做。
+# 三個時機可能同時發生（整點剛好在部署、或部署時關機）：同一時間只執行一份，後到的等前一份做完再做。
 # 不鎖的話，同一秒開始的兩份會寫同一個檔名、互相刪掉對方的暫存檔
 mkdir -p "$BACKUP_DIR"
 exec 9> "$BACKUP_DIR/.lock"
@@ -32,7 +32,7 @@ flock 9
 echo "[backup-to-s3] $reason：開始"
 dump="$(bash "$ROOT/repo/deploy/backup/pg-backup.sh")"
 
-# 先傳 dump、再傳雜湊檔：S3 上看得到 .sha256，就代表它的 dump 已經完整傳上去了
+# 先傳 dump、再傳雜湊檔：S3 上看得到 .sha256，就代表對應的 dump 已經完整傳上去了
 dest="s3://$BACKUPS_BUCKET/postgres/"
 aws s3 cp "$dump" "$dest" --region "$AWS_REGION" --only-show-errors
 aws s3 cp "$dump.sha256" "$dest" --region "$AWS_REGION" --only-show-errors

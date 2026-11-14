@@ -9,7 +9,7 @@
 #   1. 雜湊對得上（複製、傳輸途中沒壞）。雜湊跟備份由同一個角色寫，防得了損壞、防不了蓄意竄改
 #   2. pg_restore 讀得出目錄
 #   3. 整份還原到暫存庫 <db>_restore 成功（後半截不見、資料違反約束，都在這裡失敗）
-#   4. 停 app → 線上庫改名成 <db>_before_<時間>（留著，不刪）→ 暫存庫改名成 <db> → 起 app
+#   4. 停 app → 線上庫改名成 <db>_before_<時間>（留著，不刪）→ 暫存庫改名成 <db> → 啟動 app
 # 1～3 任何一步失敗就結束，線上的資料庫一個 byte 都沒動。
 # 第 4 步只是兩次改名：出事就改回來（runbook 有指令），被換下來的那份也還能撈「備份之後才寫進去」的資料。
 set -euo pipefail
@@ -82,11 +82,11 @@ if [ -n "$APP_CONTAINER" ] && [ "$(docker inspect -f '{{.State.Running}}' "$APP_
   docker stop "$APP_CONTAINER" > /dev/null
   restart_app=1
 fi
-# 換上成功或失敗都要把 app 起回來
+# 換上成功或失敗都要把 app 重新啟動
 start_app() { if [ "${restart_app:-}" = 1 ]; then log "起 $APP_CONTAINER"; docker start "$APP_CONTAINER" > /dev/null; fi; }
 # 資料庫名稱沒加引號會被轉成小寫，所以時間格式只用數字和底線，印出來的跟實際的名稱一樣
 old="${PG_DB}_before_$(date -u +%Y%m%d_%H%M%S)"
-# 先不讓新的連線進來、再踢掉剩下的（psql、postgres_exporter 之類），改名才不會撞上「有人在用」。
+# 先不讓新的連線進來、再踢掉剩下的（psql、postgres_exporter 之類），改名才不會遇到「有人在用」。
 # 被換下來的那份維持不能連：免得哪個忘了改設定的程式繼續寫進一個已經不是線上的庫
 # 兩次改名包在同一個交易：要嘛都換了、要嘛都沒換，不會出現「線上庫不見了」的中間狀態
 if ! psql_admin > /dev/null <<SQL

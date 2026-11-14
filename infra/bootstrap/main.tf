@@ -1,6 +1,6 @@
-# ── Bootstrap：兩個階段共用、只跑一次 ─────────────────────────────────────────
+# ── Bootstrap：兩個階段共用、只執行一次 ───────────────────────────────────────
 # 雞生蛋問題：各階段的 Terraform state 要放 S3，但那個 bucket 本身也得有人建。
-# 這個小 stack 用本機 state 建出它，之後各階段（envs/1-ec2、envs/2-eks）都把 state 放進去。
+# 這個小 stack 用本機 state 建出這個 bucket，之後各階段（envs/1-ec2、envs/2-eks）都把 state 放進去。
 # 這裡只放兩樣東西：state bucket、花費告警。其他資源一律放各階段的資料夾。
 terraform {
   required_version = ">= 1.10"
@@ -28,7 +28,7 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 
 # ── Terraform remote state bucket ─────────────────────────────────────────────
-# 名稱帶帳號 ID：S3 bucket 名稱全球唯一，加上帳號 ID 不會撞到別人的。
+# 名稱帶帳號 ID：S3 bucket 名稱全球唯一，加上帳號 ID 不會跟別人重複。
 resource "aws_s3_bucket" "tfstate" {
   bucket = "talkcal-tfstate-${data.aws_caller_identity.current.account_id}"
 

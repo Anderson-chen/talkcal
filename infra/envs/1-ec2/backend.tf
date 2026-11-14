@@ -5,7 +5,7 @@ terraform {
   # 所以這裡只寫各環境一樣的部分，bucket / region / profile 放在 backend.hcl（已 gitignore）：
   #   cp backend.hcl.example backend.hcl   # 填入 bootstrap 輸出的 state_bucket
   #   terraform init -backend-config=backend.hcl
-  # key 帶階段名稱：之後 2-eks 用自己的 key，拆掉這個階段時它的 state 還留著可以追溯。
+  # key 帶階段名稱：之後 2-eks 用自己的 key，拆掉這個階段時，這個階段的 state 還留著可以追溯。
   backend "s3" {
     key          = "1-ec2/terraform.tfstate"
     use_lockfile = true # Terraform 1.10+ 的 S3 原生鎖，不必另建 DynamoDB
