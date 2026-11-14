@@ -1,6 +1,6 @@
 # AGENTS.md
 
-專案介紹、怎麼跑，看 [README.md](README.md)。
+專案介紹、使用方式，看 [README.md](README.md)。
 
 ## 語言
 
@@ -17,7 +17,7 @@
 | 3 | 改程式碼、寫註解；改到基礎設施另見下面「改基礎設施」 | [@.agents/rules/comments.md](.agents/rules/comments.md) |
 | 4 | commit | [@.agents/rules/commit.md](.agents/rules/commit.md) |
 | 5 | 要開 PR 時，先審改到的中文：見 `pr.md` 以「文案審查：」起頭的那一點 | [@.agents/rules/pr.md](.agents/rules/pr.md) |
-| 6 | 照改到的地方跑測試、檢查 | [@.agents/rules/commands.md](.agents/rules/commands.md) |
+| 6 | 照改到的地方執行測試、檢查 | [@.agents/rules/commands.md](.agents/rules/commands.md) |
 | 7 | 審查、開或改 PR | [@.agents/rules/pr.md](.agents/rules/pr.md) |
 | 每一步 | 寫文件、註解、介面文字、prompt、issue、PR、commit 的文字 | [@.agents/rules/writing.md](.agents/rules/writing.md) |
 
@@ -32,4 +32,4 @@
 
 檔案位置（`F`、`L` 兩張表）記錨點，發佈時才換成行號，檔案多一行、少一行都不用改那頁。
 錨點對不上時 `ci/checks.sh` 會紅燈並列出是哪一個，照 [lines.mjs](docs/architecture/lines.mjs) 開頭的寫法改；
-要看換成行號的樣子，跑 `node docs/architecture/lines.mjs --out <資料夾>`，開那個資料夾裡的 `index.html`。
+要看換成行號的樣子，執行 `node docs/architecture/lines.mjs --out <資料夾>`，開那個資料夾裡的 `index.html`。
