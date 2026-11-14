@@ -16,50 +16,43 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 把「一句自然語言 + 現在時間」翻譯成要交給 Spring AI ChatModel 的 Prompt。
+ * 跟 AI 助理用同一個 ChatModel，要的東西不一樣：助理要一段自由文字，這裡要一份程式讀得懂的行程清單。
+ * 差別都在這個類別：system prompt、日期表、約束輸出的 JSON Schema。
  *
- * 跟 AI 助理用的是同一個 ChatModel，但要的東西不一樣：
- * 助理要一段自由文字，這邊要一份機器讀得懂的行程清單。差別全在這個 class 裡 ——
- * system prompt 怎麼寫、附上哪張日期表、用什麼 JSON Schema 約束輸出。
- *
- * 這些都是「怎麼讓這顆模型做對這件事」的知識，所以屬於 adapter，不屬於 domain：
- * 換成 Claude 或 OpenAI，日期表可能根本不需要，schema 的寫法也不一樣（tool use），
- * 但 CalendarEvent 的規則一條都不會變。
+ * 這些是讓這個模型做對這件事的寫法，所以屬於 adapter：換成 Claude 或 OpenAI，日期表可能不需要，
+ * schema 的寫法也不一樣（tool use），但 CalendarEvent 的規則一條都不會變。
  */
 final class ExtractionRequest {
 
-    // 生成上限。文法約束只管形狀不管長度：模型要是一直往 events 陣列裡塞東西，
-    // 會一直佔住 llama-server 的一個 slot 直到逾時。
-    // 兩個行程實測約 114 tokens，1024 夠一句話塞十幾個行程，再多就是模型失控了
+    // 文法約束只管形狀不管長度：模型一直往 events 陣列裡加東西的話，會占住 llama-server 的一個 slot 直到逾時。
+    // 兩個行程實測約 114 tokens，1024 夠一句話放十幾個行程，再多就是模型失控了
     static final int MAX_TOKENS = 1024;
 
-    // 這個請求自己的取樣溫度：0 = 每一步都挑機率最高的 token（貪婪解碼），同樣的輸入永遠同樣的輸出。
-    // server 啟動時的 0.7（deploy/compose.yaml）留給要一點變化的自由文字；抽行程只有一個正確答案，變化就是錯誤。
+    // 0 是每一步都選機率最高的 token，同樣的輸入永遠同樣的輸出。抽行程只有一個正確答案，變化就是錯誤；
+    // server 啟動時的 0.7（deploy/compose.yaml）是給要一點變化的自由文字。
     // 實測：同一份 body 在 0.7 下 10 次有 1 次把「下週三」查成下週二，0 之後 7 種句子各 10 次全對
     static final double TEMPERATURE = 0;
 
     private static final DateTimeFormatter NOW_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
-    // 時間格式寫進 pattern：文法約束解碼會讓模型「只能」吐出這個形狀，
-    // 而這個形狀剛好就是 LocalDateTime.parse 吃的 ISO 格式（不帶秒）
+    // 文法約束解碼會讓模型只能輸出這個形狀，這個形狀剛好是 LocalDateTime.parse 讀得懂的 ISO 格式（不帶秒）
     private static final String DATE_TIME_PATTERN = "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$";
 
     /**
-     * 輸出必須長這樣。end 可以是 null（沒講結束時間），由 ExtractionResponse 交給 domain 補預設長度。
-     * 欄位全部 required、不准多欄位：形狀固定，剖析那頭才不必猜。
-     * category 用 enum 鎖死四個值：模型「只能」從裡面挑，不會發明出「會議」「其他」這種第五類。
-     * location 跟 end 一樣可以是 null（沒講地點）。備註不交給模型 —— 那是使用者自己補的東西。
+     * end 可以是 null（沒講結束時間），由 ExtractionResponse 交給 domain 補預設長度；location 也可以是 null。
+     * 欄位全部 required、不准多欄位：形狀固定，解析那一端才不必猜。
+     * category 用 enum 限定四個值：模型只能從裡面選，不會自創「會議」「其他」這種第五類。
+     * 備註不交給模型：那是使用者自己補的。
      *
-     * startSaid、endSaid 是模型「引用」的原話：使用者講開始、結束時間的那幾個字。
-     * 模型給的 start / end 不一定可信（沒講結束時間會自己編、沒講上下午會照字面當凌晨），
-     * ExtractionResponse 拿這些引用回原句核對、套規則。規則和原因寫在 SaidTimes。
+     * startSaid、endSaid 是模型照抄的原話：使用者講開始、結束時間的那幾個字。模型給的 start、end 不一定可信
+     * （沒講結束時間會自己編、沒講上下午會照字面當凌晨），ExtractionResponse 拿引用回原句核對，規則見 SaidTimes。
      *
-     * 透過 OpenAI 協定的 response_format（json_schema）送過去，llama.cpp 把它轉成文法（GBNF）在解碼時強制執行 ——
-     * 不合 schema 的 token 根本選不到，比在 prompt 裡拜託模型「請回 JSON」可靠得多。
-     * 但它保證不了語意（日期算錯、結束早於開始），那些還是要靠 domain 的規則擋。
+     * 透過 OpenAI 協定的 response_format（json_schema）送出，llama.cpp 把 schema 轉成文法（GBNF）在解碼時強制執行：
+     * 不合 schema 的 token 根本選不到，比在 prompt 裡要求「請回 JSON」可靠。但文法保證不了語意（日期算錯、結束早於開始），
+     * 那些還是靠 domain 的規則擋。
      *
-     * 是字串不是 JsonNode：Spring AI 收的就是字串。寫壞了（少一個括號）不會在這裡炸，
-     * 會變成每次解析都失敗 —— ExtractionRequestTest 把它讀成 JSON 檢查，守著這件事。
+     * 是字串，不是 JsonNode：Spring AI 收的是字串。寫錯了（少一個括號）不會在這裡丟例外，而是每次解析都失敗，
+     * ExtractionRequestTest 會把它讀成 JSON 檢查。
      */
     static final String SCHEMA = """
             {
@@ -101,15 +94,14 @@ final class ExtractionRequest {
     }
 
     /**
-     * 這個請求自己的選項：從 application.properties 的預設（spring.ai.openai.chat.options.*，傳進來的 defaults）開始，
-     * 再蓋掉這件工作專屬的三個：max_tokens 是失控保險、response_format 是輸出約束、
-     * temperature 是「這個請求要確定性」。這三個只屬於這種請求。
+     * 從 application.properties 的預設（傳進來的 defaults）開始，再覆蓋這件工作專屬的三個：
+     * max_tokens 防止失控、response_format 約束輸出、temperature 要結果確定。
      *
      * 一定要從預設開始：Spring AI 2.0 的 OpenAiChatModel 看到請求自帶選項就整份照用，不會補上預設，
      * 沒給模型名稱就送 gpt-5-mini。本機的 llama-server 不看名稱，Bedrock 會回 404。
      *
-     * 用的是 OpenAiChatOptions 而不是通用的 ChatOptions：通用的那份沒有 response_format。
-     * 這也是這個 adapter 唯一綁在「OpenAI 協定」上的地方 —— 換成 Claude，要改的就是這個方法。
+     * 用 OpenAiChatOptions：通用的 ChatOptions 沒有 response_format。這是這個 adapter 唯一綁定 OpenAI 協定的地方，
+     * 換成 Claude 時要改的就是這個方法。
      */
     static OpenAiChatOptions options(ChatOptions defaults) {
         // 測試用的假 ChatModel 給的是通用的 ChatOptions，沒有 OpenAI 的欄位可以沿用
@@ -127,13 +119,13 @@ final class ExtractionRequest {
     }
 
     /**
-     * 給模型的指示。每一句擋的都是模型真的會犯的錯：
+     * 每一句擋的都是模型真的會犯的錯：
      * - 「從下表找，不要自己推算」：不 thinking 的 8B 模型心算星期幾不可靠，「下週三」給過星期一、星期二
      * - 「跨過午夜要用隔天的日期」：不講的話「晚上十點到凌晨一點」的結束時間會被丟掉
-     * - 「沒有行程就回空陣列」：不講的話閒聊也可能被硬湊出一個行程
-     * - title「有講跟誰就保留」：叫它別把地點寫進標題時，它連「跟小明」都一起刪了，只剩「吃飯」
-     * - location 的例子：只寫「有講地點才填」時，「在3F會議室A」抽得到、「在健身房」卻抽不到
-     * - category 每一類都舉例：只給類名時，模型對「看牙醫」該算 health 還是 personal 會猶豫
+     * - 「沒有行程就回空陣列」：不講的話，閒聊也可能被硬湊出一個行程
+     * - title「有講跟誰就保留」：只叫模型別把地點寫進標題的話，「跟小明」也會一起刪掉，只剩「吃飯」
+     * - location 的例子：只寫「有講地點才填」的話，「在3F會議室A」抽得到、「在健身房」卻抽不到
+     * - category 每一類都舉例：只給類名的話，模型對「看牙醫」該算 health 還是 personal 會不穩定
      */
     static String instruction(LocalDateTime now) {
         return """

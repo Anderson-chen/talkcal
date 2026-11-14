@@ -38,32 +38,26 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 
 /**
- * 行事曆 AI 助理的 HTTP 入口：一句話進來，助理的回覆和它提議的行程出去。
+ * 助理提議的行程跟 POST /events 收的是同一個形狀（EventFields）：畫面顯示卡片，使用者確認後送 POST /events 才存。
+ * 修改（changes）、刪除（removals）也只是卡片，使用者按確認才送 PUT、DELETE /events/{id}。
+ * 修改卡片的 before 原樣當 PUT 的 expected 送回來：卡片顯示之後那筆被改過的話，PUT 回 409，不會蓋掉別人的改動。
  *
- * 這裡是一段對話 —— 助理可能先反問、可能去查行程或找空檔，也可能提議新增、修改、刪除。
- * 提議的行程跟 POST /events 收的是同一個形狀（EventFields），畫面顯示卡片、使用者確認後送 POST /events 才存。
- * 修改（changes）、刪除（removals）也一樣只是卡片：使用者按確認才送 PUT、DELETE /events/{id}。
- * 修改卡片的 before 原樣當 PUT 的 expected 送回來，卡片顯示之後那筆被改過，PUT 就會 409，不會蓋掉別人的改動。
+ * 多輪對話靠 conversationId：第一句不帶，回應裡會拿到一個，之後每句都帶。重新整理頁面後用 GET 讀回給人看的部分。
+ * 沒有 DELETE：「清空」是前端丟掉 conversationId、下一句開新的一段；舊的那段由每天的歸檔排程按保留期限搬走，
+ * 不讓一個按鈕（或任何拿得到 id 的請求）把紀錄抹掉。
+ * 拿別人的 conversationId 來讀是空的，拿來說話是在自己名下開一段新的。
  *
- * 多輪對話靠 conversationId（UUID）：第一句不帶，回應裡會拿到一個；之後每句帶著它。歷史存在伺服器。
- * 重新整理頁面後用 GET 讀回那段對話給人看的部分。
- * 沒有 DELETE：「清空」是前端丟掉 conversationId、下一句開新的一段；舊的那段留給每天的歸檔排程（AssistantMemoryArchive）。
- * 紀錄只由排程按保留期限刪，不讓一個按鈕（或任何拿得到 id 的請求）把它抹掉。
+ * 卡片的去向記成產品指標：回覆時每張卡片發一個 proposalId；按「加入行事曆」走 POST /events 時每筆帶著自己的 proposalId，
+ * 按「取消」「移除」只改畫面，所以前端另外送 POST /dismissals。伺服器只算自己發過、屬於登入者、還沒表態過的卡片。
  *
- * 對話屬於登入者：拿別人的 conversationId 來讀是空的、拿來說話是在自己名下開一段新的，碰不到別人的那段。
- *
- * 卡片的去向記成產品指標：回覆時每張卡片發一個 proposalId 並記下來；
- * 按「加入行事曆」走 POST /events，每筆帶著它的 proposalId；按「取消」「移除」只改畫面，所以前端另外送 POST /dismissals 帶那幾張的 id。
- * 伺服器只認自己發過、屬於登入者、還沒表態過的卡片，前端說了不算。
- *
- * 失敗一律回 AssistantFailure：error 給人看，code 給程式判斷（前端依它決定怎麼顯示、要不要讓使用者重試）。
+ * 失敗一律回 AssistantFailure：error 給人看，code 給程式判斷要怎麼顯示、要不要讓使用者重試。
  * <pre>
  * 400  INVALID_REQUEST    訊息空白、conversationId 不是 UUID。改了請求才會好
- * 502  ASSISTANT_FAILED   這一次叫模型（或資料庫）失敗了。可以馬上再試
- * 503  MODEL_UNAVAILABLE  熔斷打開：模型最近一直失敗，這次根本沒叫它。Retry-After 秒後再試
- * 503  MODEL_BUSY         同時在等模型的請求滿了，這次沒叫它。Retry-After 秒後再試
+ * 502  ASSISTANT_FAILED   這一次呼叫模型（或資料庫）失敗。可以馬上再試
+ * 503  MODEL_UNAVAILABLE  斷路器打開：模型最近一直失敗，這次沒有呼叫。Retry-After 秒後再試
+ * 503  MODEL_BUSY         同時在等模型的請求滿了，這次沒有呼叫。Retry-After 秒後再試
  * </pre>
- * 503 跟 502 分開：502 是「叫了、壞了」，503 是「知道叫了也沒用，先不叫」—— 前端看到 503 就不該讓使用者一直按重試。
+ * 503 跟 502 分開：502 是呼叫了、失敗了，503 是呼叫了也沒用、先不呼叫，前端看到 503 就不該讓使用者一直按重試。
  */
 @RestController
 @RequestMapping("/api/calendar/assistant")
@@ -96,7 +90,7 @@ public final class CalendarAssistantController {
         String conversationId = conversationId(request.conversationId());
         OwnerId owner = SignedIn.owner(signedIn);
         CalendarAssistant.Reply reply = assistant.reply(owner, conversationId, request.message());
-        // 在這裡發 id、不在助理呼叫工具時發：工具解析出來的草稿可能被擋下（沒講早上晚上），也可能這一輪最後失敗（502），
+        // 在這裡發 id，不在助理呼叫工具時發：工具解析出來的草稿可能被擋下（沒講早上晚上），這一輪也可能最後失敗（502），
         // 那些使用者都沒看到。回得出去的這一份，才是畫面上真的出現的卡片
         List<CalendarEvent> drafts = reply.proposals();
         List<ProposalId> ids = proposals.proposalsShown(owner, drafts.size());
@@ -111,7 +105,6 @@ public final class CalendarAssistantController {
     }
 
     @PostMapping("/dismissals")
-    // 204：記下了，沒有東西要回
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "回報使用者拒絕了哪幾張提議卡片",
             description = "按「取消」「移除」只改畫面、不經過後端，前端用這個告訴後端，產品指標才算得出採納率。不影響任何行程。"
@@ -149,7 +142,7 @@ public final class CalendarAssistantController {
         }
     }
 
-    // 沒帶就開新對話；帶了就要是 UUID（calendar_assistant_message 的 conversation_id 是 UUID 欄位，見 V7）
+    // calendar_assistant_message.conversation_id 是 UUID 欄位（見 V7）
     private static String conversationId(String requested) {
         if (requested == null || requested.isBlank()) {
             return UUID.randomUUID().toString();
@@ -167,8 +160,8 @@ public final class CalendarAssistantController {
         return ResponseEntity.badRequest().body(AssistantFailure.of(e.getMessage(), "INVALID_REQUEST"));
     }
 
-    // 模型沒被叫就擋下。比下面的 IllegalStateException 具體，Spring 會先挑這個。
-    // 只記一行 warn、不印 stack：熔斷打開時每個請求都會走到這裡，原因已經在「熔斷狀態改變」那行 log 和指標上了
+    // 比下面的 IllegalStateException 具體，Spring 會先選這個。
+    // 只記一行 warn、不印 stack：斷路器打開時每個請求都會走到這裡，原因已經在斷路器狀態改變的那行 log 和指標上
     @ExceptionHandler(ModelUnavailableException.class)
     public ResponseEntity<AssistantFailure> onModelUnavailable(ModelUnavailableException e) {
         long seconds = Math.max(1, e.retryAfter().toSeconds());
@@ -182,14 +175,14 @@ public final class CalendarAssistantController {
                 .body(new AssistantFailure(e.getMessage(), code, seconds));
     }
 
-    // 只攔 IllegalStateException（CalendarAssistant 把上游的各種例外都包成這個），理由見 CalendarController 的 onUpstreamFailure
+    // CalendarAssistant 把上游的各種例外都包成 IllegalStateException；只攔這個的理由見 CalendarController.onUpstreamFailure
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<AssistantFailure> onUpstreamFailure(IllegalStateException e) {
         log.error("AI 助理失敗，回 502", e);
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(AssistantFailure.of(e.getMessage(), "ASSISTANT_FAILED"));
     }
 
-    // 名字帶著 Assistant，不叫 Request／Response：springdoc 用簡單類別名當 schema 名稱，太通用的名字遲早撞名
+    // 名字帶著 Assistant：springdoc 用類別的簡單名稱當 schema 名稱，叫 Request／Response 遲早撞名
     public record AssistantRequest(
             @Schema(description = "使用者說的話", example = "明天七點和 Amy 見面") String message,
             @Schema(description = "要接續的對話；不帶就開一段新對話", nullable = true) String conversationId) {
@@ -220,7 +213,7 @@ public final class CalendarAssistantController {
     }
 
     /**
-     * 助理的錯誤回應。error 跟 CalendarController 的 CalendarFailure 同名同義，只看 error 的前端不必改；
+     * error 跟 CalendarFailure 同名同義，只看 error 的前端不必改；
      * 多出來的 code、retryAfterSeconds 給要分辨「這次失敗」和「現在不能用」的前端。
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)

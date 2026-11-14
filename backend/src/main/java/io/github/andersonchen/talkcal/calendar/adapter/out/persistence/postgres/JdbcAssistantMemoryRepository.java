@@ -28,34 +28,31 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * AI 助理的對話記憶存 PostgreSQL，連工具呼叫一起（表在 V7__create_calendar_assistant_message.sql，為什麼另開一張表也寫在那裡）。
+ * AI 助理的對話記憶，連工具呼叫一起存（表在 V7__create_calendar_assistant_message.sql，為什麼另開一張表也寫在那裡）。
  *
- * 對話依擁有者分開（V11）：of(owner) 拿到的是「這個人名下的對話」，每一句 SQL 都帶著 owner_id。
- * 同一個 conversation_id 在不同人底下是不同的兩段，別人拿到你的 conversation_id 也讀不到、蓋不掉你的那段。
+ * 對話依擁有者分開（V11）：每一句 SQL 都帶著 owner_id，同一個 conversation_id 在不同人底下是兩段不同的對話，
+ * 別人拿到你的 conversation_id 也讀不到、蓋不掉你的那段。
  *
- * 寫入是只往後接（append-only），不整段取代。
- * 照 Spring AI ChatMemoryRepository 的 saveAll 寫的話是：讀出整段 → 跑模型（好幾秒）→ 整段刪掉重插。
- * 同一段對話同時送兩句（兩個分頁、按了兩次送出），兩個請求讀到同一份歷史，晚存的那個整段蓋掉早的，
- * 早的那句和它的回覆就不見了，而且沒有任何錯誤。
- * 每一輪只把「這一輪新增的那幾則」接在最後面，兩句都留著，誰先誰後照存進來的順序。
+ * 寫入只往後接，不整段取代。照 Spring AI ChatMemoryRepository 的 saveAll 寫的話，是讀出整段、呼叫模型（好幾秒）、
+ * 整段刪掉重插：同一段對話同時送兩句（兩個分頁、按了兩次送出）時，兩個請求讀到同一份歷史，晚存的整段蓋掉早的，
+ * 早的那句和回覆就不見了，而且沒有任何錯誤。每一輪只把這一輪新增的那幾則接在最後面，兩句都會留著。
  *
- * 為什麼不是樂觀鎖（version 欄位、衝突回 409）：對話不是「兩個人改同一份東西」，兩句都是使用者真的說過的，
- * 沒有誰該被退回；回 409 要使用者重送，重送就要重跑一次模型（又是好幾秒、又花一次錢），換來的結果跟直接接上去一樣。
- * 代價：晚到的那句，模型回它的時候沒看到同時送出的那一句（兩個請求本來就是並行的）；但兩句和兩個回覆都存著，下一輪模型都看得到。
+ * 不用樂觀鎖（version 欄位、衝突回 409）：兩句都是使用者真的說過的，沒有哪一句該被退回；
+ * 回 409 要使用者重送，重送又要再呼叫一次模型（好幾秒、多花一次錢），結果跟直接接上去一樣。
+ * 代價：模型回覆晚到的那句時，看不到同時送出的另一句；但兩句和兩個回覆都存著，下一輪模型都看得到。
  *
- * of(owner) 回傳 Spring AI 的 ChatMemory（add / get / clear），而不是自己定一個 port：
- * 對話記憶是 AI 助理（inbound adapter）跟框架之間的事，core 不知道有「對話」這回事。
- * 用 ChatMemory 而不是 ChatMemoryRepository，是因為框架裡「往後接」的語意就是 ChatMemory.add；
- * ChatMemoryRepository 只有 saveAll（整段取代），照它寫就一定是讀-改-寫，躲不掉上面那個遺失更新。
- * 框架的介面只認 conversationId，擁有者只好在拿到這個物件之前先決定 —— 所以是「先 of(owner)，再照框架的方法用」。
+ * of(owner) 回傳 Spring AI 的 ChatMemory，不另外定 port：對話記憶只在 AI 助理（inbound adapter）和框架之間使用，
+ * core 裡沒有對話的概念。用 ChatMemory 不用 ChatMemoryRepository：框架裡往後接的語意是 ChatMemory.add，
+ * ChatMemoryRepository 只有 saveAll（整段取代），照它寫一定是讀、改、寫，避不開上面的遺失更新。
+ * 框架的介面只收 conversationId，擁有者要在取得這個物件之前決定，所以是先 of(owner)，再照框架的方法用。
  *
- * 名字不叫 Adapter：這個字尾在專案裡專指「實作 core 的 outbound port」（ArchitectureTest 守著），這個不是。
+ * 名字不叫 Adapter：這個字尾在專案裡專指實作 core outbound port 的類別（ArchitectureTest 會檢查），這個類別不是。
  *
- * 只存 USER、ASSISTANT、TOOL：system 每一輪由程式重新給（日期表要跟著「現在」走），傳進來也不存。
+ * 只存 USER、ASSISTANT、TOOL：system 每一輪由程式重新給（日期表要跟著「現在」變），傳進來也不存。
  */
 public final class JdbcAssistantMemoryRepository {
 
-    // 設定好之後就是執行緒安全的，當常數重用
+    // 設定好之後是執行緒安全的，可以當常數重用
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final JdbcClient jdbc;
@@ -63,8 +60,8 @@ public final class JdbcAssistantMemoryRepository {
     private final int keepTurns;
 
     /**
-     * @param keepTurns 一段對話最多留幾輪（一輪 = 使用者一句話，加上之後的工具呼叫和回覆）。
-     *                  每次接上新的一輪，就把更早的輪刪掉：只往後接的話，一直在聊的對話不會被清理排程刪，會無限長下去
+     * @param keepTurns 一段對話最多留幾輪（一輪是使用者一句話，加上之後的工具呼叫和回覆）。每接上新的一輪，就刪掉更早的輪：
+     *                  只往後接的話，一直在聊的對話不會被歸檔排程搬走，會無限變長
      */
     public JdbcAssistantMemoryRepository(JdbcClient jdbc, TransactionTemplate transaction, int keepTurns) {
         this.jdbc = Objects.requireNonNull(jdbc, "jdbc 不可為 null");
@@ -75,21 +72,19 @@ public final class JdbcAssistantMemoryRepository {
         this.keepTurns = keepTurns;
     }
 
-    /** 這個人名下的對話。物件很輕（只記著擁有者），每個請求拿一個新的就好。 */
+    /** 物件很輕，只記著擁有者，每個請求拿一個新的就好。 */
     public ChatMemory of(OwnerId owner) {
         return new OwnedMemory(Objects.requireNonNull(owner, "owner 不可為 null").value());
     }
 
     /**
-     * 找出 cutoff 之前就沒再說過話的對話（歸檔之後才刪，見 app.job.AssistantMemoryArchive），最多 limit 段，最舊的先。
-     * 不分擁有者：這是這張表自己的維護工作，不是誰的請求。
+     * cutoff 之前就沒再說過話的對話，最多 limit 段，最舊的先。不分擁有者：這是這張表自己的維護工作。
      *
-     * 「最後說話的時間」= 那段對話最新一列的 created_at：寫入是只往後接，最新一列就是最後那一輪存進來的時間。
-     * 整段一起拿，不會歸檔到只剩後半截、開頭被砍掉的對話。
-     * 一段對話是 (owner_id, conversation_id) 一組：兩個人剛好用了同一個 conversation_id，也是各算各的。
+     * 最後說話的時間是那段對話最新一列的 created_at：寫入只往後接，最新一列就是最後那一輪存進來的時間。
+     * 整段一起拿，不會歸檔到只剩後半截的對話。(owner_id, conversation_id) 才是一段對話，兩個人剛好用了同一個 conversation_id 也各算各的。
      *
-     * 讀出來的是資料庫裡原本的樣子（工具呼叫是 JSON 字串、帶著 created_at），不翻成 Spring AI 的 Message：
-     * 歸檔要的是「原封不動的備份」，還原時照原樣插回去，不必經過框架的型別再翻一次。
+     * 讀出來的是資料庫裡原本的樣子（工具呼叫是 JSON 字串、帶著 created_at），不轉成 Spring AI 的 Message：
+     * 歸檔要原封不動的備份，還原時照原樣插回去，不必經過框架的型別再轉一次。
      */
     public List<StoredConversation> findInactiveSince(Instant cutoff, int limit) {
         Objects.requireNonNull(cutoff, "cutoff 不可為 null");
@@ -122,7 +117,7 @@ public final class JdbcAssistantMemoryRepository {
         } catch (DataAccessException e) {
             throw new IllegalStateException("讀取要歸檔的對話失敗", e);
         }
-        // 一列一則訊息 → 一段對話一個物件。SQL 已經依對話排好，同一段的訊息連在一起：換了對話就收起前一段
+        // SQL 已經依對話排好，同一段的訊息連在一起：換了對話就收起前一段
         List<StoredConversation> conversations = new ArrayList<>();
         List<StoredMessage> messages = new ArrayList<>();
         for (int i = 0; i < rows.size(); i++) {
@@ -138,11 +133,11 @@ public final class JdbcAssistantMemoryRepository {
     }
 
     /**
-     * 刪掉一段已經歸檔好的對話，但只在它「現在」還是 cutoff 之前就沒說過話的時候。回傳有沒有刪。
+     * 只在這段對話現在還是 cutoff 之前就沒說過話時才刪，回傳有沒有刪。
      *
-     * 這個條件擋的是：讀出來、上傳的那幾秒之間，使用者剛好又接著聊了 —— 那段已經不舊了，刪掉就是刪掉正在聊的對話。
-     * 條件和刪除在同一句 SQL 裡，不是先查再刪；而且先拿這段對話的鎖，跟接上新一輪的 add 排隊：
-     * 不排隊的話，還沒 commit 的新一輪看不到，舊的整段被刪掉，線上只剩最新一輪，之後還原也會因為「已經有了」而跳過。
+     * 擋的是讀出來到上傳完的那幾秒之間，使用者剛好又接著聊了：那段已經不舊了，刪掉就是刪掉正在聊的對話。
+     * 條件和刪除在同一句 SQL，而且先取得這段對話的鎖，跟接上新一輪的 add 排隊：
+     * 不排隊的話看不到還沒 commit 的新一輪，舊的整段被刪掉，線上只剩最新一輪，之後還原也會因為已經有了而跳過。
      */
     public boolean deleteIfInactiveSince(OwnerId owner, UUID conversationId, Instant cutoff) {
         try {
@@ -166,11 +161,11 @@ public final class JdbcAssistantMemoryRepository {
     }
 
     /**
-     * 把歸檔裡的一段對話照原樣插回去（連 created_at 一起）。回傳有沒有放回去。
+     * 照原樣插回去（連 created_at 一起），回傳有沒有放回去。
      *
-     * 這個人名下已經有同一個 conversation_id 的對話（還原過、或還沒被刪）就整段跳過：
-     * 線上那份可能比歸檔新，不能拿舊的蓋掉；跳過也讓還原按幾次結果都一樣。
-     * 先拿這段對話的鎖，跟 add 和其他還原排隊，「查有沒有 → 插入」之間不會有人插隊撞主鍵。
+     * 這個人名下已經有同一個 conversation_id 的對話（還原過、或還沒被刪）就整段跳過：線上那份可能比歸檔新，
+     * 不能拿舊的蓋掉；跳過也讓還原按幾次結果都一樣。先取得這段對話的鎖，跟 add 和其他還原排隊，
+     * 查有沒有到插入之間不會有別的寫入插進來撞主鍵。
      */
     public boolean restore(StoredConversation conversation) {
         try {
@@ -212,8 +207,8 @@ public final class JdbcAssistantMemoryRepository {
         }
     }
 
-    // 鎖的是 (擁有者, 對話) 這一組，交易結束自動放掉；hashtextextended 把它變成 advisory lock 要的 bigint。
-    // 不同對話剛好撞到同一個雜湊值，只是多排一下隊，不會錯。這段對話的每一種寫入（接上、歸檔刪除、還原）都要先拿
+    // 鎖 (擁有者, 對話) 這一組，交易結束自動釋放；hashtextextended 把 key 轉成 advisory lock 要的 bigint。
+    // 不同對話剛好撞到同一個雜湊值，只是多排一下隊。這段對話的每一種寫入（接上、歸檔刪除、還原）都要先取得
     private void lock(UUID owner, UUID conversationId) {
         jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
                 .param("key", "calendar_assistant_message:" + owner + ":" + conversationId)
@@ -221,11 +216,11 @@ public final class JdbcAssistantMemoryRepository {
                 .list();
     }
 
-    /** 一段對話在資料庫裡原本的樣子（歸檔、還原用）。lastActive 是最後一次說話的時間。 */
+    /** 歸檔、還原用。lastActive 是最後一次說話的時間。 */
     public record StoredConversation(OwnerId owner, UUID conversationId, Instant lastActive, List<StoredMessage> messages) {
     }
 
-    /** 一則訊息在資料庫裡原本的樣子。toolCalls、toolResponses 是 JSONB 的原文，沒有就是 null。 */
+    /** toolCalls、toolResponses 是 JSONB 的原文，沒有就是 null。 */
     public record StoredMessage(int position, String type, String content, String toolCalls, String toolResponses,
                                 Instant createdAt) {
     }
@@ -264,11 +259,11 @@ public final class JdbcAssistantMemoryRepository {
         }
 
         /**
-         * 接在這段對話的最後面，包在一個交易裡：不會留下「插了一半」的一輪。
+         * 包在一個交易裡，不會留下插了一半的一輪。
          *
-         * 接在哪裡（position）要先看目前最後一則是第幾則；兩個請求同時看，會拿到同一個號碼，第二個撞主鍵失敗。
-         * 所以先拿這段對話的 advisory lock（交易結束自動放掉），同一段對話的寫入排隊，一次一個；
-         * 鎖只包「查號碼 → 插入 → 刪舊輪」這幾句 SQL，跑模型的那幾秒不在裡面，不同的對話也不互相等。
+         * 接在哪裡（position）要先查目前最後一則是第幾則；兩個請求同時查會拿到同一個號碼，第二個撞主鍵失敗。
+         * 所以先取得這段對話的 advisory lock，同一段對話的寫入排隊、一次一個。鎖只包查號碼、插入、刪舊輪這幾句 SQL，
+         * 呼叫模型的那幾秒不在裡面，不同的對話也不互相等。
          * 不用 SELECT ... FOR UPDATE：第一輪還沒有任何一列可以鎖，兩個請求還是會撞。
          */
         @Override
@@ -295,7 +290,7 @@ public final class JdbcAssistantMemoryRepository {
                     dropOldTurns(id);
                 });
             } catch (DataAccessException | TransactionException e) {
-                // 連不上資料庫時，失敗發生在開交易那一步，丟的是 TransactionException，不是 DataAccessException
+                // 連不上資料庫時，失敗發生在開始交易那一步，丟的是 TransactionException，不是 DataAccessException
                 throw new IllegalStateException("儲存 AI 助理的對話失敗：" + conversationId, e);
             }
         }
@@ -313,9 +308,9 @@ public final class JdbcAssistantMemoryRepository {
         }
 
         /**
-         * 只留最近 keepTurns 輪：從倒數第 keepTurns 句使用者的話開始留，更早的刪掉。
-         * 以輪為單位刪，不從中間截：工具結果前面一定要有呼叫它的那則助理訊息，拆開了 API 會拒收整個請求。
-         * position 不重新編號：讀的時候只看順序，號碼從幾開始都一樣。
+         * 從倒數第 keepTurns 句使用者的話開始留，更早的刪掉。以輪為單位刪、不從中間截：
+         * 工具結果前面一定要有呼叫工具的那則助理訊息，拆開了 API 會拒收整個請求。
+         * position 不重新編號：讀的時候只看順序。
          */
         private void dropOldTurns(UUID id) {
             jdbc.sql("""
@@ -376,7 +371,7 @@ public final class JdbcAssistantMemoryRepository {
         };
     }
 
-    // conversationId 由 controller 驗過是 UUID；這裡再轉一次是因為欄位型別是 UUID
+    // controller 已經檢查過是 UUID；這裡再轉一次是因為欄位型別是 UUID
     private static UUID uuid(String conversationId) {
         return UUID.fromString(Objects.requireNonNull(conversationId, "conversationId 不可為 null"));
     }
@@ -397,7 +392,7 @@ public final class JdbcAssistantMemoryRepository {
         }
     }
 
-    // 存進 JSONB 的形狀：自己的 record，不直接序列化 Spring AI 的型別 —— 它改了欄位，舊資料照樣讀得回來
+    // 不直接序列化 Spring AI 的型別：Spring AI 改了欄位，舊資料照樣讀得回來
     record ToolCallJson(String id, String type, String name, String arguments) {
 
         static ToolCallJson of(AssistantMessage.ToolCall call) {

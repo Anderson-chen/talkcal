@@ -15,18 +15,13 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 活躍使用者數：talkcal_active_users{window="1d"|"7d"|"30d"}。
+ * talkcal_active_users{window="1d"|"7d"|"30d"}：Alloy 抓 /actuator/prometheus 時才向 use case 要數字。
  *
- * 它是 inbound adapter：觸發的是 Alloy 來抓 /actuator/prometheus（跟 HTTP 請求觸發 controller 一樣），
- * 抓的時候才問 use case「最近這幾段時間各有幾個人在用」。
+ * 三個期間一句 SQL 一起數，結果留 refresh 這麼久：活躍人數變得很慢，Alloy 每 15 秒抓一次就重算是白做工；
+ * 查詢也是在抓指標的那條執行緒上執行，資料庫慢的時候整頁指標都會被拖住。
  *
- * 三個期間一次問（一句 SQL），結果留 refresh 這麼久：日活、週活、月活本來就變得很慢，
- * Alloy 每 15 秒抓一次就重算是白做工；而且查詢跑在抓指標的那條執行緒上，資料庫慢的時候整頁指標都會被拖住。
- *
- * 用 gauge、不用 counter：「有幾個人」是一個會上下變的量，不是累加的次數。
- * 不在記憶體裡累加「今天見過誰」：重啟歸零、多台各數各的（原因見 CountActiveOwnersPort）。
- *
- * 期間是固定的三個值，當成標籤不會長：日活、週活、月活是產品最常看的三個；30 天剛好是對話的保留期限，再長就數不準了。
+ * 用 gauge、不用 counter：人數會上下變，不是累加的次數。
+ * 期間固定三個值，當成標籤不會變多。30 天剛好是對話的保留期限，再長就數不準了。
  */
 public final class ActiveUsersMetrics implements MeterBinder {
 
@@ -39,9 +34,9 @@ public final class ActiveUsersMetrics implements MeterBinder {
     private final Duration refresh;
     private final Clock clock;
 
-    // 上一次問到的結果和時間；三個 gauge 共用。null = 上次失敗
+    // 三個 gauge 共用；null 表示上次失敗
     private List<Integer> latest;
-    // 從沒問過：第一次抓一定會問
+    // null：從沒查過，第一次抓一定會查
     private Instant askedAt;
 
     public ActiveUsersMetrics(CountActiveUsersUseCase activeUsers, Duration refresh, Clock clock) {
@@ -61,9 +56,9 @@ public final class ActiveUsersMetrics implements MeterBinder {
         }
     }
 
-    // 資料庫出事時回 NaN：Prometheus 把 NaN 當成「這次沒有值」，dashboard 上是斷一截，
-    // 不會誤報成 0 個人在用；例外往外丟的話，Micrometer 也只是吞掉、記一筆 warn，整頁指標照樣吐
-    // 失敗也留 refresh 這麼久才重問：資料庫掛了的時候，不要每次抓指標都再撞一次
+    // 資料庫出錯時回 NaN：Prometheus 把 NaN 當成這次沒有值，dashboard 上斷一截，不會誤報成 0 人；
+    // 例外往外丟的話，Micrometer 也只是吞掉、記一筆 warn。
+    // 失敗也等 refresh 這麼久才重查：資料庫無法連線時，不要每次抓指標都再連一次
     private synchronized double count(int index) {
         Instant now = clock.instant();
         if (askedAt == null || !now.isBefore(askedAt.plus(refresh))) {

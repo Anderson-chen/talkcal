@@ -29,15 +29,11 @@ import java.time.YearMonth;
 import java.util.Objects;
 
 /**
- * 歸檔的 HTTP 入口：查看封存的行程，和把自己某幾個月的 AI 助理對話放回線上。
- *
- * 只碰登入者自己的：不收任何「擁有者」參數，別人的歸檔從這裡碰不到。
+ * 查看封存的行程，和把自己某幾個月的 AI 助理對話放回線上。不收擁有者參數，別人的歸檔從這裡碰不到。
  * - 行程：GET，只讀。封存的行程不放回資料庫，放回去隔天的排程又會再封存一次
- * - 對話：POST，會寫資料庫。按很多次結果都一樣（已經在線上的不會被蓋掉），所以重試是安全的
+ * - 對話：POST，會寫資料庫。已經在線上的不會被蓋掉，按幾次結果都一樣，重試是安全的
  *
- * 對話的還原不在 core 裡（core 不知道有「對話」這回事），由組裝根接上一個 RestoreConversations 進來：
- * 這個 controller 不認識 adapter.out。
- *
+ * 對話不在 core 裡，還原由組裝根把 RestoreConversations 傳進來：這個 controller 不 import adapter.out。
  * 回傳的行程跟月曆同一個形狀（CalendarController.SavedEvents），前端用同一個型別畫。
  */
 @RestController
@@ -47,7 +43,7 @@ public final class ArchiveController {
 
     private static final Logger log = LoggerFactory.getLogger(ArchiveController.class);
 
-    // 502 給呼叫端看的話：例外訊息裡有 bucket、key、擁有者 id，只寫進 log，不回給瀏覽器
+    // 例外訊息裡有 bucket、key、擁有者 id，只寫進 log，不回給瀏覽器
     static final String UPSTREAM_FAILURE = "封存的資料暫時讀不到，請稍後再試";
 
     private final ListArchivedEventsUseCase listArchivedEvents;
@@ -92,14 +88,13 @@ public final class ArchiveController {
             @Parameter(description = "結束月份（含）", example = "2024-06")
             @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth to) {
         OwnerId owner = SignedIn.owner(signedIn);
-        // 範圍不合規（from 晚於 to、超過 24 個月）在這一行就是 IllegalArgumentException → 400，還沒碰到歸檔
+        // 範圍不合規在這一行就丟 IllegalArgumentException → 400，不會讀到歸檔
         MonthRange months = new MonthRange(from, to);
         int conversations = restoreConversations.restore(owner, months);
         log.info("從歸檔還原 {} ~ {}：對話 {} 段", from, to, conversations);
         return new Restored(conversations);
     }
 
-    /** 把 owner 某幾個月（兩端都含）的 AI 助理對話放回來，回傳放回幾段。組裝根接上實作。 */
     @FunctionalInterface
     public interface RestoreConversations {
 
