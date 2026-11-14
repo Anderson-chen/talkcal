@@ -1,93 +1,74 @@
-# Grafana 的「資料源自動接線」：容器一啟動就照這個檔把資料源建好，
-# 不必每次開 UI 手動加。改了這個檔 → 重啟 grafana 容器就生效。
-#
-# 三個資料源對應三種訊號，而且互相連起來 —— 觀測真正好用的地方不是三張各看各的圖，而是能跳來跳去：
-#
-#   Mimir 圖上的慢點（exemplar）──點──▶ Tempo 看那個請求的 trace
-#   Loki 的一行 log（含 trace id）──點──▶ Tempo 看那個請求的 trace
-#   Tempo 的 trace ──點──▶ Loki 看那個請求印了哪些 log
-#   Tempo 的 span  ──點──▶ Mimir 看那段時間的延遲、錯誤率、連線池
-#
-# 每個資料源都釘死 uid：沒指定的話 Grafana 會隨機產一個，
-# 那 dashboard JSON 和上面那些互相跳轉的設定就對不到它。
-# 檔案裡的 $ 要寫成 $$：Grafana 讀這個檔時會把 $XXX 當環境變數展開，$$ 才是字面上的 $。
+# 三個資料源互相連著：Mimir 圖上的 exemplar、Loki 的 log 都點得進 Tempo 的 trace，
+# trace 又點得回那個請求的 log 和當時的指標。
+# uid 都釘死：dashboard JSON 和這些跳轉設定用 uid 找資料源，不釘的話 Grafana 隨機產一個就對不上。
+# 這個檔裡的 $ 要寫成 $$：Grafana 讀檔時會把 $XXX 當環境變數展開。
 
 apiVersion: 1
 
-# 下面的 Prometheus 是換成 Mimir 之前存指標的資料源。provisioning 只會新增/更新，不會自動刪掉檔案裡消失的資料源，
-# 所以明寫要刪；不然 grafana-data volume 裡會一直留著一個連不上的 Prometheus。
+# 換成 Mimir 之前的資料源。provisioning 不會刪掉檔案裡消失的資料源，
+# 不明寫的話，起過的 Grafana 會一直留著一個連不上的 Prometheus
 deleteDatasources:
   - name: Prometheus
     orgId: 1
 
 datasources:
-  # 指標：指到 mimir 容器。type 仍然是 prometheus —— Mimir 講的就是 Prometheus 的查詢 API（PromQL），
-  # 對 Grafana 來說它就是「一台很大的 Prometheus」，所以儀表板的查詢一個字都不用改。
-  # 用服務名 "mimir" 是因為同一個 compose 網路裡，容器之間可直接用服務名互相找到（Docker 內建 DNS）。
+  # type 是 prometheus：Mimir 提供的就是 Prometheus 的查詢 API
   - name: Mimir
     type: prometheus
     uid: mimir
-    access: proxy               # 由 Grafana 後端去打 Mimir，不是叫你的瀏覽器去打
-    url: http://mimir:9009/prometheus   # Mimir 把 Prometheus 相容的 API 放在 /prometheus 底下
-    isDefault: true             # 沒特別指定時就用這個資料源
+    access: proxy               # 由 Grafana 後端連，瀏覽器連不到 compose 網路裡的 mimir
+    url: http://mimir:9009/prometheus   # Mimir 的 Prometheus 相容 API 在 /prometheus 底下
+    isDefault: true
     jsonData:
-      prometheusType: Mimir     # 讓 Grafana 知道對面是 Mimir，開放它多支援的功能
-      # exemplar：指標點上附帶的 trace id。Micrometer 把它放在 trace_id 這個標籤，
-      # 點了就用那個值去 Tempo 查。
+      prometheusType: Mimir
+      # Micrometer 把 exemplar 的 trace id 放在 trace_id 這個標籤
       exemplarTraceIdDestinations:
         - name: trace_id
           datasourceUid: tempo
 
-  # 日誌：指到 loki 容器。
   - name: Loki
     type: loki
     uid: loki
     access: proxy
     url: http://loki:3100
     jsonData:
-      # derived field：從 log 內容裡認出 trace id，做成一顆「到 Tempo 看」的按鈕。
-      # trace id 不放成 Loki 的標籤（每個請求都不同，會讓索引爆掉），所以只能從內容抓。
-      # app 的 log 是 ECS JSON（docker profile 開的，見 application-docker.properties），
-      # Micrometer Tracing 把 trace id 放進 MDC 的 traceId，Spring Boot 原樣印成 "traceId" 這個欄位。
+      # trace id 不是 Loki 的標籤（理由見 ops/alloy/config.alloy 的 discovery.relabel "deploy"），只能從內容抓。
+      # app 的 log 是 ECS JSON（application-docker.properties），Micrometer Tracing 放進 MDC 的 traceId 印成 "traceId" 欄位；
+      # 改了 log 格式，這兩個 regex 要一起改
       derivedFields:
         - name: TraceID
           matcherRegex: '"traceId":"(\w+)"'
           datasourceUid: tempo
           url: '$${__value.raw}'
           urlDisplayLabel: 到 Tempo 看這個請求
-        # 同一個 trace id 再做一顆按鈕，打開「單一請求」dashboard：trace、log、當時的指標放在同一個畫面。
-        # 沒有 datasourceUid 就是一般網址；時間範圍沿用目前畫面的
+        # 第二顆按鈕開「單一請求」dashboard。沒有 datasourceUid 就是一般網址
         - name: TraceID
           matcherRegex: '"traceId":"(\w+)"'
           url: '/d/talkcal-request/?var-traceId=$${__value.raw}&$${__url_time_range}'
           urlDisplayLabel: 用「單一請求」dashboard 看
 
-  # 追蹤：指到 tempo 容器的查詢埠。
   - name: Tempo
     type: tempo
     uid: tempo
     access: proxy
     url: http://tempo:3200
     jsonData:
-      # trace → log：在 trace 上點一下，就去 Loki 找「內容含這個 trace id」的 log。
-      # 用自訂查詢而不是 Grafana 預設的「拿 span 的屬性對 Loki 標籤」：
-      # trace 上的服務叫 talkcal（spring.application.name），Loki 標籤上叫 app（compose 服務名），兩邊對不起來；
-      # trace id 兩邊都有，用它最準。前後各多抓一分鐘，避免時鐘或延遲讓 log 落在 span 的時間範圍外。
+      # 用自訂查詢找內容含 trace id 的 log。Grafana 預設拿 span 的屬性對 Loki 標籤，但 trace 上的服務叫 talkcal
+      # （spring.application.name），Loki 的 service 標籤是 compose 服務名 app，對不起來。
+      # 前後各多一分鐘：log 的時間可能因為時鐘、送出延遲落在 span 外面
       tracesToLogsV2:
         datasourceUid: loki
         spanStartTimeShift: -1m
         spanEndTimeShift: 1m
         customQuery: true
         query: '{service="app"} |= "$${__trace.traceId}"'
-      # trace → 指標：看到一個慢的 span，一鍵看「那時候整個系統是什麼狀態」——
-      # 是只有這個請求慢，還是當時大家都慢、連線池都在排隊。時間範圍是 span 前後各 5 分鐘。
-      # 只對 talkcal 的 span 有意義：這些查詢都是 app 吐的指標（job="talkcal-app"），不帶 span 的標籤去過濾，
-      # 因為 trace 上的服務叫 talkcal、指標上的 job 叫 talkcal-app，對不起來
+      # 看一個慢 span 時，當時整個 app 是不是也慢。前三個查詢寫死 job="talkcal-app"、不帶 span 的標籤：
+      # trace 上的服務叫 talkcal，指標的 job 叫 talkcal-app，對不起來。所以只對 talkcal 的 span 有意義
       tracesToMetrics:
         datasourceUid: mimir
         spanStartTimeShift: -5m
         spanEndTimeShift: 5m
-        # span 的 service.name 換成 span metrics 上的 service 標籤，下面查詢裡的 $$__tags 會展開成 service="talkcal"
+        # span metrics 的標籤叫 service，不是 service.name；下面的 $$__tags 會展開成 service="talkcal"
         tags:
           - key: service.name
             value: service
@@ -98,10 +79,10 @@ datasources:
             query: 'sum(rate(http_server_requests_seconds_count{job="talkcal-app", status=~"5.."}[1m])) / sum(rate(http_server_requests_seconds_count{job="talkcal-app"}[1m]))'
           - name: 連線池：使用中 / 排隊等連線
             query: 'sum by (__name__) ({__name__=~"hikaricp_connections_(active|pending)", job="talkcal-app"})'
-          # 這個 span 自己這一種（同服務、同名稱）的延遲：span metrics 由 Tempo 的 metrics-generator 算（tempo.yaml）
+          # span metrics 是 Tempo 的 metrics-generator 算的（tempo/tempo.yaml）
           - name: 同一種 span 的延遲 p95
             query: 'histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_latency_bucket{$$__tags, span_name="$${__span.name}"}[1m])))'
-      # service map：用 metrics-generator 寫進 Mimir 的 traces_service_graph_* 畫服務之間的關係圖
+      # service map 讀 metrics-generator 寫進 Mimir 的 traces_service_graph_*
       serviceMap:
         datasourceUid: mimir
       nodeGraph:

@@ -1,151 +1,114 @@
-# 這個 stack 只做一件事：把「觀測環境」用 Docker 一次拉起來，跟被觀測的服務（deploy/ 那組）分開管。
-# 被觀測的 app、兩顆模型都在 deploy/ 的容器裡，這裡的容器只負責「收資料 + 存 + 畫圖」。
-#
-# 啟動順序：先 `cd deploy && docker compose up -d`，再起這組。
-# Alloy 要加入 deploy/ 的網路，那個網路由 deploy/ 建立，不存在時這組會起不來。
-#
-# 五個角色，各司其職（詳見 README）：
-#   alloy   —— 收集。三種訊號都經過它：去抓指標、讀容器 log、接 app 推來的 trace，再分送給下面三個。
-#   mimir   —— 存指標(metrics)。時間序列，查詢用 PromQL。
-#   loki    —— 存日誌(logs)。一行一行的文字，只替標籤建索引。
-#   tempo   —— 存追蹤(traces)。一個請求經過每一段的耗時樹，靠 trace id 找。
-#   grafana —— 畫圖。它自己不存資料，只去跟三個資料庫要資料來畫，並在三者之間互相跳轉。
-#
-# 不寫 version: 欄位：Compose v2 不看它，寫了會跳 warning。
+# 觀測環境：Alloy 收集，Mimir、Loki、Tempo 存，Grafana 畫圖和發告警（各自做什麼見 ops/README.md）。
+# 被觀測的服務在 deploy/，那組要先起：Alloy 會接上 deploy/ 建的網路，網路不存在時這組起不來。
+# 告警寄信、heartbeat 的值在 deploy/.env，起這組要帶 --env-file ../deploy/.env。
 
-# 給這組容器一個共同名字前綴，跟別的專案的容器分開；也讓 `docker compose down` 一次收乾淨。
 name: talkcal-observability
 
 services:
-  # ── 指標資料庫 ────────────────────────────────────────────────
-  # 只存不抓：指標由 Alloy 抓完用 remote_write 推進來。為什麼不用 Prometheus 見 README 的「選型理由」。
   mimir:
-    image: grafana/mimir:3.2.3        # 釘死版本，換機器也拉到同一版
+    image: grafana/mimir:3.2.3
     container_name: talkcal-mimir
     command:
       - -config.file=/etc/mimir/mimir.yaml
     ports:
-      # 9009：寫入（/api/v1/push）和查詢（/prometheus/api/v1/...）都走這裡。
-      # 只開給本機：想直接 curl 查 PromQL 時用，例如
-      #   curl 'localhost:9009/prometheus/api/v1/query?query=up'
+      # 只為了在本機直接 curl 查 PromQL：curl 'localhost:9009/prometheus/api/v1/query?query=up'
       - "127.0.0.1:9009:9009"
     volumes:
-      # :ro = 唯讀。設定檔由版控管，不讓容器改它
       - ./mimir/mimir.yaml:/etc/mimir/mimir.yaml:ro
-      # SLO 的錄製規則（docs/slo.md）。改了 ruler 10 分鐘內會自己重讀
+      # SLO 的錄製規則，ruler 10 分鐘內會自己重讀
       - ./mimir/rules:/etc/mimir/rules:ro
-      # 具名 volume：資料存這，容器重建後資料還在
       - mimir-data:/data
-    restart: unless-stopped           # 當掉/開機自動拉回來，但你手動 down 掉就別雞婆重啟
+    restart: unless-stopped
 
-  # ── 日誌資料庫 ────────────────────────────────────────────────
   loki:
     image: grafana/loki:3.7.9
     container_name: talkcal-loki
     command: -config.file=/etc/loki/loki-config.yaml
     ports:
-      # Alloy 送、Grafana 查都在 compose 網路裡，不經過主機。發佈出來只為了在本機直接 curl 查 log。
-      # 只綁 127.0.0.1：雲端機器上（infra/envs/1-ec2）這個埠不能讓外面連到。
+      # Alloy、Grafana 都在 compose 網路裡連它，發佈出來只為了在本機 curl 查 log。
+      # 綁 127.0.0.1：雲端機器上這個埠不能讓外面連到
       - "127.0.0.1:3100:3100"
     volumes:
       - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
       - loki-data:/loki
     restart: unless-stopped
 
-  # ── 追蹤資料庫 ────────────────────────────────────────────────
   tempo:
     image: grafana/tempo:3.1.1
     container_name: talkcal-tempo
     command:
       - -config.file=/etc/tempo/tempo.yaml
-    # 不對主機開任何埠：寫入（4317）只有 Alloy 會來、查詢（3200）只有 Grafana 會來，都在 compose 網路裡。
-    # app 的 trace 一律經過 Alloy，不直接送進 Tempo。
+    # 不發佈埠：只有 Alloy 寫、Grafana 查，都在 compose 網路裡
     volumes:
       - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
       - tempo-data:/var/tempo
     restart: unless-stopped
 
-  # ── 畫圖前台 ─────────────────────────────────────────────────
   grafana:
     image: grafana/grafana:12.4.14
     container_name: talkcal-grafana
     ports:
-      # 主角。開 http://localhost:3000 就是儀表板。
-      # 只綁 127.0.0.1：下面關掉了登入、匿名就是 Admin，對外開等於把管理權送人。
-      # 雲端機器上要看，用 SSM 的 port forwarding 接回本機（見 infra/envs/1-ec2/README.md）。
+      # 一定要綁 127.0.0.1：下面關掉了登入，誰連得到誰就是 Admin。
+      # 雲端機器上用 SSM 的 port forwarding 接回本機（見 infra/envs/1-ec2/README.md）
       - "127.0.0.1:3000:3000"
     environment:
-      # 監控本身掛掉時，Watchdog 要打的外部 heartbeat 網址。Watchdog 還沒啟用，現在沒有東西讀它，
-      # 設計見 README 的「監控本身掛掉：誰來發現」。值在不進 git 的 deploy/.env，起這組要帶 --env-file ../deploy/.env；平常留空。
-      # 沒設就給 .invalid（保留的網域，永遠解析不到）：讀它的 webhook contact point 收到空字串會驗證不過、Grafana 起不來
+      # 監控本身掛掉時 Watchdog 要打的外部網址。Watchdog 還沒啟用，現在沒有東西讀它
+      # （見 ops/README.md 的「監控本身掛掉：誰來發現」），平常留空。
+      # 沒設時給 .invalid（保留的網域，永遠解析不到）：Watchdog 用的 webhook contact point 收到空字串會驗證不過，Grafana 起不來
       - HEARTBEAT_URL=${HEARTBEAT_URL:-http://heartbeat-not-configured.invalid/}
-      # 學習用、只在 localhost 跑，關掉登入省事：一開網頁就是 Admin，不必記帳密。
-      # 要練權限管理再把這三行拿掉，改用預設帳密 admin / admin 登入。
+      # 只在 localhost 用，關掉登入，一開就是 Admin。要練權限管理時拿掉這三行，用預設的 admin / admin 登入
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_AUTH_DISABLE_LOGIN_FORM=true
-      # 少一個「要不要回報使用狀況」的背景行為
       - GF_ANALYTICS_REPORTING_ENABLED=false
-      # 告警寄信。值在不進 git 的 deploy/.env（範本 deploy/.env.example），所以起這組要帶上它：
-      #   docker compose --env-file ../deploy/.env up -d
-      # 沒帶或 ALERT_SMTP_HOST 沒填：SMTP 關著，告警照樣評估、在 Grafana 上看得到，只是不寄信。
-      # :+ 是「有值才換成 true」，沒值就是空字串（Grafana 當 false）。
+      # 告警寄信的 SMTP。ALERT_SMTP_HOST 沒填時 :+ 展開成空字串，Grafana 當成 false：
+      # 告警照樣評估、在 Grafana 上看得到，只是不寄信
       - GF_SMTP_ENABLED=${ALERT_SMTP_HOST:+true}
       - GF_SMTP_HOST=${ALERT_SMTP_HOST:-}
       - GF_SMTP_USER=${ALERT_SMTP_USER:-}
       - GF_SMTP_PASSWORD=${ALERT_SMTP_PASSWORD:-}
       - GF_SMTP_FROM_ADDRESS=${ALERT_SMTP_FROM:-grafana@talkcal.invalid}
       - GF_SMTP_FROM_NAME=talkcal Grafana
-      # 收件人：給 provisioning/alerting/contact-points.yaml 用。沒填就給一個 .invalid（保留的網域，寄不到任何人），
-      # 空字串的話 email contact point 驗證不過，Grafana 會起不來
+      # 收件人，grafana/provisioning/alerting/contact-points.yaml 讀。
+      # 沒填時給 .invalid：空字串的話 email contact point 驗證不過，Grafana 起不來
       - ALERT_EMAIL_TO=${ALERT_EMAIL_TO:-alerts@talkcal.invalid}
     volumes:
-      # provisioning：讓 Grafana 一啟動就自動把 Mimir / Loki / Tempo 三個資料源接好，
-      # 不必每次開 UI 手動加。設定用版控管，環境重建也一致。
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana-data:/var/lib/grafana
     depends_on:
-      # 只保證「先啟動」順序，不保證對方已 ready；Grafana 的資料源健康檢查本來就會自己重試，夠用。
       - mimir
       - loki
       - tempo
     restart: unless-stopped
 
-  # ── 收集器 ───────────────────────────────────────────────────
-  # 三種訊號的唯一入口：抓 deploy/ 那組的指標 → Mimir、讀它們的 stdout → Loki、接 app 推來的 trace → Tempo。
-  # 管線怎麼接見 alloy/config.alloy。
   alloy:
     image: grafana/alloy:v1.21.2
     container_name: talkcal-alloy
     command:
       - run
       - /etc/alloy/config.alloy
-      # 預設只聽 127.0.0.1，容器外連不到它的除錯頁。改聽 0.0.0.0，再由下面 ports 控制只開給本機
+      # Alloy 預設只聽 127.0.0.1，容器外連不到除錯頁；聽 0.0.0.0，由 ports 限制只開給本機
       - --server.http.listen-addr=0.0.0.0:12345
-      # 記住「每個容器讀到哪」的位置檔放這裡，配上 volume：Alloy 重啟後接著讀，不會重送或漏送
+      # 位置檔（每個容器的 log 讀到哪）放在 volume 裡，Alloy 重啟後接著讀，不重送也不漏
       - --storage.path=/var/lib/alloy/data
     ports:
-      # http://localhost:12345 是 Alloy 的除錯頁：看得到管線圖、每個元件收到幾個容器、抓了哪些 target
+      # 除錯頁：管線圖、每個元件抓到哪些 target
       - "127.0.0.1:12345:12345"
-      # OTLP/HTTP 的 trace 入口。只開給本機：給在 Windows 上 bootRun 的 app 送 trace 用。
-      # 容器裡的 app 不走這裡，它在 deploy/ 的網路上直接找 alloy:4318。
+      # 給本機 bootRun 的 app 送 trace。容器裡的 app 在 deploy/ 的網路上直接連 alloy:4318
       - "127.0.0.1:4318:4318"
     volumes:
       - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
-      # 讀 Docker 的 API 才能找到容器、讀它們的 log。
-      # 注意：docker.sock 等同主機上 Docker 的完整控制權（:ro 只擋寫檔，擋不住 API 呼叫）。
-      # 本機學習可接受；雲端上不這樣做，而是每台機器跑一個 Alloy 直接讀節點上的 log 檔（k8s DaemonSet）。
+      # 收容器 log 要用 Docker API 列出容器、讀 stdout。
+      # 風險：docker.sock 等於主機 Docker 的完整控制權，:ro 只擋寫檔，擋不住 API 呼叫；Alloy 被攻破就等於主機被攻破。
+      # 單機 compose 只能這樣；上 k8s 時改成每個節點一個 Alloy（DaemonSet）直接讀節點上的 log 檔，不碰 Docker API
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - alloy-data:/var/lib/alloy/data
-      # 備份腳本寫的 .prom（最後一次成功備份的時間），Alloy 讀了變成指標，備份太久沒成功就告警（見 grafana/provisioning/alerting/respond.yaml）。
-      # 本機沒有備份排程，掛一個空的具名 volume；雲端由 infra/envs/1-ec2/compose.ops.yaml 換成 backup-to-s3.sh 寫的資料夾
+      # 備份腳本成功時寫的 .prom，備份告警用（見 alloy/config.alloy 的 prometheus.exporter.unix）。
+      # 本機沒有備份排程，是空的 volume；雲端由 infra/envs/1-ec2/compose.ops.yaml 換成 backup-to-s3.sh 寫的資料夾
       - alloy-textfile:/var/lib/alloy/textfile:ro
     networks:
-      # default：這組自己的網路，用服務名稱找 mimir、loki、tempo。
-      # talkcal-deploy：deploy/ 那組的網路。接上後就能直接用服務名稱抓 app:8090、llm-chat:8080，
-      #   不繞主機、不看 ports 發佈成幾號。
-      #   反方向也通：deploy/ 的 app 用 http://alloy:4318 把 trace 送過來。
       - default
+      # 接上 deploy/ 的網路，才能用服務名抓 app、llm-chat 的指標，deploy/ 的 app 也才能連 alloy:4318
       - talkcal-deploy
     depends_on:
       - mimir
@@ -153,30 +116,26 @@ services:
       - tempo
     restart: unless-stopped
 
-  # ── 假信箱（只在要試告警信時起）──────────────────────────────────
-  # Mailpit：一台只收不寄的 SMTP 伺服器，收到的信在網頁上看。試告警信不必動到真的信箱、也不必輸入任何密碼。
-  # profiles：平常 `docker compose up` 不會起它，雲端也不會；要試的時候：
-  #   1. deploy/.env 填 ALERT_SMTP_HOST=mailpit:1025（其他 ALERT_SMTP_* 留空）
+  # ── 假信箱 ──────────────────────────────────────────────────────
+  # 試告警信用的 SMTP，收到的信在 http://localhost:8025 看，不寄到外面。平常不起，雲端也不起：
+  #   1. deploy/.env 填 ALERT_SMTP_HOST=mailpit:1025，其他 ALERT_SMTP_* 留空
   #   2. docker compose --env-file ../deploy/.env --profile mailtest up -d
-  #   3. 開 http://localhost:8025 看信
   mailpit:
     image: axllent/mailpit:v1.32.0
     container_name: talkcal-mailpit
     profiles: ["mailtest"]
     ports:
-      # 8025 是收件匣網頁。SMTP 的 1025 不對主機開：只有同網路的 grafana 會寄進來
+      # 只發佈收件匣網頁。SMTP 的 1025 只給同網路的 grafana
       - "127.0.0.1:8025:8025"
     restart: unless-stopped
 
 networks:
   talkcal-deploy:
-    # external：這個網路不歸這組管，`docker compose down` 不會刪它。
-    # deploy/compose.yaml 沒自訂網路，Compose 預設幫它建「<專案名>_default」，專案名是 talkcal-deploy。
+    # deploy/ 建的網路，這組只接上去，down 時不刪。
+    # deploy/compose.yaml 沒自訂網路，名字是 Compose 預設的 <專案名>_default
     external: true
     name: talkcal-deploy_default
 
-# 具名 volume：資料交給 Docker 管，不落在專案資料夾裡（所以不必動 .gitignore）。
-# 要整組資料清掉重來：docker compose down -v
 volumes:
   mimir-data:
   loki-data:

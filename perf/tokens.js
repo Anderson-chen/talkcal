@@ -1,19 +1,16 @@
-// tokens —— 量「AI 助理一個請求平均燒掉多少 token」，成本分析（docs/cost.md）的輸入就從這裡來。
+// tokens：量 AI 助理一個請求平均用掉多少 token，docs/cost.md 的成本估算從這裡來。
 //
-// 不是壓力測試：1 個虛擬使用者，訊息池（lib/assistant.js 的 MESSAGES，查詢和提議都有）照順序每句說 ROUNDS 輪。
-// 一句一句來，不併發：要量的是「一個請求的份量」，併發只會讓 llama.cpp 排隊，token 數不會變。
+// 1 個 VU，訊息池的每一句照順序說 ROUNDS 輪。不併發：併發只會讓 llama.cpp 排隊，一個請求的 token 數不變。
+// token 數由 app 記：Spring AI 每叫一次模型就把 usage 加進 gen_ai_client_token_usage_total。
+// 開始前、結束後各讀一次 app 的 /actuator/prometheus，相減就是這次的用量，跟 Grafana 成本 dashboard 是同一個指標。
 //
-// token 數不是 k6 自己數的：app 每叫一次模型，Spring AI 就把回應裡的 usage 記進 gen_ai_client_token_usage_total。
-// 這支在開始前、結束後各讀一次 app 的 /actuator/prometheus，相減就是這次跑的用量 ——
-// 跟 Grafana 成本 dashboard 用的是同一個指標，兩邊的數字對得起來。
-//
-// 怎麼跑（app 要先起來；預設打本機 bootRun 的 8090）：
+// 預設打本機 bootRun 的 app（8090），要先起來：
 //   k6 run perf/tokens.js
 //   PowerShell:  $env:ROUNDS="3"; k6 run perf/tokens.js
-// 換算費用用的單價（USD / 每 1M token）可以覆蓋，預設是 Bedrock 東京 Qwen3 32B 的 Standard（來源見 docs/cost.md）：
+// 換算費用的單價（USD / 每 1M token）可以覆蓋，預設是 Bedrock 東京 Qwen3 32B 的 Standard（來源見 docs/cost.md）：
 //   $env:PRICE_IN="0.18"; $env:PRICE_OUT="0.73"; k6 run perf/tokens.js
-// 指標在 app 的 management 埠（8091），不在 API 的 8090 上：預設把 BASE_URL 結尾的 :8090 換成 :8091。
-// docker 那台 app 的 8091 故意不發佈到主機（deploy/compose.yaml），所以這支要打本機 bootRun；別的位置就覆蓋 METRICS_URL。
+// 指標在 management 埠 8091，預設把 BASE_URL 結尾的 :8090 換成 :8091。
+// docker 那台 app 的 8091 沒有發佈到主機（deploy/compose.yaml），所以要打本機 bootRun；別的位置就覆蓋 METRICS_URL。
 
 import http from 'k6/http';
 import { BASE_URL, MESSAGES, say, signIn, useSession } from './lib/assistant.js';
@@ -33,16 +30,14 @@ export const options = {
 };
 
 /**
- * 把 Prometheus 文字格式裡的 token counter、「叫了幾次模型」和「助理請求數」加總起來。
- * token 依種類（input / output）和 model_backend 分開；其他標籤（模型名稱等）加在一起。
- * 請求數跟成本 dashboard 的分母同一個條件（POST /api/calendar/assistant，不含 4xx）：
- * 用 app 實際處理完的數量，不用 k6 預定的 iterations —— k6 跑到 maxDuration（預設 10 分鐘）會停，
- * 沒跑完的那幾輪不算 check 失敗，拿預定數當分母平均就少算了。
+ * token 依種類（input / output）和 model_backend 分開加總，其他標籤加在一起。
+ * 請求數跟成本 dashboard 的分母同一個條件（POST /api/calendar/assistant，不含 4xx），用 app 實際處理完的數量：
+ * k6 跑到 maxDuration（預設 10 分鐘）會停，沒跑完的那幾輪不算 check 失敗，拿預定的 iterations 當分母平均就少算了。
  */
 function snapshot() {
   const res = http.get(METRICS_URL);
   if (res.status !== 200) {
-    // status 0 = 連不上：多半是打了 docker 的 app（management 埠沒發佈）或 bootRun 沒起來
+    // status 0 = 連不上：多半是打了 docker 的 app（management 埠沒發佈），或 bootRun 沒起來
     throw new Error(`讀不到指標 ${METRICS_URL}：${res.status || res.error}。指標在 management 埠，見這支開頭的說明`);
   }
   const totals = { calls: 0, requests: 0, tokens: {} };
@@ -68,7 +63,7 @@ function snapshot() {
 }
 
 export function setup() {
-  // 先讀指標再登入：指標讀不到時馬上停，不必先註冊、登入一輪。登入不會叫模型，不影響相減的結果
+  // 先讀指標：讀不到就馬上停。登入不叫模型，排在後面不影響相減的結果
   const before = snapshot();
   return { session: signIn(), before };
 }
@@ -85,7 +80,7 @@ export function teardown(data) {
   const calls = after.calls - data.before.calls;
   const requests = after.requests - data.before.requests;
   const backends = Object.keys(after.tokens);
-  // counter 只會往上加；變小就是 app 中途重啟、歸零了，相減出來的數字沒有意義
+  // counter 變小代表 app 中途重啟、歸零了，相減沒有意義
   if (calls < 0 || requests < 0 || backends.some((b) => delta(b, 'input') < 0 || delta(b, 'output') < 0)) {
     throw new Error('指標比開始時還小：app 跑到一半重啟過，counter 歸零了。重跑一次');
   }

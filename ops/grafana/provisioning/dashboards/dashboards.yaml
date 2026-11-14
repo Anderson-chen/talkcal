@@ -1,23 +1,15 @@
-# Grafana 的「dashboard 自動載入」：
-# 容器一啟動就把下面 path 裡的 dashboard JSON 全部讀進來，不必開 UI 手動建、手動匯入。
-# dashboard 因此也進版控、可重現：換台機器 `docker compose up` 就有同一張圖。
-#
-# path 是「容器裡」的路徑，不是你硬碟上的。compose.yaml 已經把整個
-# ./grafana/provisioning 掛到容器的 /etc/grafana/provisioning（唯讀），
-# 所以這個資料夾裡的 *.json 會出現在下面這個 path，不必再改 compose。
-#
-# 改了這裡或改了 dashboard JSON → 重啟 grafana 容器就生效：
-#   docker compose restart grafana
+# 這個資料夾的 dashboard JSON，Grafana 啟動時載入，之後每 30 秒重掃一次。
+# path 是容器裡的路徑：ops/compose.yaml 把 ./grafana/provisioning 掛到 /etc/grafana/provisioning。
 
 apiVersion: 1
 
 providers:
   - name: talkcal-dashboards
-    # false：JSON 檔拿掉，Grafana 裡的 dashboard 也跟著刪
+    # JSON 檔拿掉，Grafana 裡的 dashboard 也跟著刪
     disableDeletion: false
-    updateIntervalSeconds: 30   # 每 30 秒掃一次檔案有沒有變，改 JSON 不必每次重啟
-    allowUiUpdates: false       # UI 上不給存回：以檔案為準，要改就把試好的結果貼回 JSON
+    updateIntervalSeconds: 30
+    allowUiUpdates: false       # 以檔案為準：UI 上試好的改動要貼回 JSON，不然重新載入就被蓋掉
     options:
       path: /etc/grafana/provisioning/dashboards
-      # 讓 Grafana 依資料夾結構分組：這裡的子資料夾會變成 Grafana 裡的資料夾
+      # 子資料夾會變成 Grafana 裡的資料夾
       foldersFromFilesStructure: true

@@ -1,27 +1,11 @@
-# 監控本身掛掉：Alloy、Mimir、Loki、Tempo 停了要被發現，不能讓 dashboard 一片空白就以為沒事。
-#
-# 誰負責發現誰：
-#
-#   停掉的         | 怎麼看出來                                   | 誰通知
-#   ---------------|----------------------------------------------|-----------------------------------
-#   Loki、Tempo    | Alloy 還在抓，up{job="loki"} = 0             | Grafana（下面第 3 條）
-#   Alloy          | 指標整個不再進來：最後一個點越來越舊         | Grafana（第 1 條）
-#   Mimir          | Grafana 查詢直接失敗                         | Grafana（第 2 條，查詢錯誤算出事）
-#   Grafana 自己   | 沒有人發告警了 —— 只能靠外面的人發現        | 還沒做，設計見 ops/README.md
-#
-# Grafana 自己掛掉要靠 dead man's switch（一條永遠在響的 Watchdog 每分鐘打外部服務的網址）。
-# 設計和為什麼還沒啟用，見 ops/README.md 的「監控本身掛掉：誰來發現」。
-#
-# 寄給誰：都沒寫，走 notification policy（policies.yaml，寄 email）；severity 用同一套值
-# （critical = 什麼都看不到了、warning = 少了一種訊號）。
-#
+# 觀測環境自己停了的告警：Alloy、Mimir、Loki、Tempo 停了，dashboard 只會一片空白，看起來跟沒流量一樣。
+# 哪個元件由哪一條發現、Grafana 自己停了怎麼辦（Watchdog，還沒啟用），見 ops/README.md 的「監控本身掛掉：誰來發現」。
 # Grafana 不對這個檔做環境變數展開，annotations 裡的 $ 照寫一個。
 
 apiVersion: 1
 
-# 拿掉的東西要明寫刪除：provisioning 只會新增、更新，檔案裡沒有了不會自己刪，
-# 已經跑過的 Grafana（本機的 volume、EC2）會一直留著 Watchdog 規則和 heartbeat contact point。
-# 之後用同樣的 uid 加回 Watchdog 時，要把這兩段拿掉，不然每次啟動都會被刪掉
+# provisioning 只新增、更新，檔案裡拿掉的不會自己刪，起過的 Grafana 會一直留著 Watchdog 和 heartbeat。
+# 之後用同樣的 uid 加回 Watchdog 時，要拿掉這兩段，不然每次啟動都被刪
 deleteRules:
   - orgId: 1
     uid: meta-watchdog
@@ -46,9 +30,8 @@ groups:
             model:
               refId: A
               instant: true
-              # 不用 up < 1：Alloy 死掉時不會再寫 up，Mimir 查詢會往回找 5 分鐘、一直拿到最後那個 1，
-              # 要 5 分鐘後才變成「沒資料」。改看最後一個點離現在幾秒，Alloy 一停就開始變大。
-              # up{job="alloy"} 是 Alloy 抓自己（config.alloy 的 prometheus.exporter.self）
+              # 不能用 up < 1：Alloy 停了就不再寫 up，查詢往回找 5 分鐘，一直拿到最後那個 1。
+              # 看最後一個點離現在幾秒，Alloy 一停就開始變大
               expr: time() - max(timestamp(up{job="alloy"}))
           - refId: C
             datasourceUid: __expr__
@@ -57,13 +40,13 @@ groups:
               type: threshold
               expression: A
               conditions:
-                # 60 秒 = 連續 4 次（15 秒一次）沒進來。Alloy 重啟只要幾秒，最多漏一次，到不了 60
+                # 60 秒 = 連續 4 次沒進來。Alloy 重啟只要幾秒，到不了 60
                 - evaluator: { type: gt, params: [60] }
-        # 再等 2 分鐘：重啟卡久一點（拉新映像、WAL 重放）也不叫人；真的停了約 3～4 分鐘寄信
+        # 重啟卡久一點（拉新映像、WAL 重放）也不叫人
         for: 2m
-        # 停超過 5 分鐘後連最後的點都查不到 → 沒資料，一樣是出事
+        # 停超過 5 分鐘後連最後的點都查不到，變成沒資料，一樣是停了
         noDataState: Alerting
-        # Mimir 查不到由第 2 條負責，這裡不重複寄
+        # Mimir 查不到由下一條負責，這裡不重複寄
         execErrState: OK
         labels:
           severity: critical
@@ -86,8 +69,7 @@ groups:
             model:
               refId: A
               instant: true
-              # 不看任何資料，只看「查不查得到」：Mimir 活著一定回 1。
-              # 真正的判斷在下面 execErrState —— 查詢失敗（連不上、逾時）就算出事
+              # 只看查不查得到：Mimir 活著一定回 1，連不上、逾時由 execErrState: Alerting 算成出事
               expr: vector(1)
           - refId: C
             datasourceUid: __expr__
@@ -97,7 +79,7 @@ groups:
               expression: A
               conditions:
                 - evaluator: { type: lt, params: [1] }
-        # 2 分鐘：Mimir 重啟（WAL 重放）一兩分鐘內回來的不叫人
+        # Mimir 重啟（WAL 重放）一兩分鐘內會回來
         for: 2m
         noDataState: Alerting
         execErrState: Alerting
@@ -122,7 +104,7 @@ groups:
             model:
               refId: A
               instant: true
-              # by (job)：Loki、Tempo 各算一個，同時掛時信裡分得出是哪個
+              # by (job)：信裡分得出是 Loki 還是 Tempo
               expr: min by (job) (up{job=~"loki|tempo"})
           - refId: C
             datasourceUid: __expr__
@@ -133,11 +115,11 @@ groups:
               conditions:
                 - evaluator: { type: lt, params: [1] }
         for: 2m
-        # 沒資料 = Alloy 沒在送，那是第 1 條的事
+        # 沒資料是 Alloy 沒在送，由第一條負責
         noDataState: OK
         execErrState: OK
         labels:
-          # 少的是 log 或 trace 其中一種，指標和告警都還在，不必半夜叫醒人
+          # 只少了 log 或 trace，指標和告警都還在，不必半夜叫醒人
           severity: warning
         annotations:
           runbook_url: https://github.com/Anderson-chen/talkcal/blob/master/docs/runbooks/meta-backend-down.md

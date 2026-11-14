@@ -1,58 +1,45 @@
-# Mimir 的工作：存指標（時間序列），並提供 PromQL 查詢 API 給 Grafana。
-# 它自己不抓任何東西 —— 指標由 Alloy 抓完，用 remote_write 推進來（見 alloy/config.alloy）。
-#
-# 為什麼用 Mimir 而不是 Prometheus：見 ops/README.md 的「選型理由」。
-#
-# 這是「單機 / 學習」用的最小設定。Mimir、Loki、Tempo 是 Grafana 用同一套分散式骨架做的，
-# 所以這份設定大半在「把分散式關掉」：
-# 所有元件（distributor、ingester、querier、compactor…）跑在同一個程序裡（-target=all，預設值），
-# 資料寫本機檔案，不接 S3 那類物件儲存。正式環境會拆元件、各自擴充、接物件儲存。
+# 單機設定：所有元件跑在同一個程序（-target=all，預設值），資料寫本機的 mimir-data volume，不接物件儲存。
+# 指標由 Alloy 用 remote_write 推進來，Mimir 自己不抓。為什麼用 Mimir 不用 Prometheus，見 ops/README.md 的「選型理由」。
 
-# 關掉多租戶：開著的話每個寫入、查詢都要帶 X-Scope-OrgID 表明是哪個團隊的資料。
-# 單機自己用不需要，關掉後所有資料歸到一個叫 anonymous 的租戶。
+# 開著的話每個寫入、查詢都要帶 X-Scope-OrgID。關掉後所有資料歸在 anonymous 這個租戶，
+# rules/ 底下的資料夾名稱就是它
 multitenancy_enabled: false
 
 server:
-  http_listen_port: 9009     # 寫入（/api/v1/push）和查詢（/prometheus/api/v1/...）都走這個埠
-  log_level: warn            # 預設 info 會一直印 ring、compactor 的例行訊息，學習時只想看到出事
+  http_listen_port: 9009
+  log_level: warn            # info 會一直印 ring、compactor 的例行訊息
 
-# 資料放哪。正式環境這裡是 s3 / gcs，「保存好幾年也不怕硬碟爆」就是靠它；單機寫本機檔案。
 common:
   storage:
     backend: filesystem
     filesystem:
-      dir: /data/blocks      # 打包好的區塊（ingester 每 2 小時打包一次上傳到這）
+      dir: /data/blocks
 
 blocks_storage:
   tsdb:
-    dir: /data/tsdb          # ingester 手上「最近 2 小時、還沒打包」的資料（含 WAL，重啟不掉）
+    dir: /data/tsdb          # 還沒打包成區塊的資料和 WAL，要在 volume 裡重啟才不掉
   bucket_store:
-    sync_dir: /data/tsdb-sync  # store-gateway 從 blocks 讀舊資料時的本機快取
+    sync_dir: /data/tsdb-sync
 
 compactor:
-  data_dir: /data/compactor  # compactor 合併小區塊時的工作目錄
+  data_dir: /data/compactor
 
-# 錄製規則（recording rules）：Mimir 的 ruler 定時跑 PromQL，把結果寫回成新的時間序列。
-# 目前只有 SLO 那一份（rules/anonymous/slo.yaml，理由見 docs/slo.md）。
-# local = 從掛進來的資料夾讀、唯讀：規則進版控，不走 API 上傳（那樣的規則只存在容器的資料裡，重建就沒了）。
-# 改了規則不用重啟：ruler 每 10 分鐘（-ruler.poll-interval 的預設值）重讀一次；要馬上生效就 restart mimir。
-# 資料夾底下一層是租戶名稱：關掉多租戶時只有 anonymous 一個。
+# 錄製規則從唯讀掛進來的 ops/mimir/rules 讀，規則跟著版控走。用 API 上傳的規則只存在容器的資料裡，換機器就沒了。
+# 底下一層資料夾是租戶名稱。ruler 每 10 分鐘（-ruler.poll-interval 預設）重讀，要馬上生效就 restart mimir
 ruler_storage:
   backend: local
   local:
     directory: /etc/mimir/rules
 
 ruler:
-  rule_path: /data/ruler     # ruler 評估時的暫存檔放這（預設在工作目錄，容器裡不一定能寫）
-  # 告警不在 Mimir 這裡發：告警規則寫在 Grafana（grafana/provisioning/alerting/），通知管道也在那邊，
-  # 所以不設 alertmanager_url。Mimir 的 ruler 只做錄製。
+  rule_path: /data/ruler     # 預設在工作目錄，容器裡不一定能寫
+  # 不設 alertmanager_url：告警規則和寄信都在 Grafana（grafana/provisioning/alerting/），ruler 只做錄製
 
-# 複製份數：預設每筆資料寫進 3 個 ingester，掛一台不掉資料。單機只有一個 ingester，只能寫 1 份。
-# 想體驗「掛一台不掉資料」得真的起 3 個 Mimir，那是之後的練習。
+# 預設每筆寫進 3 個 ingester，只有一個 ingester 時要改成 1
 ingester:
   ring:
     replication_factor: 1
-    instance_addr: 127.0.0.1  # 單機：ring 裡只有自己，用 loopback 就好，不必猜容器 IP
+    instance_addr: 127.0.0.1  # ring 裡只有自己，不必去猜容器 IP
 
 store_gateway:
   sharding_ring:
@@ -62,16 +49,14 @@ distributor:
   ring:
     instance_addr: 127.0.0.1
 
-# exemplar：指標點上附帶的 trace id（例如「p99 那個慢點是哪一個請求」）。
-# Mimir 預設是 0 = 不收，要開才存得下；Grafana 圖上才會出現可以點進 Tempo 的小點。
-# 數字是「整個租戶最多同時記住幾個 exemplar」，學習環境的量很小，給一個寬鬆的上限就好。
+# exemplar（指標點上的 trace id）預設是 0，不收，Grafana 圖上就點不進 Tempo。數字是整個租戶同時記住的上限
 limits:
   max_global_exemplars_per_user: 100000
-  # 保存期限：超過 30 天的區塊由 compactor 刪掉，預設 0 是永久保留。為什麼要設見 ops/README.md。
-  # 至少要 28 天：SLO 的 error budget 是滾動 28 天（rules/anonymous/slo.yaml 的 ratio_rate28d），留得比它短就算不出來；再多留 2 天當緩衝。
-  # Mimir 也用這個值限制查詢範圍：超過 30 天的時間查不到資料，就算區塊還沒刪。
+  # 預設 0 是永久保留，本機 volume 會一直長。
+  # 至少要 28 天：SLO 的 error budget 是滾動 28 天（rules/anonymous/slo.yaml 的 ratio_rate28d），短了就算不出來；多 2 天當緩衝。
+  # 查詢範圍也受這個值限制，超過 30 天的時間就算區塊還沒刪也查不到
   compactor_blocks_retention_period: 30d
 
-# Mimir 本身也會回報用量給 Grafana Labs。學習環境不往外送任何東西，關掉
+# 不把用量回報給 Grafana Labs
 usage_stats:
   enabled: false
