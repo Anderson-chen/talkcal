@@ -26,8 +26,8 @@ class ArchitectureTest {
     // 根 package 只有 Application，底下第一層是 app 和各業務模組
     static final String ROOT = "io.github.andersonchen.talkcal";
 
-    // 組裝根：app 裡只有 config（@Configuration）和 job（排程，直接維護某張表）可以認識 adapter 的具體類別、
-    // 同時認識好幾個模組。app.observability 不算：它是全站共用的觀測，不准認識任何一門業務
+    // 組裝根：app 裡只有 config（@Configuration）和 job（排程，直接維護某張表）可以 import adapter 的具體類別、
+    // 同時 import 好幾個模組。app.observability 不算組裝根：全站共用的觀測不准 import 任何一門業務
     static final String CONFIG = ROOT + ".app.config..";
     static final String JOB = ROOT + ".app.job..";
 
@@ -55,7 +55,7 @@ class ArchitectureTest {
 
     /**
      * 不點名 adapter.out 底下的子樹（persistence、extraction…）：一個子樹寫一條的話，
-     * 新加的子樹（例如 auth 的 security）忘了補規則就沒人守。
+     * 新加的子樹（例如 auth 的 security）忘了補規則就不受檢查。
      * adapter.out 裡的類別互相依賴不歸這條管，見 outboundAdapterSubtreesMustNotDependOnEachOther。
      */
     @ArchTest
@@ -78,8 +78,8 @@ class ArchitectureTest {
 
     /**
      * 例如 persistence.postgres、security.spring：第二家供應商來的時候放隔壁，不用先搬第一家。
-     * 直接放在 adapter.out 底下的類別不屬於任何子樹，outboundAdapterSubtreesMustNotDependOnEachOther 切不到它，
-     * 每個子樹都能 import 它，這條把它擋下來。
+     * 直接放在 adapter.out 底下的類別不屬於任何子樹，outboundAdapterSubtreesMustNotDependOnEachOther 切不到，
+     * 每個子樹都能 import，這條規則不准類別放在那裡。
      */
     @ArchTest
     static final ArchRule outboundAdaptersSitUnderAVendorPackage =

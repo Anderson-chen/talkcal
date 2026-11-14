@@ -10,7 +10,7 @@ plugins {
     id 'application'
     id 'org.springframework.boot' version '4.1.1'
     id 'net.ltgt.errorprone' version '5.1.1'
-    // 會打包進 jar 的依賴不能是 GPL、AGPL 這類授權，設定在檔案最後
+    // 檢查打包進 jar 的依賴沒有 GPL、AGPL 這類授權，設定在檔案最後
     id 'com.github.jk1.dependency-license-report' version '3.1.4'
 }
 
@@ -27,7 +27,7 @@ java {
 }
 
 dependencies {
-    // 用 Gradle 自己的 platform() 吃 BOM，不掛 io.spring.dependency-management 外掛：那個外掛在 Gradle 9 上會用到已移除的 API。
+    // 用 Gradle 內建的 platform() 匯入 BOM，不用 io.spring.dependency-management 外掛：那個外掛在 Gradle 9 上會呼叫已移除的 API。
     // BOM 座標從 Boot 外掛取，升 Boot 只改 plugins 那一行
     implementation platform(SpringBootPlugin.BOM_COORDINATES)
 
@@ -54,7 +54,7 @@ dependencies {
     implementation 'org.springframework.ai:spring-ai-starter-model-openai'
 
     // 斷路器、bulkhead 的規則寫在 application.properties 的 resilience4j.*，starter 照設定建 registry、接上 Micrometer 指標。
-    // 不用 Spring Cloud Circuit Breaker：它是同一個 Resilience4j 外面再包一層抽象，還多一套 release train 要追。
+    // 不用 Spring Cloud Circuit Breaker：那是在 Resilience4j 外面再包一層抽象，還多一套 release train 要追。
     // 不用 resilience4j-bom：2.4.0 的 BOM 沒有 spring-boot4 模組，所以版號在這裡寫一次
     def resilience4j = '2.4.0'
     implementation "io.github.resilience4j:resilience4j-spring-boot4:${resilience4j}"
@@ -70,7 +70,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
     runtimeOnly 'org.postgresql:postgresql'
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
-    // Flyway 對 PostgreSQL 的支援是獨立模組，少了它 Flyway 不認得這個資料庫
+    // Flyway 對 PostgreSQL 的支援是獨立模組，少了這個模組 Flyway 無法連 PostgreSQL
     runtimeOnly 'org.flywaydb:flyway-database-postgresql'
 
     // 歸檔放 S3 相容的物件儲存（雲端 S3、本機 RustFS），兩邊只差 endpoint。
@@ -81,19 +81,19 @@ dependencies {
     }
 
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    // 提供 /actuator/prometheus 給 ops/ 的 Alloy 來抓。程式碼不 import 它，所以 runtimeOnly
+    // 提供 /actuator/prometheus 給 ops/ 的 Alloy 抓取。程式碼沒有 import，所以 runtimeOnly
     runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 
     // trace 用 OTLP 推給 ops/ 的 Alloy，三塊各管一段：
     //   spring-boot-micrometer-tracing-opentelemetry：Boot 的自動設定，建 tracer、讀 management.* 屬性
     //   micrometer-tracing-bridge-otel：把 Micrometer 的 Observation 翻成 OpenTelemetry 的 span，程式碼只認 Micrometer
     //   opentelemetry-exporter-otlp：把 span 用 OTLP 送出去
-    // 不用 spring-boot-starter-opentelemetry：它還會帶 micrometer-registry-otlp，讓 app 另外推一份指標，
+    // 不用 spring-boot-starter-opentelemetry：那個 starter 還會帶進 micrometer-registry-otlp，讓 app 另外推一份指標，
     // 跟 Alloy 抓的那份重複
     implementation 'org.springframework.boot:spring-boot-micrometer-tracing-opentelemetry'
     runtimeOnly 'io.micrometer:micrometer-tracing-bridge-otel'
     runtimeOnly 'io.opentelemetry:opentelemetry-exporter-otlp'
-    // 每條 SQL 一個 span：HTTP 請求和叫模型 Spring 都會開 Observation，JDBC 不會，少了它 trace 上分不出時間花在模型還是資料庫。
+    // 每條 SQL 一個 span：Spring 會替 HTTP 請求和呼叫模型開 Observation，JDBC 不會，少了這個 trace 上分不出時間花在模型還是資料庫。
     // 不在 Boot 的 BOM 裡，版號自己寫；2.x 對應 Boot 4
     runtimeOnly 'net.ttddyy.observation:datasource-micrometer-spring-boot:2.3.0'
     // 改用 OpenTelemetry 的資料庫屬性名稱（db.system.name 等）。Tempo 的 service map 靠 db.system.name 畫出 postgresql 節點
@@ -106,7 +106,7 @@ dependencies {
 
     // 版本由 Boot 的 BOM 管（JUnit 6）。不另外釘 junit-bom：兩份 BOM 時 Gradle 挑高的，寫低的版號看起來有效、其實沒作用
     testImplementation 'org.junit.jupiter:junit-jupiter'
-    // 沒有它 Gradle 找不到測試引擎
+    // 少了這個 Gradle 找不到測試引擎
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
     testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
@@ -117,10 +117,10 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     // MockMvc 的 with(user(...))、with(csrf())，Boot 4 一樣拆成自己的 test starter
     testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
-    // 測試裡照樣產生 trace id、但不往外送：沒有它，起整個容器的測試會一直試著送 span 到 localhost:4318
+    // 測試裡照樣產生 trace id、但不往外送：少了這個，啟動整個 Spring 的測試會一直嘗試送 span 到 localhost:4318
     testImplementation 'org.springframework.boot:spring-boot-micrometer-tracing-test'
 
-    // net.ltgt.errorprone 外掛把它接到每個 JavaCompile 上（main、test、integrationTest、eval）。選型理由見 ci/README.md 的「lint」
+    // net.ltgt.errorprone 外掛把 Error Prone 加到每個 JavaCompile 上（main、test、integrationTest、eval）。選型理由見 ci/README.md 的「lint」
     errorprone 'com.google.errorprone:error_prone_core:2.50.0'
 }
 
@@ -172,8 +172,8 @@ tasks.named('test') {
     }
 }
 
-// 要起容器或真模型的測試放在自己的 source set，不用 @Tag 過濾：./gradlew test 只跑單元測試，幾秒就跑完。
-// IntelliJ 照 source set 決定按 ▶ 時跑 :test 還是 :integrationTest，不必另外設定
+// 要啟動容器或連真模型的測試放在自己的 source set，不用 @Tag 過濾：./gradlew test 只執行單元測試，幾秒就結束。
+// IntelliJ 照 source set 決定按 ▶ 時執行 :test 還是 :integrationTest，不必另外設定
 testing {
     suites {
         integrationTest(JvmTestSuite) {
@@ -186,10 +186,10 @@ testing {
             }
             targets.configureEach {
                 testTask.configure {
-                    // 兩個都跑時先跑快的，單元測試壞了不必等整合測試跑完才知道
+                    // 兩個都執行時先執行快的，單元測試失敗時不必等整合測試結束才知道
                     shouldRunAfter tasks.named('test')
                     // Gradle 不會把自己的系統屬性傳進測試 JVM，llama-server 在哪要從環境變數接過去。
-                    // ci/run.sh 在容器裡跑測試，127.0.0.1 是容器自己，靠這個指到主機上的模型
+                    // ci/run.sh 在容器裡執行測試，127.0.0.1 是容器自己，靠這個指到主機上的模型
                     def llmBaseUrl = providers.environmentVariable('SPRING_AI_OPENAI_CHAT_BASEURL')
                     if (llmBaseUrl.isPresent()) {
                         systemProperty 'spring.ai.openai.chat.base-url', llmBaseUrl.get()
@@ -203,8 +203,8 @@ testing {
     }
 }
 
-// AI 品質回歸：固定題目跑真模型、計分、跟基準線比。跑一次好幾分鐘，所以不放在 integrationTest 裡，免得拖慢 pre-push。
-// 改 prompt、換模型時手動跑 ./gradlew eval，報告在 build/eval/report.md
+// AI 品質回歸：固定題目交給真模型回答、計分、跟基準線比。執行一次要好幾分鐘，所以不放在 integrationTest 裡，免得拖慢 pre-push。
+// 改 prompt、換模型時手動執行 ./gradlew eval，報告在 build/eval/report.md
 testing {
     suites {
         eval(JvmTestSuite) {
@@ -253,7 +253,7 @@ jacoco {
 
 tasks.named('jacocoTestReport', JacocoReport) {
     // 傳 task，不寫死 exec 檔的路徑：Gradle 照 task 的設定找檔案，加上的是 mustRunAfter 不是 dependsOn，
-    // 所以只跑 ./gradlew test jacocoTestReport 時不會被迫起整合測試的容器
+    // 所以只執行 ./gradlew test jacocoTestReport 時不會連帶啟動整合測試的容器
     executionData tasks.named('integrationTest').get()
     reports {
         // 給 ci/checks.sh 加總：CSV 一個類別一列，比拆 XML 好處理
@@ -262,7 +262,7 @@ tasks.named('jacocoTestReport', JacocoReport) {
 }
 
 tasks.named('check') {
-    // ./gradlew build 不跑整合測試和 eval，但要編得過：不然改了方法簽名，只有它們用到的地方壞了也沒人發現
+    // ./gradlew build 不執行整合測試和 eval，但要編譯得過：不然改了方法簽名，只有這兩組測試用到的地方壞了也沒人發現
     dependsOn tasks.named('integrationTestClasses')
     dependsOn tasks.named('evalClasses')
 }
@@ -274,7 +274,7 @@ application {
 // 部署步驟只寫在 cd/apply.sh（見 cd/README.md），下面幾個 task 是本機的捷徑。
 //
 // Windows 上不能直接寫 'bash'：PATH 裡第一個 bash 是 C:\Windows\System32\bash.exe，那是 WSL，
-// WSL 裡沒有能跑這些 script 的 distro 就會失敗。所以問 git 自己裝在哪：
+// WSL 裡沒有能執行這些 script 的 distro 就會失敗。所以問 git 自己裝在哪：
 // --exec-path 是 <Git>/mingw64/libexec/git-core，往上三層是安裝目錄。
 // 找不到時：./gradlew deploy -PbashPath=<bash.exe 的路徑>
 def bashPath = providers.gradleProperty('bashPath').orElse(providers.provider {
@@ -296,17 +296,17 @@ def registerDeploy = { String name, String service, String desc ->
     }
 }
 
-// Dockerfile 只打包、不跑測試，手動部署前的測試掛在這裡。趕時間可以 ./gradlew deployApp -x test
+// Dockerfile 只打包、不執行測試，手動部署前的測試放在這裡。趕時間可以 ./gradlew deployApp -x test
 registerDeploy('deployApp', 'app', '跑測試、build app 映像檔、換掉 deploy/ 的 app 容器，等它 healthy')
 tasks.named('deployApp') { dependsOn tasks.named('test') }
 
-// 不用 dependsOn 型別檢查：web/Dockerfile 的 pnpm run build 會跑，型別錯了映像檔就 build 不出來
+// 不用 dependsOn 型別檢查：web/Dockerfile 的 pnpm run build 會檢查，型別錯了映像檔就 build 不出來
 registerDeploy('deployWeb', 'web', 'build 前端映像檔（含型別檢查）、換掉 deploy/ 的 web 容器，等它 healthy')
 
 // 升級 llama.cpp、調 compose 裡的模型參數之後用。不放進 deploy：映像檔重 build 約十分鐘，換的期間所有請求都會失敗
 registerDeploy('deployModels', 'llm-chat', '重 build llama-server 映像檔、換掉 deploy/ 的模型容器，等它載好模型（healthy）')
 
-// 用 mustRunAfter 排順序，不用 dependsOn：單獨跑 deployWeb 時才不會連 app 一起部署
+// 用 mustRunAfter 排順序，不用 dependsOn：單獨執行 deployWeb 時才不會連 app 一起部署
 tasks.register('deploy') {
     group = 'deployment'
     description = '依序部署 app 和前端'
@@ -318,7 +318,7 @@ tasks.named('deployWeb') { mustRunAfter 'deployApp' }
 // ./gradlew checkLicense 檢查；./gradlew generateLicenseReport 只產清單（build/reports/dependency-license/index.html）
 
 // 只認套件宣告的授權（POM、jar 的 manifest），不認 jar 裡附帶的授權檔。外掛預設兩種都算，
-// 而一個套件有好幾個授權時只要一個在允許清單就過：itextpdf 是 AGPL，但 jar 裡附了一份給內嵌元件用的 Apache 授權檔，預設設定會放它過
+// 而一個套件有好幾個授權時只要一個在允許清單就過：itextpdf 是 AGPL，但 jar 裡附了一份給內嵌元件用的 Apache 授權檔，預設設定會讓 itextpdf 通過
 class DeclaredLicensesOnly implements DependencyFilter {
     ProjectData filter(ProjectData data) {
         data.allDependencies.each { it.licenseFiles.clear() }
@@ -337,7 +337,7 @@ licenseReport {
     renderers = [new InventoryHtmlReportRenderer('index.html', 'talkcal 後端依賴的授權')]
 }
 
-// 外掛的 up-to-date 判斷不可靠：加了 GPL 的依賴、報告也重產了，checkLicense 還是 UP-TO-DATE、沿用上次的「通過」。每次重跑只要幾秒
+// 外掛的 up-to-date 判斷不可靠：加了 GPL 的依賴、報告也重產了，checkLicense 還是 UP-TO-DATE、沿用上次的「通過」。每次重新執行只要幾秒
 ['generateLicenseReport', 'checkLicense'].each { name ->
     tasks.named(name) { outputs.upToDateWhen { false } }
 }

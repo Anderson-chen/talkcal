@@ -57,13 +57,13 @@ class CalendarAssistantTest {
     private final ChatMemory window = MessageWindowChatMemory.builder().chatMemoryRepository(memory).maxMessages(Integer.MAX_VALUE).build();
     private final List<Prompt> prompts = new ArrayList<>();
     private final List<String> parsed = new ArrayList<>();
-    // 記下記憶、行事曆是用誰的身分拿的
+    // 記下讀記憶、查行事曆時用的是哪個擁有者
     private final List<OwnerId> memoryOwners = new ArrayList<>();
     private final List<OwnerId> listOwners = new ArrayList<>();
     // plan_events 背後排出來的時段；預設沒有，要測的那題自己放
     private List<FreeSlot> plannedSlots = List.of();
     private final List<OwnerId> planOwners = new ArrayList<>();
-    // 行事曆上已經有的一筆，修改、刪除的工具拿它的編號
+    // 行事曆上已經有的一筆，修改、刪除的工具用這一筆的編號
     private static final ScheduledEvent SAVED = ScheduledEvent.schedule(new CalendarEvent("開會", LocalDateTime.of(2026, 10, 7, 19, 0), LocalDateTime.of(2026, 10, 7, 20, 0)));
 
     /** 照劇本回話：每呼叫一次拿下一句；劇本用完就一直回最後一句。 */
@@ -131,7 +131,7 @@ class CalendarAssistantTest {
     @Test
     @DisplayName("模型沿用設定檔的預設：Spring AI 2.0 不會替請求自帶的選項補上預設，沒帶就變成 gpt-5-mini")
     void keepsDefaultModel() {
-        // 本機的 llama-server 不看模型名稱，送錯也照樣回；雲端（Bedrock）會因為名稱不對而失敗，所以要在這裡守著
+        // 本機的 llama-server 不看模型名稱，送錯也照樣回；雲端（Bedrock）會因為名稱不對而失敗，所以要在這裡檢查
         ChatModel script = scripted(says("好的"));
         ChatModel withDefaults = new ChatModel() {
             @Override
@@ -203,7 +203,7 @@ class CalendarAssistantTest {
     @Test
     @DisplayName("#50 同一段對話同時送兩句：先送的還在跑模型、後送的就存好了，兩句和兩個回覆都留著")
     void concurrentRepliesKeepBothTurns() {
-        // 用重入代替兩條執行緒，順序固定、每次都一樣：第一句讀完歷史、正在等模型的時候，第二句從頭跑到存好，第一句才回來存。
+        // 用重入代替兩條執行緒，順序固定、每次都一樣：第一句讀完歷史、正在等模型的時候，第二句從頭執行到存好，第一句才繼續存。
         // 反例：存檔寫成把「讀到的歷史 + 這一輪」整段寫回（saveAll）的話，第一句存的時候會把第二句那一輪蓋掉，這個測試會紅
         CalendarAssistant[] self = new CalendarAssistant[1];
         ChatModel model = new ChatModel() {

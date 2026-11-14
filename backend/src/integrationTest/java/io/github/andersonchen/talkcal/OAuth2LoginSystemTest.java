@@ -25,11 +25,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 設了 Google、GitHub 的 client id 之後，app 這一側接起來的樣子。
- *
- * 測不到的部分：真的到 Google 登入、Google 轉回來帶著 code、拿 code 換 token —— 那要真的 OAuth 應用程式和真人按同意。
- * 那一段之後「對帳號」的邏輯由 ExternalUserServicesTest、JdbcAccountAdapterTest 測；這裡測的是頭尾：
- * 按鈕連過去會轉到對的地方（回呼網址、scope、state 都對），以及轉回來的東西不對時會被擋。
+ * 到 Google 登入、帶 code 轉回來、用 code 換 token 這一段要真的 OAuth 應用程式和真人按同意，測不到。
+ * 這裡測前後兩端：轉址時帶的回呼網址、scope、state，以及轉回來的參數不對時會被擋。
+ * 拿到使用者資料之後怎麼對到帳號，見 ExternalUserServicesTest、JdbcAccountAdapterTest。
  */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {

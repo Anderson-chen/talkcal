@@ -44,7 +44,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * 對話記憶存進真的 PostgreSQL、讀回來，工具呼叫和工具結果一個欄位都不能少 —— 這張表存在的理由就是這個。
+ * 工具呼叫和工具結果讀回來要一個欄位都不少：下一輪送給模型的歷史裡少了這些，模型就看不到自己查過什麼。
  */
 @Testcontainers
 @DisplayName("JdbcAssistantMemoryRepository（真的 PostgreSQL）")
@@ -56,7 +56,7 @@ class JdbcAssistantMemoryRepositoryTest {
     private static final OwnerId OWNER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000001");
     private static final OwnerId OTHER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000002");
 
-    // 測試用小一點，截舊輪的測試才不必造很多輪
+    // 比正式的小，截掉舊輪的測試才不必造很多輪
     private static final int KEEP_TURNS = 3;
 
     static JdbcAssistantMemoryRepository store;
@@ -64,7 +64,6 @@ class JdbcAssistantMemoryRepositoryTest {
     static JdbcClient jdbc;
 
     private final String id = UUID.randomUUID().toString();
-    // 大部分的測試只看一個人：OWNER 名下的對話
     private final ChatMemory memory = store.of(OWNER);
 
     @BeforeAll
@@ -127,10 +126,10 @@ class JdbcAssistantMemoryRepositoryTest {
     @DisplayName("#50 遺失更新：兩個請求讀到同一份歷史、各自存這一輪，兩輪都留著（舊的整段寫回只會剩晚存的那輪）")
     void twoRequestsReadingTheSameHistoryBothSurvive() {
         memory.add(id, List.of(new UserMessage("開頭"), new AssistantMessage("好")));
-        // 兩個請求都先讀，讀到的是同一份
+        // 兩個請求先後讀到同一份歷史
         assertEquals(memory.get(id), memory.get(id));
 
-        // 各自跑完模型，只存自己這一輪；後送的先跑完
+        // 各自只存自己這一輪，後送的先存
         memory.add(id, List.of(new UserMessage("第二句"), new AssistantMessage("收到第二句")));
         memory.add(id, List.of(new UserMessage("第一句"), new AssistantMessage("收到第一句")));
 
@@ -141,9 +140,9 @@ class JdbcAssistantMemoryRepositoryTest {
     @Test
     @DisplayName("#50 真的同時寫：多條執行緒同一瞬間往同一段對話接，一輪都不少、position 不重複、每一輪不被拆開")
     void concurrentAddsAreSerialized() throws Exception {
-        // 反例：拿掉 advisory lock，大家讀到同一個 max(position)，撞主鍵（duplicate key），這個測試是紅的
+        // 反例：拿掉 advisory lock 的話，每個交易讀到同一個 max(position)，INSERT 撞主鍵，這個測試會紅
         int writers = 8;
-        // 每次 add 都從 DriverManagerDataSource 開一條新的連線，各自的交易在資料庫那邊真的同時跑
+        // DriverManagerDataSource 每次都開新的連線，各個交易在資料庫裡才是真的同時執行
         JdbcAssistantMemoryRepository roomy = new JdbcAssistantMemoryRepository(jdbc,
                 new TransactionTemplate(new DataSourceTransactionManager(dataSource)), 100);
         ExecutorService pool = Executors.newFixedThreadPool(writers);
@@ -169,7 +168,7 @@ class JdbcAssistantMemoryRepositoryTest {
         List<Message> stored = memory.get(id);
         assertEquals(writers * 2, stored.size());
         for (int i = 0; i < stored.size(); i += 2) {
-            // 一輪的兩則緊緊相鄰：別人的那輪不會插進中間
+            // 同一輪的兩則要相鄰，別的請求那輪不能插進中間
             assertEquals("收到" + stored.get(i).getText(), stored.get(i + 1).getText());
         }
         List<Integer> positions = jdbc.sql("SELECT position FROM calendar_assistant_message WHERE conversation_id = :id")
@@ -187,7 +186,7 @@ class JdbcAssistantMemoryRepositoryTest {
 
         List<Message> kept = memory.get(id);
 
-        // 最後 3 輪：第 3 輪、工具那輪、第 4 輪
+        // 留下最後 3 輪，有工具呼叫的那輪整輪留著
         assertEquals(List.of("第 3 輪", "好", "晚上", "", "", "請確認卡片。", "第 4 輪", "好"),
                 kept.stream().map(Message::getText).toList());
         assertInstanceOf(ToolResponseMessage.class, kept.get(4));
@@ -276,7 +275,7 @@ class JdbcAssistantMemoryRepositoryTest {
         makeOld(OWNER, id, 31);
         makeOld(OWNER, resumed, 31);
         assertEquals(2, store.findInactiveSince(cutoff(), 100).size());
-        // 歸檔讀出來之後、刪之前，使用者回來接著聊（接上新的一則，最後說話的時間變成現在）
+        // 歸檔讀出來之後、刪之前，使用者又說了話，最後說話的時間變成現在
         memory.add(resumed, List.of(new AssistantMessage("又見面了")));
 
         assertTrue(store.deleteIfInactiveSince(OWNER, UUID.fromString(id), cutoff()));
@@ -299,7 +298,7 @@ class JdbcAssistantMemoryRepositoryTest {
 
         assertEquals(before.toString(), memory.get(id).toString());
         assertEquals(archived, store.findInactiveSince(cutoff(), 100).getFirst());
-        // 再還原一次：已經在了，跳過，不會多出一份
+        // 再還原一次：已經在資料庫裡的跳過，不會多一份
         assertFalse(store.restore(archived));
         assertEquals(4, memory.get(id).size());
     }
@@ -355,7 +354,7 @@ class JdbcAssistantMemoryRepositoryTest {
     @Test
     @DisplayName("#50 歸檔的刪除跟接上新一輪排隊：新一輪 commit 之後才判斷，對話變新了就不刪")
     void archiveDeleteWaitsForAppend() throws Exception {
-        // 反例：deleteIfInactiveSince 拿掉鎖，它不用等、馬上把舊的刪掉，這個測試是紅的
+        // 反例：deleteIfInactiveSince 不拿鎖的話，不用等就會把舊的刪掉，這個測試會紅
         memory.add(id, oneTurnWithTool());
         makeOld(OWNER, id, 31);
 
@@ -368,7 +367,7 @@ class JdbcAssistantMemoryRepositoryTest {
     @Test
     @DisplayName("#50 還原跟接上新一輪排隊：新的先存好，還原就跳過，不撞主鍵")
     void restoreWaitsForAppend() throws Exception {
-        // 反例：restore 拿掉鎖，它不用等、馬上把舊的插回去，這個測試是紅的
+        // 反例：restore 不拿鎖的話，不用等就會把舊的插回去，這個測試會紅
         memory.add(id, oneTurnWithTool());
         makeOld(OWNER, id, 31);
         StoredConversation archived = store.findInactiveSince(cutoff(), 100).getFirst();
@@ -380,7 +379,7 @@ class JdbcAssistantMemoryRepositoryTest {
         assertEquals(1, memory.get(id).size());
     }
 
-    /** 模擬 add 進行到一半：拿著這段對話的鎖，other 必須等到新的一列 commit 之後才跑得完。 */
+    /** 模擬 add 進行到一半、拿著這段對話的鎖：other 要等新的一列 commit 之後才會完成。 */
     private boolean whileAppending(int position, Callable<Boolean> other) throws Exception {
         ExecutorService pool = Executors.newSingleThreadExecutor();
         try {
@@ -429,7 +428,6 @@ class JdbcAssistantMemoryRepositoryTest {
     @Test
     @DisplayName("資料庫出事：三個方法都丟 IllegalStateException（502），不讓 Spring 的例外往外跑")
     void databaseFailuresAreUpstreamFailures() {
-        // 連到一個沒有資料庫的埠：每一次查詢都會失敗
         DriverManagerDataSource nowhere = new DriverManagerDataSource("jdbc:postgresql://127.0.0.1:1/none", "x", "x");
         ChatMemory broken = new JdbcAssistantMemoryRepository(JdbcClient.create(nowhere),
                 new TransactionTemplate(new DataSourceTransactionManager(nowhere)), KEEP_TURNS).of(OWNER);

@@ -11,14 +11,14 @@ FROM gradle:9.2.1-jdk25-noble AS build
 ENV GRADLE_USER_HOME=/gradle-cache
 WORKDIR /src
 
-# 先只放決定依賴的檔案、把依賴下載好：只改 src/ 的時候這一層吃快取，不必重新解析依賴。
+# 先只放決定依賴的檔案、把依賴下載好：只改 src/ 的時候這一層用快取，不必重新解析依賴。
 # cache mount 讓 Gradle 的下載快取跨 build 保留，又不會進到映像檔
 COPY settings.gradle build.gradle ./
 RUN --mount=type=cache,target=/gradle-cache \
     gradle dependencies --no-daemon -q > /dev/null
 
 COPY src/ src/
-# 只打包、不跑測試：測試在 CI 和 ./gradlew deployApp 跑過，整合測試要的模型和容器 build 環境裡也沒有
+# 只打包、不執行測試：CI 和 ./gradlew deployApp 已經執行過，整合測試要的模型和容器 build 環境裡也沒有
 RUN --mount=type=cache,target=/gradle-cache \
     gradle bootJar --no-daemon -q \
     # 另一個 talkcal-plain.jar 只有自己的 class，不能直接執行
@@ -37,8 +37,8 @@ RUN apt-get update \
 
 COPY --from=build /app.jar /app/app.jar
 
-# 版本由 compose 的 build.args 傳進來（cd/version.sh 算的），`docker inspect` 看得到正在跑的是哪個 commit。
-# 放在最後：只改了 web/、docs/ 的 commit 版本也會變，ARG 之後的每一層都要重跑，放前面的話 apt-get 那層每次都吃不到快取。
+# 版本由 compose 的 build.args 傳進來（cd/version.sh 算的），`docker inspect` 看得到執行中的是哪個 commit。
+# 放在最後：只改了 web/、docs/ 的 commit 版本也會變，ARG 之後的每一層都要重新 build，放前面的話 apt-get 那層每次都用不到快取。
 # 沒帶參數直接 docker build 時是 local / unknown
 ARG APP_VERSION=local
 ARG GIT_COMMIT=unknown
@@ -47,13 +47,13 @@ LABEL org.opencontainers.image.title="talkcal-app" \
       org.opencontainers.image.version="$APP_VERSION" \
       org.opencontainers.image.revision="$GIT_COMMIT"
 
-# 不跑 root：用映像檔內建的 ubuntu 使用者（uid 1000）
+# 不用 root 執行：用映像檔內建的 ubuntu 使用者（uid 1000）
 USER ubuntu
 WORKDIR /app
 
 # 對外發佈成哪一號由 deploy/compose.yaml 的 ports 決定
 EXPOSE 8090
 
-# JVM 預設只拿容器記憶體上限的 1/4 當 heap；容器裡只跑這一支，給到 75%，剩下留給 heap 以外的記憶體。
+# JVM 預設只拿容器記憶體上限的 1/4 當 heap；容器裡只執行這個程式，給到 75%，剩下留給 heap 以外的記憶體。
 # 用 exec 形式：java 是 PID 1，docker stop 的 SIGTERM 才會送到 JVM，Spring 才能處理完手上的請求再停
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "/app/app.jar"]

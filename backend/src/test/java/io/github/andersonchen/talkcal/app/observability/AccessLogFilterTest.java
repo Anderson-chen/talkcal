@@ -17,7 +17,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 /**
- * 不起 Spring，直接餵 Mock 的 request、response：這個 filter 只用到 Servlet API，起 MockMvc 也驗不到更多東西。
+ * 不啟動 Spring，直接傳入 Mock 的 request、response：這個 filter 只用到 Servlet API，用 MockMvc 也驗不到更多東西。
  */
 @ExtendWith(OutputCaptureExtension.class)
 @DisplayName("AccessLogFilter")
@@ -69,7 +69,7 @@ class AccessLogFilterTest {
         filter.doFilter(login, new MockHttpServletResponse(), readsBody);
 
         assertFalse(output.getOut().contains("secret-pass"), output.getOut());
-        // 請求照樣要有紀錄，誰在試登入才看得到
+        // 請求照樣要有紀錄，才看得到有人在嘗試登入
         assertTrue(output.getOut().contains("/api/auth/login"), output.getOut());
         assertTrue(output.getOut().contains("不記：可能有密碼"), output.getOut());
     }

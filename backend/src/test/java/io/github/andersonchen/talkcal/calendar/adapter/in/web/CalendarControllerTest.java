@@ -55,7 +55,7 @@ import org.springframework.web.context.WebApplicationContext;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * 起 MockMvc：CalendarController 幾乎每一行都在跟 Spring 講話（路由、JSON 綁定、狀態碼、例外翻譯），直接呼叫方法等於沒測。
+ * 用 MockMvc：CalendarController 幾乎每一行都依賴 Spring 的行為（路由、JSON 綁定、狀態碼、例外翻譯），直接呼叫方法等於沒測。
  *
  * use case 由手寫的 StubCalendar 扮演，照核心真正的規則演（期間交給 DateRange 檢查、不存在的 id 丟 EventNotFoundException）；
  * 假物件演得跟核心不一樣的話，測試描述的是不會發生的情境。

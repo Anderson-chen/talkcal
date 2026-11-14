@@ -27,12 +27,12 @@ import org.springframework.boot.test.web.server.LocalServerPort;
  * Loki 上「到 Tempo 看這個請求」的按鈕，靠 access log 帶著 traceId。AccessLogFilter 要排在 Spring 開 trace 的 filter 裡面才有，
  * 那個 filter 排在哪由 Spring 決定。排錯了不會報錯，log 只會少一個欄位，所以測最終結果，不只相信 @Order 的常數。
  *
- * 起真的 server：MockMvc 自己組 filter 鏈，驗到的不一定是 Servlet 容器裡那一條。
+ * 啟動真的 server：MockMvc 自己組 filter 鏈，驗到的不一定是 Servlet 容器裡那一條。
  * 請求沒登入也沒帶 CSRF token，在 Spring Security 就被擋下，用不到模型和資料庫。
- * 資料庫指到沒人在聽的埠、Flyway 關掉（啟動時只有它會連資料庫）；properties 要跟 ActuatorPortTest 一字不差，兩個測試才共用同一個 context。
+ * 資料庫指到沒人在聽的埠、Flyway 關掉（啟動時只有 Flyway 會連資料庫）；properties 要跟 ActuatorPortTest 一字不差，兩個測試才共用同一個 context。
  *
  * 看 log 事件的 MDC，不把輸出改成 ECS JSON 再找 traceId：ECS 的 traceId 就是從 MDC 抄的。
- * 而且改了 log 格式會留在整個測試 JVM，之後跑的 AccessLogFilterTest 會看到 JSON 而失敗。
+ * 而且改了 log 格式會留在整個測試 JVM，之後執行的 AccessLogFilterTest 會看到 JSON 而失敗。
  *
  * spring-boot-micrometer-tracing-test 在測試裡關掉匯出，trace id 照樣產生。
  */

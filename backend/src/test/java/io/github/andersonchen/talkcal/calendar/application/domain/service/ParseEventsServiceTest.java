@@ -68,7 +68,7 @@ class ParseEventsServiceTest {
 
         new ParseEventsService(port, FIXED).parseEvents("明天三點跟小明吃飯");
 
-        // 時區來自時鐘，service 自己不知道是台北
+        // 時區來自時鐘，service 裡沒有寫死台北
         assertEquals(LocalDateTime.of(2026, 10, 5, 9, 30), port.now);
     }
 

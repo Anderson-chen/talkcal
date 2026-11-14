@@ -39,7 +39,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * 對話歸檔跟行程歸檔守同一組規則（存好才刪、只拿得到自己的、不舊的不搬），反例也一題一題對到 EventArchiveFlowTest，
+ * 對話歸檔跟行程歸檔照同一組規則（存好才刪、只拿得到自己的、不舊的不搬），反例也一題一題對到 EventArchiveFlowTest，
  * 改其中一邊的規則時兩邊一起看。
  */
 @Testcontainers

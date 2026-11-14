@@ -25,10 +25,10 @@ import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
 /**
- * 起真的 server：要驗的是哪個埠回什麼，MockMvc 沒有埠。RANDOM_PORT 時 management 埠也是隨機的，
+ * 啟動真的 server：要驗的是哪個埠回什麼，MockMvc 沒有埠。RANDOM_PORT 時 management 埠也是隨機的，
  * 設定檔寫的 8091 不會跟本機開著的 bootRun 撞。
  *
- * 資料庫指到沒人在聽的埠 1，用來驗 liveness、readiness 不看資料庫。啟動時只有 Flyway 會連資料庫，所以把它關掉。
+ * 資料庫指到沒人在聽的埠 1，用來驗 liveness、readiness 不看資料庫。啟動時只有 Flyway 會連資料庫，所以關掉 Flyway。
  * properties 要跟 AccessLogTraceIdTest 一字不差，兩個測試才會共用同一個 Spring context。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -67,7 +67,7 @@ class ActuatorPortTest {
     @DisplayName("management 埠上的 /actuator/health 含資料庫：連不到就是 503 DOWN")
     void managementPortHealthIncludesDatabase() throws Exception {
         // 跟 managementPortServesProbes 對照：資料庫連不到時整體是 DOWN、liveness 還是 UP。
-        // liveness 也看資料庫的話，資料庫一掛，k8s 會把每個副本一直重啟
+        // liveness 也看資料庫的話，資料庫一停止回應，k8s 會把每個副本一直重啟
         HttpResponse<String> response = get(managementPort, "/actuator/health");
         assertEquals(503, response.statusCode(), response.body());
         assertTrue(response.body().contains("\"DOWN\""), response.body());

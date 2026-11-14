@@ -20,10 +20,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * JdbcActiveOwnersAdapter 對真的 PostgreSQL（做法見 JdbcCalendarEventAdapterTest）。
- *
- * 重點是「一個人只算一次」：同一個人在兩張表、同一張表好幾筆都有紀錄，UNION 要把他收成一個 —— 只有真的 SQL 驗得準。
- * 資料直接用 SQL 寫進去，created_at 自己給：要造出「八天前」的紀錄，走 adapter 存檔做不到。
+ * 做法見 JdbcCalendarEventAdapterTest。一個人在兩張表、同一張表都有好幾筆紀錄時只算一次，靠 SQL 的 UNION，要對真的 PostgreSQL 才驗得準。
+ * 資料用 SQL 直接寫進去：存檔時 created_at 是現在，造不出八天前的紀錄。
  */
 @Testcontainers
 @DisplayName("JdbcActiveOwnersAdapter（真的 PostgreSQL）")

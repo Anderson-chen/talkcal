@@ -24,14 +24,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 對真正的 llama-server 跑。
+ * 換了模型或改了 prompt，先執行這組測試：要驗的是 prompt、日期表、schema 合起來對這個模型有沒有效。
+ * 沒有日期表的話，模型會把「下週三」算錯，跨夜的結束時間也可能被丟掉。
  *
- * 這裡驗的不只是「HTTP 通了」，而是 prompt + 日期表 + schema 這整套對這顆模型有沒有效：
- * 沒有日期表的話，模型會把「下週三」算錯；跨夜的結束時間也可能被丟掉。這幾個斷言守的就是這兩件事。
- *
- * request 帶 temperature 0：0.7 時「下週三」偶爾會算錯。同樣輸入同樣輸出，所以日期可以斷言得很死；
- * 標題仍然不斷言確切文字 —— 換一版模型措辭就可能變，那不是這裡要守的東西。
- * 哪天換了模型或改了 prompt，先跑這個。
+ * request 帶 temperature 0（0.7 時「下週三」偶爾會算錯），同樣輸入同樣輸出，所以日期可以斷言得很精確。
+ * 標題的措辭換一版模型就可能變，不比對確切文字。
  */
 @DisplayName("SpringAiExtractEventsAdapter（真實 server）")
 class SpringAiExtractEventsAdapterTest {
@@ -64,8 +61,8 @@ class SpringAiExtractEventsAdapterTest {
     }
 
     private static List<CalendarEvent> extract(String text) {
-        // 自己建一個 ChatModel，設定跟 application.properties 的 spring.ai.openai.chat.* 一致。
-        // 不起 Spring 容器：這裡只測 adapter 跟真模型的往返，不需要資料庫和其他 bean
+        // 設定要跟 application.properties 的 spring.ai.openai.chat.* 一致，測到的才是正式的設定。
+        // 只測 adapter 和模型之間的往返，不需要資料庫，所以不啟動 Spring
         OpenAiChatModel chatModel = OpenAiChatModel.builder()
                 .options(OpenAiChatOptions.builder()
                         .baseUrl(BASE_URI.toString())
@@ -85,7 +82,7 @@ class SpringAiExtractEventsAdapterTest {
 
         assertEquals(2, events.size());
         assertEquals(LocalDateTime.of(2026, 10, 6, 15, 0), events.get(0).start());
-        // 沒講結束時間：domain 補一小時
+        // 沒講結束時間，domain 補一小時
         assertEquals(LocalDateTime.of(2026, 10, 6, 16, 0), events.get(0).end());
         assertEquals(LocalDateTime.of(2026, 10, 14, 9, 0), events.get(1).start());
         assertEquals(LocalDateTime.of(2026, 10, 14, 10, 30), events.get(1).end());

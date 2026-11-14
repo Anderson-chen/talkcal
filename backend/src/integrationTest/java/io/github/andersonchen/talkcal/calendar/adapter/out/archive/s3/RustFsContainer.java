@@ -10,15 +10,13 @@ import software.amazon.awssdk.services.s3.S3Client;
 import java.net.URI;
 
 /**
- * 歸檔的整合測試用的 S3 相容儲存：跟 deploy/compose.yaml 同一個 RustFS 映像檔。
- *
- * 為什麼不是 MinIO（Testcontainers 有現成的模組）：MinIO 已經不發社群版的映像檔，
- * Docker Hub 上的 minio/minio 拉不到了。RustFS 是 Apache-2.0、講同一套 S3 API 的替代品。
- * 跟真的 S3 一樣走 HTTP、一樣驗簽章 —— 用假的 S3 client 測不出「endpoint、path-style、checksum 設錯」這類問題。
+ * 映像檔跟 deploy/compose.yaml 用同一個。不用 Testcontainers 現成的 MinIO 模組：MinIO 不再發社群版的映像檔，
+ * Docker Hub 上的 minio/minio 已經拉不到。RustFS 是 Apache-2.0，S3 API 相同。
+ * 用真的儲存，不用假的 S3 client：走 HTTP、驗簽章，endpoint、path-style、checksum 設錯才測得出來。
  */
 public final class RustFsContainer extends GenericContainer<RustFsContainer> {
 
-    // public：系統測試（ArchiveSystemTest）要把整個 app 接到這個容器，帳密要填進 talkcal.archive.*
+    // public：其他 package 的系統測試要把帳密填進 talkcal.archive.*
     public static final String ACCESS_KEY = "archive-test";
     public static final String SECRET_KEY = "archive-test-secret";
     public static final String REGION = "us-east-1";
@@ -28,7 +26,7 @@ public final class RustFsContainer extends GenericContainer<RustFsContainer> {
         withEnv("RUSTFS_ACCESS_KEY", ACCESS_KEY);
         withEnv("RUSTFS_SECRET_KEY", SECRET_KEY);
         withExposedPorts(9000);
-        // /health/ready：儲存、權限都準備好才回 200（/health 只代表程序活著）
+        // /health 只代表 process 還在，/health/ready 要儲存和權限都準備好才回 200
         waitingFor(Wait.forHttp("/health/ready").forPort(9000));
     }
 
@@ -36,7 +34,7 @@ public final class RustFsContainer extends GenericContainer<RustFsContainer> {
         return "http://" + getHost() + ":" + getMappedPort(9000);
     }
 
-    /** 連到這個容器裡的某個 bucket（不會自動建立，要先 createBucket）。 */
+    /** bucket 不會自動建立，要先 createBucket。 */
     public ArchiveBucket bucket(String name) {
         return ArchiveBucket.connect(endpoint(), REGION, name, ACCESS_KEY, SECRET_KEY);
     }

@@ -13,8 +13,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 /**
  * 用 @SpringBootTest，不用 @WebMvcTest：springdoc 的自動設定不在 web 切片裡，切片測試看不到 /v3/api-docs。
- * 起整個容器也不用開模型和資料庫：ChatModel 建構時只記下位址，連線池等第一次查詢才連，
- * 啟動時只有 Flyway 會連資料庫，所以把它關掉。
+ * 啟動整個 Spring 也不用開模型和資料庫：ChatModel 建構時只記下位址，連線池等第一次查詢才連，
+ * 啟動時只有 Flyway 會連資料庫，所以關掉 Flyway。
  */
 @SpringBootTest(properties = "spring.flyway.enabled=false")
 @AutoConfigureMockMvc
@@ -36,7 +36,7 @@ class OpenApiDocumentationTest {
     @Test
     @DisplayName("助理列出成功、呼叫端送錯、上游出事、模型暫時不能用四種回應，成功和失敗的 body 形狀不同")
     void documentsEveryAssistantOutcome() throws Exception {
-        // 502 是這一次模型或資料庫出事，503 是模型暫時不能用、這次沒叫它。
+        // 502 是這一次模型或資料庫出錯，503 是模型暫時不能用、這次沒有呼叫模型。
         // 文件少列一個，看文件的人會以為那種情況不會發生
         String responses = "$.paths['/api/calendar/assistant'].post.responses";
         String schema = ".content['*/*'].schema['$ref']";

@@ -13,14 +13,9 @@ import java.time.Duration;
 import java.util.Optional;
 
 /**
- * 系統測試用的「瀏覽器」：照前端的方式跟後端講話。
- *
- * - 記得 cookie（session、XSRF-TOKEN），每個請求自動帶上 —— 瀏覽器本來就會這樣
- * - 送會改東西的請求（POST、DELETE）時，從 XSRF-TOKEN cookie 讀出 token、放進 X-XSRF-TOKEN header ——
- *   這是前端要自己做的那一步（Spring Security 的 csrf.spa() 規定的格式）
- * - 登入用表單格式送 username、password（Spring Security 的 formLogin 吃的是表單，不是 JSON）
- *
- * 每個 BrowserSession 是一個獨立的瀏覽器：兩個 session 就像兩個人，cookie 不互通。
+ * 照前端的方式送請求：保存 cookie；POST、PUT、DELETE 時把 XSRF-TOKEN cookie 的值放進 X-XSRF-TOKEN header
+ * （Spring Security 的 csrf.spa() 規定的格式）；登入用表單格式，formLogin 不接受 JSON。
+ * 每個 BrowserSession 是一個獨立的瀏覽器，cookie 不共用。
  */
 final class BrowserSession {
 

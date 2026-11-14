@@ -54,13 +54,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * JdbcCalendarEventAdapter 對真的 PostgreSQL。
+ * Testcontainers 啟動 PostgreSQL，Flyway 套用正式的 migration，adapter 直接 new，不啟動 Spring：
+ * 測到的是正式的表結構和 SQL，又不必等整個 app 啟動。其他 Jdbc*Test 也這樣做。
  *
- * 做法：Testcontainers 起一個 PostgreSQL，Flyway 跑完正式的 migration，adapter 自己 new、不起 Spring，
- * 測的就是正式的表結構和 SQL，又不必等整個 app 起來。
- *
- * 讀取這半邊的重點是邊界：「有重疊」的定義在 port 上寫成一句話，
- * 但它其實是 SQL 的 && 加上 tsrange 預設的 [) 邊界一起決定的 —— 只有真的 PostgreSQL 驗得準。
+ * 「有重疊」在 port 上寫成一句話，實際由 SQL 的 && 和 tsrange 預設的 [) 邊界決定，要對真的 PostgreSQL 才驗得準。
  */
 @Testcontainers
 @DisplayName("JdbcCalendarEventAdapter（真的 PostgreSQL）")
@@ -73,8 +70,8 @@ class JdbcCalendarEventAdapterTest {
     static JdbcClient jdbc;
     static TransactionTemplate transaction;
 
-    // 直接寫 SQL 的測試也帶著擁有者：不然每一筆都會先撞上 V11 的 NOT NULL，
-    // 「CHECK 擋下了」的測試就變成因為別的原因被擋、照樣綠燈
+    // 直接寫 SQL 的測試也要帶擁有者：不帶的話每一筆都先被 V11 的 NOT NULL 擋下，
+    // 測 CHECK 的題目會因為別的原因失敗，照樣綠燈
     private static final OwnerId OWNER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000001");
     private static final OwnerId OTHER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000002");
 
@@ -83,7 +80,6 @@ class JdbcCalendarEventAdapterTest {
     private static final CalendarEvent OVERNIGHT =
             new CalendarEvent("唱歌", LocalDateTime.of(2026, 10, 5, 22, 0), LocalDateTime.of(2026, 10, 6, 1, 0));
 
-    // 10/06 這一天
     private static final DateRange OCT_06 = new DateRange(LocalDate.of(2026, 10, 6), LocalDate.of(2026, 10, 7));
 
     @BeforeAll
@@ -164,7 +160,7 @@ class JdbcCalendarEventAdapterTest {
             ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);
             adapter.save(OWNER, List.of(dinner));
 
-            // 直接用字串讀，不經過 JDBC 的型別轉換：看的是資料庫裡實際存的值
+            // 用字串讀，不經過 JDBC 的型別轉換，看到的才是資料庫裡實際存的值
             String stored = jdbc.sql("SELECT to_char(start_at, 'YYYY-MM-DD HH24:MI') FROM calendar_event WHERE id = :id")
                     .param("id", dinner.id().value())
                     .query(String.class).single();
@@ -400,11 +396,10 @@ class JdbcCalendarEventAdapterTest {
         @Test
         @DisplayName("資料庫裡有 domain 不接受的資料：讀出來時被擋下，丟 IllegalStateException（502，不是 400）")
         void corruptRowBecomesUpstreamFailure() {
-            // 資料庫的 CHECK（V4）跟 domain 一樣嚴，正常的 INSERT 塞不進空白標題。
-            // 要模擬「資料庫裡有壞資料」（例如規則變嚴之前就存在的舊資料、有人手動改過），
-            // 就在一個交易裡暫時拆掉 CHECK、塞一筆、讀讀看，最後 rollback。
-            // PostgreSQL 的 DDL 也在交易裡，所以 rollback 連拆掉的 CHECK 都會裝回去，不影響其他測試。
-            // adapter 用的是同一個 DataSource，交易裡它拿到的就是這條連線，看得到那筆還沒 commit 的壞資料
+            // 資料庫的 CHECK（V4）跟 domain 一樣嚴，INSERT 寫不進空白標題。要造出資料庫裡的壞資料
+            // （例如規則變嚴之前存的、有人手動改過的），只能在交易裡暫時拿掉 CHECK、寫一筆、讀出來，最後 rollback。
+            // PostgreSQL 的 DDL 也在交易裡，rollback 會把 CHECK 加回去，不影響其他測試。
+            // adapter 用同一個 DataSource，在交易裡拿到的是同一條連線，所以讀得到還沒 commit 的那筆
             transaction.executeWithoutResult(status -> {
                 jdbc.sql("ALTER TABLE calendar_event DROP CONSTRAINT calendar_event_title_not_blank").update();
                 jdbc.sql("""
@@ -427,7 +422,7 @@ class JdbcCalendarEventAdapterTest {
     class DatabaseChecks {
 
         /**
-         * 用 btrim 檢查的話只去掉半形空格，換行、tab、全形空白都放得進來；title ~ '\S'（V4）才跟 domain 的 isBlank 一致。
+         * 用 btrim 檢查的話只去掉半形空格，換行、tab、全形空白都寫得進去；V4 的 title ~ '\S' 才跟 domain 的 isBlank 一致。
          */
         @Test
         @DisplayName("空白標題一律擋下：半形空格、換行、tab、全形空白")
@@ -512,10 +507,9 @@ class JdbcCalendarEventAdapterTest {
     @Test
     @DisplayName("讀取的 SQL 用得到 V11 的 GiST 索引（擁有者＋期間）")
     void loadQueryCanUseTheGistIndex() {
-        // 表裡只有幾筆時，規劃器會選全表掃描（那對小表確實比較快），從 EXPLAIN 看不出索引能不能用。
-        // 所以在交易裡用 SET LOCAL 暫時禁止全表掃描：如果 SQL 的運算式跟索引對不上，
-        // 規劃器就算被禁止也只能硬掃（計畫裡會出現 Seq Scan）；對得上才會換成用索引。
-        // SET LOCAL 只活到交易結束，不會影響其他測試。
+        // 表裡只有幾筆時，planner 會選全表掃描（小表確實比較快），從 EXPLAIN 看不出索引用不用得上。
+        // 所以在交易裡用 SET LOCAL 禁止全表掃描：SQL 的運算式跟索引對不上的話，計畫裡還是會出現 Seq Scan。
+        // SET LOCAL 在交易結束時失效，不影響其他測試。
         String plan = transaction.execute(status -> {
             jdbc.sql("SET LOCAL enable_seqscan = off").update();
             return String.join("\n", jdbc.sql("""
@@ -547,17 +541,16 @@ class JdbcCalendarEventAdapterTest {
     }
 
     /**
-     * 冪等寫入（表和理由見 V13）。前幾題經過 AddEventsService 打真的資料庫：測的是使用者實際遇到的「按兩次加入」，
-     * 不只是 adapter 的某個方法。
+     * 表和理由見 V13。前幾題經過 AddEventsService 寫進真的資料庫，測的是使用者按兩次加入的情況，不只是 adapter 的方法。
      *
-     * 怎麼證明這些題目真的抓得到重複：withoutKeyDuplicates 示範同樣的操作不帶鍵就是兩筆（偵測方法是對的）；
-     * 把 saveOnce 搶鍵的那句拿掉（每次都當成第一次），sameKeyTwiceSavesOnce、concurrentRetriesSaveOnce 等題會紅。
+     * withoutKeyDuplicates 是對照組：同樣的操作不帶鍵會存成兩筆，證明這裡數重複的方法有效。
+     * 把 saveOnce 搶鍵的那句拿掉（每次都當成第一次）的話，sameKeyTwiceSavesOnce、concurrentRetriesSaveOnce 等題會紅。
      */
     @Nested
     @DisplayName("#51 冪等鍵：同一個鍵只存一次")
     class Idempotency {
 
-        // 卡片和用量指標不是這裡要測的（AddEventsServiceTest 測）：給兩個什麼都不做的
+        // 卡片和用量指標在 AddEventsServiceTest 測，這裡給不做事的版本
         private final AddEventsService service = new AddEventsService(adapter, adapter, NO_PROPOSALS, NO_USAGE);
         private final IdempotencyKey key = new IdempotencyKey("3f1c8a2e-6b0d-4d7e-9a51-2c4e8f7b9d10");
         private final CalendarEvent dentist = CalendarEvent.startingAt("看牙醫", LocalDateTime.of(2026, 10, 6, 9, 0));
@@ -622,7 +615,7 @@ class JdbcCalendarEventAdapterTest {
             AddedEvents first = service.addEvents(OWNER, key, List.of(DINNER), List.of());
 
             assertThrows(IdempotencyKeyReusedException.class, () -> service.addEvents(OWNER, key, List.of(dentist), List.of()));
-            // 內容只差一點也算不同：使用者在卡片上改了結束時間，就是另一批
+            // 使用者在卡片上改了結束時間，內容只差一點也算另一批
             CalendarEvent longer = new CalendarEvent(DINNER.title(), DINNER.start(), DINNER.end().plusMinutes(30));
             assertInstanceOf(KeyUsedForOtherContent.class, adapter.saveOnce(OWNER, key, List.of(ScheduledEvent.schedule(longer))));
             assertEquals(first.events(), adapter.load(OWNER, OCT_06));
@@ -633,7 +626,7 @@ class JdbcCalendarEventAdapterTest {
         void concurrentRetriesSaveOnce() throws Exception {
             ExecutorService pool = Executors.newFixedThreadPool(2);
             try {
-                // 跑 20 輪，每輪換一個鍵：兩條執行緒等同一個起跑信號，盡量讓兩個 INSERT 撞在一起
+                // 重複 20 次，每次換一個鍵：兩條執行緒等同一個信號才開始，讓兩個 INSERT 盡量同時發生
                 for (int round = 0; round < 20; round++) {
                     IdempotencyKey roundKey = new IdempotencyKey("race-" + round);
                     CountDownLatch start = new CountDownLatch(1);
@@ -678,7 +671,7 @@ class JdbcCalendarEventAdapterTest {
         @DisplayName("一批裡有一筆存不進去：整批 rollback，鍵也沒記下 —— 用同一個鍵再送，照樣存得進去")
         void failedBatchDoesNotBurnTheKey() {
             ScheduledEvent dinner = ScheduledEvent.schedule(DINNER);
-            // 同一個 id 兩次：第二筆撞 calendar_event 的主鍵
+            // 同一個 id 兩次，第二筆違反 calendar_event 的主鍵
             assertThrows(IllegalStateException.class, () -> adapter.saveOnce(OWNER, key, List.of(dinner, dinner)));
             assertEquals(0, count());
 

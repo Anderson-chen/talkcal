@@ -39,15 +39,10 @@ import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 
 /**
- * AI 助理對真的 llama-server 跑一段一段的對話：模型會不會反問、選不選得對工具、整理出的句子解析出來對不對。
+ * 換了模型或改了 prompt，先執行這組測試。溫度 0，同一段對話每次走同一條路，所以提議的時間可以斷言得很精確；
+ * 回覆的措辭換一版模型就會變，只比對關鍵字。
  *
- * 溫度 0，同一段對話每次走同一條路，所以可以斷言得很死：
- * - 反問那一題：沒有提議、回覆裡有「晚上」；接著回「晚上」才提議 19:00
- * - 查詢、找空檔：回覆裡提到假資料裡的那幾筆
- * 回覆的措辭不斷言整句（換一版模型就會變），只看關鍵字。換了模型或改了 prompt，先跑這個。
- *
- * 除了模型，其他都是真的：抽取 adapter、ParseEvents／FindFreeSlots 的 service、DateTable、SaidTimes。
- * 行事曆資料是假的（固定兩筆），對話記憶放記憶體 —— 這裡不測資料庫。
+ * 行事曆是固定兩筆的假資料，對話記憶放在記憶體，抽取 adapter 和 service 都是正式的。
  */
 @DisplayName("CalendarAssistant（真實 server 的對話）")
 class CalendarAssistantConversationTest {
@@ -55,7 +50,7 @@ class CalendarAssistantConversationTest {
     private static final URI BASE_URI =
             URI.create(System.getProperty("spring.ai.openai.chat.base-url", "http://127.0.0.1:8080/v1"));
 
-    // 這裡只有一個人；分不分得開擁有者不是這裡測的（JdbcAssistantMemoryRepositoryTest、SystemTest）
+    // 只有一個人：不同擁有者的對話分開，在 JdbcAssistantMemoryRepositoryTest、SystemTest 測
     private static final OwnerId OWNER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000001");
 
     // 台北 2026-10-06（週二）11:30
@@ -66,11 +61,11 @@ class CalendarAssistantConversationTest {
             ScheduledEvent.schedule(new CalendarEvent("產品週會", LocalDateTime.of(2026, 10, 7, 9, 0), LocalDateTime.of(2026, 10, 7, 10, 0))),
             ScheduledEvent.schedule(new CalendarEvent("瑜珈課", LocalDateTime.of(2026, 10, 7, 18, 0), LocalDateTime.of(2026, 10, 7, 19, 0))));
 
-    // 不讓它自己截（截輪數是 CalendarAssistant 的事），它只負責往後接
+    // 截掉舊的輪數由 CalendarAssistant 處理，記憶本身不截
     private final ChatMemory memory = MessageWindowChatMemory.builder().maxMessages(Integer.MAX_VALUE).build();
     private CalendarAssistant assistant;
     private String conversation;
-    // 這段對話裡 list_events / find_free_slots 讀了幾次行事曆：用來確認模型真的去查了，不是憑記憶回答
+    // list_events、find_free_slots 讀了幾次行事曆，用來確認模型真的查了行事曆，回覆不是編的
     private final AtomicInteger calendarReads = new AtomicInteger();
 
     @BeforeAll
@@ -93,7 +88,7 @@ class CalendarAssistantConversationTest {
 
     @BeforeEach
     void newConversation() {
-        // 設定跟 application.properties 的 spring.ai.openai.chat.* 一致
+        // 設定要跟 application.properties 的 spring.ai.openai.chat.* 一致，測到的才是正式的設定
         OpenAiChatModel chatModel = OpenAiChatModel.builder()
                 .options(OpenAiChatOptions.builder()
                         .baseUrl(BASE_URI.toString())
@@ -177,7 +172,7 @@ class CalendarAssistantConversationTest {
         CalendarAssistant.Reply reply = say("明天下午有空嗎？");
 
         assertTrue(reply.proposals().isEmpty());
-        // 只看數字不看寫法：模型有時寫「12:00–18:00」、有時寫「12 點到 18 點」，兩種都對
+        // 只比對數字：模型有時寫「12:00–18:00」，有時寫「12 點到 18 點」
         assertTrue(reply.text().contains("12") && reply.text().contains("18"), reply.text());
     }
 

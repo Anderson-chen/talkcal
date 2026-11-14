@@ -25,9 +25,9 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 /**
- * 成本 dashboard 靠這些 token 指標和它們的標籤。
+ * 成本 dashboard 的查詢用到這些 token 指標和標籤。
  *
- * 起整個 Spring：token 指標是 Spring AI 的 handler 記的，標籤是 ObservationConfiguration 的 filter 貼的，
+ * 啟動整個 Spring：token 指標是 Spring AI 的 handler 記的，標籤是 ObservationConfiguration 的 filter 貼的，
  * 兩個都要被 Boot 註冊進同一個 ObservationRegistry。少註冊一個不會有錯誤訊息，指標只會少一個標籤或整個不見。
  *
  * 模型換成 JDK 內建 HttpServer 做的假 OpenAI server，回寫死的 Chat Completions JSON，
@@ -79,7 +79,7 @@ class ModelTokenUsageMetricsTest {
         assertNotNull(output, "沒有 output 的 token 指標，現有的是：" + tokenMeters());
         assertEquals(120, input.count());
         assertEquals(34, output.count());
-        // application.properties 設的模型名稱，dashboard 用它分模型
+        // application.properties 設的模型名稱，dashboard 用這個標籤分模型
         assertEquals("qwen3-8b", input.getId().getTag("gen_ai.request.model"));
     }
 

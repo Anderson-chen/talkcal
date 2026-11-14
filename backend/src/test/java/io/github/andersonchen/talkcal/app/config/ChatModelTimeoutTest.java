@@ -16,9 +16,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 
 /**
  * 為什麼逾時要 GuardedChatModel 自己補，見 GuardedChatModel.getOptions。
- * 助理和抽行程都從 GuardedChatModel 的 getOptions() 組選項，所以看它就知道兩者實際等多久。
+ * 助理和抽行程都從 GuardedChatModel 的 getOptions() 組選項，所以看 GuardedChatModel 的選項就是兩者實際等多久。
  *
- * 為什麼起整個容器卻不需要資料庫，見 OpenApiDocumentationTest。@SpringBootTest、@AutoConfigureMockMvc 要跟它一模一樣，Spring 才會重用同一個 context。
+ * 為什麼啟動整個 Spring 卻不需要資料庫，見 OpenApiDocumentationTest。@SpringBootTest、@AutoConfigureMockMvc 要跟 OpenApiDocumentationTest 一模一樣，Spring 才會重用同一個 context。
  */
 @SpringBootTest(properties = "spring.flyway.enabled=false")
 @AutoConfigureMockMvc
@@ -48,7 +48,7 @@ class ChatModelTimeoutTest {
     }
 
     /**
-     * 升級 Spring AI 後這條紅了，代表它自己會帶設定的逾時，GuardedChatModel 補逾時那段就可以拿掉。
+     * 升級 Spring AI 後這條紅了，代表 Spring AI 會自己帶設定的逾時，GuardedChatModel 補逾時那段就可以拿掉。
      */
     @Test
     @DisplayName("反例：Spring AI 自動組裝的選項，每一次呼叫是它預設的 60 秒（所以 GuardedChatModel 要補）")

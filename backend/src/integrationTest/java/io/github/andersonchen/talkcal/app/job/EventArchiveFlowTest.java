@@ -204,7 +204,7 @@ class EventArchiveFlowTest {
         ScheduledEvent trip = between("出差", LocalDateTime.of(2023, 5, 30, 9, 0), LocalDateTime.of(2023, 6, 2, 18, 0));
         events.save(ALICE, List.of(trip));
         archiving(archive).archiveEndedBefore(CUTOFF);
-        // 先確認它在六月的包、不在五月，下面查得到才證明有往後多讀一個月
+        // 先確認這一筆在六月的包、不在五月，下面查得到才證明有往後多讀一個月
         assertTrue(archive.load(ALICE, MAY_2023, MAY_2023).isEmpty());
 
         assertEquals(List.of(trip), viewing.listArchivedEvents(ALICE, LocalDate.of(2023, 5, 30), LocalDate.of(2023, 5, 31)));
@@ -259,7 +259,7 @@ class EventArchiveFlowTest {
     void eventEditedAfterLoadingIsNotDeleted() {
         ScheduledEvent old = at("三年前", LocalDateTime.of(2023, 5, 1, 9, 0));
         events.save(ALICE, List.of(old));
-        // 排程讀出來之後、刪之前，使用者把它改到下個月
+        // 排程讀出來之後、刪之前，使用者把這一筆改到下個月
         jdbc.sql("UPDATE calendar_event SET start_at = '2026-11-01 09:00', end_at = '2026-11-01 10:00' WHERE id = :id")
                 .param("id", old.id().value()).update();
 

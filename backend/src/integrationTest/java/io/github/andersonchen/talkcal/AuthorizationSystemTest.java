@@ -21,15 +21,11 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 授權接起來的樣子：兩個人各自登入，只看得到、改得到自己的行程和對話。
+ * 擁有者要從登入者一路傳到 SQL 的 WHERE。controller 沒取登入者、service 沒往下傳、SQL 少了 owner_id 條件，
+ * 哪一處漏了都會讓別人讀得到，單獨測各層都綠，只有整個 app 組在一起才測得出來。
  *
- * 真的 SecurityFilterChain、真的 session、真的 PostgreSQL —— 擁有者從登入者一路帶到 SQL 的 WHERE，
- * 中間任何一層漏了（controller 沒拿登入者、service 沒往下傳、SQL 少了 owner_id 條件），這裡都會紅燈。
- *
- * 主角是 IDOR（OWASP API1 Broken Object Level Authorization）：拿到別人的 id，換自己的 session 去讀、去刪。
- * 每一題都有反例：本人用同一個 id 照樣成功，證明擋下來的是「不是你的」，而不是「這個 id 壞了」。
- *
- * 不需要模型：對話那一題直接把訊息寫進資料庫，只測讀回來的部分。
+ * 測的是 IDOR（OWASP API1）：拿別人的 id，用自己的 session 讀、刪。
+ * 每一題都有反例：本人用同一個 id 會成功，證明被擋是因為不是自己的，id 本身沒問題。
  */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)

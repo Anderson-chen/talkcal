@@ -21,14 +21,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 
 /**
- * starter 對設定很寬容：名字打錯、key 拼錯、設定裡沒寫的依賴，都會不報錯地用 Resilience4j 內建的預設建一個。
+ * starter 對設定很寬容：名字寫錯、key 拼錯、設定裡沒寫的依賴，都會不報錯地用 Resilience4j 內建的預設建一個。
  * 斷路器照樣在，只是門檻全錯（內建是 100 次的視窗、60 秒才算慢、bulkhead 25 個），從外面看不出來。
  * 所以拿 app 實際建出來的那一組，逐項對設定檔寫的值。
  *
- * 為什麼起整個容器卻不需要資料庫，見 OpenApiDocumentationTest。
+ * 為什麼啟動整個 Spring 卻不需要資料庫，見 OpenApiDocumentationTest。
  */
 @SpringBootTest(properties = "spring.flyway.enabled=false")
-// 用不到 MockMvc：加上它，設定才跟 OpenApiDocumentationTest 一模一樣，Spring 會重用同一個 context
+// 用不到 MockMvc：加上這個 annotation，設定才跟 OpenApiDocumentationTest 一模一樣，Spring 會重用同一個 context
 @AutoConfigureMockMvc
 @DisplayName("斷路器、bulkhead 的設定")
 class ResilienceSettingsTest {
@@ -93,8 +93,8 @@ class ResilienceSettingsTest {
     }
 
     /**
-     * 斷路器狀態接進 /actuator/health 的話，模型一掛 health 就變 DOWN，Docker 的 healthcheck 判 app 不健康、
-     * 負載平衡器把它拿掉，行程的新增修改跟著不能用，正好是斷路器要防的事。starter 預設是關的，這裡守著它。
+     * 斷路器狀態接進 /actuator/health 的話，模型一停止回應 health 就變 DOWN，Docker 的 healthcheck 判 app 不健康、
+     * 負載平衡器把 app 拿掉，行程的新增修改跟著不能用，正好是斷路器要防的事。starter 預設是關的，這裡檢查設定沒有打開。
      * 不看整體的 UP／DOWN：這個測試沒有資料庫，資料庫那一項本來就是 DOWN，而且要等連線逾時。
      */
     @Test
