@@ -39,27 +39,21 @@ import java.util.function.Function;
 import java.util.regex.Pattern;
 
 /**
- * 行事曆的 AI 助理：一段對話，模型自己決定要查行程、找空檔、提議新增、修改、刪除，還是先反問使用者。
+ * 行事曆的 AI 助理：模型自己決定要查行程、找空檔、提議新增修改刪除，還是先反問使用者。
  *
  * 分工照 qwen3:8b（不 thinking）實際的表現定：
- * - 模型擅長的交給模型：判斷使用者想做什麼、時間不確定時反問、把對話整理成一句完整的話、轉述查詢結果
- * - 模型不擅長的不交給它：時間怎麼解析（propose_events 只收一句話，交給既有的抽取流程）、
- *   空檔怎麼算（FreeSlots）、「下午」是幾點到幾點（DayPeriod）、存不存檔（使用者按確認）
+ * - 交給模型：判斷使用者想做什麼、時間不確定時反問、把對話整理成一句完整的話、轉述查詢結果
+ * - 不交給模型：時間怎麼解析（propose_events 只收一句話，交給抽取流程）、空檔怎麼算（FreeSlots）、
+ *   「下午」是幾點到幾點（DayPeriod）、存不存檔（使用者按確認）
  *
- * 模型的話不全信：沒呼叫工具卻說「已顯示卡片」「已加入」時，提醒它重來一次，還是一樣就換成老實的固定回覆（見 reply）。
- *
- * agent loop 寫在這裡（reply），不交給 Spring AI 的 ChatClient + advisor：
- * 記憶裡一定要留著工具呼叫和工具結果。只留「使用者的話」和「助理最後那句」時，
- * 下一輪模型看到的是「助理說了『已顯示卡片』就完成了」，於是改時間時只說不做、畫面上沒有卡片。
- * Spring AI 的 JDBC 記憶庫會把工具訊息濾掉，MessageChatMemoryAdvisor 也只存頭尾兩則，
- * 自己跑迴圈，每一則訊息都在手上，存什麼、截到哪都看得見。
- *
- * 每一句話都屬於一個擁有者：記憶只讀寫這個人名下的對話，工具也只查得到這個人的行程。
+ * agent loop 自己寫（reply），不用 Spring AI 的 ChatClient + advisor：記憶裡一定要留著工具呼叫和工具結果。
+ * 只留使用者的話和助理最後那句的話，下一輪模型看到的是「助理說了『已顯示卡片』就完成了」，改時間時就只說不做。
+ * Spring AI 的 JDBC 記憶庫會濾掉工具訊息，MessageChatMemoryAdvisor 也只存頭尾兩則（見 ADR 0003）。
  */
 public final class CalendarAssistant {
 
-    // agent 內部做了什麼（叫了哪個工具、帶什麼參數、有沒有說謊被擋下）。access log 只看得到「HTTP 200、回了一段話」，
-    // 模型只說不做時從外面看不出來：沒有這份 log，使用者回報「說已加入卻沒有卡片」時就查不到原因
+    // 記下叫了哪個工具、帶什麼參數、有沒有說謊被擋下：access log 只看得到 200 和一段話，
+    // 使用者回報「說已加入卻沒有卡片」時，只有這份 log 查得到原因
     private static final Logger log = LoggerFactory.getLogger(CalendarAssistant.class);
 
     /**
@@ -96,7 +90,7 @@ public final class CalendarAssistant {
     // 有卡片、提醒過還是說「已修改」「已刪除」時的固定回覆：卡片是真的，只是還沒確認
     static final String CONFIRM_CARDS_FALLBACK = "已顯示卡片，請按卡片上的按鈕確認，確認之後才會修改或刪除。";
 
-    // 提醒過還是一樣：不再讓模型說話，改成老實的固定回覆。存進記憶的也是這句，不是那句假話
+    // 提醒過還是一樣，就不讓模型再說，改成這句。存進記憶的也是這句，不是那句假話
     static final String HONEST_FALLBACK = "抱歉，我剛剛沒有真的建立卡片，行事曆也沒有任何改變。"
             + "請把要新增、修改或刪除的行程再說一次（日期、時間、要做的事），我會整理成卡片讓你確認。";
 
@@ -125,7 +119,7 @@ public final class CalendarAssistant {
     // 回覆在講內部設定時，改送這句。存進記憶的也是這句
     static final String INTERNALS_FALLBACK = "我是你的行事曆助理，可以幫你查行程、找空檔、新增、修改或刪除行程。我的內部設定沒辦法提供，有什麼行程要我幫忙嗎？";
 
-    // 溫度 0：同一段對話每次走同一條路，壞了重現得出來。實測 0 之下該問的會問、工具也選得對
+    // 溫度 0：同一段對話每次走同一條路，壞了重現得出來；0 之下該問的照樣會問、工具也選得對
     private static final double TEMPERATURE = 0;
     // 一次呼叫的上限。回覆本身很短，工具呼叫的參數也不長；超過就是模型停不下來了
     private static final int MAX_TOKENS = 1024;
@@ -166,28 +160,26 @@ public final class CalendarAssistant {
     }
 
     /**
-     * 助理這一輪說的話，以及這一輪提議的新增、修改、刪除（畫面顯示成卡片，使用者確認後才存、才改、才刪）。
+     * 畫面把 proposals、changes、removals 顯示成卡片，使用者確認後才存、才改、才刪。
      * changes 的每一筆是「行事曆上現在的樣子 → 要改成的樣子」。
      */
     public record Reply(String text, List<CalendarEvent> proposals, List<CalendarTools.Change> changes,
                         List<ScheduledEvent> removals) {
 
-        /** 只有新增提議的回覆（沒有改、沒有刪）。 */
         public Reply(String text, List<CalendarEvent> proposals) {
             this(text, proposals, List.of(), List.of());
         }
     }
 
-    /** 對話裡給人看的一句：誰說的（使用者或助理）、說了什麼。 */
     public record Line(boolean fromUser, String text) {
     }
 
     /**
-     * 這段對話給人看的部分：使用者的話、助理的回覆，照順序。重新整理頁面之後，畫面靠它接回同一段對話。
+     * 給人看的部分：使用者的話、助理的回覆，照順序。重新整理頁面之後，畫面靠它接回同一段對話。
      *
-     * 記憶是給模型看的格式，裡面有工具呼叫和工具結果；這裡全部濾掉 —— 那是助理怎麼做到的，不是它說了什麼。
-     * 提議過的卡片也不回：卡片後來是加入了還是取消了，記憶裡沒有，顯示一張可能已經過時的卡片不如不顯示。
-     * 沒有這段對話（從來沒有、已經被清理排程刪掉、或是別人的）就是空的。
+     * 工具呼叫和工具結果濾掉：那是助理怎麼做到的，不是它說了什麼。
+     * 提議過的卡片也不回：記憶裡沒有卡片後來是加入了還是取消了，顯示一張可能過時的卡片不如不顯示。
+     * 沒有這段對話（從來沒有、已經歸檔、或是別人的）就是空的。
      */
     public List<Line> history(OwnerId owner, String conversationId) {
         Objects.requireNonNull(owner, "owner 不可為 null");
@@ -204,26 +196,23 @@ public final class CalendarAssistant {
     }
 
     /**
-     * 回應 owner 的一句話（agent loop）。conversationId 是這段對話的身分（UUID），同一段對話的每一句都帶同一個；
-     * 它只在 owner 名下有意義，別人名下同一個 id 是另一段對話。
+     * conversationId 只在 owner 名下有意義，別人名下同一個 id 是另一段對話。
      *
      * <pre>
      * 讀出歷史（含工具呼叫）＋ 這一句
      * 重複最多 MAX_STEPS 步：
-     *     呼叫模型（帶著工具定義；Spring AI 2.0 的 ChatModel 只會回「要呼叫哪個工具」，不會自己執行）
+     *     呼叫模型（帶著工具定義；Spring AI 2.0 的 ChatModel 只回「要呼叫哪個工具」，不會自己執行）
      *     沒要工具 → 這就是回覆，結束
      *     要工具   → ToolCallingManager 執行，「呼叫」和「結果」都接到對話後面，再問一次
      * 這一輪新增的（使用者的話、工具呼叫和結果、回覆）接到記憶的最後面
      * </pre>
      *
-     * 存的時候只接「這一輪新增的」，不把讀出來的歷史整段寫回去：
-     * 同一段對話同時送兩句，兩個請求讀到的是同一份歷史；整段寫回的話，晚存的會把早存的那一輪蓋掉。
-     * 只往後接，兩輪都留著。怎麼接、接在哪裡由記憶自己排隊（JdbcAssistantMemoryRepository）。
+     * 只接這一輪新增的，不把讀出來的歷史整段寫回去：同一段對話同時送兩句時，兩個請求讀到同一份歷史，
+     * 整段寫回的話，晚存的會把早存的那一輪蓋掉。同一段對話的寫入怎麼排隊見 JdbcAssistantMemoryRepository。
      *
-     * 失敗時（模型、資料庫出事、繞圈超過 MAX_STEPS）一律丟 IllegalStateException：
-     * 背後的例外型別五花八門，裡面還可能混著 IllegalArgumentException，不包起來會被誤認成「呼叫端送錯」。
-     * 「模型這次沒被叫」（ModelUnavailableException）本來就是 IllegalStateException，原樣丟出去，呼叫端才回得出 503；
-     * 工具裡被擋下的也一樣（見 toolCallingManager）。
+     * 失敗時（模型、資料庫出事、繞圈超過 MAX_STEPS）一律丟 IllegalStateException：背後的例外五花八門，
+     * 混著 IllegalArgumentException 的話會被誤認成呼叫端送錯。ModelUnavailableException 本來就是 IllegalStateException，
+     * 原樣丟出去，呼叫端才回得出 503；工具裡被擋下的也一樣（見 toolCallingManager）。
      */
     public Reply reply(OwnerId owner, String conversationId, String message) {
         Objects.requireNonNull(owner, "owner 不可為 null");
@@ -335,7 +324,7 @@ public final class CalendarAssistant {
         return null;
     }
 
-    /** 回覆裡有沒有網址不在使用者說過的話裡（大小寫不分）。使用者自己貼的網址，助理照著講是正常的。 */
+    /** 大小寫不分。使用者自己貼的網址，助理照著講是正常的。 */
     static boolean hasLinkUserNeverSaid(String reply, List<String> userSaid) {
         String said = String.join("\n", userSaid).toLowerCase();
         return LINK.matcher(reply).results().map(m -> m.group().toLowerCase()).anyMatch(link -> !said.contains(link));

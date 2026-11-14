@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 使用者說「幫我排兩天讀書、各兩小時」時，決定幾點到幾點。純計算，不交給模型挑，理由見 CalendarTools 的 plan_events。
+ * 使用者說「幫我排兩天讀書、各兩小時」時，決定幾點到幾點。純計算，不交給模型挑，理由見 CalendarTools.planEvents。
  *
  * 每天一段，放在當天最早放得下的空檔，開始時間進位到整點或半點。
  * 不做一天好幾段：模型會把「各排兩小時」填成每天兩段，也還沒有人要過。

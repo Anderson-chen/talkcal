@@ -28,18 +28,13 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * AI 助理能用的工具：模型決定要不要呼叫、帶什麼參數，Spring AI 把呼叫轉到這裡的方法。
+ * AI 助理的工具：模型決定要不要呼叫、帶什麼參數，Spring AI 把呼叫轉到這裡的方法。這個類別只呼叫 use case，規則都不在這裡。
  *
- * 在架構上，這個類別是 inbound adapter，呼叫端是模型。
- * 它只認得 use case（port.in），不認得資料庫、不認得抽取的實作；規則一條都不在這裡。
+ * 每個請求建一份新的，這一輪提議的新增、修改、刪除收在這裡，請求結束後交給畫面顯示成卡片。
+ * 擁有者跟著這一份，不是模型給的參數：模型再怎麼被誘導，也查不到、改不到別人的行事曆。
+ * 提議不等於動手：存檔、修改、刪除一定要使用者在畫面上按確認。
  *
- * 每個請求建一份新的：propose_events、plan_events、propose_change、propose_removal 提議的新增、修改、刪除收在這裡，
- * 請求結束後交給畫面顯示成卡片。
- * 擁有者也跟著這一份走，不是模型給的參數：查誰的行事曆由登入者決定，模型再怎麼被誘導也查不到、改不到別人的。
- * 提議不等於動手 —— 存檔、修改、刪除一定是使用者在畫面上按確認（走 POST、PUT、DELETE /events）。
- *
- * 工具回給模型的都是給人看得懂的短文字，而不是 JSON：模型接著要用一兩句話轉述給使用者，
- * 已經整理好的文字比較不會被它轉述錯。
+ * 工具回給模型的是整理好的短文字，不是 JSON：模型接著要用一兩句話轉述給使用者，整理好的文字比較不會被轉述錯。
  */
 public final class CalendarTools {
 
@@ -54,19 +49,18 @@ public final class CalendarTools {
     private final List<Change> changes = new ArrayList<>();
     private final List<ScheduledEvent> removals = new ArrayList<>();
     private boolean checkedCalendar;
-    // 這一輪排過了沒（plan_events）：模型排完會再叫一次、把日期往後挪，不擋的話同一天就排出兩張
+    // 模型排完會再呼叫一次、把日期往後挪，不擋的話同一天會排出兩張
     private boolean planned;
 
-    // 使用者講過的話裡，表示時段的寫法：早上、上午、中午、下午、晚上、傍晚、清晨、凌晨、半夜、宵夜、早餐、晚餐、晨跑……
-    // 都至少有其中一個字；或是 AM/PM；或是 13～23 點的 24 小時制（「19點」「19:00」）
+    // 使用者講過的話裡表示時段的寫法：早上、上午、中午、下午、晚上、傍晚、清晨、凌晨、半夜、宵夜、早餐、晚餐、晨跑……
+    // 都至少有其中一個字；或是 AM/PM；或是 13～23 點的 24 小時制（「19點」「19:00」）。
     // AM/PM 前後不能接英文字母：不然「Amy」「Pam」的 am 會被當成講了上午，「七點和 Amy 見面」就沒問直接提議 19:00。
     // 「7am」「7 a.m.」前面是數字或空白，照樣算
     private static final Pattern SAID_A_PERIOD =
             Pattern.compile("[早晚午晨夜凌]|(?i:(?<![a-z])(?:a\\.?m|p\\.?m)\\.?(?![a-z]))|(?<!\\d)(1[3-9]|2[0-3])\\s*[點:：]");
 
     /**
-     * @param owner    這段對話是誰的：list_events、find_free_slots 只查這個人的行程
-     * @param userSaid 這段對話裡使用者說過的所有話（包括這一句）：propose_events 要拿它核對「使用者有沒有講早上還是晚上」
+     * @param userSaid 這段對話裡使用者說過的所有話（包括這一句），用來核對使用者有沒有講早上還是晚上
      */
     public CalendarTools(OwnerId owner, ParseEventsUseCase parseEvents, ListEventsUseCase listEvents, FindEventUseCase findEvent,
                          FindFreeSlotsUseCase findFreeSlots, PlanSessionsUseCase planSessions, List<String> userSaid) {
@@ -79,39 +73,35 @@ public final class CalendarTools {
         this.userSaid = String.join("\n", Objects.requireNonNull(userSaid, "userSaid 不可為 null"));
     }
 
-    /** 這一輪對話裡提議的行程（照提議的順序），給畫面顯示成卡片。 */
     public List<CalendarEvent> proposals() {
         return List.copyOf(proposals);
     }
 
-    /** 一張修改卡片：行事曆上現在的那筆，和要改成的樣子。 */
     public record Change(ScheduledEvent before, CalendarEvent after) {
     }
 
-    /** 這一輪提議的修改（照提議的順序）。 */
     public List<Change> changes() {
         return List.copyOf(changes);
     }
 
-    /** 這一輪提議刪除的行程（照提議的順序）。 */
     public List<ScheduledEvent> removals() {
         return List.copyOf(removals);
     }
 
-    /** 這一輪有沒有提議任何事（新增、修改、刪除）：有的話畫面上就有卡片。 */
+    /** 有的話畫面上就有卡片。 */
     public boolean proposedAnything() {
         return !proposals.isEmpty() || !changes.isEmpty() || !removals.isEmpty();
     }
 
     /**
-     * 改一筆已經在行事曆上的行程。只收一句話，新的日期、時間交給抽取流程解析（理由見 propose_events）。
+     * 只收一句話，新的日期、時間交給抽取流程解析（理由見 proposeEvents）。
      *
-     * 只找得到自己的行程：編號是別人的、或亂編的，findEvent 都找不到，回一段請模型重查的話。
+     * 編號是別人的、或模型亂編的，都找不到，回一段請模型重查的話。
      * 新的那句沒講地點就沿用原本的地點，備註一律沿用：改時間、改名稱時，模型整理的那句話通常不會重複原本的地點和備註，
      * 不沿用的話改一次就清掉了。要清掉地點，使用者可以按卡片上的「修改」自己改。
      *
-     * 早上晚上的檢查跟 propose_events 一樣，只有一個例外：開始時刻跟原本一樣就不問。
-     * 「改成喝咖啡」沒動時間，原本的 11:00 是使用者當初確認過的，不必再問一次。
+     * 早上晚上的檢查跟 proposeEvents 一樣，只有一個例外：開始時刻跟原本一樣就不問。
+     * 「改成喝咖啡」沒動時間，原本的 11:00 是使用者當初確認過的。
      */
     @Tool(name = "propose_change", description = "修改行事曆上已經有的一個行程，畫面會顯示修改前後的卡片讓使用者確認（不會直接改）。")
     public String proposeChange(
@@ -160,7 +150,7 @@ public final class CalendarTools {
 
     static final String NOT_FOUND = "行事曆上找不到這個編號的行程。請先用 list_events 查出那個行程的編號，再用查到的編號呼叫。";
 
-    // 模型給的編號不一定是 UUID（自己編的、抄錯的）：格式錯跟找不到一樣請它重查，不讓例外變成一段奇怪的錯誤訊息
+    // 模型給的編號不一定是 UUID（自己編的、抄錯的）：格式錯跟找不到一樣請模型重查，不讓例外變成一段看不懂的錯誤訊息
     private Optional<ScheduledEvent> find(String eventId) {
         try {
             return findEvent.findEvent(owner, EventId.of(eventId == null ? "" : eventId.strip()));
@@ -169,15 +159,15 @@ public final class CalendarTools {
         }
     }
 
-    // 地點：新的那句有講就用新的，沒講就沿用。備註：抽取流程不產生備註，一律沿用原本的
+    // 抽取流程不產生備註，所以備註一律沿用原本的
     private static CalendarEvent keepDetails(CalendarEvent after, CalendarEvent before) {
         return after.withDetails(after.location().or(before::location).orElse(null), before.note().orElse(null));
     }
 
     /**
-     * 只收一句話，不收時間：時間交給已經驗證過的抽取流程解析（日期對照表、溫度 0、SaidTimes 核對、domain 規則）。
-     * 讓模型自己填時間的話，它會把「下週三」算成星期二、自己編結束時間；
-     * 讓它把對話整理成一句完整的話（「明天晚上七點和 Amy 見面」），它做得很穩。
+     * 只收一句話、不收時間：時間交給抽取流程解析（日期對照表、溫度 0、SaidTimes 核對、domain 規則）。
+     * 讓模型自己填時間的話，「下週三」會算成星期二、結束時間會自己編；
+     * 讓模型把對話整理成一句完整的話（「明天晚上七點和 Amy 見面」），結果很穩定。
      */
     @Tool(name = "propose_events", description = "把使用者要新增的行程交給行事曆解析，畫面會顯示卡片讓使用者確認（不會存檔）。")
     public String proposeEvents(
@@ -199,29 +189,27 @@ public final class CalendarTools {
         return show(parsed);
     }
 
-    // 收下新增提議，回給模型「畫面上有哪幾張卡片」
     private String show(List<CalendarEvent> events) {
         proposals.addAll(events);
         return "已顯示 " + events.size() + " 張卡片，等使用者確認：\n" + lines(events.stream().map(CalendarTools::describe).toList());
     }
 
     /**
-     * 這一輪有沒有成功查過行事曆（list_events）。查過之後說「已經加入了」可能是真的（提議過的卡片使用者按了加入），
-     * 所以 CalendarAssistant 的說謊檢查要知道這件事。
+     * 查過行事曆之後說「已經加入了」可能是真的（使用者按了卡片上的加入），CalendarAssistant 的說謊檢查要看這個值。
      */
     public boolean checkedCalendar() {
         return checkedCalendar;
     }
 
     /**
-     * 這個行程是 7～11 點或 19～23 點（早上晚上都可能），而使用者從頭到尾沒講過任何時段的字？那就不該替他決定。
+     * 7～11 點或 19～23 點早上晚上都可能，使用者從頭到尾沒講過任何時段的字，就不替使用者決定。
      *
-     * 為什麼由程式擋、不靠 prompt：prompt 已經寫明「吃飯、見面、開會看不出早晚，一定要問」，
+     * 由程式擋、不靠 prompt：prompt 已經寫明「吃飯、見面、開會看不出早晚，一定要問」，
      * 模型對「明天七點吃飯」仍然自己補上「晚上」直接提議 19:00（溫度 0，每次都一樣）。
-     * 核對的是使用者實際說過的話，不是模型整理出來的那句 —— 模型補的「晚上」不算數。
+     * 核對的是使用者實際說過的話，不是模型整理出來的那句：模型補的「晚上」不算數。
      * 「七點吃晚餐」「七點晨跑」「十一點吃宵夜」本身就有晚、晨、夜，照樣直接提議。
      *
-     * 1～6 點不在這裡：沒講上下午的 1～6 點一律當下午（SaidTimes），不必問；12～18 點本來就不會被誤會。
+     * 1～6 點不在這裡：沒講上下午的 1～6 點一律當下午（SaidTimes）；12～18 點不會被誤會。
      * 代價：一句話兩個行程、其中一個有講時段，另一個也會被當成講過（這裡看的是整段對話，不是每一筆）。
      */
     private boolean needsMorningOrEvening(CalendarEvent event) {
@@ -240,10 +228,10 @@ public final class CalendarTools {
             if (events.isEmpty()) {
                 return from + " 到 " + to + "（不含）之間沒有行程。";
             }
-            // 標題、地點不一定是使用者自己想的字（從信件、網頁複製貼上的；之後的邀請、匯入），可能藏著給模型的指令（間接 prompt injection）。
-            // 只有本人寫得進自己的行事曆，但這道防線不靠「寫的人可信」。
-            // 開頭先講清楚這是資料；每個欄位都用「」框起來，模型分得出哪裡是資料、哪裡是我們說的話（spotlighting）
-            // 編號放在每一筆最前面：要改、要刪的時候，模型拿它呼叫 propose_change、propose_removal
+            // 標題、地點不一定是使用者自己想的字（從信件、網頁複製貼上的，或之後的邀請、匯入），可能藏著給模型的指令
+            // （間接 prompt injection）。現在只有本人寫得進自己的行事曆，但這道防線不靠寫的人可信。
+            // 開頭先講清楚這是資料，每個欄位都用「」框起來，模型才分得出哪裡是資料、哪裡是指示（spotlighting）。
+            // 編號放在每一筆最前面：要改、要刪時，模型拿編號呼叫 propose_change、propose_removal
             return DATA_NOTICE + lines(events.stream().map(e -> "〔編號 " + e.id() + "〕" + describe(e.event())).toList());
         } catch (DateTimeParseException | IllegalArgumentException e) {
             return "日期不對（" + e.getMessage() + "）。日期格式是 yyyy-MM-dd，而且 to 要晚於 from。";
@@ -268,7 +256,7 @@ public final class CalendarTools {
         }
     }
 
-    // find_free_slots、plan_events 共用：時段參數的說明、沒填時的預設、參數錯時回給模型的話
+    // find_free_slots、plan_events 共用
     private static final String PERIOD = "時段：MORNING 早上 08–12、AFTERNOON 下午 12–18、EVENING 晚上 18–22、ANYTIME 不限 08–22；沒講就填 ANYTIME";
 
     private static DayPeriod orAnytime(DayPeriod period) {
@@ -280,13 +268,13 @@ public final class CalendarTools {
     }
 
     /**
-     * 使用者叫助理排時間：在空檔裡排時段（PlanSessionsUseCase）、出新增卡片，一次做完。
+     * 在空檔裡排時段、出新增卡片，一次做完。
      *
-     * 為什麼不讓模型自己挑：要它 find_free_slots → 自己挑 → propose_events 的話，qwen3-8b 常停在中間，
-     * 用文字列出時段再問「要新增嗎？」，使用者回「好」又反問幾點。靠規則、範例、提醒去修只修得好一半，還會弄壞別的題目。
-     * 模型只要決定「做什麼、哪幾天、多長」，幾點由程式挑，這一個工具它叫得穩。怎麼挑見 SessionPlanner。
+     * 不讓模型自己挑：要 qwen3-8b 做 find_free_slots → 自己挑 → propose_events 的話，常停在中間，
+     * 用文字列出時段再問「要新增嗎？」，使用者回「好」又反問幾點；靠規則、範例、提醒去修只修好一半，還會弄壞別的題目。
+     * 模型只決定做什麼、哪幾天、多長，幾點由程式挑（見 SessionPlanner），這樣一個工具模型呼叫得很穩定。
      *
-     * 時間是程式從空檔裡挑的，所以不經過 propose_events 的「沒講早晚就先問」：使用者沒講幾點，沒有早晚可以問。
+     * 不經過 proposeEvents 的「沒講早晚就先問」：時間是程式從空檔裡挑的，使用者沒講幾點，沒有早晚可以問。
      */
     @Tool(name = "plan_events", description = "使用者叫你幫忙排時間（幫我排、幫我規劃、幫我找時間做某件事）時用："
             + "行事曆會在空檔裡挑時段，畫面顯示卡片讓使用者確認（不會存檔）。")
@@ -326,7 +314,7 @@ public final class CalendarTools {
         return when(event.start(), event.end()) + " " + quote(event.title()) + "〔" + label(event.category()) + "〕" + location;
     }
 
-    // 用「」框起來。內容裡的「」換成『』：不然標題寫一個「」」就能提早結束框框，把後面的字變成框外的話
+    // 內容裡的「」換成『』：不然標題寫一個「」」就能提早結束框框，把後面的字變成框外的話
     static String quote(String text) {
         return "「" + text.replace('「', '『').replace('」', '』') + "」";
     }
