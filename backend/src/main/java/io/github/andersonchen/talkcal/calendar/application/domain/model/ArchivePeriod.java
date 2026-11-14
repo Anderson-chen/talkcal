@@ -32,7 +32,7 @@ public record ArchivePeriod(LocalDate from, LocalDate to) {
         if (from.isAfter(to)) {
             throw new IllegalArgumentException("開始日期（" + from + "）不可晚於結束日期（" + to + "）");
         }
-        // 最多幾個月的規則只寫在 MonthRange，超過它會丟 IllegalArgumentException
+        // 最多幾個月的規則只寫在 MonthRange，超過時 MonthRange 會丟 IllegalArgumentException
         new MonthRange(YearMonth.from(from), YearMonth.from(to));
     }
 

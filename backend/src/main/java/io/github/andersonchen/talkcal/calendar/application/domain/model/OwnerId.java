@@ -5,8 +5,8 @@ import java.util.UUID;
 /**
  * 誰的行程、誰的對話。每個查詢、新增、刪除都限定在一個擁有者裡。
  *
- * 不用 auth 模組的 AccountId：兩個模組互不認識（ArchitectureTest 守著）。值就是登入者的帳號 ID，
- * 但 calendar 不知道它是怎麼登入的。
+ * 不用 auth 模組的 AccountId：兩個模組不互相 import（ArchitectureTest 會檢查）。值就是登入者的帳號 ID，
+ * 但 calendar 不依賴登入方式。
  */
 public record OwnerId(UUID value) {
 

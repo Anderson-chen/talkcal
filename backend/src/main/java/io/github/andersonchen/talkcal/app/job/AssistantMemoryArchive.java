@@ -28,9 +28,9 @@ import java.util.UUID;
  * 舊的那段就沒有入口，只會一直留在表裡。不直接刪：要查 AI 當時說了什麼、使用者要匯出資料時還找得回來。
  * 上傳失敗的那段一列都不刪，留到明天再試。
  *
- * 助理的提議卡片也在這裡清，保留期限跟對話一樣，但直接刪、不歸檔：它只是產品指標的紀錄，不是使用者的資料。
+ * 助理的提議卡片也在這裡清，保留期限跟對話一樣，但直接刪、不歸檔：卡片只是產品指標的紀錄，不是使用者的資料。
  *
- * 放在 app.job：它直接用 JdbcAssistantMemoryRepository 和歸檔的 bucket，ArchitectureTest 只准 app.config、app.job 認識 adapter.out。
+ * 放在 app.job：這個類別直接用 JdbcAssistantMemoryRepository 和歸檔的 bucket，ArchitectureTest 只准 app.config、app.job import adapter.out。
  * 對話不在 core 裡（見 JdbcAssistantMemoryRepository），所以不走 core 的 port。
  */
 public final class AssistantMemoryArchive {
@@ -61,7 +61,7 @@ public final class AssistantMemoryArchive {
         }
     }
 
-    // 凌晨四點沒人在用。多台一起跑也沒關係：同一段對話的 key 固定，重傳只是蓋成同樣的內容
+    // 凌晨四點沒人在用。多台同時執行也沒關係：同一段對話的 key 固定，重傳只是蓋成同樣的內容
     @Scheduled(cron = "0 0 4 * * *", zone = "${calendar.zone}")
     void run() {
         Instant cutoff = clock.instant().minus(retention);

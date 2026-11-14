@@ -7,7 +7,7 @@ import java.time.YearMonth;
 import java.util.List;
 
 /**
- * core 只知道「一個人、一個月的行程存一包，之後讀得回來」；壓成什麼格式、key 怎麼排、放哪個 bucket 是 adapter 的事。
+ * core 只用到「一個人、一個月的行程存一包，之後讀得回來」；壓成什麼格式、key 怎麼排、放哪個 bucket 是 adapter 的事。
  *
  * 約定：
  * - store：month 是行程結束的那個月。正常回傳就是物件儲存確實回了成功，呼叫端才可以刪資料庫裡的那幾筆；

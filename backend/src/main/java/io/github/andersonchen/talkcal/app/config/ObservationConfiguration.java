@@ -11,10 +11,10 @@ import org.springframework.context.annotation.Configuration;
 class ObservationConfiguration {
 
     // Spring AI 每次叫完模型會記 gen_ai.client.token.usage 等指標，標籤照抄這次觀測的 low-cardinality 標籤；
-    // 在觀測上多貼 model.backend，token 指標、gen_ai.client.operation 的延遲、trace 的 span 就都帶著它。
+    // 在觀測上多貼 model.backend，token 指標、gen_ai.client.operation 的延遲、trace 的 span 就都帶著這個標籤。
     //
-    // 本機 llama-server 和雲端 Bedrock 都是用 OpenAI 的 client 打的，Spring AI 內建的 gen_ai.system 兩邊都是 openai，
-    // 只看它分不出模型在哪裡跑。各個值和算錢怎麼用，見 application.properties 的 talkcal.ai.backend。
+    // 本機 llama-server 和雲端 Bedrock 都是用 OpenAI 的 client 呼叫的，Spring AI 內建的 gen_ai.system 兩邊都是 openai，
+    // 只看這個標籤分不出模型在哪裡執行。各個值和算錢怎麼用，見 application.properties 的 talkcal.ai.backend。
     //
     // 只貼在叫模型的觀測上：其他指標多一個永遠同值的標籤，只會讓每條時間序列變長
     @Bean

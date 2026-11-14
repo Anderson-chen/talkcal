@@ -12,7 +12,7 @@ import java.util.Objects;
 
 /**
  * 「現在」從建構子收的 Clock 取，不直接呼叫 LocalDateTime.now()：測試給固定時鐘，「明天」就是確定的日期；
- * 用哪個時區由組裝根決定，core 不知道。Clock 是 JDK 的型別，core 可以依賴。
+ * 用哪個時區由組裝根決定，core 不處理時區。Clock 是 JDK 的型別，core 可以依賴。
  */
 public final class ParseEventsService implements ParseEventsUseCase {
 

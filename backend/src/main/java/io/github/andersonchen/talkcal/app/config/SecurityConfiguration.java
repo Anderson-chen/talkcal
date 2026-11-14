@@ -34,17 +34,17 @@ import org.springframework.security.web.authentication.logout.HttpStatusReturnin
  *
  * - /api 底下除了註冊、登入都要登入；沒登入回 401 JSON，不轉址到登入頁，登入畫面由前端畫
  * - POST、PUT、DELETE 要帶 CSRF token：別的網站騙瀏覽器送請求時 cookie 會自動帶上，
- *   但它讀不到這個網域的 XSRF-TOKEN cookie，送不出對的 header
+ *   但別的網站讀不到這個網域的 XSRF-TOKEN cookie，送不出對的 header
  * - API 文件不擋：nginx 只轉 /api，外面連不到
- * - actuator 不擋：它在不發佈到主機的 management 埠，由網路決定誰連得到，Alloy 抓指標不必登入。
- *   用 EndpointRequest，不寫死 /actuator/**：它只認 management 埠上的請求，API 埠上打 /actuator 照樣要登入
+ * - actuator 不擋：actuator 在不發佈到主機的 management 埠，連不連得到由網路決定，Alloy 抓指標不必登入。
+ *   用 EndpointRequest，不寫死 /actuator/**：EndpointRequest 只比對 management 埠上的請求，在 API 埠上請求 /actuator 照樣要登入
  */
 @Configuration(proxyBeanMethods = false)
 class SecurityConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(SecurityConfiguration.class);
 
-    // 沒有程式注入它：Spring Security 登入時自己從 context 拿
+    // 沒有程式注入這個 bean：Spring Security 登入時自己從 context 拿
     @Bean
     UserDetailsService userDetailsService(FindAccountUseCase findAccount) {
         return new AccountUserDetailsService(findAccount);
@@ -71,7 +71,7 @@ class SecurityConfiguration {
         http
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
-                        // 登入頁要先知道畫哪些按鈕，這時還沒登入
+                        // 畫登入頁之前要先取得有哪些按鈕，這時還沒登入
                         .requestMatchers(HttpMethod.GET, "/api/auth/providers").permitAll()
                         // 出錯時 Spring Boot 會轉到 /error 產生回應；擋住的話，所有錯誤都變成 401
                         .requestMatchers("/error").permitAll()

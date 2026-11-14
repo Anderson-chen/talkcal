@@ -25,7 +25,7 @@ public record Account(AccountId id, String displayName, PasswordLogin passwordLo
     /** 畫面右上角放得下，也不讓對方給的超長名字灌進資料庫。 */
     public static final int MAX_DISPLAY_NAME_LENGTH = 64;
 
-    /** 存的是 HashPasswordPort 算好的雜湊值，domain 不知道是哪種演算法。 */
+    /** 存的是 HashPasswordPort 算好的雜湊值，domain 裡沒有演算法的細節。 */
     public record PasswordLogin(Username username, String passwordHash) {
 
         public PasswordLogin {

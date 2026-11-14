@@ -43,7 +43,7 @@ import java.util.UUID;
  *
  * of(owner) 回傳 Spring AI 的 ChatMemory，不另外定 port：對話記憶只在 AI 助理（inbound adapter）和框架之間使用，
  * core 裡沒有對話的概念。用 ChatMemory 不用 ChatMemoryRepository：框架裡往後接的語意是 ChatMemory.add，
- * ChatMemoryRepository 只有 saveAll（整段取代），照它寫一定是讀、改、寫，避不開上面的遺失更新。
+ * ChatMemoryRepository 只有 saveAll（整段取代），照 saveAll 寫一定是讀、改、寫，避不開上面的遺失更新。
  * 框架的介面只收 conversationId，擁有者要在取得這個物件之前決定，所以是先 of(owner)，再照框架的方法用。
  *
  * 名字不叫 Adapter：這個字尾在專案裡專指實作 core outbound port 的類別（ArchitectureTest 會檢查），這個類別不是。

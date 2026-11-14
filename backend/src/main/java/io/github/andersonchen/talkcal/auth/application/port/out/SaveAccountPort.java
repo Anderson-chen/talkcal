@@ -12,7 +12,7 @@ public interface SaveAccountPort {
     boolean saveIfUsernameFree(Account account);
 
     /**
-     * 存帳號，同時記下 identity 對到它，兩件事一起成功或一起不算。
+     * 存帳號，同時記下 identity 對到這個帳號，兩件事一起成功或一起不算。
      * identity 已經對到別的帳號（兩個分頁同時第一次登入，另一邊先存好）就回 false，帳號也不留下。
      */
     boolean saveIfIdentityFree(Account account, ExternalIdentity identity);

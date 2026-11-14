@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * 叫哪一家的模型是 adapter 的事。
  *
- * now 由 core 傳進來，不讓 adapter 自己讀時鐘：模型不知道今天幾號，「明天」「下週三」要靠這個值才算得出來，
+ * now 由 core 傳進來，不讓 adapter 自己讀時鐘：模型沒有今天的日期，「明天」「下週三」要靠這個值才算得出來，
  * 測試給一個固定的時間，「明天」就是確定的日期。
  *
  * 回傳時已經翻成 CalendarEvent。沒講結束時間的，adapter 用 CalendarEvent.startingAt 建：預設多長是 domain 決定的。

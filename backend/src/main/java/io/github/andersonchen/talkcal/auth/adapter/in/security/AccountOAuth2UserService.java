@@ -14,8 +14,8 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 /**
  * GitHub 登入（OAuth2，不是 OIDC）的最後一步：把 GitHub 的使用者對到帳號，第一次登入就建一個。
  *
- * OAuth2 沒有 ID token，使用者資料是 delegate 拿 access token 去打 GitHub 的 /user 問來的，欄位是 GitHub 自己的格式：
- * - id：數字、不會變，當成身分。它就是設定裡的 user-name-attribute，所以 user.getName() 拿到的是它
+ * OAuth2 沒有 ID token，使用者資料是 delegate 拿 access token 呼叫 GitHub 的 /user 取得的，欄位是 GitHub 自己的格式：
+ * - id：數字、不會變，當成身分。id 就是設定裡的 user-name-attribute，所以 user.getName() 回傳的是 id
  * - login：帳號名稱，使用者改得掉，不能當身分，只在沒填 name 時當顯示名稱
  * - name：使用者自己填的名字，可能是 null
  */

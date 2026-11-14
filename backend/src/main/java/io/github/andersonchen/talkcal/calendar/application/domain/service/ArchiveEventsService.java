@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
  *
  * 一次讀 batchSize 筆，搬完再讀下一批：資料再多，記憶體也只放一批。
  * app.job.AssistantMemoryArchive 是同一個迴圈、同一組停止條件，改一邊要對照另一邊；
- * 不共用 helper：對話不在 core 裡，共用的話 core 要認識 app.job。
+ * 不共用 helper：對話不在 core 裡，共用的話 core 要 import app.job。
  */
 public final class ArchiveEventsService implements ArchiveEventsUseCase {
 

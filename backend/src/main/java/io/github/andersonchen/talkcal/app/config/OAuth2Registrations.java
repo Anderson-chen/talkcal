@@ -11,8 +11,8 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
  * Google、GitHub 的 OAuth client 設定，從 talkcal.auth.google.*、talkcal.auth.github.* 組出來。
  *
  * 不用 Spring Boot 的 spring.security.oauth2.client.registration.*：
- * - 它的回呼網址預設在 /login/oauth2/code/*，nginx 只把 /api 轉給 app，每個 provider 都得另寫 redirect-uri
- * - 寫了 redirect-uri 卻沒給 client id，啟動就失敗，沒申請 OAuth 應用程式的人連 app 都起不來
+ * - 回呼網址預設在 /login/oauth2/code/*，nginx 只把 /api 轉給 app，每個 provider 都得另寫 redirect-uri
+ * - 寫了 redirect-uri 卻沒給 client id，啟動就失敗，沒申請 OAuth 應用程式的人連 app 都無法啟動
  * 這裡只開有 client id 的 provider，都沒設就只有帳密登入。
  */
 record OAuth2Registrations(List<ClientRegistration> all) {

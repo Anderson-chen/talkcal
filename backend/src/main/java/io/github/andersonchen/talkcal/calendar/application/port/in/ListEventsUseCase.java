@@ -7,7 +7,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 給月曆畫一頁。收兩個 LocalDate，不收 DateRange：期間合不合規由 service 交給 DateRange 檢查，呼叫端不必知道有這個型別。
+ * 給月曆畫一頁。收兩個 LocalDate，不收 DateRange：期間合不合規由 service 交給 DateRange 檢查，呼叫端不必用到這個型別。
  *
  * 跟期間有重疊的就算：跨夜、跨月的行程，前後兩段期間都看得到。依開始時間排序，只有 owner 自己的行程。
  *

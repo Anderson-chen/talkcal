@@ -52,7 +52,7 @@ final class ExtractionRequest {
      * 那些還是靠 domain 的規則擋。
      *
      * 是字串，不是 JsonNode：Spring AI 收的是字串。寫錯了（少一個括號）不會在這裡丟例外，而是每次解析都失敗，
-     * ExtractionRequestTest 會把它讀成 JSON 檢查。
+     * ExtractionRequestTest 會把 SCHEMA 讀成 JSON 檢查。
      */
     static final String SCHEMA = """
             {

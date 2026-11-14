@@ -3,7 +3,7 @@ package io.github.andersonchen.talkcal.auth.application.domain.model;
 import java.util.UUID;
 
 /**
- * 帳號的身分，登入之後的「目前是誰」就是它。不用帳號名稱當身分：
+ * 帳號的身分，登入之後的「目前是誰」就是這個 ID。不用帳號名稱當身分：
  * - 帳號名稱之後可能開放改名，身分一改，這個人的行程、對話都要跟著搬
  * - 用 Google、GitHub 登入的人沒有帳號名稱，一樣要有身分
  *

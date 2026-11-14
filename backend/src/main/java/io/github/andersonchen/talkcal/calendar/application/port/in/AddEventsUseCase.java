@@ -28,11 +28,11 @@ public interface AddEventsUseCase {
     List<ScheduledEvent> addEvents(OwnerId owner, List<CalendarEvent> events, List<ProposalId> adopting);
 
     /**
-     * 帶冪等鍵：同一個 owner 用同一個鍵再送一次同樣的行程，不會多存，回的是第一次存的那幾筆，也不再記採納和用量。
+     * 帶冪等鍵：同一個 owner 用同一個鍵再送一次同樣的行程，不會多存，回的是第一次存的那幾筆，也不重複記採納和用量。
      *
      * 按了「加入」之後後端存好了、回應卻沒送到（逾時、502、斷線），畫面只看到失敗，使用者會再按一次；
      * 沒有鍵的話，後端分不出這是重送還是真的要再加一筆一樣的，只能照存。
-     * 卡片的 proposalId 擋不了這件事：它只記指標（記不下就算了），手動表單也沒有卡片。
+     * 卡片的 proposalId 擋不了這件事：proposalId 只用來記指標（記不下就算了），手動表單也沒有卡片。
      *
      * 額外的失敗：
      * - 同一個鍵之前存的是不同的行程 → IdempotencyKeyReusedException（什麼都不存）

@@ -86,14 +86,14 @@ class CalendarConfiguration {
 
     // ── 助理工具背後的 use case ────────────────────────────────────────────
 
-    // 回傳型別寫實作：它實作好幾個 port，寫成其中一個介面的話，注入其他 port 時找不找得到它要看 bean 建立的順序
+    // 回傳型別寫實作：這個類別實作好幾個 port，寫成其中一個介面的話，注入其他 port 時找不找得到這個 bean 要看建立的順序
     @Bean
     JdbcCalendarEventAdapter calendarEventStore(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
         return new JdbcCalendarEventAdapter(jdbcClient, new TransactionTemplate(transactionManager));
     }
 
     // 跟 AI 助理用同一個包好保護的模型，逾時也是同一個（spring.ai.openai.chat.timeout）；
-    // 抽行程不會跑到逾時，靠的是 ExtractionRequest 的 max_tokens
+    // 抽行程不會等到逾時，靠的是 ExtractionRequest 的 max_tokens
     @Bean
     ExtractEventsPort extractEventsPort(@Qualifier(ChatModelConfiguration.GUARDED_CHAT_MODEL) ChatModel chatModel) {
         return new SpringAiExtractEventsAdapter(chatModel);
@@ -200,7 +200,7 @@ class CalendarConfiguration {
         return new ListArchivedEventsService(eventArchive);
     }
 
-    // 對話的還原（行程不還原，見 ArchiveController）：controller 不認識 app.job，在這裡把方法接過去
+    // 對話的還原（行程不還原，見 ArchiveController）：controller 不 import app.job，在這裡把方法接過去
     @Bean
     ArchiveController.RestoreConversations restoreConversations(AssistantMemoryArchive assistantMemoryArchive) {
         return assistantMemoryArchive::restore;

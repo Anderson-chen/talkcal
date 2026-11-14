@@ -75,7 +75,7 @@ public final class AuthController {
     @Operation(summary = "註冊帳號（不會自動登入，註冊完要再呼叫 /api/auth/login）")
     public Me register(@RequestBody RegisterRequest request) {
         AccountId id = registerAccount.register(request.username(), request.password());
-        // 回傳資料庫裡存的名字（轉過小寫），不是使用者打的原樣
+        // 回傳資料庫裡存的名字（轉過小寫），不是使用者輸入的原樣
         return me(id).orElseThrow(() -> new IllegalStateException("剛註冊的帳號查不到：" + id));
     }
 

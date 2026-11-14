@@ -17,7 +17,7 @@ import java.util.Objects;
 /**
  * talkcal_active_users{window="1d"|"7d"|"30d"}：Alloy 抓 /actuator/prometheus 時才向 use case 要數字。
  *
- * 三個期間一句 SQL 一起數，結果留 refresh 這麼久：活躍人數變得很慢，Alloy 每 15 秒抓一次就重算是白做工；
+ * 三個期間一句 SQL 一起數，結果留 refresh 這麼久：活躍人數變得很慢，Alloy 每 15 秒抓一次就重算是多餘的計算；
  * 查詢也是在抓指標的那條執行緒上執行，資料庫慢的時候整頁指標都會被拖住。
  *
  * 用 gauge、不用 counter：人數會上下變，不是累加的次數。

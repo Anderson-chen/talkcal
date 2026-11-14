@@ -12,7 +12,7 @@ import java.util.Map;
  *
  * 約定：
  * - 結束早於 cutoff 是 end < cutoff，剛好在 cutoff 結束的不算
- * - 一次最多 limit 筆：全部讀進記憶體的話，資料一多就撐爆。剩下的由呼叫端下一輪再拿
+ * - 一次最多 limit 筆：全部讀進記憶體的話，資料一多就超過記憶體。剩下的由呼叫端下一輪再拿
  * - 失敗時丟 IllegalStateException
  */
 public interface LoadEndedEventsPort {

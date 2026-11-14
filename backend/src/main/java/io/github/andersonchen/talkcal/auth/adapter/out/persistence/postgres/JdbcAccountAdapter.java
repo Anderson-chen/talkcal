@@ -61,8 +61,8 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
                         .param("id", account.id().value())
                         .param("displayName", account.displayName())
                         .update();
-                // 另一個交易正在插同一個 identity 時，PostgreSQL 會等它結束再決定：
-                // 它 commit 了這邊就是 0 列，兩邊不會都以為自己建成功
+                // 另一個交易正在插同一個 identity 時，PostgreSQL 會等那個交易結束再決定：
+                // 那個交易 commit 了，這邊就是 0 列，兩邊不會都以為自己建成功
                 int linked = jdbc.sql("""
                                 INSERT INTO account_identity (provider, subject, account_id)
                                 VALUES (:provider, :subject, :accountId)

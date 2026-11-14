@@ -26,7 +26,7 @@ import java.util.Set;
  * 用量在存好之後才記：存檔失敗的不算數。採納不信呼叫端說的，交給 ProposalStorePort 核對，
  * 是 owner 的、還沒表態過的卡片才算。
  *
- * 帶冪等鍵時改走 SaveEventsOncePort，這個鍵存過沒有由它在存的那一刻決定。重送不記採納和用量：
+ * 帶冪等鍵時改走 SaveEventsOncePort，這個鍵存過沒有由 SaveEventsOncePort 在存的那一刻決定。重送不記採納和用量：
  * 第一次存的時候已經記過，再記一次同一筆會算成兩筆（卡片已經表態過，第二次會被算成手動新增）。
  */
 public final class AddEventsService implements AddEventsUseCase {
