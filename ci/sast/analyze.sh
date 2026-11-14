@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# 在 ci/sast/Dockerfile 的容器裡跑 CodeQL（由 ci/sast.sh 啟動），/work 是要掃的程式碼。
+# 在 ci/sast/Dockerfile 的容器裡執行 CodeQL（由 ci/sast.sh 啟動），/work 是要掃的程式碼。
 #
 # 三種語言都不編譯（build-mode none）：
-#   java-kotlin            後端。CodeQL 還是會跑 ./gradlew 下載依賴，才認得外部函式庫的型別（見 ci/sast/Dockerfile）
+#   java-kotlin            後端。CodeQL 還是會執行 ./gradlew 下載依賴，才認得外部函式庫的型別（見 ci/sast/Dockerfile）
 #   javascript-typescript  前端的 .ts 和 .vue 的 <script>。模板裡的 v-html 追不到，由 ESLint 的 vue/no-v-html 擋
 #   actions                .github/workflows/：${{ }} 直接貼進 run 的注入、PR 觸發卻拿到寫入權限這類問題
 #
@@ -34,7 +34,7 @@ for lang in "${langs[@]}"; do
         --format=sarif-latest --output="$out/$lang.sarif" --threads=0 --quiet
 done
 
-# 每一筆結果配上它的規則的 security-severity，一行一筆：分數<TAB>規則<TAB>檔案:行<TAB>訊息。
+# 每一筆結果配上所屬規則的 security-severity，一行一筆：分數<TAB>規則<TAB>檔案:行<TAB>訊息。
 # 規則可能在 driver（CLI 本身）或 extensions（查詢包）裡，兩邊都找
 jq -r '
     .runs[]

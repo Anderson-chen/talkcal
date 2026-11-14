@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# 把這台機器上的服務換成目前 checkout 的版本，等它們 healthy 才結束。
-# 本機和雲端都跑這一支，環境的差異寫在 cd/envs/<env>.env。
+# 把這台機器上的服務換成目前 checkout 的版本，等服務 healthy 才結束。
+# 本機和雲端都執行這一支，環境的差異寫在 cd/envs/<env>.env。
 #
 #   cd/apply.sh local                 部署 app、web
 #   cd/apply.sh local web             只部署前端
 #   cd/apply.sh local llm-chat        只換模型（要重 build、重新載入模型，所以不在預設裡）
 #   WAIT_TIMEOUT=600 cd/apply.sh local app   拉長等待
 #
-# 這裡不跑測試、不看 CI：部署前要過哪道關由觸發的一方決定（./gradlew deployApp 先跑測試，watcher 等 CI 綠燈）。
+# 這裡不執行測試、不看 CI：部署前要過哪道關由觸發的一方決定（./gradlew deployApp 先執行測試，watcher 等 CI 綠燈）。
 # 一次換一個服務、每個都帶 --no-deps，理由見 cd/README.md「為什麼每個服務分開換」。
 
 set -euo pipefail
@@ -29,7 +29,7 @@ APP_VERSION="$(cd/version.sh)"
 GIT_COMMIT="$(git rev-parse HEAD)"
 export APP_VERSION GIT_COMMIT
 
-# 先換後端再換前端：新的前端換上去時，打的已經是新的 API
+# 先換後端再換前端：新的前端換上去時，呼叫的已經是新的 API
 services=("$@")
 [ ${#services[@]} -gt 0 ] || services=(app web)
 

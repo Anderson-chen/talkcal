@@ -8,7 +8,7 @@ docs/design/calendar/prototype.html -text -diff
 .githooks/* text eol=lf
 cd/envs/*.env text eol=lf
 backend/gradlew text eol=lf
-# Terraform 在 Windows 上讀 user_data 範本，原樣送到 EC2 給 bash 跑
+# Terraform 在 Windows 上讀 user_data 範本，原樣送到 EC2 交給 bash 執行
 *.tftpl text eol=lf
 # secrets.tf 的 heredoc 原樣寫進 SSM 的 .env。CRLF 會讓每行多一個 \r，
 # deploy.sh 用 grep 取出的 DB 密碼就多一個字元，ALTER ROLE 設錯密碼、app 連不上資料庫

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# 後端 Java 的格式檢查，跑 Spotless 的 spotlessCheck、spotlessApply。
+# 後端 Java 的格式檢查，執行 Spotless 的 spotlessCheck、spotlessApply。
 #
 #   ci/format.sh            檢查
 #   ci/format.sh apply      直接排好
 #
-# backend/build.gradle 還沒接 Spotless，現在跑會因為找不到 spotlessCheck 而失敗；
+# backend/build.gradle 還沒接 Spotless，現在執行會因為找不到 spotlessCheck 而失敗；
 # 格式化為什麼還沒做，見 ci/README.md「格式化為什麼還沒做」。
 #
-# 在主機上跑、不進 checks.sh 的容器：要跟 origin/master 比出改過的檔案就要有 .git，容器裡沒有。
+# 在主機上執行、不進 checks.sh 的容器：要跟 origin/master 比出改過的檔案就要有 .git，容器裡沒有。
 # Spotless 不必編譯，主機的 JDK（17 以上）就夠。
 # 檢查的是工作目錄裡的檔案，不是某個 commit：有還沒 commit 的改動時，結果可能跟推上去的不一樣。
 

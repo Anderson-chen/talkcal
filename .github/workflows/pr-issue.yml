@@ -10,7 +10,7 @@ name: PR issue
 
 on:
   pull_request:
-    # edited：補上 Closes #N 之後要重跑
+    # edited：補上 Closes #N 之後要重新執行
     types: [opened, edited, synchronize, reopened]
 
 permissions:
@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   pr-issue:
-    # Renovate 的套件升級 PR 沒有對應的需求，追蹤在它的 Dependency Dashboard issue，不用連。
+    # Renovate 的套件升級 PR 沒有對應的需求，追蹤在 Renovate 的 Dependency Dashboard issue，不用連。
     # job 被 if 跳過時 GitHub 當成通過，必過檢查不會卡住
     if: github.event.pull_request.user.login != 'renovate[bot]'
     runs-on: ubuntu-latest

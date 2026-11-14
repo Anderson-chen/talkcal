@@ -19,7 +19,7 @@ permissions:
   pages: write
   id-token: write
 
-# 新的進來不取消正在跑的，發佈到一半不會被切斷
+# 新的進來不取消正在執行的，發佈到一半不會被切斷
 concurrency:
   group: pages
   cancel-in-progress: false

@@ -2,14 +2,14 @@
 # 告警端到端測試：真的造出問題，確認「指標 → Mimir → Grafana 告警 → SMTP」整條鏈寄得出信。
 #
 #   ci/alerting.sh            約 15 分鐘
-#   KEEP=1 ci/alerting.sh     跑完留著容器，到 http://localhost:13000、http://localhost:18025 看
+#   KEEP=1 ci/alerting.sh     執行完留著容器，到 http://localhost:13000、http://localhost:18025 看
 #
-# 起 ops/compose.yaml 的觀測組（疊 ci/alerting/compose.yaml，跟本機正在跑的那組分開）、Mailpit 當假信箱、
+# 啟動 ops/compose.yaml 的觀測組（疊 ci/alerting/compose.yaml，跟本機正在執行的那組分開）、Mailpit 當假信箱、
 # ci/alerting/fake-app.py 當假 app 和假 postgres_exporter，然後依序：
-#   1. 正常流量 3 分鐘：一封都不能有          → 擋規則太敏感、正常也寄信
-#   2. 假 app 全部回 5xx：要收到 SLO 快燒      → 擋 burn rate 的錄製規則、門檻、SMTP 任何一段斷掉
-#   3. 停掉假 app：要收到 app 掛了             → 擋 rules.yaml 的門檻、for、noDataState 寫錯
-#   4. 假 app 起來：要收到 app 掛了的 RESOLVED  → 擋恢復通知被關掉
+#   1. 正常流量 3 分鐘：一封都不能有                 → 擋規則太敏感、正常也寄信
+#   2. 假 app 全部回 5xx：要收到「SLO 快燒」         → 擋 burn rate 的錄製規則、門檻、SMTP 任何一段斷掉
+#   3. 停掉假 app：要收到「app 掛了」                → 擋 rules.yaml 的門檻、for、noDataState 寫錯
+#   4. 重新啟動假 app：要收到「app 掛了」的 RESOLVED → 擋恢復通知被關掉
 # 每一步的時限是實際所需時間的兩倍左右：寧可慢一點綠，不要因為時間差誤判。
 #
 # 不驗：慢燒（視窗要好幾小時，算式由 ci/rules.sh 的單元測試驗）、真的信箱收不收得到。
@@ -65,7 +65,7 @@ cleanup() {
 trap cleanup EXIT
 
 # Mailpit 收到的每封信的主旨，一行一個。不用 jq：Git Bash 沒有。
-# 沒信時 grep 回 1，pipefail 會當成失敗；沒信是正常結果，所以吞掉（curl 失敗照樣報錯）
+# 沒信時 grep 回 1，pipefail 會當成失敗；沒信是正常結果，所以忽略（curl 失敗照樣報錯）
 subjects() {
   local json
   json=$(curl -fsS "$mailpit/api/v1/messages?limit=200")
@@ -101,8 +101,8 @@ printf '| 經過時間、事件 |\n|---|\n' > "$summary"
 teardown
 dc pull --quiet
 
-# Grafana 晚一步起：一起起的話，Grafana 第一次評估時 Mimir 可能還沒有 up，
-# app-down 的 noDataState 是 Alerting，會把「還沒有資料」當成 app 掛了
+# Grafana 晚一步啟動：同時啟動的話，Grafana 第一次評估時 Mimir 可能還沒有 up，
+# app-down 的 noDataState 是 Alerting，會把「還沒有資料」當成 app 停止
 log "起 mimir、alloy、假 app、假 postgres_exporter"
 dc up -d mimir alloy fake-app fake-postgres-exporter
 wait_until "Mimir 收到假 app 的 up = 1" 180 mimir_has_up

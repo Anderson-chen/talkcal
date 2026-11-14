@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# 本機的 CD（之後 EC2 也是）：去 GitHub 看 master 有沒有新的綠燈版本，有就部署。排程每幾分鐘跑一輪，跑完就結束。
+# 本機的 CD（之後 EC2 也是）：去 GitHub 看 master 有沒有新的綠燈版本，有就部署。排程每幾分鐘執行一輪，執行完就結束。
 #
 #   cd/triggers/watch.sh local
 #
 # 由機器自己來拉，GitHub 不必有連進這台機器的權限（見 cd/README.md「為什麼是 pull」）。
-# 它會 checkout 別的 commit，要跑在專門部署用的 clone，不要跑在開發用的那份。
+# watcher 會 checkout 別的 commit，要放在專門部署用的 clone 執行，不要用開發用的那份。
 #
-# 排程跑的是 .git/cd-watch.sh 這份副本，不是這個檔案：這個檔案跟著 checkout 變，
-# 部署到還沒有 watcher 的舊版本時就不見了，排程從此叫不到東西。副本只在部署成功後換成新版。
+# 排程執行的是 .git/cd-watch.sh 這份副本，不是這個檔案：這個檔案跟著 checkout 變，
+# 部署到還沒有 watcher 的舊版本時就不見了，排程從此找不到要執行的檔案。副本只在部署成功後換成新版。
 #
 # 一輪：
 #   1. 問 GitHub 這個分支最新一個 CI 綠燈的 commit
 #   2. 跟上次試過的一樣就結束。失敗了也不重試：要人來看，不該每幾分鐘重 build 一次
-#   3. checkout 那個 commit，跑那個 commit 的 cd/apply.sh
+#   3. checkout 那個 commit，執行那個 commit 的 cd/apply.sh
 #   4. 結果寫回 GitHub Deployments
 
 set -euo pipefail
@@ -24,7 +24,7 @@ main() {
   local branch=master
   local workflow=ci.yml
 
-  # 自己可能在 cd/triggers/（手動跑），也可能在 .git/（排程跑的副本），從 git 找 clone 的根目錄
+  # 自己可能在 cd/triggers/（手動執行），也可能在 .git/（排程執行的副本），從 git 找 clone 的根目錄
   cd "$(dirname "$0")"
   local git_dir
   git_dir="$(git rev-parse --absolute-git-dir)"
@@ -38,10 +38,10 @@ main() {
   # shellcheck source=/dev/null
   source "$env_file"   # 這裡只用 SITE_URL；部署讀的是 checkout 之後那個版本的 env 檔
 
-  # 排程跑時沒人看螢幕，全部寫進 log；手動跑時畫面也要有，用 tee。
+  # 排程執行時沒人看螢幕，全部寫進 log；手動執行時畫面也要有，用 tee。
   # 排程（conhost --headless）底下 stdout 不是有效的 handle，tee 一啟動就失敗，
-  # 整支會在寫下第一行 log 前結束、排程器卻顯示成功。所以先讓 tee 空跑一次，成功才用。
-  # 不用 [ -t 1 ] 判斷：被管線接走和 headless 都回「不是 tty」，分不出來
+  # 整支會在寫下第一行 log 前結束、排程器卻顯示成功。所以先讓 tee 試著執行一次，成功才用。
+  # 不用 [ -t 1 ] 判斷：輸出接到管線和 headless 都回「不是 tty」，分不出來
   if : | tee 2>/dev/null; then
     exec > >(tee -a "$log") 2>&1
   else
@@ -49,8 +49,8 @@ main() {
   fi
   echo "══ $(date '+%F %T') watch $env_name"
 
-  # 上一輪還在跑就跳過這輪。Git Bash 沒有 flock，用 mkdir 當鎖：建資料夾是原子操作。
-  # 超過 60 分鐘的鎖當成上一輪被砍掉留下的（排程的執行上限是一小時，見 install-local.ps1）
+  # 上一輪還在執行就跳過這輪。Git Bash 沒有 flock，用 mkdir 當鎖：建資料夾是原子操作。
+  # 超過 60 分鐘的鎖當成上一輪被終止後留下的（排程的執行上限是一小時，見 install-local.ps1）
   if [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +60)" ]; then
     echo "鎖超過 60 分鐘，當成殘留清掉：$lock"
     rmdir "$lock"
@@ -69,7 +69,7 @@ main() {
     return 1
   fi
 
-  # Docker 沒起來就整輪跳過、不記成試過：開機後排程常比 Docker Desktop 先跑，
+  # Docker 沒啟動就整輪跳過、不記成試過：開機後排程常比 Docker Desktop 先執行，
   # 那是環境還沒好，不是這個版本壞了
   if ! docker info >/dev/null 2>&1; then
     echo "Docker 沒在跑，這輪跳過"
@@ -84,7 +84,7 @@ main() {
     return 0
   fi
 
-  # 1. 只看 push 事件：PR 的 run 跑的是合併前的版本
+  # 1. 只看 push 事件：PR 的 run 測的是合併前的版本
   local sha
   sha="$(gh run list --workflow "$workflow" --branch "$branch" --event push --status success \
            --limit 1 --json headSha --jq '.[0].headSha // empty')"
@@ -111,7 +111,7 @@ main() {
   # 從這裡開始，部署失敗也算試過
   echo "$sha" > "$state"
 
-  # 3. 跑那個 commit 自己的 apply.sh 和 envs/：部署步驟跟著程式碼一起改版
+  # 3. 執行那個 commit 自己的 apply.sh 和 envs/：部署步驟跟著程式碼一起改版
   local ok=true
   git fetch --quiet origin "$sha" && git checkout --quiet --detach "$sha" || ok=false
   if $ok; then
@@ -135,7 +135,7 @@ main() {
   fi
 }
 
-# 在 GitHub 上開一筆部署紀錄，印出它的 id。
+# 在 GitHub 上建立一筆部署紀錄，印出紀錄的 id。
 # required_contexts 給空陣列：不給的話 GitHub 會再檢查一次這個 commit 的所有狀態，
 # 而 PR 才有的檢查（pr-issue）在 master 的 commit 上不存在，會被擋下來。CI 綠燈第 1 步已經確認過
 create_deployment() {

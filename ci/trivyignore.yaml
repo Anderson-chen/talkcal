@@ -7,11 +7,11 @@
 # gosu（postgres 映像檔裡切換使用者的小工具）的 Go 標準函式庫漏洞，2026-10-14 評估：
 #   - 修不了：gosu 是上游編好的執行檔，最新的 postgres 18 也一樣；deploy/postgres/Dockerfile 用 apk 只升得到作業系統套件
 #   - 碰不到：gosu 只在容器啟動時把 root 切成 postgres，接著就 exec 成 postgres，不開網路、不讀外部輸入。
-#     標準函式庫的漏洞要被利用，得先有程式拿它處理攻擊者給的資料
+#     標準函式庫的漏洞要被利用，得先有程式拿標準函式庫處理攻擊者給的資料
 #   - postgres 的埠只綁 127.0.0.1（deploy/compose.yaml）
 #
 # 第三方映像檔，2026-11-10 評估。都已升到發布滿 14 天的最新版（.github/renovate.json5 的 minimumReleaseAge）：
-#   - Caddy 2.11.6：對外的服務只有它，HTTP/2、Range 的 DoS 外面碰得到，只接受到升版為止。
+#   - Caddy 2.11.6：對外的服務只有 Caddy，HTTP/2、Range 的 DoS 外面碰得到，只接受到升版為止。
 #     2.11.9 修掉了 x/net/html 以外的全部，2026-11-20 發布滿 14 天，Renovate 11-23 開 PR；到期日給到合併的隔天
 #   - 觀測堆疊：Grafana 只綁 127.0.0.1、其他只在 compose 網路裡，外面連不到；上游還沒帶修補，給一個月
 #   - postgres-exporter：v0.20.1 已是最新版，不發佈埠，只有 Alloy 會來抓；給兩個月

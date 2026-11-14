@@ -5,15 +5,15 @@
 #   ci/migrations.sh <base>     跟指定的 commit 比
 #
 # 兩道檢查：
-#   1. <base> 裡已經有的 migration 不能改、刪、改名：Flyway 會比對跑過的檔案的 checksum，
-#      改了舊檔，已經跑過的資料庫一啟動就驗證失敗，要部署到一半才發現。
+#   1. <base> 裡已經有的 migration 不能改、刪、改名：Flyway 會比對執行過的檔案的 checksum，
+#      改了舊檔，已經執行過的資料庫一啟動就驗證失敗，要部署到一半才發現。
 #   2. 新增的 migration 給 squawk 看：直接 DROP、RENAME COLUMN、改型別、不帶 CONCURRENTLY 建索引這類寫法，
 #      舊版還在線上時會壞掉或鎖住整張表。每條規則的理由和安全的替代做法見 https://squawkhq.com/docs/rules
-# squawk 只看新增的檔案：已經跑過的改不了，掃出來的警告也修不掉，只會把新的問題淹沒。
+# squawk 只看新增的檔案：已經執行過的改不了，掃出來的警告也修不掉，只會把新的問題淹沒。
 #
 # 真的要做危險的變更（例如刪掉已經沒人用的欄位），在那一句上面加
 #   -- squawk-ignore ban-drop-column
-# 並寫清楚為什麼現在刪是安全的（從哪個版本起就沒人讀寫它）。
+# 並寫清楚為什麼現在刪是安全的（從哪個版本起就沒有程式讀寫這個欄位）。
 #
 # 不放進 checks.sh：那邊的容器沒有 .git，比不出這次改了哪些。
 

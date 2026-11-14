@@ -33,7 +33,7 @@ git archive "$commit" ci/sast/Dockerfile \
     | docker build --quiet --tag "$image" --file ci/sast/Dockerfile - >/dev/null
 
 trap 'docker rm --force "$container" >/dev/null 2>&1 || true' EXIT
-# talkcal-sast-gradle：CodeQL 跑 ./gradlew 時下載的 Gradle 本體和 jar，本機跨次保留。
+# talkcal-sast-gradle：CodeQL 執行 ./gradlew 時下載的 Gradle 本體和 jar，本機跨次保留。
 # 不跟 ci/run.sh 的 talkcal-ci-gradle 共用：那邊只掛 caches/、Gradle 本體在映像檔裡，路徑對不上
 docker create --name "$container" --volume talkcal-sast-gradle:/root/.gradle "$image" ci/sast/analyze.sh >/dev/null
 

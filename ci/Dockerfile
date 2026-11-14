@@ -1,6 +1,6 @@
-# CI 的執行環境：ci/run.sh 在這個映像檔裡跑 ci/checks.sh。為什麼要自己的映像檔見 docs/adr/0008-ci-same-script-in-container.md。
+# CI 的執行環境：ci/run.sh 在這個映像檔裡執行 ci/checks.sh。為什麼要自己的映像檔見 docs/adr/0008-ci-same-script-in-container.md。
 #
-# 很少變的（JDK、Node、pnpm、Gradle 本體、Playwright 的瀏覽器）烤進映像檔；
+# 很少變的（JDK、Node、pnpm、Gradle 本體、Playwright 的瀏覽器）裝進映像檔；
 # 常變的（Java 函式庫、前端套件）放 ci/run.sh 掛上來的 volume。
 # build context 是 ci/run.sh 從要測的 commit 用 git archive 取出的幾個檔案，不是資料夾。
 #
@@ -32,12 +32,12 @@ RUN ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack 
 # 授權分類內建在執行檔裡，不必下載漏洞資料庫
 COPY --from=aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 /usr/local/bin/trivy /usr/local/bin/trivy
 
-# GRADLE_USER_HOME 底下，wrapper/ 是烤進來的 Gradle 本體（約 140 MB），caches/ 是 ci/run.sh 掛的 volume。
+# GRADLE_USER_HOME 底下，wrapper/ 是裝在映像檔裡的 Gradle 本體（約 140 MB），caches/ 是 ci/run.sh 掛的 volume。
 # pnpm 的設定只讀 pnpm_config_ 開頭的環境變數，寫成 npm_config_ 不會生效（見 web/README.md）
 ENV GRADLE_USER_HOME=/opt/gradle-home \
     pnpm_config_store_dir=/cache/pnpm-store
 
-# 讓 wrapper 照 gradle-wrapper.properties 下載 Gradle 本體、驗 checksum，跟在任何機器上跑 ./gradlew 一樣。
+# wrapper 照 gradle-wrapper.properties 下載 Gradle 本體、驗 checksum，跟在任何機器上執行 ./gradlew 一樣。
 # 這一層只 COPY 這幾個檔案，升級 Gradle 時才會重新下載
 WORKDIR /opt/gradle-wrapper
 COPY backend/gradlew ./

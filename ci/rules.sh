@@ -4,9 +4,9 @@
 #   ci/rules.sh
 #
 # check rules 抓語法、PromQL 寫錯、名稱重複；test rules 餵 ops/mimir/slo.test.yaml 的假請求，比對錄出來的值。
-# 改了範圍、門檻、算式卻漏想某個情況（沒流量、不在範圍內的路徑），第二步會紅。
+# 改了範圍、門檻、算式卻漏想某個情況（沒流量、不在範圍內的路徑），第二步會失敗。
 #
-# 不放進 checks.sh：那邊的容器沒有 promtool，這支只要一個 Prometheus 映像檔，幾秒就跑完。
+# 不放進 checks.sh：那邊的容器沒有 promtool，這支只要一個 Prometheus 映像檔，幾秒就執行完。
 
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"

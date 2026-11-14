@@ -1,7 +1,7 @@
-# 告警端到端測試，只在改到會影響告警的檔案時跑。實際做法在 ci/alerting.sh，本機也能跑。
+# 告警端到端測試，只在改到會影響告警的檔案時執行。實際做法在 ci/alerting.sh，本機也能執行。
 #
 # 不放進 ci.yml：這支要 15 分鐘，而 paths 篩選只能設在整支 workflow 的觸發條件上，不能設在單一 job。
-# 沒改到下面的路徑時這支不會出現在 PR 上，所以不能設成必過檢查：必過但沒跑，PR 會一直等不到它。
+# 沒改到下面的路徑時這支不會出現在 PR 上，所以不能設成必過檢查：必過卻沒執行，PR 會一直等不到結果。
 
 name: Alerting
 
@@ -16,7 +16,7 @@ on:
       - ci/alerting.sh
       - ci/alerting/**
       - .github/workflows/alerting.yml
-  # 例如升級 Grafana、Mimir 映像檔之前手動跑一次
+  # 例如升級 Grafana、Mimir 映像檔之前手動執行一次
   workflow_dispatch:
 
 permissions:

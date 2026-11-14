@@ -1,6 +1,6 @@
 # METADATA
 # title: 容器拿到主機層級的權限
-# description: privileged、network_mode host、pid host 讓容器裡的程式等同主機上的 root，容器被打穿就是整台機器
+# description: privileged、network_mode host、pid host 讓容器裡的程式等同主機上的 root，容器被入侵就等於整台機器被入侵
 # custom:
 #   id: TALKCAL-COMPOSE-001
 #   avd_id: TALKCAL-COMPOSE-001

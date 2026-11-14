@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # 把這台機器上的 app、web 退回一個部署過的版本並釘住，watcher 就不會再自動部署新版上來。
 #
-#   cd/rollback.sh local --list          機器上有哪些版本退得回去、現在跑哪個、有沒有釘住
+#   cd/rollback.sh local --list          機器上有哪些版本退得回去、現在執行的是哪個、有沒有釘住
 #   cd/rollback.sh local 3f9c2ab         退到指定版本（版本號就是映像檔的 tag，見 cd/release.md）
 #   cd/rollback.sh local --previous      退到 GitHub Deployments 上一個成功、機器上也還有映像檔的版本
 #   cd/rollback.sh local --unpin         解除釘住，watcher 下一輪照常部署最新的綠燈版本
 #
-# 為什麼 --no-build --pull never、為什麼先換 web、起不來為什麼換回原本的：見 cd/rollback.md「選型」。
+# 為什麼 --no-build --pull never、為什麼先換 web、無法啟動時為什麼換回原本的：見 cd/rollback.md「選型」。
 # 鎖和釘住的檔名（.git/cd-<env>.lock、.pin）跟 cd/triggers/watch.sh 是同一組，改名要兩邊一起改。
 
 set -euo pipefail
@@ -42,7 +42,7 @@ repo_name() {
   [ -n "$repo" ]
 }
 
-# 正在跑的服務用的映像檔 tag；沒在跑就印空的
+# 執行中的服務用的映像檔 tag；沒有執行就印空的
 running_version() {
   local id
   id="$(docker compose "${compose_args[@]}" ps -q "$1" 2>/dev/null || true)"
@@ -51,7 +51,7 @@ running_version() {
 }
 
 # app 映像檔 label 上的 commit，只認 40 碼。沒有 label、或沒經過 apply.sh 直接 build 的
-# （Dockerfile 的預設值是 unknown）都當成沒有：不知道裡面是哪個 commit，退過去等於賭
+# （Dockerfile 的預設值是 unknown）都當成沒有：不知道裡面是哪個 commit，退過去的結果無法預期
 revision_of() {
   local rev
   rev="$(docker image inspect --format "{{index .Config.Labels \"$revision_label\"}}" "talkcal/app:$1" 2>/dev/null || true)"
@@ -141,7 +141,7 @@ record() {
 }
 
 # 在 GitHub Deployments 記一筆退版。跟 watch.sh 的 create_deployment、set_status 做的事一樣，
-# 但 watch.sh 跑的是 .git 裡的副本，沒辦法 source 共用的檔案，所以各寫一份。
+# 但排程執行的是 .git 裡的 watch.sh 副本，沒辦法 source 共用的檔案，所以各寫一份。
 # 連不上 GitHub 不算失敗：服務已經退好了，本機的 history 檔也有記
 record_github() {
   local version="$1" from="$2" sha id
@@ -229,7 +229,7 @@ elif ! git diff --quiet "$target_rev" HEAD -- $COMPOSE_FILES; then
 fi
 
 # 2. 拿 watcher 的鎖，換到一半 watcher 不會插進來。
-# 殘留的鎖照 watch.sh 的規則清掉（超過 60 分鐘）：出事要退版時不該被它擋住
+# 殘留的鎖照 watch.sh 的規則清掉（超過 60 分鐘）：出事要退版時不該被殘留的鎖擋住
 if [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +60)" ]; then
   echo "鎖超過 60 分鐘，當成殘留清掉：$lock"
   rmdir "$lock"
@@ -254,7 +254,7 @@ if switch_to "$target" "$target"; then
   exit 0
 fi
 
-# 4. 新的起不來就換回原本的版本，不留一個掛掉的服務
+# 4. 新版無法啟動就換回原本的版本，不留下停止運作的服務
 echo "❌ $target 起不來，換回原本的 $shown_from" >&2
 if [ -n "$from" ] && [ -n "$from_web" ] && switch_to "$from_web" "$from"; then
   echo "已換回 $from（web $from_web），服務照舊。$target 為什麼起不來：docker compose logs app" >&2

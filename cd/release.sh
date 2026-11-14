@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # 檢查過後在本機建 release tag（annotated），印出推上去的指令，不自己推：推之前還能再看一眼。
-# 流程和為什麼手動打，見 cd/release.md。
+# 流程和為什麼手動建 tag，見 cd/release.md。
 #
-#   cd/release.sh v0.2.0              打在 origin/master 最新的 commit
-#   cd/release.sh v0.2.0 3f9c2ab      打在 master 上比較早的某個 commit
+#   cd/release.sh v0.2.0              建在 origin/master 最新的 commit
+#   cd/release.sh v0.2.0 3f9c2ab      建在 master 上比較早的某個 commit
 #
-# 擋下來的情況都是打錯之後很難收回的：
-#   1. 名字不是 v<主>.<次>.<修>：cd/version.sh 不會把它當成版本
+# 擋下來的情況都是建錯之後很難收回的：
+#   1. 名字不是 v<主>.<次>.<修>：cd/version.sh 不會把這個名字當成版本
 #   2. 這個 tag 已經存在（本機或 GitHub）：tag 推出去就不該移動，同一個名字指到兩個 commit 最難收拾
 #   3. commit 不在 master 上：沒走過 PR 的東西不該變成 release
 #   4. 那個 commit 的 CI 沒有綠燈
@@ -46,7 +46,7 @@ ci="$(gh run list --workflow ci.yml --commit "$sha" --event push --status succes
 [ -n "$ci" ] || fail "${sha:0:7} 沒有綠燈的 CI（gh run list --workflow ci.yml --commit $sha）"
 echo "  ✓ CI 綠燈（run $ci）"
 
-# 5 要知道打過哪些 tag，這時才拉
+# 5 要比對建過的 tag，這時才拉
 git fetch --quiet --tags origin
 previous="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' "$sha" 2>/dev/null || true)"
 if [ -n "$previous" ]; then
@@ -57,7 +57,7 @@ else
   echo "  ✓ 第一個 release"
 fi
 
-# annotated tag 才記得誰、什麼時候打的；GitHub Release 和 git describe 也都以它為準
+# annotated tag 才會記下誰、什麼時候建的；GitHub Release 和 git describe 也都以 annotated tag 為準
 git tag -a "$version" "$sha" -m "$version"
 echo
 echo "已在本機建好 $version。確認沒問題再推上去、開 GitHub Release："

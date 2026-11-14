@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# CI 的檢查項目，在 ci/Dockerfile 的容器裡跑（由 ci/run.sh 啟動）。要加一項檢查就加在這裡。
+# CI 的檢查項目，在 ci/Dockerfile 的容器裡執行（由 ci/run.sh 啟動）。要加一項檢查就加在這裡。
 #
-# 不設 -e：一項失敗還是往下跑，每一項都跑完再用 status 決定成敗。後端紅了，前端的結果照樣有用，
+# 不設 -e：一項失敗還是往下執行，每一項都執行完再用 status 決定成敗。後端失敗了，前端的結果照樣有用，
 # 一次看到全部的問題，不必修一個、推一次、再看下一個。
 
 set -uo pipefail
@@ -16,13 +16,13 @@ echo "── shell 腳本：ShellCheck ──"
 find . \( -name '*.sh' -o -path './.githooks/*' \) -type f -print0 | xargs -0 shellcheck || status=1
 
 echo "── 架構圖：每個錨點都對得上檔案 ──"
-# 錨點的規則見 docs/architecture/lines.mjs 開頭。它只用 Node 內建模組，不必等 pnpm install
+# 錨點的規則見 docs/architecture/lines.mjs 開頭。lines.mjs 只用 Node 內建模組，不必等 pnpm install
 node docs/architecture/lines.mjs --check || status=1
 
 echo "── 後端：單元測試、架構規則、整合測試（編譯時 Error Prone 一起跑）──"
 # 要真模型的測試連不到 llama-server 就跳過，下面的摘要會列出來。
-# evalClasses：AI eval 要真模型、跑一分多鐘，不在這裡跑，但要編得過；
-#   不然改了 CalendarAssistant 的方法簽名，eval 壞了要等下次有人跑它才知道
+# evalClasses：AI eval 要真模型、執行一分多鐘，不在這裡執行，但要編譯得過；
+#   不然改了 CalendarAssistant 的方法簽名，eval 壞了要等下次有人執行才會發現
 # jacocoTestReport：覆蓋率只記錄、不設門檻，總數貼在下面的摘要
 # checkLicense：會打包進 jar 的依賴有沒有不允許的授權，規則見 docs/licenses.md
 (cd backend && ./gradlew --no-daemon test integrationTest evalClasses jacocoTestReport checkLicense) || status=1
@@ -34,7 +34,7 @@ if [ "${RUN_EVAL:-0}" = 1 ]; then
 fi
 
 echo "── 前端：lint、單元測試、型別檢查、打包、E2E ──"
-# 照快到慢排，前面紅了後面就不跑。型別錯誤只有 build（vue-tsc）抓得到，所以 build 排在 E2E 前面。
+# 照快到慢排，前面失敗後面就不執行。型別錯誤只有 build（vue-tsc）抓得到，所以 build 排在 E2E 前面。
 # E2E 的 API 是假的，不需要後端
 (cd web && pnpm install --frozen-lockfile && pnpm run lint && pnpm test && pnpm run build && pnpm run e2e) || status=1
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 印出目前 checkout 的版本號，映像檔的 tag 和 label 都用它。為什麼這樣定見 cd/release.md。
+# 印出目前 checkout 的版本號，映像檔的 tag 和 label 都用這個版本號。為什麼這樣定見 cd/release.md。
 #
 #   cd/version.sh   → v0.2.0 / 3f9c2ab / 3f9c2ab-dirty
 #

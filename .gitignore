@@ -17,7 +17,7 @@ build/
 .claude/worktrees/
 
 # Terraform 的 provider 快取、state、計畫檔、各自的變數值。
-# .terraform.lock.hcl 要進 git：它釘住 provider 的版本和雜湊，換台電腦 init 拿到同一份
+# .terraform.lock.hcl 要進 git：這個檔案釘住 provider 的版本和雜湊，換台電腦 init 拿到同一份
 .terraform/
 *.tfstate
 *.tfstate.*

@@ -1,6 +1,6 @@
 # ci/alerting.sh 疊在 ops/compose.yaml 上的覆寫檔。告警規則、contact point、SMTP 設定都用 ops/ 那份原樣，
-# 這裡只讓這組跟本機正在跑的觀測組、deploy/ 那組分開，再加假 app 和假 postgres_exporter。
-# 不分開的話容器名稱、主機埠會撞，Alloy 也會在 deploy 的網路上抓到真的 app。
+# 這裡只讓這組跟本機正在執行的觀測組、deploy/ 那組分開，再加假 app 和假 postgres_exporter。
+# 不分開的話容器名稱、主機埠會衝突，Alloy 也會在 deploy 的網路上抓到真的 app。
 #   - 專案名由 ci/alerting.sh 的 -p 給，volume 跟著換名字，Mimir、Grafana 都是全新的
 #   - 拿掉 container_name，讓 compose 照專案名取名
 #   - 主機埠只留腳本要查的三個（Mimir、Grafana、Mailpit），換成不常用的號碼
@@ -34,7 +34,7 @@ services:
   fake-app:
     image: python:3.13-alpine@sha256:8bcfa47b04b853a17aaf909362b847b2112fd6ec4105ea553ef9a43bafbb5916
     command: ["python", "-u", "/fake-app.py"]
-    # python 當 PID 1 不理 SIGTERM，stop 要等 10 秒才被砍；SIGINT 會變成 KeyboardInterrupt 馬上結束
+    # python 當 PID 1 不理 SIGTERM，stop 要等 10 秒才被強制終止；SIGINT 會變成 KeyboardInterrupt 馬上結束
     stop_signal: SIGINT
     volumes:
       # 相對路徑以第一個 -f 檔案（ops/compose.yaml）所在的資料夾為準，不是這個檔案的位置

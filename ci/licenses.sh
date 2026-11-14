@@ -6,7 +6,7 @@
 #
 # 先另外裝一份只有 dependencies 的 node_modules 再掃：
 #   - devDependencies 只在 build、測試時用，不會進 dist/，不算散布出去
-#   - pnpm-lock.yaml 沒有記授權，直接掃它的話 Trivy 找得到套件、卻一個授權都沒有，檢查會默默通過。
+#   - pnpm-lock.yaml 沒有記授權，直接掃 lockfile 的話 Trivy 找得到套件、卻一個授權都沒有，檢查會默默通過。
 #     裝好的每個套件都有自己的 package.json，讀得到授權
 #   - 套件從 pnpm store 拿，checks.sh 前面的 pnpm install 已經下載過，不會再連網
 #
@@ -19,16 +19,16 @@ cd "$(dirname "$0")/.."
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-# pnpm-workspace.yaml 也要帶：pnpm 的設定（例如只裝發布滿兩週的版本）寫在那裡，少了它裝出來的版本會不一樣
+# pnpm-workspace.yaml 也要帶：pnpm 的設定（例如只裝發布滿兩週的版本）寫在那裡，少了這個檔案，裝出來的版本會不一樣
 cp web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml "$work/"
-# 輸出不丟掉：裝不起來時 pnpm 把原因（ERR_PNPM_…）印在 stdout
+# 輸出不丟掉：安裝失敗時 pnpm 把原因（ERR_PNPM_…）印在 stdout
 (cd "$work" && pnpm install --prod --frozen-lockfile --ignore-scripts)
 
 trivy rootfs --quiet --skip-db-update --scanners license --list-all-pkgs --format json \
     --output "$work/report.json" "$work"
 
 # 不用 Trivy 的 --exit-code，自己判斷：還要擋兩種 Trivy 不會報的情況，
-# 一個套件都沒掃到（例如 node_modules 沒裝起來），和套件的 package.json 沒寫授權
+# 一個套件都沒掃到（例如 node_modules 沒裝好），和套件的 package.json 沒寫授權
 node - "$work/report.json" <<'EOF'
 const report = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
 const results = report.Results ?? [];

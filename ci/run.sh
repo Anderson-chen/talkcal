@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 把一個 commit 放進 ci/Dockerfile 的容器跑 ci/checks.sh，跑完刪掉容器，摘要和報告複製回 ci/build/。
-# 本機、pre-push hook、GitHub Actions 都跑這一支，理由見 docs/adr/0008-ci-same-script-in-container.md。
+# 把一個 commit 放進 ci/Dockerfile 的容器執行 ci/checks.sh，執行完刪掉容器，摘要和報告複製回 ci/build/。
+# 本機、pre-push hook、GitHub Actions 都執行這一支，理由見 docs/adr/0008-ci-same-script-in-container.md。
 #
 #   ci/run.sh            測 HEAD
 #   ci/run.sh <commit>   測指定的 commit
@@ -39,7 +39,7 @@ trap 'docker rm --force "$container" >/dev/null 2>&1 || true' EXIT
 # docker.sock：Testcontainers 開的 PostgreSQL 跟這個容器並排開在主機的 Docker 上，不在容器裡再包一層 Docker。
 #   所以 TESTCONTAINERS_HOST_OVERRIDE 要指向主機：資料庫的埠發佈在主機上，localhost 是這個容器自己
 # host.docker.internal：容器裡找主機的名字。Docker Desktop 內建，Linux（GitHub 的 runner）要 --add-host 才有
-# 兩個 volume 是依賴快取，跨次保留，不然每次都重新下載幾百 MB。Gradle 只掛 caches/：Gradle 本體烤在映像檔的 wrapper/，掛整個家目錄會蓋掉它
+# 兩個 volume 是依賴快取，跨次保留，不然每次都重新下載幾百 MB。Gradle 只掛 caches/：Gradle 本體裝在映像檔的 wrapper/，掛整個家目錄會蓋掉 wrapper/
 # SPRING_AI_OPENAI_CHAT_BASEURL：模型測試連的 llama-server，預設是主機的 8080。連不到的話那些測試跳過，不算失敗
 docker create --name "$container" \
     --volume /var/run/docker.sock:/var/run/docker.sock \
@@ -56,7 +56,7 @@ git archive "$commit" | docker cp - "$container:/work"
 status=0
 docker start --attach "$container" || status=$?
 
-# 前面某一步沒跑到的話，對應的報告不存在，跳過不算錯。
+# 前面某一步沒執行到的話，對應的報告不存在，跳過不算錯。
 # 前端 E2E 的報告這樣開：pnpm --dir web exec playwright show-report ../ci/build/playwright-report
 rm -rf "$out"
 mkdir -p "$out"

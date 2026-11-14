@@ -3,7 +3,7 @@
 //
 // 改完先在 repo 根目錄驗證：
 //   npx --yes --package renovate@44.167.5 -- renovate-config-validator --strict
-// 它擋得住拼錯的欄位、型別不對的值，擋不住 regex 少了捕捉群組、列舉值打錯；
+// validator 抓得到拼錯的欄位、型別不對的值，抓不到 regex 少了捕捉群組、列舉值打錯；
 // 那些要用本機 dry-run 看實際抓到哪些套件（指令見 docs/dependency-updates.md）
 {
   $schema: 'https://docs.renovatebot.com/renovate-schema.json',
@@ -42,7 +42,7 @@
   // ── 安全修補：不等週一的排程，滿兩週就開 ─────────────────────────
   // repo 沒開 GitHub 的 Dependabot alerts（Renovate 預設讀那裡），所以讓 Renovate 自己查 OSV 漏洞資料庫。
   // 修漏洞的 PR 不等週一、不受 PR 數量上限限制，但一樣等 14 天：Renovate 預設不等（minimumReleaseAge: null），要明寫蓋掉。
-  // 沒辦法只讓 HIGH、CRITICAL 不等：漏洞的設定是 Renovate 最後用 force 蓋上去的，packageRules 依嚴重度改不動它
+  // 沒辦法只讓 HIGH、CRITICAL 不等：漏洞的設定是 Renovate 最後用 force 蓋上去的，packageRules 依嚴重度改不了這個設定
   // （見 docs/dependency-updates.md）。要提早的話由人在 Dependency Dashboard 勾選，流程也在那份文件
   osvVulnerabilityAlerts: true,
   vulnerabilityAlerts: {
@@ -62,7 +62,7 @@
     // ── 分組：minor、patch 依生態系各合成一個 PR ───────────────────
     // 不全部合成一個：後端紅燈不該擋住前端的修補，分開的話紅了也一眼看出是哪一邊。
     // 每組都要寫 groupSlug（分支名）：沒寫的話 Renovate 用 groupName 產生分支名，中文會被拿掉，
-    // 每一組都變成 renovate/minorpatch，全部擠進同一個 PR
+    // 每一組都變成 renovate/minorpatch，全部合進同一個 PR
     {
       description: '後端（Gradle）的 minor、patch 合成一個 PR',
       matchManagers: ['gradle'],
@@ -189,7 +189,7 @@
       versioningTemplate: 'gradle',
     },
     {
-      // ci/*.sh 用 docker run 跑的掃描工具，版本和 digest 寫在 image= 變數裡，標準管理器看不到。
+      // ci/*.sh 用 docker run 執行的掃描工具，版本和 digest 寫在 image= 變數裡，標準管理器看不到。
       // 掃描工具舊了會漏抓新的祕密格式、新的漏洞。Trivy 寫在 ci/Dockerfile，由 dockerfile 管理器追
       customType: 'regex',
       description: 'ci/*.sh 裡 image=名稱:版本@digest 的掃描工具',
