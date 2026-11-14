@@ -13,7 +13,7 @@
 | 步驟 | 做什麼 | 先讀 |
 |---|---|---|
 | 1 | 開 issue：分支名稱要用到 issue 編號；之後改 issue 也照這份 | [@.agents/rules/issue.md](.agents/rules/issue.md) |
-| 2 | 開分支 | [@.agents/rules/branch.md](.agents/rules/branch.md) |
+| 2 | 開分支；分支已經建好（例如桌面 app 開 session 時建的）也要看名稱合不合規則 | [@.agents/rules/branch.md](.agents/rules/branch.md) |
 | 3 | 改程式碼、寫註解；改到基礎設施另見下面「改基礎設施」 | [@.agents/rules/comments.md](.agents/rules/comments.md) |
 | 4 | commit | [@.agents/rules/commit.md](.agents/rules/commit.md) |
 | 5 | 要開 PR 時，照改到的地方跑測試、檢查 | [@.agents/rules/commands.md](.agents/rules/commands.md) |
