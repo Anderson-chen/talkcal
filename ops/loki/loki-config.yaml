@@ -1,4 +1,4 @@
-# 單機設定：所有元件跑在一個容器，資料寫本機的 loki-data volume，不接物件儲存。
+# 單機設定：所有元件在一個容器裡執行，資料寫本機的 loki-data volume，不接物件儲存。
 
 auth_enabled: false          # 關掉多租戶，Alloy 送、Grafana 查都不必帶租戶 header
 

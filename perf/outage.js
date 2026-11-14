@@ -1,11 +1,11 @@
 // outage：模型斷線或卡住時，助理是不是快速失敗、行程 API 是不是照常。
 //
-// 同時跑兩群人，都用 constant-arrival-rate，模型壞了也不會多來人，前後的數字才比得起來：
+// 同時有兩群人，都用 constant-arrival-rate，模型壞了也不會多來人，前後的數字才比得起來：
 //   assistant：每分鐘 RATE_PER_MIN 個人跟助理說一句
 //   calendar：每秒 1 個人讀一個月的行程，不經過模型
 //
 // 給了 FAULT，k6 會在第 FAULT_AT_S 秒透過 Toxiproxy 的 API 弄壞 PROXY 那一段、第 RECOVER_AT_S 秒恢復，每次時間點一樣才能重現。
-// deploy/ 要疊 compose.chaos.yaml 起，app 才經過 Toxiproxy：
+// deploy/ 要疊上 compose.chaos.yaml 啟動，app 才經過 Toxiproxy：
 //   FAULT=down  停用那段 proxy，幾毫秒就失敗
 //   FAULT=hang  回應晚 10 分鐘才到，比叫模型的逾時還久，要等到逾時才失敗
 //   FAULT=slow  每個回應慢 SLOW_MS（預設 40 秒），會回，但超過 30 秒的慢呼叫門檻
@@ -18,7 +18,7 @@
 //   - 行程 API 從頭到尾都是 200
 //   - 模型恢復後 30 秒內熔斷試探、關回來，助理又回 200
 //
-// 預設打 docker 那台 app（18090），Toxiproxy 的 API 用 TOXIPROXY_URL（預設 localhost:8474）：
+// 預設送到 docker 那台 app（18090），Toxiproxy 的 API 用 TOXIPROXY_URL（預設 localhost:8474）：
 //   FAULT=down k6 run perf/outage.js
 //   FAULT=hang DURATION_S=360 RECOVER_AT_S=220 k6 run perf/outage.js   # 卡住要等逾時，拉長一點
 //   PROXY=postgres FAULT=down k6 run perf/outage.js                     # 弄壞資料庫那一段
@@ -48,7 +48,7 @@ const FAULTS = {
     recover: () => setEnabled(true),
   },
   hang: {
-    // 不能用 Toxiproxy 的 timeout 毒，它擋不住關連線：加在 downstream，模型回完就關；
+    // 不能用 Toxiproxy 的 timeout 毒，這種毒擋不住關連線：加在 downstream，模型回完就關；
     // 加在 upstream，請求到不了模型，llama-server 對閒置 5 秒的連線也會關。兩種都會把關閉傳回 app，
     // app 幾秒就收到連線中斷，變成斷線。latency 毒把回應連同關閉一起延後，app 才是真的一直等
     inject: () => addToxic('latency', { latency: HANG_MS }, 'downstream'),
@@ -63,7 +63,7 @@ const FAULTS = {
 if (FAULT && !FAULTS[FAULT]) {
   throw new Error(`FAULT 只能是 ${Object.keys(FAULTS).join('、')}，收到 ${FAULT}`);
 }
-// 時間點錯了的話，可能根本沒弄壞，跑出一張全 200 的表，看起來像熔斷有效
+// 時間點錯了的話，可能根本沒弄壞，結果是一張全 200 的表，看起來像熔斷有效
 if (FAULT && !(0 <= FAULT_AT_S && FAULT_AT_S < RECOVER_AT_S && RECOVER_AT_S < DURATION_S)) {
   throw new Error(`要 0 ≤ FAULT_AT_S < RECOVER_AT_S < DURATION_S，收到 ${FAULT_AT_S}、${RECOVER_AT_S}、${DURATION_S}`);
 }
@@ -146,7 +146,7 @@ export function setup() {
   return signIn();
 }
 
-// 跑完、Ctrl+C、中途出錯都會到這裡。毒留著的話，本機的 app 之後每個請求都會失敗
+// 正常結束、Ctrl+C、中途出錯都會執行 teardown。毒留著的話，本機的 app 之後每個請求都會失敗
 export function teardown() {
   if (FAULT) {
     http.post(`${TOXIPROXY_URL}/reset`);
@@ -160,7 +160,7 @@ export function fault() {
   toxiproxy(`恢復 ${PROXY}`, FAULTS[FAULT].recover());
 }
 
-// Toxiproxy 沒照做就讓演練失敗，不然要跑完才發現根本沒弄壞
+// Toxiproxy 沒照做就讓演練失敗，不然要等到結束才發現根本沒弄壞
 function toxiproxy(what, res) {
   if (res.status < 200 || res.status >= 300) {
     throw new Error(`${what} 失敗：${res.status} ${res.body}`);

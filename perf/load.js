@@ -1,4 +1,4 @@
-// load：同時跟助理說話的人數到多少開始塞車。分三段，每段各自有門檻，收工時 k6 分段印出 p95：
+// load：同時跟助理說話的人數到多少開始排隊。分三段，每段各自有門檻，收工時 k6 分段印出 p95：
 //   below：1 個 VU，基準線
 //   at：SLOTS 個 VU，剛好等於 llama-server 的 slot 數
 //   above：SLOTS×2 個 VU，多的請求只能排隊（requests_deferred 會離開 0）
@@ -8,7 +8,7 @@
 // 改了 -np 就用環境變數對上：
 //   PowerShell:  $env:SLOTS="2"; k6 run perf/load.js
 //
-// 預設打本機 bootRun 的 app（8090），llama-server 8080、PostgreSQL 都要在跑；全程約 4～5 分鐘：
+// 預設送到本機 bootRun 的 app（8090），llama-server 8080、PostgreSQL 都要啟動；全程約 4～5 分鐘：
 //   k6 run perf/load.js
 // 先確認腳本沒寫錯，每段縮成 10 秒（全程約 2 分鐘）：
 //   PowerShell:  $env:HOLD_S="10"; k6 run perf/load.js
@@ -19,9 +19,9 @@ import { MESSAGES, say, signIn, useSession } from './lib/assistant.js';
 const SLOTS = Number(__ENV.SLOTS || 4);
 // 一個請求要好幾秒，太短的話每段只收到幾筆，p95 不準
 const HOLD_S = Number(__ENV.HOLD_S || 60);
-// 第一個請求常特別慢（KV cache 還沒暖），給它獨立的時段
+// 第一個請求常特別慢（KV cache 還沒暖），給第一個請求獨立的時段
 const WARMUP_S = 30;
-// constant-vus 時間到時讓手上的請求在 gracefulStop 內跑完，不留空檔的話上一段的尾巴會混進下一段
+// constant-vus 時間到時讓手上的請求在 gracefulStop 內完成，不留空檔的話上一段的尾巴會混進下一段
 const GAP_S = 20;
 
 const BELOW_START = WARMUP_S;
@@ -56,15 +56,15 @@ export const options = {
 
   thresholds: {
     // 只送正常訊息，非 2xx 都是真的失敗（通常是 llama.cpp 那頭出事的 502）。
-    // 第二條：失敗率過 10% 就提前收工，server 已經倒了，再打幾分鐘也只量到 502
+    // 第二條：失敗率過 10% 就提前收工，server 已經停止回應，再送幾分鐘也只量到 502
     http_req_failed: ['rate<0.01', { threshold: 'rate<0.1', abortOnFail: true, delayAbortEval: '30s' }],
     checks: ['rate>0.99'],
 
     // 收工報表只印有設門檻的子指標，這三條拿掉的話就看不到各段的 p95。
-    // 30 秒是暫定的服務目標，還沒拿實際跑出來的數字調過
+    // 30 秒是暫定的服務目標，還沒照實測的數字調過
     'http_req_duration{scenario:below}': ['p(95)<30000'],
     'http_req_duration{scenario:at}': ['p(95)<30000'],
-    // 超過容量本來就會變慢，60 秒只抓卡死
+    // 超過容量本來就會變慢，60 秒只抓卡住
     'http_req_duration{scenario:above}': ['p(95)<60000'],
   },
 };

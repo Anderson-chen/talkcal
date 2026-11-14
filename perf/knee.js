@@ -3,7 +3,7 @@
 //
 // 每一階是 constant-vus、說完立刻再說（不 sleep），VU 數 = 持續壓在 server 上的請求數。
 //
-// 預設打 docker 那台 app（18090），全程約 STEPS 階數 × (HOLD_S + GAP_S) 秒：
+// 預設送到 docker 那台 app（18090），全程約 STEPS 階數 × (HOLD_S + GAP_S) 秒：
 //   k6 run perf/knee.js
 // 先確認腳本沒寫錯，每階縮成 10 秒：
 //   PowerShell:  $env:HOLD_S="10"; k6 run perf/knee.js
@@ -20,9 +20,9 @@ import { say, signIn, useSession } from './lib/assistant.js';
 // 同一句會命中 llama.cpp 的 prompt 快取，但 prefill 只占十幾毫秒，可以忽略
 const MESSAGE = __ENV.MESSAGE || '明天有什麼行程？';
 const STEPS = (__ENV.STEPS || '1,2,3,4,5,6,8,12,16').split(',').map(Number);
-// 預設 5 秒跑得快，但助理一輪要好幾秒，5 秒只收得到幾筆，中位數會抖；要穩的數字就拉長
+// 預設 5 秒，整輪比較快結束，但助理一輪要好幾秒，5 秒只收得到幾筆，中位數會抖；要穩的數字就拉長
 const HOLD_S = Number(__ENV.HOLD_S || 5);
-// 上一階還沒回來的請求會在 gracefulStop 內跑完，不留空檔就會混進下一階
+// 上一階還沒回來的請求會在 gracefulStop 內完成，不留空檔就會混進下一階
 const GAP_S = Number(__ENV.GAP_S || 4);
 
 const scenarios = {};

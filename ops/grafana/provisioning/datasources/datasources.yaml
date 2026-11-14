@@ -6,7 +6,7 @@
 apiVersion: 1
 
 # 換成 Mimir 之前的資料源。provisioning 不會刪掉檔案裡消失的資料源，
-# 不明寫的話，起過的 Grafana 會一直留著一個連不上的 Prometheus
+# 不明寫的話，啟動過的 Grafana 會一直留著一個連不上的 Prometheus
 deleteDatasources:
   - name: Prometheus
     orgId: 1

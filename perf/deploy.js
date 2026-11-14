@@ -5,24 +5,24 @@
 // app 停掉時每個請求幾毫秒就失敗、VU 立刻再送，十幾秒能刷出九萬個失敗，只反映 k6 重送得多快。
 //
 // 失敗分三種，各記一個 counter（收工印成表，也送進 Grafana）：
-//   deploy_fast_fail：不到 1 秒、沒拿到回應。app 已經不收新請求，或新的還沒起來
-//   deploy_slow_fail：超過 1 秒、沒拿到回應，連線被砍。可能是處理到一半容器被 SIGKILL，
+//   deploy_fast_fail：不到 1 秒、沒拿到回應。app 已經不收新請求，或新的還沒啟動
+//   deploy_slow_fail：超過 1 秒、沒拿到回應，連線被中斷。可能是處理到一半容器被 SIGKILL，
 //                     也可能是在連線佇列裡沒被處理就斷了。client 端分不出來，要對照舊容器的結束碼（137 = SIGKILL）和 app 的 log
 //   deploy_error：拿到回應但不是 200（例如 502）
 //
-// 怎麼跑（先起 ops/ 才看得到圖）：
+// 執行方式（先啟動 ops/ 才看得到圖）：
 //   1. perf/run-to-grafana.sh perf/deploy.js
 //   2. 大約 60 秒後，在另一個終端機：cd backend && ./gradlew deployApp -x test
 //   3. 看收工的表和 Grafana「talkcal — 壓測（k6）」上的部署線
 //
-// 預設打 docker 那台 app（18090），部署的就是它。
+// 預設送到 docker 那台 app（18090），部署的也是這台。
 
 import './lib/docker-target.js';
 import http from 'k6/http';
 import { Counter } from 'k6/metrics';
 import { ASSISTANT_URL, MESSAGES, jsonParams, signIn, useSession } from './lib/assistant.js';
 
-// 要低於容量，量的才是部署的影響。每分鐘 60 人時，模型同時處理到 20 幾個、KV cache 塞爆回 502，
+// 要低於容量，量的才是部署的影響。每分鐘 60 人時，模型同時處理到 20 幾個、KV cache 占滿、回 502，
 // 跟部署無關的失敗混進來就分不出來；20 人時模型同時處理維持在個位數
 const RATE_PER_MIN = Number(__ENV.RATE_PER_MIN || 20);
 const DURATION_S = Number(__ENV.DURATION_S || 180); // 要涵蓋部署前的穩定期、部署、部署後恢復
@@ -39,7 +39,7 @@ export const options = {
       rate: RATE_PER_MIN,
       timeUnit: '1m',
       duration: `${DURATION_S}s`,
-      // 一個請求占住一個 VU 直到回來，模型塞車時要幾十秒。VU 不夠的話 k6 跳過那幾輪，部署期間的人數就少算
+      // 一個請求占住一個 VU 直到回來，模型排隊時要幾十秒。VU 不夠的話 k6 跳過那幾輪，部署期間的人數就少算
       preAllocatedVUs: 50,
       maxVUs: 300,
       // 最後進來的人也要等到回覆或失敗，才算得進表裡
@@ -62,7 +62,7 @@ export default function (session) {
   if (res.status === 200) {
     ok.add(1);
   } else if (res.status === 0) {
-    // 1 秒當分界：app 不在時幾毫秒就失敗，處理中被砍的至少已經跑了一段
+    // 1 秒當分界：app 不在時幾毫秒就失敗，處理到一半被中斷的至少已經執行了一段時間
     (res.timings.duration < 1000 ? fastFail : slowFail).add(1);
   } else {
     errorStatus.add(1);

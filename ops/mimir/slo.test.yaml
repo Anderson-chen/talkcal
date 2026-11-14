@@ -1,4 +1,4 @@
-# rules/anonymous/slo.yaml 的單元測試，ci/rules.sh 跑。
+# rules/anonymous/slo.yaml 的單元測試，由 ci/rules.sh 執行。
 # 放在 rules/ 外面：那個資料夾整個掛給 Mimir，底下每個子資料夾都會被當成一個租戶。
 #
 # 比例都挑 2 的次方（512 個請求壞 8 個 = 1/64），乘上 1024 再取整數比較：rate() 在序列頭尾、斜率轉折處會外推，

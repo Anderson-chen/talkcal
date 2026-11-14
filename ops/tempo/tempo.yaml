@@ -1,4 +1,4 @@
-# 單機設定：所有元件跑在同一個程序，資料寫本機的 tempo-data volume，不接物件儲存。
+# 單機設定：所有元件在同一個 process 裡執行，資料寫本機的 tempo-data volume，不接物件儲存。
 # 為什麼 trace 要另一個資料庫，見 ops/README.md 的「選型理由」。
 
 server:
@@ -27,9 +27,9 @@ backend_worker:
     block_retention: 72h
 
 # ── metrics-generator ────────────────────────────────────────────
-# 從 span 算指標寫進 Mimir，Grafana 的 service map 和 span metrics 查詢讀它（見 grafana/provisioning/datasources/datasources.yaml）。
+# 從 span 算指標寫進 Mimir，Grafana 的 service map 和 span metrics 查詢讀這些指標（見 grafana/provisioning/datasources/datasources.yaml）。
 # 服務之間的邊要兩頭的 span 放在一起才算得出來，app 自己的指標只看得到自己，所以在收齊 span 的 Tempo 算。
-# 它排在 Alloy 的取樣後面，雲端算出來的請求數會少算、錯誤率會高估（見 ops/README.md 的「對從 trace 算出來的數字的影響」）。
+# metrics-generator 排在 Alloy 的取樣後面，雲端算出來的請求數會少算、錯誤率會高估（見 ops/README.md 的「對從 trace 算出來的數字的影響」）。
 metrics_generator:
   # 分得出是 Tempo 算的指標，不是 Alloy 抓來的
   registry:
@@ -52,10 +52,10 @@ metrics_generator:
         - target.host
         - server.address
     span_metrics:
-      # 預設的維度之外不加：每多一個維度，序列數就乘上它有幾種值
+      # 預設的維度之外不加：每多一個維度，序列數就乘上那個維度有幾種值
       dimensions: []
 
-# processor 要在 overrides 裡對租戶打開才會跑。沒有多租戶，開在 defaults
+# processor 要在 overrides 裡對租戶開啟才會執行。沒有多租戶，開在 defaults
 overrides:
   defaults:
     metrics_generator:

@@ -1,5 +1,5 @@
-// 三種訊號都經過這個 Alloy：指標由它去抓再寫進 Mimir，log 由它讀 deploy/ 容器的 stdout 送進 Loki，
-// trace 由 app、nginx 用 OTLP 推給它再轉進 Tempo。為什麼只有一個收集器，見 docs/adr/0007-alloy-to-mimir-loki-tempo.md。
+// 三種訊號都經過這個 Alloy：Alloy 抓指標寫進 Mimir、讀 deploy/ 容器的 stdout 送進 Loki，
+// 也接收 app、nginx 用 OTLP 送來的 trace，轉進 Tempo。為什麼只有一個收集器，見 docs/adr/0007-alloy-to-mimir-loki-tempo.md。
 // 管線圖：http://localhost:12345
 
 
@@ -36,10 +36,10 @@ prometheus.scrape "postgres" {
   forward_to      = [prometheus.remote_write.mimir.receiver]
 }
 
-// 備份是跑完就結束的批次工作（infra/envs/1-ec2/backup-to-s3.sh），沒有 /metrics。
-// 它成功時寫一個 .prom 檔（textfile collector），這裡讀；資料夾由 ops/compose.yaml 掛進來，本機是空的。
+// 備份是執行完就結束的批次工作（infra/envs/1-ec2/backup-to-s3.sh），沒有 /metrics。
+// 備份成功時寫 .prom 檔（textfile collector），這裡讀；資料夾由 ops/compose.yaml 掛進來，本機是空的。
 // 不用 Pushgateway：要多養一個服務，而且一樣只留最後一次的值。
-// stat 給 node_boot_time_seconds：容器跟主機共用核心，讀到的是主機開機時間，備份告警要用它排除剛開機
+// stat 給 node_boot_time_seconds：容器跟主機共用核心，讀到的是主機開機時間，備份告警用這個值排除剛開機
 // （見 grafana/provisioning/alerting/respond.yaml）。其他 collector 在容器裡讀到的不是主機的值，不開。
 prometheus.exporter.unix "backup" {
   set_collectors = ["textfile", "stat"]
@@ -101,7 +101,7 @@ prometheus.scrape "observability" {
   forward_to      = [prometheus.relabel.observability_up_only.receiver]
 }
 
-// 只留 up，告警只用到它。這四個元件自己的指標有好幾千條，全收會讓小機器上的 Mimir 多存一大份
+// 只留 up，告警只用到 up。這四個元件自己的指標有好幾千條，全收會讓小機器上的 Mimir 多存一大份
 prometheus.relabel "observability_up_only" {
   rule {
     source_labels = ["__name__"]
@@ -135,7 +135,7 @@ discovery.docker "deploy" {
 }
 
 // Loki 只替標籤建索引，每多一種值就多一條 stream。標籤只放值只有幾種的（容器名、服務名）；
-// trace id、使用者這種每筆不同的值放進標籤，Loki 會被 stream 數拖垮。trace id 留在內容裡，
+// trace id、使用者這種每筆不同的值放進標籤，stream 數會多到 Loki 無法負荷。trace id 留在內容裡，
 // 由 Grafana 從內容認出來做成連結（見 grafana/provisioning/datasources/datasources.yaml）。
 discovery.relabel "deploy" {
   // 只定義規則，由 loki.source.docker 的 relabel_rules 拿去套
@@ -192,13 +192,13 @@ otelcol.receiver.otlp "default" {
   }
 }
 
-// Tempo 畫 service map 時，一個 client span 加上接在它底下的 server span 算一條邊；
+// Tempo 畫 service map 時，client span 加上接在底下的 server span 算一條邊；
 // 底下沒有 server span 的（資料庫、模型不送 span），照 peer.service 這類屬性造一個虛擬節點（見 tempo/tempo.yaml）。
 //
 // 第一條：nginx 的模組一個請求只開一個 server span，沒有轉給 app 的 client span，
 //   app 的 server span 直接接在 server span 底下，Tempo 配不成邊，圖上 talkcal-web 和 talkcal 之間就斷了。
 //   那個 span 從收到到 app 回完，本來就涵蓋轉送，標成 client 就配得起來。
-//   代價是圖上少了 nginx 前面的 user 節點：Tempo 只替最上層的 server span 造它。
+//   代價是圖上少了 nginx 前面的 user 節點：Tempo 只替最上層的 server span 造這個節點。
 // 第二條：datasource-micrometer 把 SQL span 的 peer.service 設成資料庫名稱，資料庫剛好也叫 talkcal，
 //   圖上會變成 talkcal 連自己。Tempo 取節點名稱時 peer.service 優先，tempo.yaml 改不掉，只能在這裡換成 postgresql
 otelcol.processor.transform "service_graph" {
@@ -229,7 +229,7 @@ otelcol.processor.tail_sampling "default" {
   // 同時在記憶體裡等決定的 trace 數，滿了最舊的被迫先決定。每秒 50 個請求 × 125 秒 ≈ 6,250，留三倍
   num_traces = 20000
 
-  // 決定之後才到的 span 照同一個決定處理。不記的話它會被當新 trace 重新抽，Tempo 裡出現半截的 trace。
+  // 決定之後才到的 span 照同一個決定處理。不記的話晚到的 span 會被當新 trace 重新抽，Tempo 裡出現半截的 trace。
   // 只存 trace id，官方建議給得比 num_traces 大很多
   decision_cache = {
     sampled_cache_size     = 200000,

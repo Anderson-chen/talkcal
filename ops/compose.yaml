@@ -1,6 +1,6 @@
 # 觀測環境：Alloy 收集，Mimir、Loki、Tempo 存，Grafana 畫圖和發告警（各自做什麼見 ops/README.md）。
-# 被觀測的服務在 deploy/，那組要先起：Alloy 會接上 deploy/ 建的網路，網路不存在時這組起不來。
-# 告警寄信、heartbeat 的值在 deploy/.env，起這組要帶 --env-file ../deploy/.env。
+# 被觀測的服務在 deploy/，要先啟動：Alloy 會接上 deploy/ 建的網路，網路不存在時這組無法啟動。
+# 告警寄信、heartbeat 的值在 deploy/.env，啟動這組要帶 --env-file ../deploy/.env。
 
 name: talkcal-observability
 
@@ -25,7 +25,7 @@ services:
     container_name: talkcal-loki
     command: -config.file=/etc/loki/loki-config.yaml
     ports:
-      # Alloy、Grafana 都在 compose 網路裡連它，發佈出來只為了在本機 curl 查 log。
+      # Alloy、Grafana 都在 compose 網路裡連 Loki，發佈出來只為了在本機 curl 查 log。
       # 綁 127.0.0.1：雲端機器上這個埠不能讓外面連到
       - "127.0.0.1:3100:3100"
     volumes:
@@ -52,9 +52,9 @@ services:
       # 雲端機器上用 SSM 的 port forwarding 接回本機（見 infra/envs/1-ec2/README.md）
       - "127.0.0.1:3000:3000"
     environment:
-      # 監控本身掛掉時 Watchdog 要打的外部網址。Watchdog 還沒啟用，現在沒有東西讀它
+      # 觀測環境本身停止時，Watchdog 要呼叫的外部網址。Watchdog 還沒啟用，現在沒有設定讀這個值
       # （見 ops/README.md 的「監控本身掛掉：誰來發現」），平常留空。
-      # 沒設時給 .invalid（保留的網域，永遠解析不到）：Watchdog 用的 webhook contact point 收到空字串會驗證不過，Grafana 起不來
+      # 沒設時給 .invalid（保留的網域，永遠解析不到）：Watchdog 用的 webhook contact point 收到空字串會驗證不過，Grafana 無法啟動
       - HEARTBEAT_URL=${HEARTBEAT_URL:-http://heartbeat-not-configured.invalid/}
       # 只在 localhost 用，關掉登入，一開就是 Admin。要練權限管理時拿掉這三行，用預設的 admin / admin 登入
       - GF_AUTH_ANONYMOUS_ENABLED=true
@@ -70,7 +70,7 @@ services:
       - GF_SMTP_FROM_ADDRESS=${ALERT_SMTP_FROM:-grafana@talkcal.invalid}
       - GF_SMTP_FROM_NAME=talkcal Grafana
       # 收件人，grafana/provisioning/alerting/contact-points.yaml 讀。
-      # 沒填時給 .invalid：空字串的話 email contact point 驗證不過，Grafana 起不來
+      # 沒填時給 .invalid：空字串的話 email contact point 驗證不過，Grafana 無法啟動
       - ALERT_EMAIL_TO=${ALERT_EMAIL_TO:-alerts@talkcal.invalid}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -117,7 +117,7 @@ services:
     restart: unless-stopped
 
   # ── 假信箱 ──────────────────────────────────────────────────────
-  # 試告警信用的 SMTP，收到的信在 http://localhost:8025 看，不寄到外面。平常不起，雲端也不起：
+  # 試告警信用的 SMTP，收到的信在 http://localhost:8025 看，不寄到外面。平常不啟動，雲端也不啟動：
   #   1. deploy/.env 填 ALERT_SMTP_HOST=mailpit:1025，其他 ALERT_SMTP_* 留空
   #   2. docker compose --env-file ../deploy/.env --profile mailtest up -d
   mailpit:

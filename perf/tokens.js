@@ -4,13 +4,13 @@
 // token 數由 app 記：Spring AI 每叫一次模型就把 usage 加進 gen_ai_client_token_usage_total。
 // 開始前、結束後各讀一次 app 的 /actuator/prometheus，相減就是這次的用量，跟 Grafana 成本 dashboard 是同一個指標。
 //
-// 預設打本機 bootRun 的 app（8090），要先起來：
+// 預設送到本機 bootRun 的 app（8090），要先啟動：
 //   k6 run perf/tokens.js
 //   PowerShell:  $env:ROUNDS="3"; k6 run perf/tokens.js
 // 換算費用的單價（USD / 每 1M token）可以覆蓋，預設是 Bedrock 東京 Qwen3 32B 的 Standard（來源見 docs/cost.md）：
 //   $env:PRICE_IN="0.18"; $env:PRICE_OUT="0.73"; k6 run perf/tokens.js
 // 指標在 management 埠 8091，預設把 BASE_URL 結尾的 :8090 換成 :8091。
-// docker 那台 app 的 8091 沒有發佈到主機（deploy/compose.yaml），所以要打本機 bootRun；別的位置就覆蓋 METRICS_URL。
+// docker 那台 app 的 8091 沒有發佈到主機（deploy/compose.yaml），所以要送到本機 bootRun 的 app；別的位置就覆蓋 METRICS_URL。
 
 import http from 'k6/http';
 import { BASE_URL, MESSAGES, say, signIn, useSession } from './lib/assistant.js';
@@ -32,12 +32,12 @@ export const options = {
 /**
  * token 依種類（input / output）和 model_backend 分開加總，其他標籤加在一起。
  * 請求數跟成本 dashboard 的分母同一個條件（POST /api/calendar/assistant，不含 4xx），用 app 實際處理完的數量：
- * k6 跑到 maxDuration（預設 10 分鐘）會停，沒跑完的那幾輪不算 check 失敗，拿預定的 iterations 當分母平均就少算了。
+ * k6 到 maxDuration（預設 10 分鐘）會停，沒完成的那幾輪不算 check 失敗，拿預定的 iterations 當分母平均就少算了。
  */
 function snapshot() {
   const res = http.get(METRICS_URL);
   if (res.status !== 200) {
-    // status 0 = 連不上：多半是打了 docker 的 app（management 埠沒發佈），或 bootRun 沒起來
+    // status 0 = 連不上：多半是送到了 docker 的 app（management 埠沒發佈），或 bootRun 沒啟動
     throw new Error(`讀不到指標 ${METRICS_URL}：${res.status || res.error}。指標在 management 埠，見這支開頭的說明`);
   }
   const totals = { calls: 0, requests: 0, tokens: {} };

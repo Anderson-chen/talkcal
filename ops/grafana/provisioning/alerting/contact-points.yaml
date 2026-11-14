@@ -7,7 +7,7 @@ contactPoints:
   - orgId: 1
     name: email
     receivers:
-      # policies.yaml 用名字找它，UI、API 用 uid；不釘的話每次重建都換一個 uid
+      # policies.yaml 用名字找這個 receiver，UI、API 用 uid；不釘的話每次重建都換一個 uid
       - uid: talkcal-email
         type: email
         settings:

@@ -1,4 +1,4 @@
-# SLO 的錄製規則。目標和數字的理由見 docs/slo.md。改之前先跑 ci/rules.sh（單元測試在 ops/mimir/slo.test.yaml）。
+# SLO 的錄製規則。目標和數字的理由見 docs/slo.md。改之前先執行 ci/rules.sh（單元測試在 ops/mimir/slo.test.yaml）。
 #
 # 先錄好再給告警和儀表板讀：告警每分鐘都要看 5 分鐘到 3 天的視窗，error budget 要看 28 天，
 # 每次從原始資料算太貴，而且兩邊讀同一個值才不會對不起來。
@@ -23,7 +23,7 @@ groups:
   - name: slo
     interval: 1m
     rules:
-      # 目標也錄成序列：burn rate 要拿它來除，儀表板也要畫它
+      # 目標也錄成序列：burn rate 要除以目標，儀表板也要畫目標線
       - record: slo:objective:ratio
         labels: { slo: calendar-availability }
         expr: vector(0.995)

@@ -5,7 +5,7 @@
 // constant-arrival-rate：k6 照固定節奏開始新的一輪，不等前面的回來，所以人數 = 輪數 = 請求數。
 // 結果裡出現 dropped_iterations，代表 VU 不夠、沒送到設定的人數，數字不能信。
 //
-// 預設打 docker 那台 app（18090），打本機 bootRun 的就覆蓋 BASE_URL：
+// 預設送到 docker 那台 app（18090），要送到本機 bootRun 的 app 就覆蓋 BASE_URL：
 //   PowerShell:  $env:BASE_URL="http://localhost:8090"; k6 run perf/concurrent.js
 // 調人數和時間窗：
 //   PowerShell:  $env:USERS="50"; $env:WINDOW_S="5"; k6 run perf/concurrent.js

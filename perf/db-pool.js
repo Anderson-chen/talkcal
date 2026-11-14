@@ -4,9 +4,9 @@
 //
 // 看 Grafana 的 talkcal-app dashboard（http://localhost:3000/d/talkcal-app）「資料庫連線池」那一排：
 // active 貼到 max（10）、pending 離開 0、acquire 從微秒跳到毫秒。
-// 指標每 15 秒抓一次，每一階要撐超過 15 秒圖上才看得到。
+// 指標每 15 秒抓一次，每一階要維持超過 15 秒，圖上才看得到。
 //
-// 預設打 docker 那台 app（18090，Alloy 只抓它的指標），全程約 2 分半：
+// 預設送到 docker 那台 app（18090，Alloy 只抓這台的指標），全程約 2 分半：
 //   perf/run-to-grafana.sh perf/db-pool.js
 // 自訂每一階的 VU 數、每階多久：
 //   STAGES=20,100,300 HOLD_S=30 perf/run-to-grafana.sh perf/db-pool.js
@@ -50,7 +50,7 @@ export function setup() {
   // 登入一次，所有 VU 共用（理由見 lib/assistant.js 的登入那段）
   const session = signIn();
   useSession(session);
-  // 已經種過就不再種，不然每重跑一次，查詢就重一點
+  // 已經種過就不再種，不然每重新執行一次，查詢就重一點
   const existing = http.get(eventsUrl()).json('events') || [];
   if (existing.length < SEED_EVENTS) {
     const events = [];

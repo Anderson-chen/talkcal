@@ -1,16 +1,16 @@
 // slo：一直有人在用的平常流量，行程 API 為主、偶爾跟助理說一句。兩個用途：
 //   1. 量一般 API 的延遲基準，docs/slo.md 的門檻從這裡來：收工印行程 API 和助理各自的 p95、p99、5xx 比例。
-//   2. 驗 burn-rate 告警：開著這支當背景流量，再讓依賴掛掉（停資料庫、模型位址指錯），
+//   2. 驗 burn-rate 告警：開著這支當背景流量，再讓依賴失效（停止資料庫、模型位址指錯），
 //      burn rate 要往上衝、告警進 firing；依賴恢復、只剩這支時告警不該響。
 //
 // 用 constant-arrival-rate：SLO 看的是來的人有幾成被好好服務，到達速率不能跟著 server 變慢而降。
 //
-// 預設打 docker 那台 app（18090）：
+// 預設送到 docker 那台 app（18090）：
 //   k6 run perf/slo.js
 // 環境變數：
 //   CRUD_RPS        行程 API 每秒幾個請求（預設 10，GET 列表 : 新增+刪除 ≈ 8 : 2）
 //   ASSIST_PER_MIN  每分鐘跟助理說幾句（預設 6；0 = 不碰模型）
-//   DURATION        跑多久（預設 2m）
+//   DURATION        執行多久（預設 2m）
 
 import './lib/docker-target.js';
 import http from 'k6/http';

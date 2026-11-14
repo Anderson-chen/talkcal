@@ -20,7 +20,7 @@ groups:
             model:
               refId: A
               instant: true
-              # 只看 pg_up 的話，exporter 自己掛了時 pg_up 5 分鐘後就消失，變成沒資料、算正常。
+              # 只看 pg_up 的話，exporter 自己停了時 pg_up 5 分鐘後就消失，變成沒資料、算正常。
               # 後半讓 exporter 抓不到（up = 0）也算 0。兩個 job 都沒有的環境結果是空的，noDataState OK 不會響
               expr: >-
                 min(pg_up{job="postgres"})
@@ -150,7 +150,7 @@ groups:
               expression: A
               conditions:
                 # 2 小時 15 分 = 整點備份連續兩次沒成功。一次失敗可能是 S3 短暫連不上，下一個整點會補上；
-                # 多的 15 分鐘給備份本身跑和時鐘誤差
+                # 多的 15 分鐘給備份本身執行和時鐘誤差
                 - evaluator: { type: gt, params: [8100] }
         for: 0s
         noDataState: OK

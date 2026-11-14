@@ -4,7 +4,7 @@
 
 apiVersion: 1
 
-# provisioning 只新增、更新，檔案裡拿掉的不會自己刪，起過的 Grafana 會一直留著 Watchdog 和 heartbeat。
+# provisioning 只新增、更新，檔案裡拿掉的不會自己刪，啟動過的 Grafana 會一直留著 Watchdog 和 heartbeat。
 # 之後用同樣的 uid 加回 Watchdog 時，要拿掉這兩段，不然每次啟動都被刪
 deleteRules:
   - orgId: 1
@@ -46,7 +46,7 @@ groups:
         for: 2m
         # 停超過 5 分鐘後連最後的點都查不到，變成沒資料，一樣是停了
         noDataState: Alerting
-        # Mimir 查不到由下一條負責，這裡不重複寄
+        # Mimir 查不到時下一條會響，這裡不重複寄
         execErrState: OK
         labels:
           severity: critical
@@ -93,7 +93,7 @@ groups:
             `docker compose ps mimir`、`docker compose logs mimir` 看原因（常見：硬碟滿、記憶體被砍）。
             Alloy 會先把指標留在自己的 WAL，Mimir 回來後補送，短時間停掉不太會缺資料。
 
-      # ── 3. Loki、Tempo 掛了 ──────────────────────────────────────
+      # ── 3. Loki、Tempo 停了 ──────────────────────────────────────
       - uid: meta-backend-down
         title: Loki 或 Tempo 抓不到
         condition: C
@@ -115,7 +115,7 @@ groups:
               conditions:
                 - evaluator: { type: lt, params: [1] }
         for: 2m
-        # 沒資料是 Alloy 沒在送，由第一條負責
+        # 沒資料是 Alloy 沒在送，第一條會響
         noDataState: OK
         execErrState: OK
         labels:

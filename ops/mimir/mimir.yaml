@@ -1,8 +1,8 @@
-# 單機設定：所有元件跑在同一個程序（-target=all，預設值），資料寫本機的 mimir-data volume，不接物件儲存。
+# 單機設定：所有元件在同一個 process 裡執行（-target=all，預設值），資料寫本機的 mimir-data volume，不接物件儲存。
 # 指標由 Alloy 用 remote_write 推進來，Mimir 自己不抓。為什麼用 Mimir 不用 Prometheus，見 ops/README.md 的「選型理由」。
 
 # 開著的話每個寫入、查詢都要帶 X-Scope-OrgID。關掉後所有資料歸在 anonymous 這個租戶，
-# rules/ 底下的資料夾名稱就是它
+# rules/ 底下的資料夾就用這個名稱
 multitenancy_enabled: false
 
 server:
