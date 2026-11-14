@@ -1,5 +1,4 @@
-// eventDraft.ts 的單元測試：新增表單的每一條規則。
-// 規則都是純函式，不必掛元件、不必等畫面更新，一種情況一行。元件有沒有接好，交給 Playwright（e2e/）。
+// 元件有沒有接好，交給 Playwright（e2e/）。
 import { describe, expect, it } from 'vitest'
 import { daysApart, endDayOffset, isOvernight, toDraft, type FormFields } from './eventDraft'
 

@@ -1,12 +1,10 @@
-// 封存：結束超過 2 年的行程，後端每天會搬到封存，月曆上就看不到了，只能照日期查看。
-// 這裡是純函式：哪幾個月要註明「已自動封存」、查詢的日期合不合規、查到的行程時間怎麼寫。
+// 後端每天把結束超過 2 年的行程搬到封存，月曆讀不到，只能照日期另外查。
 
 import { dayLabel, timeOf, toIsoDate } from '../monthGrid'
 
 /** 結束超過幾年就封存。跟後端的 calendar.event.retention 一致：畫面上寫著這個數字，改那邊要一起改這裡 */
 export const ARCHIVE_YEARS = 2
 
-/** 畫面上的說明，月曆上的提示和查詢畫面共用 */
 export const ARCHIVE_NOTICE = `結束超過 ${ARCHIVE_YEARS} 年的行程已自動封存，只能查看`
 
 /**
@@ -25,7 +23,7 @@ export function isArchivedMonth(year: number, month: number, today: string): boo
   return monthBounds(year, month).from < archiveCutoff(today)
 }
 
-/** 這個月的第一天和最後一天（兩端都含），查詢畫面預設查整個月 */
+/** 兩端都含 */
 export function monthBounds(year: number, month: number): { from: string; to: string } {
   return { from: toIsoDate(new Date(year, month - 1, 1)), to: toIsoDate(new Date(year, month - 1, lastDayOf(year, month))) }
 }

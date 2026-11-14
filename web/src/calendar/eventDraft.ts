@@ -1,8 +1,6 @@
-// 新增表單的規則：欄位填得對不對、怎麼變成要送給後端的資料。
-// 純函式：不碰畫面、不碰 API，給一樣的欄位就得到一樣的結果，所以用單元測試就能把每種情況測透。
+// 新增、修改表單的規則：欄位填得對不對、怎麼變成要送出的資料。抽成純函式，才能用單元測試把每種情況測透。
 //
-// 存檔走同一個 POST /events，所以規則由後端的 CalendarEvent 決定；
-// 這裡先擋最常見的幾種（沒標題、結束等於開始），讓使用者不必等一趟來回才知道。
+// 規則由後端的 CalendarEvent 決定，這裡只先擋最常見的幾種（沒標題、結束等於開始），使用者不必等一趟來回。
 import type { Category, EventFields } from '../calendar'
 import { addDays } from '../monthGrid'
 
@@ -40,7 +38,6 @@ export function isOvernight(start: string, end: string): boolean {
   return start !== '' && end !== '' && end < start
 }
 
-/** 欄位 → 要送出的資料；有問題就回給使用者看的錯誤訊息。 */
 export function toDraft(form: FormFields): { draft: EventFields } | { error: string } {
   if (!form.title.trim()) return { error: '請輸入行程標題' }
   if (!form.date) return { error: '請選擇日期' }

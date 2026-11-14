@@ -1,6 +1,5 @@
-// 新增行程：從按「新增行程」到它出現在月曆上，整條流程在真的瀏覽器裡跑一遍。
-// EventForm 的規則（驗證、跨夜、去空白）在 src/calendar/eventDraft.test.ts 測透了，
-// 這裡測的是「接起來」：表單打得開、填得進去、送出去的資料對、存好之後畫面跟著變。
+// 表單的規則（驗證、跨夜、去空白）在 src/calendar/eventDraft.test.ts 測，
+// 這裡測接起來的樣子：表單打得開、送出去的資料對、存好之後畫面跟著變。
 import { expect, test } from '@playwright/test'
 import { fakeApi } from './fakeApi'
 

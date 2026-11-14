@@ -1,8 +1,5 @@
-// 行事曆的狀態與動作：選了哪天、看哪種視圖、這一頁有哪些行程、篩掉哪些分類、新增、修改、刪除。
-//
-// 桌面版和手機版共用這一份：兩種版面只是把同樣的狀態畫成不同樣子。
-// 由 CalendarView 建一份、provide 給底下所有元件，元件之間不必一層一層傳 props。
-// 螢幕寬度跨過分界、版面整個換掉時，狀態也還在（選的日期、看的月份不會跳回今天）。
+// 行事曆的狀態與動作。桌面版和手機版共用 CalendarView 建的這一份：
+// 視窗跨過寬度分界、整個版面換掉時，選的日期、看的月份還在。
 
 import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
 import { addEvents, listEvents, NotFoundError, removeEvent, updateEvent, type Category, type EventFields, type SavedEvent } from '../calendar'
@@ -13,24 +10,23 @@ import { isArchivedMonth } from './archive'
 export type View = 'month' | 'week' | 'day'
 
 /**
- * 表單的初始值：手動新增是空白的，從 AI 卡片「修改」過來的帶著草稿。
- * editing：改已經存好的那一筆，存檔時送 PUT 而不是新增。id 是哪一筆，expected 是改之前看到的樣子，
- * 存的時候一起送出去，那筆在這之後被別人改過就會失敗（409），不會蓋掉別人的改動。
+ * editing：改已經存好的那一筆，存檔送 PUT。expected 是改之前看到的樣子，跟著送出去；
+ * 那筆在這之間被別人改過的話後端回 409，不會蓋掉別人的改動。
  */
 export interface FormRequest {
   initial: EventFields
   editing?: { id: string; expected: EventFields }
-  // 存好之後要通知誰（AI 卡片要把那一筆標成「已加入」「已修改」）
+  // AI 卡片要知道存好了，才能標成已加入、已修改
   onSaved?: (saved: SavedEvent) => void
 }
 
 export function useCalendar() {
-  // 「今天」取瀏覽器的本地日期。跟後端的 calendar.zone（台北）在台灣是同一天；不在台灣用的話會差，那是已知的限制
+  // 瀏覽器的本地日期。在台灣跟後端的 calendar.zone 是同一天，在別的時區會差，是已知的限制
   const today = toIsoDate(new Date())
 
   const sel = ref(today)
   const view = ref<View>('month')
-  // 現在載入的是哪個月的月曆頁。週、日視圖也靠它：任何一天所在的那一週，一定落在它那個月的 42 格裡
+  // 載入的是哪個月的月曆頁。週、日視圖也只讀這一頁：任何一天所在的那一週，一定落在它那個月的 42 格裡
   const shown = ref(monthOf(today))
   const events = ref<SavedEvent[]>([])
   const loadError = ref<string | null>(null)
@@ -41,12 +37,12 @@ export function useCalendar() {
   const days = computed(() => monthGrid(shown.value.year, shown.value.month))
 
   // ── 載入 ──────────────────────────────────────────────
-  // 換月份、或資料變了（新增、刪除）就重讀這一頁。version 只是用來「明明月份沒變也要重讀」的開關
+  // 月份沒變也要重讀時（新增、刪除之後）把 version 加一
   const version = ref(0)
   let latestLoad = 0
 
   watch([days, version], async () => {
-    // 快速連按「下個月」時，回應可能不照順序回來：每次領一個號碼，回來時不是最新那一號就丟掉
+    // 快速連按下個月時回應可能不照順序回來，不是最新那一號就丟掉
     const ticket = ++latestLoad
     const { from, to } = gridRange(days.value)
     try {
@@ -62,7 +58,7 @@ export function useCalendar() {
 
   const reload = () => version.value++
 
-  // 讀失敗之後網路回來了（瀏覽器的 online 事件），自己重讀一次，不必等使用者按「重新讀取」
+  // 讀失敗之後網路回來了就自己重讀，不必等使用者按「重新讀取」
   const reloadIfFailed = () => {
     if (loadError.value) reload()
   }
@@ -72,7 +68,7 @@ export function useCalendar() {
   // ── 查詢 ──────────────────────────────────────────────
   const visible = computed(() => events.value.filter((e) => !hidden.value[e.category]))
 
-  // 每一天有哪些行程（跨夜、跨天的會出現在它涵蓋的每一天），依開始時間排好
+  // 跨天的行程會出現在它涵蓋的每一天
   const byDay = computed(() => {
     const map = new Map<string, SavedEvent[]>()
     for (const event of visible.value) {
@@ -87,7 +83,7 @@ export function useCalendar() {
 
   const eventsOn = (day: string) => byDay.value.get(day) ?? []
 
-  // 側欄篩選旁邊的數字：這個月開始的行程，各分類幾筆（不管有沒有被篩掉）
+  // 側欄篩選旁邊的數字：這個月開始的行程各分類幾筆，被篩掉的也算
   const monthCounts = computed(() => {
     const prefix = `${shown.value.year}-${String(shown.value.month).padStart(2, '0')}`
     const counts: Record<Category, number> = { WORK: 0, PERSONAL: 0, HEALTH: 0, SOCIAL: 0 }
@@ -97,7 +93,6 @@ export function useCalendar() {
 
   const detail = computed(() => events.value.find((e) => e.id === detailId.value) ?? null)
 
-  // 看的這個月有沒有已經封存的日子：有的話月曆上要註明，並放查看封存的入口
   const archived = computed(() => isArchivedMonth(shown.value.year, shown.value.month, today))
 
   // ── 導覽 ──────────────────────────────────────────────
@@ -109,12 +104,11 @@ export function useCalendar() {
   }
 
   function shiftMonth(n: number) {
-    // 交給 Date 處理進位：月份 13 會變成明年一月、0 變成去年十二月
+    // 月份 13、0 交給 Date 進位成明年一月、去年十二月
     const first = new Date(shown.value.year, shown.value.month - 1 + n, 1)
     shown.value = { year: first.getFullYear(), month: first.getMonth() + 1 }
   }
 
-  /** 「上一頁／下一頁」：月視圖跳一個月，週視圖跳七天，日視圖跳一天 */
   function step(direction: 1 | -1) {
     if (view.value === 'month') shiftMonth(direction)
     else pickDate(addDays(sel.value, direction * (view.value === 'week' ? 7 : 1)))
@@ -125,17 +119,14 @@ export function useCalendar() {
   }
 
   // ── 新增、修改、刪除 ─────────────────────────────────────────
-  /**
-   * 存起來、跳到第一筆那天、重讀這一頁。存進去的分類如果被篩掉了，打開它：不然使用者會以為沒存到。
-   * idempotencyKey 由呼叫端（表單、助理的卡片）管：它們才知道「再按一次」是不是同一次新增。
-   */
+  /** idempotencyKey 由呼叫端管：只有它知道再按一次是不是同一次新增 */
   async function add(drafts: EventFields[], idempotencyKey?: string): Promise<SavedEvent[]> {
     const saved = await addEvents(drafts, idempotencyKey)
     showSaved(saved)
     return saved
   }
 
-  // 存好之後（新增、修改共用）：跳到第一筆那天、打開被篩掉的分類、重讀這一頁
+  // 存進去的分類被篩掉的話打開它，不然使用者會以為沒存到
   function showSaved(saved: SavedEvent[]) {
     const shownAgain = { ...hidden.value }
     for (const e of saved) delete shownAgain[e.category]
@@ -144,14 +135,13 @@ export function useCalendar() {
     reload()
   }
 
-  /** 改成 event 的樣子。存好之後見 showSaved */
   async function update(id: string, expected: EventFields, event: EventFields): Promise<SavedEvent> {
     const saved = await updateEvent(id, expected, event)
     showSaved([saved])
     return saved
   }
 
-  /** 刪掉。已經不在了（別的分頁先刪了）也當成成功：使用者要的結果本來就是「它不在」，重讀一次讓畫面跟上 */
+  /** 已經不在（別的分頁先刪了）也算成功：使用者要的就是它不在 */
   async function remove(id: string) {
     try {
       await removeEvent(id)
@@ -167,10 +157,7 @@ export function useCalendar() {
     form.value = { initial: { ...blankDraft(sel.value), ...initial }, onSaved }
   }
 
-  /**
-   * 打開表單改已經存好的那一筆。initial 不給就是它現在的樣子；助理的修改卡片會給「要改成的樣子」。
-   * expected 是改之前看到的樣子，存的時候拿它核對那筆有沒有在這之間被改過。
-   */
+  /** initial 不給是它現在的樣子，助理的修改卡片會給要改成的樣子。expected 見 FormRequest */
   function openEdit(id: string, expected: EventFields, initial: EventFields = expected, onSaved?: (saved: SavedEvent) => void) {
     detailId.value = null
     form.value = { initial: { ...initial }, editing: { id, expected }, onSaved }
@@ -186,14 +173,14 @@ export type CalendarState = ReturnType<typeof useCalendar>
 
 export const CALENDAR: InjectionKey<CalendarState> = Symbol('calendar')
 
-/** 元件取得共用狀態。沒被 CalendarView 包住就是接線錯誤，直接炸比拿到 undefined 好除錯 */
+/** 沒被 CalendarView 包住就直接丟例外，比拿到 undefined 好查 */
 export function useCalendarState(): CalendarState {
   const state = inject(CALENDAR)
   if (!state) throw new Error('行事曆元件必須放在 CalendarView 底下')
   return state
 }
 
-/** 手動新增的預設值：選的那天 10:00–11:00、工作（照設計稿） */
+/** 選的那天 10:00–11:00、工作，照設計稿 */
 export function blankDraft(day: string): EventFields {
   return { title: '', start: `${day}T10:00`, end: `${day}T11:00`, category: 'WORK', location: null, note: null }
 }
@@ -202,5 +189,4 @@ export function monthOf(day: string) {
   return { year: Number(day.slice(0, 4)), month: Number(day.slice(5, 7)) }
 }
 
-// 錯誤變成一句話的函式定義在 http.ts（每個 API 共用）；轉出去，元件從這個檔案一起 import
 export { message }

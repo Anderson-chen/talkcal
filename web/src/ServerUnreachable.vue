@@ -1,7 +1,6 @@
 <script setup lang="ts">
-// 打開頁面時連不上伺服器：網路斷了、伺服器正在重啟或更新。
-// 跟登入頁分開畫：這時候不知道使用者有沒有登入，畫登入頁會讓登入著的人以為被登出，而且那時候登入也一樣失敗。
-// 「重新連線」再問一次「我是誰」；網路回來時（瀏覽器的 online 事件）自己問，不必等使用者按。
+// 打開頁面時連不上伺服器。為什麼不畫登入頁見 auth.ts 的 meUnreachable。
+// 網路回來時（瀏覽器的 online 事件）自己重新連線，不必等使用者按。
 import { onMounted, onUnmounted, ref } from 'vue'
 import { savedThemeVars } from './calendar/theme'
 
@@ -20,7 +19,7 @@ async function reconnect() {
   }
 }
 
-// 事件監聽不接 Promise：包一層，加上和拿掉的要是同一個函式
+// 包一層：事件監聽不接 Promise，而且加上和拿掉的要是同一個函式
 const onOnline = () => void reconnect()
 onMounted(() => window.addEventListener('online', onOnline))
 onUnmounted(() => window.removeEventListener('online', onOnline))

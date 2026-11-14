@@ -1,5 +1,4 @@
-// 週、日視圖的時間軸：哪些行程畫在這一天、畫在幾點到幾點、重疊時怎麼並排。
-// 純函式，不碰畫面；元件只把結果換成 top / height / left / width。
+// 週、日視圖的時間軸：每一天畫哪幾段、重疊時怎麼並排。元件只把結果換成 top / height / left / width。
 
 import type { SavedEvent } from '../calendar'
 import { addDays } from '../monthGrid'

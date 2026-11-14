@@ -1,4 +1,4 @@
-// 助理回應的假資料：桌面、手機的失敗畫面測試共用，錯誤格式照後端 CalendarAssistantController 的 AssistantFailure 只寫一份。
+// 錯誤格式照後端 CalendarAssistantController 的 AssistantFailure：{ error, code, retryAfterSeconds? }。
 import type { Page, Route } from '@playwright/test'
 
 export type Reply = (route: Route) => Promise<void>

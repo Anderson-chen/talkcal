@@ -1,9 +1,6 @@
 <script setup lang="ts">
-// 手動新增行程，或修改已經存好的那一筆（calendar.form 帶著 editing）。桌面版是對話框、手機版是整頁（variant）。
-// 從 AI 卡片按「修改」過來時，欄位帶著草稿。
-//
-// 這裡只管畫面：欄位怎麼驗證、怎麼變成送出的資料，在 eventDraft.ts（純函式，有單元測試）。
-// 跟設計稿不同的地方：結束時間早於開始時間時，當成「結束在隔天」並標示出來（理由見 isOvernight）。
+// 新增、修改行程的表單，驗證和轉換在 eventDraft.ts。
+// 跟設計稿不同：結束時間早於開始時間時當成結束在隔天，並標示出來（理由見 eventDraft.ts 的 isOvernight）。
 import { computed, onMounted, reactive, ref } from 'vue'
 import { CATEGORIES } from '../calendar'
 import { timeOf } from '../monthGrid'
@@ -30,7 +27,7 @@ const form = reactive<FormFields>({
   endDays: keptEndDays(),
 })
 
-// 修改跨天的行程：記住原本跨幾天，只有一個日期欄也不會把結束日改掉。
+// 修改跨天的行程時記住原本跨幾天，見 eventDraft.ts 的 endDays。
 // 一般的跨夜（22:00–01:00）不必記，照「結束早於開始算隔天」就對；記了反而改成白天時段時還停在隔天
 function keptEndDays(): number | undefined {
   if (!request.editing) return undefined
@@ -40,7 +37,7 @@ function keptEndDays(): number | undefined {
 }
 const error = ref<string | null>(null)
 const saving = ref(false)
-// 這個表單的冪等鍵：存失敗後再按「儲存」，內容沒改就帶同一把，上次其實存好了也不會多一筆
+// 存失敗後再按，內容沒改就帶同一把鍵，上次其實存好了也不會多一筆
 const saveKey = retryKey()
 const titleInput = ref<HTMLInputElement | null>(null)
 const heading = request.editing ? '修改行程' : '新增行程'
@@ -56,7 +53,6 @@ function close() {
   calendar.form.value = null
 }
 
-// oneAtATime：送出中再按（連點、按 Enter）不會送第二次
 const save = oneAtATime(saving, async () => {
   const result = toDraft(form)
   if ('error' in result) return fail(result.error)
@@ -65,10 +61,9 @@ const save = oneAtATime(saving, async () => {
   try {
     let saved
     if (request.editing) {
-      // 改已經存好的那一筆：帶著打開表單時看到的樣子，這之間被別人改過的話後端回 409，不會蓋掉
       saved = await calendar.update(request.editing.id, request.editing.expected, result.draft)
     } else {
-      // 表單只產生行程內容；從 AI 卡片「修改」來的，初始值裡有卡片的 id，再把它接回去。手動新增不帶這個欄位
+      // toDraft 不帶 proposalId；從 AI 卡片來的要接回去，後端才算採納
       const proposalId = initial.proposalId
       const drafts = [proposalId ? { ...result.draft, proposalId } : result.draft]
       ;[saved] = await calendar.add(drafts, saveKey.for(drafts))
@@ -76,7 +71,7 @@ const save = oneAtATime(saving, async () => {
     }
     request.onSaved?.(saved)
     close()
-    // 存好直接打開它的詳情（照設計稿），使用者看得到存進去的樣子
+    // 照設計稿，存好直接打開它的詳情
     calendar.detailId.value = saved.id
   } catch (e) {
     fail(message(e))

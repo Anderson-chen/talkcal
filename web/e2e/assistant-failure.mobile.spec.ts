@@ -1,5 +1,4 @@
-// 失敗時的使用者體驗在手機版：助理在底部滑上來的面板裡，倒數和「再試一次」一樣要在。
-// 每一種失敗的細節在 assistant-failure.desktop.spec.ts，這裡只確認手機版面也接上了。
+// 每一種失敗的細節在 assistant-failure.desktop.spec.ts，這裡只確認手機版的面板也接上了。
 import { expect, test } from '@playwright/test'
 import { assistantReplies, failure, ok } from './assistantReplies'
 import { fakeApi } from './fakeApi'

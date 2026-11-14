@@ -1,6 +1,5 @@
 <script setup lang="ts">
-// 桌面版：左側欄（新增、小月曆、分類篩選、主題）＋ 中間的月／週／日視圖 ＋ 右側 AI 助理。
-// 行程詳情是從右邊滑出的抽屜，新增表單是對話框。版面照設計稿的「桌面 Web」畫板。
+// 版面照設計稿的「桌面 Web」畫板。
 import { computed, ref } from 'vue'
 import { logOut, me } from '../auth'
 import { CATEGORIES } from '../calendar'
@@ -70,7 +69,6 @@ const noEventsToday = computed(() => calendar.view.value === 'day' && calendar.e
         <span class="section-title">主題</span>
         <ThemePicker />
       </div>
-      <!-- 目前是誰、登出。推到側欄最下面，跟上面的行事曆操作分開 -->
       <div v-if="me" class="account">
         <span class="account-name">{{ me.name }}</span>
         <button type="button" class="logout" @click="logOut()">登出</button>

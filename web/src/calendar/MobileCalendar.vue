@@ -1,9 +1,5 @@
 <script setup lang="ts">
-// 手機版：照設計稿的「手機 App」畫板。
-// - 月視圖：小格子（每天最多三個分類圓點）＋ 下面是選中那天的行程清單
-// - 週、日視圖：時間軸
-// - 行程詳情、新增表單都是整頁；AI 助理和主題選擇是從底部滑上來的面板
-// - 右下角兩顆浮動按鈕：AI 助理、新增行程
+// 版面照設計稿的「手機 App」畫板。
 import { computed, ref } from 'vue'
 import { logOut, me } from '../auth'
 import type { Category, SavedEvent } from '../calendar'
@@ -35,7 +31,7 @@ const week = computed(() => weekOf(calendar.sel.value))
 const cells = computed(() =>
   calendar.days.value.map((day) => {
     const events = calendar.eventsOn(day)
-    // 每個分類最多一個圓點、最多三個：手機格子小，圓點是「這天大概有什麼」的提示，不是清單
+    // 手機格子小，圓點只提示這天大概有什麼，不是清單：每個分類最多一個、最多三個
     const dots = [...new Set(events.map((e) => e.category))].slice(0, 3)
     return {
       day,
@@ -205,7 +201,7 @@ const dotColor = (category: Category) => theme.colors.value[category].color
           <button type="button" class="done" @click="themeOpen = false">完成</button>
         </div>
         <ThemePicker large />
-        <!-- 目前是誰、登出：手機版頁首放不下，跟主題一起放在這個面板 -->
+        <!-- 登出放這個面板：手機版頁首放不下 -->
         <div v-if="me" class="account">
           <span class="account-name">{{ me.name }}</span>
           <button type="button" class="logout" @click="logOut()">登出</button>
