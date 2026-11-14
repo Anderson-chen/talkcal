@@ -10,7 +10,7 @@ commit 前不用跑，等要開 PR 時一起跑。這些可以直接跑，不用
 |---|---|
 | 後端 Java | `backend/gradlew -p backend test`：單元測試、ArchUnit 分層規則，編譯時 Error Prone 也會跑 |
 | 後端的 package、import | `backend/gradlew -p backend test --tests '*ArchitectureTest'`：只看依賴方向，最快 |
-| 後端的資料庫、S3 adapter、整個 app 接起來 | `backend/gradlew -p backend integrationTest`（要開 Docker） |
+| 後端的資料庫、S3 adapter、整個 app 的組裝 | `backend/gradlew -p backend integrationTest`（要開 Docker） |
 | DB migration | `ci/migrations.sh` |
 | prompt、模型相關的程式 | `backend/gradlew -p backend eval`（要開模型） |
 | 前端 `web/` | `pnpm --dir web run lint`、`pnpm --dir web test`、`pnpm --dir web run build`：`build` 會跑 `vue-tsc`，型別錯誤只有它抓得到 |
