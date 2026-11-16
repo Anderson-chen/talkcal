@@ -17,7 +17,7 @@ import java.util.List;
  */
 public interface PlanSessionsUseCase {
 
-    /** 「這學期每天都幫我排」這種會一次出上百張卡片。 */
+    /** 「這學期每天都幫我排」這種會一次產生上百張卡片。 */
     int MAX_DAYS = 14;
 
     List<FreeSlot> planSessions(OwnerId owner, LocalDate start, LocalDate endExclusive, DayPeriod period, Duration length);

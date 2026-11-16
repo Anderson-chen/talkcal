@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
- * 從 calendar_event（存過行程）和 calendar_assistant_message（跟助理說過話）數出最近有動作的擁有者，時間都看 created_at。
+ * 數出最近存過行程（calendar_event）或跟助理說過話（calendar_assistant_message）的擁有者，時間都看 created_at。
  * calendar_assistant_message 只往後接、舊輪會被刪掉，所以 created_at 是最近幾輪各自存進來的時間，正好看得出這段期間有沒有說話。
  *
  * 幾個期間在同一句 SQL 裡用 FILTER 一起數，兩張表各掃描一次；只掃描最早那個時間點之後的資料，其他期間再從裡面篩。

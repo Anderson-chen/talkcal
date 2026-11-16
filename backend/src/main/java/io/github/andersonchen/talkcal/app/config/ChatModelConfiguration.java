@@ -18,7 +18,7 @@ class ChatModelConfiguration {
     static final String GUARDED_CHAT_MODEL = "guardedChatModel";
 
     /**
-     * 要跟 application.properties 的 resilience4j.*.instances.chat-model 同名：對不上的話，starter 會默默用預設值另建一個。
+     * 要跟 application.properties 的 resilience4j.*.instances.chat-model 同名：對不上的話，starter 會用預設值另建一個，不報錯。
      * 指標的 name tag 也是這個值，改名之後照 tag 篩的告警就查不到資料。
      */
     static final String CHAT_MODEL = "chat-model";

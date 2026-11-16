@@ -27,7 +27,7 @@ public interface TrackProposalsUseCase {
     List<ProposalId> proposalsShown(OwnerId owner, int count);
 
     /**
-     * 只有 owner 自己的、還沒表態過的才算，每張最多算一次；別人的、沒發過的、已經表態過的都靜靜略過，
+     * 只有 owner 自己的、還沒表態過的才算，每張最多算一次；別人的、沒發過的、已經表態過的都略過、不報錯，
      * 不洩漏別人的卡片存不存在。
      * 失敗時：owner、proposals 是 null 或含 null、超過 MAX_DISMISSED_PER_CALL 張 → IllegalArgumentException。
      */

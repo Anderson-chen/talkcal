@@ -16,7 +16,7 @@ public record Account(AccountId id, String displayName, PasswordLogin passwordLo
     /**
      * 以 UTF-8 的 bytes 算：
      * - 至少 8：太短的密碼幾秒就猜得到
-     * - 最多 72：BCrypt 只看前 72 bytes，後面的默默忽略，前 72 bytes 一樣的兩個密碼會被當成同一個。
+     * - 最多 72：BCrypt 只看前 72 bytes，後面的直接忽略、不報錯，前 72 bytes 一樣的兩個密碼會被當成同一個。
      *   中文一個字是 3 bytes，24 個中文字就到上限
      */
     public static final int MIN_PASSWORD_BYTES = 8;

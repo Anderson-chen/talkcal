@@ -228,8 +228,8 @@ public final class CalendarTools {
             if (events.isEmpty()) {
                 return from + " 到 " + to + "（不含）之間沒有行程。";
             }
-            // 標題、地點不一定是使用者自己想的字（從信件、網頁複製貼上的，或之後的邀請、匯入），可能藏著給模型的指令
-            // （間接 prompt injection）。現在只有本人寫得進自己的行事曆，但這道防線不靠寫的人可信。
+            // 標題、地點可能藏著給模型的指令，這種攻擊叫間接 prompt injection。這些字不一定是使用者自己想的：
+            // 可能從信件、網頁複製貼上，或來自之後的邀請、匯入。現在只有本人寫得進自己的行事曆，但這道防線不靠寫的人可信。
             // 開頭先講清楚這是資料，每個欄位都用「」框起來，模型才分得出哪裡是資料、哪裡是指示（spotlighting）。
             // 編號放在每一筆最前面：要改、要刪時，模型拿編號呼叫 propose_change、propose_removal
             return DATA_NOTICE + lines(events.stream().map(e -> "〔編號 " + e.id() + "〕" + describe(e.event())).toList());
@@ -268,9 +268,9 @@ public final class CalendarTools {
     }
 
     /**
-     * 在空檔裡排時段、出新增卡片，一次做完。
+     * 在空檔裡排時段、產生新增卡片，一次做完。
      *
-     * 不讓模型自己挑：要 qwen3-8b 做 find_free_slots → 自己挑 → propose_events 的話，常停在中間，
+     * 不讓模型自己挑：要 qwen3:8b 做 find_free_slots → 自己挑 → propose_events 的話，常停在中間，
      * 用文字列出時段再問「要新增嗎？」，使用者回「好」又反問幾點；靠規則、範例、提醒去修只修好一半，還會弄壞別的題目。
      * 模型只決定做什麼、哪幾天、多長，幾點由程式挑（見 SessionPlanner），這樣一個工具模型呼叫得很穩定。
      *

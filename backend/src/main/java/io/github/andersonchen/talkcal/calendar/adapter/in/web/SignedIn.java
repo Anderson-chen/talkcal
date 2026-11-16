@@ -17,7 +17,7 @@ final class SignedIn {
 
     /**
      * SecurityFilterChain 已經擋掉沒登入的請求。萬一沒有登入者（設定被改壞），丟 IllegalStateException 回 502，
-     * 不丟 NullPointerException，也不默默當成某個人。名字不是 UUID 也一樣：那是登入那一端的錯，不是呼叫端送錯，不該變成 400。
+     * 不丟 NullPointerException，也不在沒有登入者時當成某個人。名字不是 UUID 也一樣：那是登入那一端的錯，不是呼叫端送錯，不該變成 400。
      */
     static OwnerId owner(Principal signedIn) {
         if (signedIn == null) {

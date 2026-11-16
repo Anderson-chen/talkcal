@@ -24,8 +24,8 @@ import java.util.Objects;
  * 歸檔用的 bucket。雲端是 AWS S3，本機是 RustFS（deploy/compose.yaml），都支援 S3 的 API，只差 endpoint 和帳密。
  * SDK 的型別、例外只出現在這個類別，S3 的錯一律轉成 IllegalStateException。
  *
- * 不叫 Adapter：這個類別不實作 core 的 port，行程（S3EventArchiveAdapter）和 AI 助理的對話（app.job.AssistantMemoryArchive）
- * 共用同一個 bucket、同一套讀寫。
+ * 不叫 Adapter：這個類別不實作 core 的 port。S3EventArchiveAdapter 存行程、app.job.AssistantMemoryArchive 存 AI 助理的對話，
+ * 兩邊共用同一個 bucket、同一套讀寫。
  *
  * key 的排法只寫在這裡：&lt;root&gt;owner=&lt;擁有者&gt;/month=&lt;yyyy-MM&gt;/&lt;檔名&gt;（root 是 calendar-event/、assistant-conversation/）。
  * - 擁有者在最前面：一個人的全部歸檔就是一個前綴，查看、還原只列自己的前綴，刪帳號時整個前綴刪掉，列不到也刪不到別人的；

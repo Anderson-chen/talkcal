@@ -39,7 +39,7 @@ import java.util.stream.IntStream;
 
 /**
  * 助理提議的行程跟 POST /events 收的是同一個形狀（EventFields）：畫面顯示卡片，使用者確認後送 POST /events 才存。
- * 修改（changes）、刪除（removals）也只是卡片，使用者按確認才送 PUT、DELETE /events/{id}。
+ * changes 是修改、removals 是刪除，也都只是卡片：使用者按確認才送 PUT、DELETE /events/{id}。
  * 修改卡片的 before 原樣當 PUT 的 expected 送回來：卡片顯示之後那筆被改過的話，PUT 回 409，不會蓋掉別人的改動。
  *
  * 多輪對話靠 conversationId：第一句不帶，回應裡會拿到一個，之後每句都帶。重新整理頁面後用 GET 讀回給人看的部分。

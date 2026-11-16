@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 
 /**
  * 先存進歸檔、存成功了才刪資料庫：先刪再存的話，存的那一步一失敗資料就沒了。
- * 先存再刪最壞是存好了、刪之前當掉：兩邊各一份，下次排程再存一包、再刪一次，歸檔裡多一份重複的，
+ * 先存再刪，最壞的情況是存好了、還沒刪之前程式就中斷：兩邊各一份，下次排程再存一包、再刪一次，歸檔裡多一份重複的，
  * load 時依 id 去重。重複比遺失便宜。
  *
  * 一個人、一個月一包（依行程結束的月份）：
@@ -71,14 +71,14 @@ public final class ArchiveEventsService implements ArchiveEventsUseCase {
                 }
             }
             archived += deletedThisBatch;
-            // 不滿一批 = 舊的都讀完了；有包失敗、或一筆都沒刪到（全被改成未來的）= 再讀也是同一批，停下來免得繞不完
+            // 不滿一批 = 舊的都讀完了；有包失敗、或一筆都沒刪到（全被改成未來的）= 再讀也是同一批，停止迴圈，避免無限重複
             if (loaded < batchSize || failedGroups > 0 || deletedThisBatch == 0) {
                 return new Report(archived, failedGroups);
             }
         }
     }
 
-    // TreeMap：依月份順序存，log 和物件儲存裡的順序跟時間一致，比較好對
+    // TreeMap：依月份順序存，log 和物件儲存裡的順序跟時間一致，比較容易對照
     private static Map<YearMonth, List<ScheduledEvent>> byEndMonth(List<ScheduledEvent> events) {
         return events.stream().collect(Collectors.groupingBy(
                 e -> YearMonth.from(e.event().end()), TreeMap::new, Collectors.toList()));

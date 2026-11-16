@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 跟 AI 助理用同一個 ChatModel，要的東西不一樣：助理要一段自由文字，這裡要一份程式讀得懂的行程清單。
+ * 跟 AI 助理用同一個 ChatModel，要的東西不一樣：助理要一段自由文字，這裡要一份程式能解析的行程清單。
  * 差別都在這個類別：system prompt、日期表、約束輸出的 JSON Schema。
  *
  * 這些是讓這個模型做對這件事的寫法，所以屬於 adapter：換成 Claude 或 OpenAI，日期表可能不需要，
@@ -35,7 +35,7 @@ final class ExtractionRequest {
 
     private static final DateTimeFormatter NOW_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
-    // 文法約束解碼會讓模型只能輸出這個形狀，這個形狀剛好是 LocalDateTime.parse 讀得懂的 ISO 格式（不帶秒）
+    // 文法約束解碼會讓模型只能輸出這個形狀，這個形狀剛好是 LocalDateTime.parse 能解析的 ISO 格式（不帶秒）
     private static final String DATE_TIME_PATTERN = "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$";
 
     /**

@@ -26,10 +26,10 @@ import java.util.Objects;
  * 模型給的時間要拿使用者原句核對：結束時間核對得到才採用、沒講上下午的 1～6 點當成下午（規則在 SaidTimes）。
  *
  * 文法約束已經保證了形狀，這裡還是每個欄位都檢查：約束是 server 端的設定，換一台沒開文法的 server、
- * 換一版行為不同的 llama.cpp，壞資料都不該安靜地放進來。
+ * 換一版行為不同的 llama.cpp，壞資料都不該在沒有錯誤的情況下放進來。
  *
  * 所有失敗一律丟 IllegalStateException，讀不懂的 JSON 也是：這裡讀的每個 byte 都是模型產生的，
- * 壞了是上游的錯（502），不是使用者送錯（400）。
+ * 壞了是上游的錯，回 502，不是使用者送錯的 400。
  */
 final class ExtractionResponse {
 
@@ -115,7 +115,7 @@ final class ExtractionResponse {
         }
     }
 
-    /** 寫成 switch：schema 多了一類而這裡沒跟上的話，丟例外，不會安靜地放進預設值。 */
+    /** 寫成 switch：schema 多了一類而這裡沒跟上的話，丟例外，不會放進預設值。 */
     private static Category category(String text, String where) {
         return switch (text) {
             case "work" -> Category.WORK;

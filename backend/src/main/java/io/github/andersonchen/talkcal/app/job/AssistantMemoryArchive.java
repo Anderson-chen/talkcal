@@ -95,7 +95,7 @@ public final class AssistantMemoryArchive {
                 }
             }
             archived += deletedThisBatch;
-            // 不滿一批 = 舊的讀完了；有失敗、或一段都沒刪到 = 再讀一次也是同一批，停下來免得繞不完。
+            // 不滿一批 = 舊的讀完了；有失敗、或一段都沒刪到 = 再讀一次也是同一批，停止迴圈，避免無限重複。
             // ArchiveEventsService 是同一組停止條件，改一邊要對照另一邊
             if (batch.size() < BATCH || failed > 0 || deletedThisBatch == 0) {
                 return new Report(archived, failed);
