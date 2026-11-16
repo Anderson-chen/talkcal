@@ -95,7 +95,7 @@ final class ExtractionResponse {
         if (endTime != null && !SaidTimes.endIsGrounded(startSaid, endSaid, said)) {
             endTime = null;
         }
-        // 沒講上下午的 1～6 點當成下午（使用者定的規則）。開始時間挪了，沒講上下午的結束時間也跟著挪
+        // 沒講上下午的 1～6 點當成下午（產品規則）。開始時間挪了，沒講上下午的結束時間也跟著挪
         LocalDateTime start = modelStart;
         if (SaidTimes.meansAfternoon(startSaid, start.getHour(), said)) {
             start = start.plusHours(12);

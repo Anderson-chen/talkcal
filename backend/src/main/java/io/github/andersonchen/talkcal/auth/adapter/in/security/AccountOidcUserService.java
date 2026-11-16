@@ -12,7 +12,7 @@ import org.springframework.security.oauth2.client.userinfo.OAuth2UserService;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
 /**
- * Google 登入（OIDC）的最後一步：Spring Security 已經換到 token、驗過 ID token 的簽章和對象，
+ * Google 登入（OIDC）的最後一步：Spring Security 已經換到 token、驗過 ID token 的簽章和 audience（aud），
  * 這裡把 Google 的使用者對到帳號，第一次登入就建一個。
  */
 public final class AccountOidcUserService implements OAuth2UserService<OidcUserRequest, OidcUser> {

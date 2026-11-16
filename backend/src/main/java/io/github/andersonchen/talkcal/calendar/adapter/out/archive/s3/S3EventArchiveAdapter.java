@@ -21,7 +21,7 @@ import java.util.UUID;
 
 /**
  * calendar-event/owner=&lt;擁有者&gt;/month=&lt;結束的月份&gt;/&lt;存的時間&gt;-&lt;亂數&gt;.jsonl.gz
- * （前面的排法見 ArchiveBucket）
+ * （key 前綴的排法見 ArchiveBucket）
  * - 檔名帶存的時間：同一個月每天的排程各一包，不會互相覆蓋；照字典順序列出來就是時間順序，
  *   同一筆行程出現好幾次時，後存的那份（比較新）蓋掉先存的
  * - 再加亂數：多台機器同一秒都在執行排程，也不會寫到同一個 key

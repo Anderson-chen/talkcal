@@ -16,7 +16,7 @@ public interface TrackProposalsUseCase {
 
     /**
      * 一則回覆的卡片不會到這麼多；上限是為了請求大小：核對是一句 SQL 帶著所有 id，不設的話一個請求就能塞上萬個參數。
-     * 指標灌不灌得了不靠這個：每張卡片本來就只算一次。
+     * 指標會不會重複計算不靠這個上限：每張卡片本來就只算一次。
      */
     int MAX_DISMISSED_PER_CALL = 100;
 

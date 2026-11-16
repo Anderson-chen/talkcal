@@ -210,7 +210,7 @@ public final class CalendarController {
     // 跟別的 controller 撞名的話，文件裡會互相覆蓋
 
     /**
-     * 助理的提議（proposals）和確認的請求共用這個形狀：前端把卡片原樣（或改過）送回 /events，不必轉換。
+     * 助理的提議（proposals）和確認的請求共用這個形狀：前端把卡片原樣或改過之後送回 /events，不必轉換。
      *
      * 分類在 API 上是字串，不直接用 domain 的 Category：enum 改名不該連帶改掉 API 契約，對照寫在 toCategory()、fromCategory()。
      */
@@ -245,7 +245,7 @@ public final class CalendarController {
         }
     }
 
-    // 沒帶就是 domain 的預設；帶了但不認得是呼叫端送錯（400），不改成預設
+    // 沒帶就是 domain 的預設；帶了對應不到的值是呼叫端送錯（400），不改成預設
     private static Category toCategory(String text) {
         if (text == null) {
             return Category.DEFAULT;

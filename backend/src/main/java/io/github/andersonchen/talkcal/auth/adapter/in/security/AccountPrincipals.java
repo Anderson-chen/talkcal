@@ -12,7 +12,7 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 
 /**
- * 登入之後記在 session 裡的「目前是誰」。三種登入方式都長得一樣：getName() 是帳號 ID（不是 Google 的 sub、GitHub 的 id），
+ * 登入之後記在 session 裡的「目前是誰」。三種登入方式的格式都相同：getName() 是帳號 ID（不是 Google 的 sub、GitHub 的 id），
  * 權限一律是 USER。/api/auth/me、比對資料擁有者時就只比對帳號 ID，不分登入方式。
  */
 public final class AccountPrincipals {

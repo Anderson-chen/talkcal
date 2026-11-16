@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
 // - 在 Spring Security 外面：被 Spring Security 擋下的請求（沒登入 401、沒帶 CSRF token 403）也要留紀錄，
 //   暴力試密碼、拿別人的 cookie 亂送請求的最需要被看到。排在裡面的話，這些請求在 log 裡完全隱形
 // - 在 ServerHttpObservationFilter（HIGHEST_PRECEDENCE + 1）裡面：trace id 只在這個 filter 的範圍內放進 MDC，
-//   排在外面的話這行 log 沒有 traceId，Loki 上「到 Tempo 看這個請求」的按鈕就不會出現（AccessLogTraceIdTest 會檢查）
+//   排在外面的話這行 log 沒有 traceId，Loki 上「到 Tempo 看這個請求」的按鈕就不會出現。AccessLogTraceIdTest 會檢查這件事
 // - 在 characterEncodingFilter（HIGHEST_PRECEDENCE）裡面：官方文件說會讀 body 的 filter 不要放在 HIGHEST_PRECEDENCE，會跟編碼設定衝突
 // - 會包裝 request 的 filter，官方規定 order 不可大於 REQUEST_WRAPPER_FILTER_MAX_ORDER（0）
 // 用常數算：Spring Security 的位置改了，這裡跟著動
@@ -71,7 +71,7 @@ final class AccessLogFilter extends OncePerRequestFilter {
             int status = cachingResponse.getStatus();
             cachingResponse.copyBodyToResponse();
             // 用 key-value：ECS JSON 會把這些 key 變成獨立欄位，Loki 才能寫 `| json | http_response_status_code >= 500`，
-            // 不必用 regex 從句子裡挖。欄位名照 ECS，event.duration 在 ECS 規定是奈秒
+            // 不必用 regex 從句子裡擷取。欄位名照 ECS，event.duration 在 ECS 規定是奈秒
             log.atInfo()
                     .addKeyValue("http.request.method", request.getMethod())
                     .addKeyValue("url.path", request.getRequestURI())

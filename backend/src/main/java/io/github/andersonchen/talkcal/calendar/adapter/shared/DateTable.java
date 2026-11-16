@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * 給模型看的日期對照表，例如「2026-10-14 = 下週三」：從這週一起連續三週，今天、明天、後天另外標出來。
  *
- * 把推算日期換成比對字串：不 thinking 的 8B 模型心算星期幾不可靠（「下週三」給過星期一、星期二），
+ * 把推算日期換成比對字串：關閉 thinking 的 8B 模型心算星期幾不可靠（「下週三」給過星期一、星期二），
  * 在表裡找到「下週三」那一列就不必算。日曆的計算交給 java.time。
  *
  * 放在 adapter.shared：抽行程（adapter.out.extraction）和 AI 助理（adapter.in.assistant）都要放進 prompt，

@@ -314,7 +314,7 @@ public final class CalendarTools {
         return when(event.start(), event.end()) + " " + quote(event.title()) + "〔" + label(event.category()) + "〕" + location;
     }
 
-    // 內容裡的「」換成『』：不然標題寫一個「」」就能提早結束框框，把後面的字變成框外的話
+    // 內容裡的「」換成『』：不然標題寫一個「」」就能提早結束引號，把後面的字變成框外的話
     static String quote(String text) {
         return "「" + text.replace('「', '『').replace('」', '』') + "」";
     }

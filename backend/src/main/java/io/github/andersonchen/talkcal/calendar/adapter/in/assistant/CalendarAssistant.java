@@ -41,10 +41,10 @@ import java.util.regex.Pattern;
 /**
  * 行事曆的 AI 助理：模型自己決定要查行程、找空檔、提議新增修改刪除，還是先反問使用者。
  *
- * 分工照 qwen3:8b（不 thinking）實際的表現定：
+ * 分工照關閉 thinking 的 qwen3:8b 實際的表現定：
  * - 交給模型：判斷使用者想做什麼、時間不確定時反問、把對話整理成一句完整的話、轉述查詢結果
- * - 不交給模型：時間怎麼解析（propose_events 只收一句話，交給抽取流程）、空檔怎麼算（FreeSlots）、
- *   「下午」是幾點到幾點（DayPeriod）、存不存檔（使用者按確認）
+ * - 不交給模型：時間怎麼解析（propose_events 只收一句話，交給抽取流程）。
+ *   空檔由 FreeSlots 算，「下午」是幾點到幾點由 DayPeriod 定義，存不存檔由使用者按確認
  *
  * agent loop 自己寫（reply），不用 Spring AI 的 ChatClient + advisor：記憶裡一定要留著工具呼叫和工具結果。
  * 只留使用者的話和助理最後那句的話，下一輪模型看到的是「助理說了『已顯示卡片』就完成了」，改時間時就只說不做。
@@ -58,7 +58,7 @@ public final class CalendarAssistant {
 
     /**
      * 回覆裡在說「有卡片」或「已經加入」。這一輪明明沒有提議任何行程，卻這樣說，就是在說謊：
-     * 例如「隨便」→「已顯示卡片」（沒呼叫工具）、「是」→「已加入這週三寫日記的行程」（助理根本不能加入）。
+     * 例如「隨便」→「已顯示卡片」，其實沒呼叫工具。「是」→「已加入這週三寫日記的行程」，助理根本不能加入。
      *
      * 前面是「是否、有沒有、還沒、尚未、未、不」的不算：「我無法確認是否已加入」是在問、不是在宣稱，不排除的話會被誤擋。
      */
@@ -119,7 +119,7 @@ public final class CalendarAssistant {
     // 回覆在講內部設定時，改送這句。存進記憶的也是這句
     static final String INTERNALS_FALLBACK = "我是你的行事曆助理，可以幫你查行程、找空檔、新增、修改或刪除行程。我的內部設定沒辦法提供，有什麼行程要我幫忙嗎？";
 
-    // 溫度 0：同一段對話每次走同一條路，壞了重現得出來；0 之下該問的照樣會問、工具也選得對
+    // 溫度 0：同一段對話每次走同一條路，出錯時重現得出來；溫度 0 時該問的照樣會問、工具也選得對
     private static final double TEMPERATURE = 0;
     // 一次呼叫的上限。回覆本身很短，工具呼叫的參數也不長；超過就是模型停不下來了
     private static final int MAX_TOKENS = 1024;
@@ -129,9 +129,9 @@ public final class CalendarAssistant {
     private static final DateTimeFormatter NOW_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final ChatModel chatModel;
-    // 擁有者 → 這個人名下的對話記憶。框架的 ChatMemory 只認 conversationId，擁有者要在取得 ChatMemory 之前決定
+    // 擁有者 → 這個人名下的對話記憶。框架的 ChatMemory 只用 conversationId 區分對話，擁有者要在取得 ChatMemory 之前決定
     private final Function<OwnerId, ChatMemory> memories;
-    // 工具裡叫模型被斷路器、bulkhead 擋下（ModelUnavailableException）要原樣丟出來，回 503。
+    // 工具裡呼叫模型被斷路器、bulkhead 擋下（ModelUnavailableException）要原樣丟出來，回 503。
     // Spring AI 預設把工具丟的例外轉成一段文字交給模型（讓模型自己道歉、改問別的），那樣使用者會拿到 200 和一段模型編的話，
     // 看不出「現在不能用、過一陣子再來」。其他例外照預設，轉成文字讓模型處理
     private final ToolCallingManager toolCallingManager = ToolCallingManager.builder()
@@ -278,7 +278,7 @@ public final class CalendarAssistant {
                         text = UNSAFE_LINK_FALLBACK;
                     }
                     // 內部設定不能從產品裡被問出來（OWASP LLM07 System Prompt Leakage）：
-                    // prompt 叫模型不要講只是請求，模型照樣會講，所以由程式比對回覆
+                    // prompt 呼叫模型不要講只是請求，模型照樣會講，所以由程式比對回覆
                     if (revealsInternals(text, system.getText())) {
                         log.warn("AI 助理的回覆在講內部設定（工具名稱或照念指示），改成固定回覆：conversation={} reply={}",
                                 conversationId, text);
@@ -400,7 +400,7 @@ public final class CalendarAssistant {
      * - 「只有帶著時段的字才不用問」：寫成「從要做的事看得出來就不用問」的話，模型會把「七點吃飯」也當成看得出來、
      *   直接提議 19:00，但早上七點吃飯也很常見。所以界線看字：早餐、晚餐、晨跑這種字本身帶著時段，其他一律問
      * - 「叫你排時間就用 plan_events」：沒有這條時，「幫我規劃兩天讀書」模型查完空檔只報空檔，
-     *   使用者回「好」還反問幾點。用規則加範例叫模型自己挑時段再 propose_events 的話，模型常停在用文字列出時段，
+     *   使用者回「好」還反問幾點。用規則加範例呼叫模型自己挑時段再 propose_events 的話，模型常停在用文字列出時段，
      *   範例一多又會照抄範例的文字、弄壞別的題目。所以挑時段交給程式（SessionPlanner），這裡只告訴模型用哪個工具
      */
     static String instruction(LocalDateTime now) {

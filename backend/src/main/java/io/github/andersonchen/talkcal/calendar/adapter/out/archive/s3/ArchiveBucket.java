@@ -21,8 +21,8 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 歸檔用的 bucket。雲端是 AWS S3，本機是 RustFS（deploy/compose.yaml），都講 S3 的 API，只差 endpoint 和帳密。
- * SDK 的型別、例外只出現在這個類別，S3 的錯一律翻成 IllegalStateException。
+ * 歸檔用的 bucket。雲端是 AWS S3，本機是 RustFS（deploy/compose.yaml），都支援 S3 的 API，只差 endpoint 和帳密。
+ * SDK 的型別、例外只出現在這個類別，S3 的錯一律轉成 IllegalStateException。
  *
  * 不叫 Adapter：這個類別不實作 core 的 port，行程（S3EventArchiveAdapter）和 AI 助理的對話（app.job.AssistantMemoryArchive）
  * 共用同一個 bucket、同一套讀寫。
@@ -32,7 +32,7 @@ import java.util.Objects;
  *   行程和對話的前綴排法一樣，刪帳號時不會有一邊漏刪
  * - owner=、month= 是 Hive 的分區慣例：之後用 Athena 直接查歸檔，不必搬資料就能依人、依月份過濾
  *
- * PutObject 回 200 才算上傳成功；SDK v2 預設每次上傳都帶 CRC32 checksum、由服務端驗過才收，
+ * PutObject 回 200 才算上傳成功；SDK v2 預設每次上傳都帶 CRC32 checksum、由伺服器端驗過才收，
  * 傳到一半斷線、內容傳壞了都會丟例外，不會看起來成功。呼叫端只在 put 正常回傳之後才刪資料庫。
  */
 public final class ArchiveBucket {

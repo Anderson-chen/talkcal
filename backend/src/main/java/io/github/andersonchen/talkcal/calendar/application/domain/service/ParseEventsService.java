@@ -28,7 +28,7 @@ public final class ParseEventsService implements ParseEventsUseCase {
     public List<CalendarEvent> parseEvents(String description) {
         // 空白的描述在這裡就擋下，不會叫到模型
         EventDescription described = new EventDescription(description);
-        // List.copyOf 會拒絕 null 元素：adapter 漏翻一筆的話在這裡就炸，不會一路傳到畫面上
+        // List.copyOf 會拒絕 null 元素：adapter 漏轉一筆的話，在這裡就丟例外，不會一路傳到畫面上
         return List.copyOf(extractEventsPort.extractEvents(described, LocalDateTime.now(clock)));
     }
 }

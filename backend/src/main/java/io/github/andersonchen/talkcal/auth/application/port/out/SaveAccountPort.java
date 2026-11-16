@@ -5,7 +5,7 @@ import io.github.andersonchen.talkcal.auth.application.domain.model.ExternalIden
 
 /**
  * 撞名、撞 identity 時回 false、不丟例外：那是正常會發生的事，不是故障。
- * 撞了沒有要由資料庫的唯一約束判斷，不能先查再存：兩個請求同時進來，先查時兩邊都會看到沒有。
+ * 有沒有重複，要由資料庫的唯一約束判斷，不能先查再存：兩個請求同時進來，先查時兩邊都會看到沒有。
  */
 public interface SaveAccountPort {
 

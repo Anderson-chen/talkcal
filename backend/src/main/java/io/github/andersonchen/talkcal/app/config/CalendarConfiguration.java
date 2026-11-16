@@ -92,7 +92,7 @@ class CalendarConfiguration {
         return new JdbcCalendarEventAdapter(jdbcClient, new TransactionTemplate(transactionManager));
     }
 
-    // 跟 AI 助理用同一個包好保護的模型，逾時也是同一個（spring.ai.openai.chat.timeout）；
+    // 跟 AI 助理用同一個 GuardedChatModel，逾時也是同一個（spring.ai.openai.chat.timeout）；
     // 抽行程不會等到逾時，靠的是 ExtractionRequest 的 max_tokens
     @Bean
     ExtractEventsPort extractEventsPort(@Qualifier(ChatModelConfiguration.GUARDED_CHAT_MODEL) ChatModel chatModel) {
@@ -200,7 +200,7 @@ class CalendarConfiguration {
         return new ListArchivedEventsService(eventArchive);
     }
 
-    // 對話的還原（行程不還原，見 ArchiveController）：controller 不 import app.job，在這裡把方法接過去
+    // 對話的還原（行程不還原，見 ArchiveController）：controller 不 import app.job，在這裡把還原的方法傳給 controller
     @Bean
     ArchiveController.RestoreConversations restoreConversations(AssistantMemoryArchive assistantMemoryArchive) {
         return assistantMemoryArchive::restore;

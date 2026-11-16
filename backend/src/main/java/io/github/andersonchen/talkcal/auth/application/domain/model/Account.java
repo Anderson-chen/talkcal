@@ -22,7 +22,7 @@ public record Account(AccountId id, String displayName, PasswordLogin passwordLo
     public static final int MIN_PASSWORD_BYTES = 8;
     public static final int MAX_PASSWORD_BYTES = 72;
 
-    /** 畫面右上角放得下，也不讓對方給的超長名字灌進資料庫。 */
+    /** 畫面右上角放得下，也不讓 provider 給的超長名字存進資料庫。 */
     public static final int MAX_DISPLAY_NAME_LENGTH = 64;
 
     /** 存的是 HashPasswordPort 算好的雜湊值，domain 裡沒有演算法的細節。 */

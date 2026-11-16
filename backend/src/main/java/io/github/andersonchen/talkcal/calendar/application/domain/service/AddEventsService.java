@@ -23,7 +23,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * 用量在存好之後才記：存檔失敗的不算數。採納不信呼叫端說的，交給 ProposalStorePort 核對，
+ * 用量在存好之後才記：存檔失敗的不算數。是否採納不看呼叫端給的值，交給 ProposalStorePort 核對，
  * 是 owner 的、還沒表態過的卡片才算。
  *
  * 帶冪等鍵時改走 SaveEventsOncePort，這個鍵存過沒有由 SaveEventsOncePort 在存的那一刻決定。重送不記採納和用量：
@@ -81,7 +81,7 @@ public final class AddEventsService implements AddEventsUseCase {
         if (owner == null) {
             throw new IllegalArgumentException("擁有者不可為 null");
         }
-        // 丟 IllegalArgumentException，不丟 NullPointerException：跟其他輸入不合規的一樣，HTTP 那頭對應 400。
+        // 丟 IllegalArgumentException，不丟 NullPointerException：跟其他輸入不合規的一樣，在 HTTP 對應 400。
         // 不用 events.contains(null)：List.of 做出來的清單，contains(null) 會直接丟 NullPointerException
         if (events == null || events.stream().anyMatch(Objects::isNull)) {
             throw new IllegalArgumentException("行程清單和裡面的每一筆都不可為 null");

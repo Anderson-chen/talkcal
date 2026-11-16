@@ -47,7 +47,7 @@ final class ExtractionRequest {
      * startSaid、endSaid 是模型照抄的原話：使用者講開始、結束時間的那幾個字。模型給的 start、end 不一定可信
      * （沒講結束時間會自己編、沒講上下午會照字面當凌晨），ExtractionResponse 拿引用回原句核對，規則見 SaidTimes。
      *
-     * 透過 OpenAI 協定的 response_format（json_schema）送出，llama.cpp 把 schema 轉成文法（GBNF）在解碼時強制執行：
+     * 透過 OpenAI 協定的 response_format（json_schema）送出。llama.cpp 把 schema 轉成 GBNF 文法，在解碼時強制執行：
      * 不合 schema 的 token 根本選不到，比在 prompt 裡要求「請回 JSON」可靠。但文法保證不了語意（日期算錯、結束早於開始），
      * 那些還是靠 domain 的規則擋。
      *
@@ -120,10 +120,10 @@ final class ExtractionRequest {
 
     /**
      * 每一句擋的都是模型真的會犯的錯：
-     * - 「從下表找，不要自己推算」：不 thinking 的 8B 模型心算星期幾不可靠，「下週三」給過星期一、星期二
+     * - 「從下表找，不要自己推算」：關閉 thinking 的 8B 模型心算星期幾不可靠，「下週三」給過星期一、星期二
      * - 「跨過午夜要用隔天的日期」：不講的話「晚上十點到凌晨一點」的結束時間會被丟掉
      * - 「沒有行程就回空陣列」：不講的話，閒聊也可能被硬湊出一個行程
-     * - title「有講跟誰就保留」：只叫模型別把地點寫進標題的話，「跟小明」也會一起刪掉，只剩「吃飯」
+     * - title「有講跟誰就保留」：只呼叫模型別把地點寫進標題的話，「跟小明」也會一起刪掉，只剩「吃飯」
      * - location 的例子：只寫「有講地點才填」的話，「在3F會議室A」抽得到、「在健身房」卻抽不到
      * - category 每一類都舉例：只給類名的話，模型對「看牙醫」該算 health 還是 personal 會不穩定
      */

@@ -3,7 +3,7 @@ package io.github.andersonchen.talkcal.calendar.application.domain.model;
 /**
  * 四種照設計稿來。設計稿裡的「假日」沒收進來：「假日」只用在全天行程（國慶日），全天行程決定不做。
  *
- * 線路上怎麼寫是各個 adapter 的事：HTTP 用大寫字串，LLM 的 schema 用小寫，畫面上用中文。
+ * 傳輸時寫成什麼格式，由各個 adapter 決定：HTTP 用大寫字串，LLM 的 schema 用小寫，畫面上用中文。
  */
 public enum Category {
     WORK,

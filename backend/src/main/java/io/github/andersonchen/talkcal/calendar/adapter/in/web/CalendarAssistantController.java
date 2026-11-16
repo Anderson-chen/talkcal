@@ -90,7 +90,7 @@ public final class CalendarAssistantController {
         String conversationId = conversationId(request.conversationId());
         OwnerId owner = SignedIn.owner(signedIn);
         CalendarAssistant.Reply reply = assistant.reply(owner, conversationId, request.message());
-        // 在這裡發 id，不在助理呼叫工具時發：工具解析出來的草稿可能被擋下（沒講早上晚上），這一輪也可能最後失敗（502），
+        // 在這裡發 id，不在助理呼叫工具時發：工具解析出來的草稿可能因為沒講早上晚上被擋下，這一輪也可能最後失敗（502），
         // 那些使用者都沒看到。回得出去的這一份，才是畫面上真的出現的卡片
         List<CalendarEvent> drafts = reply.proposals();
         List<ProposalId> ids = proposals.proposalsShown(owner, drafts.size());

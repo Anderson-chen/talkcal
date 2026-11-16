@@ -11,7 +11,7 @@ import java.util.Objects;
  * - 這個例外（回 503 + Retry-After）：模型已經連續出錯，或同時卡在模型上的請求已經滿了，現在重試也沒用
  *
  * 繼承 IllegalStateException：ExtractEventsPort、CalendarAssistant 的契約都是失敗丟 IllegalStateException，
- * 不認得這個型別的呼叫端照樣當成一般失敗處理，契約不必改；CalendarAssistantController 認得，回 503。
+ * 沒有另外處理這個型別的呼叫端照樣當成一般失敗處理，契約不必改；CalendarAssistantController 另外處理，回 503。
  *
  * 放在 adapter.shared：丟出的是包著 ChatModel 的 GuardedChatModel，助理和抽行程兩邊都用，
  * 處理的是 inbound 的 controller；inbound 和 outbound 不能互相 import，共用的類別只能放這裡。

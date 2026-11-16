@@ -33,7 +33,7 @@ import java.util.Objects;
  * bulkhead 在外層：bulkhead 滿了不是模型的錯，不該記進 breaker、讓 breaker 打開。
  *
  * breaker、bulkhead 由 Resilience4j 的 starter 照 application.properties 的 resilience4j.*.instances.chat-model 建立
- * （門檻的理由寫在那裡）。所有呼叫模型的地方共用這一組：背後是同一個模型，要壞一起壞。
+ * （門檻的理由寫在那裡）。所有呼叫模型的地方共用這一組：背後是同一個模型，故障時會一起故障。
  * 什麼失敗算模型出錯，見 ModelFailurePredicate。每一次呼叫最多等多久，見 getOptions。
  */
 public final class GuardedChatModel implements ChatModel {

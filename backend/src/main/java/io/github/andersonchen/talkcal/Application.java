@@ -4,7 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
- * 只啟動 Spring：不 import 任何 adapter 或 port，哪個 port 接哪個實作都在 app.config。
+ * 只啟動 Spring：不 import 任何 adapter 或 port，每個 port 用哪個實作，都在 app.config 設定。
  *
  * 留在根 package，不搬進 app：元件掃描從這個類別所在的 package 往下掃，搬進 app 就掃不到 calendar、auth；
  * 測試的 @SpringBootTest、@WebMvcTest 從測試所在的 package 往上找這個類別，calendar 底下的測試也會找不到。

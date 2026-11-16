@@ -8,10 +8,10 @@ import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
 
 /**
- * Google、GitHub 對帳號時出的錯，一律翻成 OAuth2AuthenticationException。
+ * Google、GitHub 對帳號時出的錯，一律轉成 OAuth2AuthenticationException。
  *
  * Spring Security 只把 AuthenticationException 當成登入失敗、交給 failure handler 轉回登入頁；
- * 其他例外（資料庫無法連線、provider 沒給 ID）會一路丟成 500 的錯誤頁，使用者停在一個看不懂的網址上。
+ * 其他例外（資料庫無法連線、provider 沒給 ID）會一路丟成 500 的錯誤頁，使用者停在看不懂的網址上。
  */
 final class ExternalSignIn {
 

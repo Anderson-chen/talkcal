@@ -126,7 +126,7 @@ public final class AssistantMemoryArchive {
 
     /**
      * assistant-conversation/owner=&lt;擁有者&gt;/month=&lt;最後說話的月份&gt;/&lt;conversation_id&gt;.jsonl.gz
-     * 一段對話一包、key 固定：重傳只會蓋成同樣的內容，不會多出重複的。前面的排法見 ArchiveBucket。
+     * 一段對話一包、key 固定：重傳只會蓋成同樣的內容，不會多出重複的。key 前綴的排法見 ArchiveBucket。
      */
     private String key(StoredConversation conversation) {
         YearMonth month = YearMonth.from(conversation.lastActive().atZone(clock.getZone()));
