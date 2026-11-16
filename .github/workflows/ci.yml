@@ -19,11 +19,10 @@ on:
   # 漏洞剛公布、想馬上確認有沒有受影響的時候手動執行
   workflow_dispatch:
 
-# 預設的 GITHUB_TOKEN 權限比這寬，明寫出來收窄成只讀
+# 預設的 GITHUB_TOKEN 權限比這寬，明寫出來收窄成唯讀
 permissions:
   contents: read
 
-# 同一個分支連推好幾次，只執行最新那次
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -56,7 +55,7 @@ jobs:
             !ci/build/reports/jacoco/
             ci/build/playwright-report/
 
-      # 覆蓋率綠燈也要留：用途是找漏測，不是判斷成敗。怎麼看見 docs/test-coverage.md
+      # 覆蓋率綠燈也要留：用途是找漏測，不是判斷成敗。報告怎麼看，見 docs/test-coverage.md
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -82,7 +81,7 @@ jobs:
       # 為什麼要給 HEAD 見 ci/secrets.sh
       - run: ci/secrets.sh HEAD
 
-  # migration 檢查要 .git 比對這次改了哪些，不能放進 checks 的容器
+  # 不放進 checks 的理由見 ci/migrations.sh
   migrations:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
@@ -138,7 +137,7 @@ jobs:
       - run: docker build --quiet --pull --tag talkcal/web:local web
       - run: docker build --quiet --pull --tag talkcal/postgres:local deploy/postgres
 
-      # 清單自己一步：寫在下一步的 $() 裡的話，compose 解析失敗只會變成少了參數，什麼都沒掃卻是綠的。
+      # 清單獨立成一步：寫在下一步的 $() 裡的話，compose 解析失敗只會變成少了參數，什麼都沒掃卻是綠燈。
       # git diff --quiet 出錯（不是 0 也不是 1）也往下掃：寧可多掃
       - id: list
         run: |

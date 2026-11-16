@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 本機的 CD（之後 EC2 也是）：去 GitHub 看 master 有沒有新的綠燈版本，有就部署。排程每幾分鐘執行一輪，執行完就結束。
+# 本機的 CD（之後 EC2 也是）：向 GitHub 查詢 master 有沒有新的綠燈版本，有就部署。排程每幾分鐘執行一輪，執行完就結束。
 #
 #   cd/triggers/watch.sh local
 #
@@ -10,7 +10,7 @@
 # 部署到還沒有 watcher 的舊版本時就不見了，排程從此找不到要執行的檔案。副本只在部署成功後換成新版。
 #
 # 一輪：
-#   1. 問 GitHub 這個分支最新一個 CI 綠燈的 commit
+#   1. 向 GitHub 查詢這個分支最新一個 CI 綠燈的 commit
 #   2. 跟上次試過的一樣就結束。失敗了也不重試：要人來看，不該每幾分鐘重 build 一次
 #   3. checkout 那個 commit，執行那個 commit 的 cd/apply.sh
 #   4. 結果寫回 GitHub Deployments
@@ -59,8 +59,7 @@ main() {
     echo "上一輪還在跑，這輪跳過"
     return 0
   fi
-  # 路徑要現在展開：trap 在 main 結束後才觸發，那時 local 變數已經不在了
-  # shellcheck disable=SC2064  # 要現在展開，理由見上一行
+  # shellcheck disable=SC2064  # 路徑要現在展開：trap 在 main 結束後才觸發，那時 local 變數已經不在了
   trap "rmdir '$lock'" EXIT
 
   # 有沒 commit 的改動，多半是開發用的 clone，checkout 會蓋掉別人的工作

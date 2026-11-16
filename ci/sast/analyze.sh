@@ -48,7 +48,7 @@ jq -r '
     | @tsv
 ' "$out"/*.sarif | sort -rn > "$out/results.tsv"
 
-# 摘要全部列出，門檻以上的標 ❌；awk 最後印出擋下的筆數
+# 摘要全部列出，門檻以上的標 ❌
 blocking=$(awk -F'\t' -v t="$threshold" -v summary="$out/summary.md" '
     BEGIN { print "## 原始碼安全分析（CodeQL）\n" > summary }
     NR == 1 { print "| security-severity | 規則 | 位置 | 說明 |\n|---|---|---|---|" > summary }

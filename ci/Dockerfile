@@ -13,7 +13,7 @@
 FROM node:22-bookworm-slim AS node
 
 # ShellCheck 的官方映像檔只有一支靜態連結的執行檔，直接搬。Ubuntu 24.04 的 apt 只有 0.9.0（2022）。
-# 版本和 digest 釘死，理由見 ci/vulns.sh
+# 版本和 digest 釘死，理由見 ci/README.md「漏洞掃描」
 FROM koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d AS shellcheck
 
 # 用 JDK：CI 要編譯。noble（Ubuntu 24.04）跟 app 映像檔同一個發行版
@@ -28,8 +28,7 @@ RUN ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack 
     && corepack enable --install-directory /usr/local/bin
 
 # Trivy 給 ci/licenses.sh 掃授權。ci/vulns.sh 從這一行讀版本，Renovate 升這一行時兩邊一起換，
-# 掃授權和掃漏洞才不會用到不同版本。釘 digest 的理由見 ci/vulns.sh。
-# 授權分類內建在執行檔裡，不必下載漏洞資料庫
+# 掃授權和掃漏洞才不會用到不同版本。釘 digest 的理由見 ci/README.md「漏洞掃描」。
 COPY --from=aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 /usr/local/bin/trivy /usr/local/bin/trivy
 
 # GRADLE_USER_HOME 底下，wrapper/ 是裝在映像檔裡的 Gradle 本體（約 140 MB），caches/ 是 ci/run.sh 掛的 volume。
@@ -48,7 +47,7 @@ RUN ./gradlew --version --no-daemon
 # 所以版本直接從 package.json 讀，不另外寫。代價是 package.json 任何一行改了這層都重建（約一兩分鐘）。
 # --with-deps 用 apt 裝 Chromium 要的系統函式庫（字型、libnss…），基底映像檔裡沒有。
 # corepack install 也在這一層把 pnpm 本體下載進 COREPACK_HOME。
-# pnpm dlx 用暫時的 store 再刪掉：預設的 store 位置會被 ci/run.sh 的 volume 蓋住，留著只是占映像檔
+# pnpm dlx 用暫時的 store 再刪掉：預設的 store 位置會被 ci/run.sh 的 volume 蓋住，留著只會占用映像檔的空間
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
     COREPACK_HOME=/opt/corepack \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0

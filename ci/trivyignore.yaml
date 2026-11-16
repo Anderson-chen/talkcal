@@ -246,7 +246,7 @@ misconfigurations:
     paths: [ci/Dockerfile, ci/sast/Dockerfile]
     statement: CI 容器掛 docker.sock，等同主機 root；只在 CI 跑完就丟
     expired_at: 2027-10-30
-  # master 用 root 只為了開 80 埠。整個改成非 root 要換成 8080 埠，Caddy、compose、架構頁都要跟著改
+  # 為什麼 master 用 root 見 web/Dockerfile。整個改成非 root 要換成 8080 埠，Caddy、compose、架構頁都要跟著改
   - id: DS-0002
     paths: [web/Dockerfile]
     statement: nginx master 是 root、worker 不是；改成非 root 要換埠，另外做
@@ -255,7 +255,7 @@ misconfigurations:
     paths: [deploy/postgres/Dockerfile]
     statement: 官方 entrypoint 以 root 準備資料夾權限，再用 gosu 換成 postgres 執行
     expired_at: 2027-11-12
-  # 剛建好的 volume 擁有者是 root，複製模型檔要 root；長駐的模型服務是一般使用者
+  # 為什麼要 root 見 deploy/compose.yaml 的 model-seed
   - id: TALKCAL-COMPOSE-003
     paths: [deploy/compose.yaml]
     statement: model-seed 跑完就結束，只為了寫進 root 擁有的 volume
@@ -273,7 +273,7 @@ misconfigurations:
     paths: [infra/bootstrap/main.tf, infra/envs/1-ec2/backups.tf, infra/envs/1-ec2/archive.tf]
     statement: SSE-S3 已加密；自管 KMS key 的好處這個規模用不到
     expired_at: 2027-10-30
-  # 出網的目的地太多（映像檔、模型、套件、Let's Encrypt）。只開 443 也一樣會報：這條規則看的是 0.0.0.0/0
+  # 為什麼出網全開見 infra/envs/1-ec2/security-groups.tf。只開 443 也一樣會報：這條規則看的是 0.0.0.0/0
   - id: AWS-0104
     paths: [infra/envs/1-ec2/security-groups.tf]
     statement: EC2 要對外拉映像檔、模型、憑證；入站才是要鎖的，只開 80/443（SSH 要明確開、限定來源 IP）

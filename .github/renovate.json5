@@ -8,8 +8,7 @@
 {
   $schema: 'https://docs.renovatebot.com/renovate-schema.json',
   extends: [
-    // 官方建議的基本組合，包括 Dependency Dashboard、monorepo 的套件綁在一起升（例如 vue 的各個子套件）、
-    // Node 映像檔只升 LTS
+    // 官方建議的基本組合
     'config:recommended',
   ],
 
@@ -42,8 +41,8 @@
   // ── 安全修補：不等週一的排程，滿兩週就開 ─────────────────────────
   // repo 沒開 GitHub 的 Dependabot alerts（Renovate 預設讀那裡），所以讓 Renovate 自己查 OSV 漏洞資料庫。
   // 修漏洞的 PR 不等週一、不受 PR 數量上限限制，但一樣等 14 天：Renovate 預設不等（minimumReleaseAge: null），要明寫蓋掉。
-  // 沒辦法只讓 HIGH、CRITICAL 不等：漏洞的設定是 Renovate 最後用 force 蓋上去的，packageRules 依嚴重度改不了這個設定
-  // （見 docs/dependency-updates.md）。要提早的話由人在 Dependency Dashboard 勾選，流程也在那份文件
+  // packageRules 沒辦法依嚴重度只讓 HIGH、CRITICAL 不等；要提早的話由人在 Dependency Dashboard 勾選
+  // （原因和流程見 docs/dependency-updates.md）
   osvVulnerabilityAlerts: true,
   vulnerabilityAlerts: {
     labels: ['dependencies', 'security'],

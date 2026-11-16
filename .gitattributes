@@ -2,8 +2,7 @@
 # 當成二進位檔，不做換行轉換、不算文字 diff。core.autocrlf=true 的機器（Windows 的 Git 預設）不設的話，取出時會變成 CRLF
 docs/design/calendar/prototype.html -text -diff
 
-# 下面這些要給 bash 讀，一律 LF：core.autocrlf=true 的機器 checkout 出來會變成 CRLF，
-# bash 讀到行尾的 \r 會報 "$'\r': command not found"
+# 下面這些要給 bash 讀，一律 LF：行尾多了 \r 的話，bash 會報 "$'\r': command not found"
 *.sh text eol=lf
 .githooks/* text eol=lf
 cd/envs/*.env text eol=lf

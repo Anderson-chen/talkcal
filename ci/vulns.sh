@@ -17,8 +17,7 @@ cd "$(git rev-parse --show-toplevel)"
 export MSYS_NO_PATHCONV=1  # 別讓 Git Bash 改寫 /var/run/docker.sock（見 ci/run.sh）
 
 # 映像檔的版本和 digest 從 ci/Dockerfile 讀，版本只維護那一處（理由見 ci/Dockerfile 的 Trivy 那段）。
-# 釘 digest、不用 trivy-action：tag 可以被換成別的內容，digest 不行。
-# 2026-03 Trivy 被入侵時，v0.69.4 和 trivy-action 的 tag 就被換成會偷 secret 的版本。
+# 釘 digest、不用 trivy-action 的理由見 ci/README.md「漏洞掃描」。
 # 只比對 COPY --from 開頭的那一行，註解裡寫到同一個名字才不會多抓一筆
 image=$(sed -nE 's|^COPY --from=(aquasec/trivy:[^ ]+) .*|\1|p' ci/Dockerfile)
 if [ -z "$image" ] || [ "$(printf '%s\n' "$image" | wc -l)" -ne 1 ]; then

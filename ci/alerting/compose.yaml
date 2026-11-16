@@ -1,10 +1,7 @@
 # ci/alerting.sh 疊在 ops/compose.yaml 上的覆寫檔。告警規則、contact point、SMTP 設定都用 ops/ 那份原樣，
 # 這裡只讓這組跟本機正在執行的觀測組、deploy/ 那組分開，再加假 app 和假 postgres_exporter。
 # 不分開的話容器名稱、主機埠會衝突，Alloy 也會在 deploy 的網路上抓到真的 app。
-#   - 專案名由 ci/alerting.sh 的 -p 給，volume 跟著換名字，Mimir、Grafana 都是全新的
-#   - 拿掉 container_name，讓 compose 照專案名取名
-#   - 主機埠只留腳本要查的三個（Mimir、Grafana、Mailpit），換成不常用的號碼
-#   - Alloy 接的 deploy 網路換成這組自己建的，上面只有假的服務
+# 專案名由 ci/alerting.sh 的 -p 給，volume 跟著換名字，Mimir、Grafana 都是全新的。
 # 用 !reset、!override（Compose 2.24 起）：一般的覆寫檔對清單是合併，拿不掉原本的埠。
 
 services:

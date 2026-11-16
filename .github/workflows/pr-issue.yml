@@ -1,7 +1,7 @@
 # PR 沒連到 issue（描述裡寫「Closes #<issue 編號>」）就紅燈，再由 branch protection 設成必過。
 # 合併時自動關 issue、看板移到 Done、之後從 PR 點回當初的需求，都靠這個連結。
 #
-# 問 GitHub 這個 PR 合併時會關哪些 issue（closingIssuesReferences），不自己用 regex 掃描述：
+# 向 GitHub 查詢這個 PR 合併時會關哪些 issue（closingIssuesReferences），不自己用 regex 掃描述：
 # 大小寫、Fixes、Resolves 這些變體、側欄手動連的，判斷都跟 GitHub 實際的行為一樣。
 #
 # 不放進 ci/checks.sh：PR 只存在 GitHub 上，本機 push 時還沒有 PR。

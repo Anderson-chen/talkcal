@@ -4,14 +4,9 @@
 #
 #   ci/licenses.sh        要有 node 和 Trivy，CI 容器（ci/Dockerfile）裡有
 #
-# 先另外裝一份只有 dependencies 的 node_modules 再掃：
-#   - devDependencies 只在 build、測試時用，不會進 dist/，不算散布出去
-#   - pnpm-lock.yaml 沒有記授權，直接掃 lockfile 的話 Trivy 找得到套件、卻一個授權都沒有，檢查會默默通過。
-#     裝好的每個套件都有自己的 package.json，讀得到授權
-#   - 套件從 pnpm store 拿，checks.sh 前面的 pnpm install 已經下載過，不會再連網
-#
-# Trivy 照 SPDX 分類授權並給嚴重度：擋 CRITICAL（AGPL、SSPL、CC-BY-NC…）、HIGH（GPL、LGPL…）和 UNKNOWN（無法辨識授權的）。
-# MPL、EPL 這類只限檔案本身的 copyleft 是 MEDIUM，放行。授權分類內建在 Trivy 裡，不必下載漏洞資料庫。
+# 為什麼另外裝一份只有 dependencies 的 node_modules 再掃、擋哪些授權等級，
+# 見 docs/licenses.md「前端：ci/licenses.sh（Trivy）」。
+# 授權分類內建在 Trivy 裡，所以 --skip-db-update，不必下載漏洞資料庫。
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
