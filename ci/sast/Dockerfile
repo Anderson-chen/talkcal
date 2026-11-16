@@ -17,7 +17,7 @@ RUN tar -xzf /tmp/codeql.tar.gz -C /opt \
               qlpacks/codeql/cpp-* qlpacks/codeql/csharp-* qlpacks/codeql/go-* qlpacks/codeql/python-* \
               qlpacks/codeql/ruby-* qlpacks/codeql/rust-* qlpacks/codeql/swift-* qlpacks/codeql/*-examples
 
-# CodeQL 解析 TypeScript（含 .vue 的 <script lang="ts">）要 node。從官方映像檔搬，版本跟 web/Dockerfile 一樣
+# CodeQL 解析 TypeScript（含 .vue 的 <script lang="ts">）要 node。從官方映像檔搬，大版本跟 web/Dockerfile 一致
 FROM node:22-bookworm-slim AS node
 
 # 下載的壓縮檔（約 700 MB）留在 fetch 那一段，這一段只拿解開的 /opt/codeql。

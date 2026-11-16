@@ -27,7 +27,8 @@ echo "── 後端：單元測試、架構規則、整合測試（編譯時 Err
 # checkLicense：會打包進 jar 的依賴有沒有不允許的授權，規則見 docs/licenses.md
 (cd backend && ./gradlew --no-daemon test integrationTest evalClasses jacocoTestReport checkLicense) || status=1
 
-# RUN_EVAL=1 由 .githooks/pre-push 在改到 prompt 或模型相關的檔案時設定。GitHub 上沒有模型，不會設
+# RUN_EVAL=1 由 .githooks/pre-push 在改到 prompt 或模型相關的檔案時設定。GitHub 上沒有模型，不會設。
+# 只有基準線裡的題目沒過才算失敗；報告在 backend/build/eval/report.md，ci/run.sh 會複製回 ci/build/eval/
 if [ "${RUN_EVAL:-0}" = 1 ]; then
     echo "── AI eval：這次改到 prompt 或模型相關的檔案 ──"
     (cd backend && ./gradlew --no-daemon eval) || status=1

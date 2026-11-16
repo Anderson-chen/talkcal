@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 export MSYS_NO_PATHCONV=1  # 別讓 Git Bash 把 /repo 改寫成 Windows 路徑（見 ci/run.sh）
 
-# 版本和 digest 都釘死（理由見 ci/README.md「漏洞掃描」）
+# 版本和 digest 都釘死：tag 可以被換成別的內容，掃描工具被換掉，這道檢查就形同虛設（實例見 ci/README.md「漏洞掃描」的 Trivy）
 image=ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
 
 # Windows 上 docker 要 C:/... 形式的路徑（pwd -W），Linux、macOS 沒有 -W 就用 pwd

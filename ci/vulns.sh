@@ -58,7 +58,7 @@ vuln=(--scanners vuln --ignore-unfixed)
 
 if [ "${1:-}" = --repo ]; then
     shift
-    # --skip-dirs：本機才有的 build 產物和別人的程式碼，CI 上 git archive 出來的沒有。
+    # --skip-dirs：build 產物、別人的程式碼、.git，以及 .claude 底下 worktree 那種整份 repo 的副本，都不是要掃的設定
     # --misconfig-scanners 的 yaml：所有 yaml 都交給 ci/config-checks/ 的規則，規則只看有頂層 services 的（compose 檔）。
     #   --check-namespaces user 是那些規則的 package 前綴
     # --skip-check-update：只用跟著 Trivy 版本內建的規則。執行時下載最新規則包的話，

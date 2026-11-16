@@ -9,7 +9,7 @@
 #   Node 22：web/Dockerfile、ci/sast/Dockerfile
 #   Gradle：backend/gradle/wrapper/gradle-wrapper.properties，由 wrapper 下載，這裡不寫版本
 
-# Node 從官方映像檔整包搬過來：跟 web/Dockerfile 打包用的是同一組 node、corepack，也不必信任另一個套件來源
+# Node 從官方映像檔整包搬過來，不必信任另一個套件來源。大版本要跟 web/Dockerfile 一致（那邊是 alpine，不是同一個執行檔）
 FROM node:22-bookworm-slim AS node
 
 # ShellCheck 的官方映像檔只有一支靜態連結的執行檔，直接搬。Ubuntu 24.04 的 apt 只有 0.9.0（2022）。
