@@ -39,10 +39,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * AI 助理對話的歸檔（#54）：真的 PostgreSQL、真的 S3 相容儲存（RustFS）。
- *
- * 跟行程那邊（EventArchiveFlowTest）同一組規則、同一組反例：
- * 存好才刪 ↔ 上傳失敗一列都不少；歸檔 → 還原後讀出來一樣；只還原得到自己的；不舊的不搬。
+ * 對話歸檔跟行程歸檔照同一組規則（存好才刪、只拿得到自己的、不舊的不搬），反例也一題一題對到 EventArchiveFlowTest，
+ * 改其中一邊的規則時兩邊一起看。
  */
 @Testcontainers
 @DisplayName("AssistantMemoryArchive：PostgreSQL ↔ S3 相容儲存")
@@ -57,7 +55,7 @@ class AssistantMemoryArchiveTest {
     private static final OwnerId ALICE = OwnerId.of("3f1c8a2e-0000-4000-8000-00000000000a");
     private static final OwnerId BOB = OwnerId.of("3f1c8a2e-0000-4000-8000-00000000000b");
     private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
-    // 超過 30 天沒說話的對話「最後說話」的時間
+    // 離測試的「現在」超過 30 天，這時候最後說話的對話算舊
     private static final Instant MARCH_2026 = Instant.parse("2026-03-15T02:00:00Z");
 
     static JdbcClient jdbc;
@@ -102,7 +100,7 @@ class AssistantMemoryArchiveTest {
                 new AssistantMessage("幫你排好了，確認一下卡片"));
     }
 
-    // 把某人某段對話的時間整段改到 lastActive（模擬「那時候聊的」）
+    // 存檔時 created_at 是現在，要造出舊對話只能事後改
     private static void lastSpokeAt(OwnerId owner, String conversationId, Instant lastActive) {
         jdbc.sql("UPDATE calendar_assistant_message SET created_at = :at WHERE owner_id = :owner AND conversation_id = :id")
                 .param("at", OffsetDateTime.ofInstant(lastActive, ZoneOffset.UTC))
@@ -132,7 +130,7 @@ class AssistantMemoryArchiveTest {
 
         assertEquals(1, archive.restore(ALICE, new MonthRange(YearMonth.of(2026, 3), YearMonth.of(2026, 3))));
         assertEquals(before.toString(), alices.get(id).toString());
-        // 再還原一次：已經在了，跳過
+        // 再還原一次：已經在資料庫裡的跳過，不會多一份
         assertEquals(0, archive.restore(ALICE, new MonthRange(YearMonth.of(2026, 3), YearMonth.of(2026, 3))));
         assertEquals(4, alices.get(id).size());
     }

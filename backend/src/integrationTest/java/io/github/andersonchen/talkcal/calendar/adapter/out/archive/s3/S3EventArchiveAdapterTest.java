@@ -33,8 +33,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * 行程的歸檔放進真的 S3 相容儲存（RustFS）、讀回來（#54）。
- * 驗的是：讀回來跟存進去一樣、格式不靠這個 app 也讀得懂、不同人的不混、存不進去一定是例外（不會「看起來成功」）。
+ * 歸檔格式要不靠這個 app 也讀得懂，存不進去時要丟例外，不能回傳得像成功了一樣。
  */
 @Testcontainers
 @DisplayName("S3EventArchiveAdapter（真的 S3 相容儲存）")

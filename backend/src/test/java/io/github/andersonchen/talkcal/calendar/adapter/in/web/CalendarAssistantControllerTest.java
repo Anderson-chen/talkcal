@@ -56,19 +56,16 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.test.web.servlet.MockMvc;
 
-/**
- * HTTP 這一層：conversationId 怎麼發、錯誤怎麼對應。助理背後接一個假的 ChatModel，不打真模型。
- */
 @WebMvcTest(CalendarAssistantController.class)
 @Import(CalendarAssistantControllerTest.StubConfiguration.class)
 @DisplayName("CalendarAssistantController")
 class CalendarAssistantControllerTest {
 
     private static final String URL = "/api/calendar/assistant";
-    // 另一個登入的人（預設的請求是 ...0001）
+    // 預設的請求用 ME 登入
     private static final String ME = "3f1c8a2e-0000-4000-8000-000000000001";
     private static final String OTHER = "3f1c8a2e-0000-4000-8000-000000000002";
-    // 行事曆上已經有的那筆（#259）：假的助理說「改」「刪」時拿它的編號呼叫工具
+    // 假模型收到含「改」「刪」的訊息時，拿這一筆的編號呼叫工具
     static final ScheduledEvent LUNCH = new ScheduledEvent(EventId.of("3f1c8a2e-6b0d-4d7e-9a51-2c4e8f7b9d99"),
             CalendarEvent.startingAt("午餐", LocalDateTime.of(2026, 10, 7, 12, 0)).withDetails("拉麵店", null));
     private static final String UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
@@ -78,7 +75,7 @@ class CalendarAssistantControllerTest {
 
     MockMvc mockMvc;
 
-    // 跟 CalendarControllerTest 一樣：每個請求預設已登入、帶著 CSRF token
+    // 每個請求預設已登入、帶著 CSRF token，見 CalendarControllerTest 的 signedIn
     @BeforeEach
     void signedIn() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context)
@@ -221,7 +218,6 @@ class CalendarAssistantControllerTest {
         assertEquals(List.of(), usage.events);
     }
 
-    // 跟助理說一句會提議的話，拿回那張卡片的 proposalId
     private String proposeCard(String signedIn) throws Exception {
         String body = mockMvc.perform(post(URL).with(user(signedIn)).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"message\":\"明天下午三點開會\"}"))
@@ -258,7 +254,7 @@ class CalendarAssistantControllerTest {
             mockMvc.perform(post(URL + "/dismissals").contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isNoContent());
         }
-        // 別人的卡片：我按不掉，回應跟成功一模一樣（不透露那張卡片存在）
+        // 別人的卡片按不掉，但回應跟成功一樣，才不會透露那張卡片存在
         mockMvc.perform(post(URL + "/dismissals").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"proposalIds\":[\"" + othersCard + "\"]}"))
                 .andExpect(status().isNoContent());
@@ -338,15 +334,14 @@ class CalendarAssistantControllerTest {
             return new RecordedUsage();
         }
 
-        // 記用量走真的 service（核對卡片的規則在那裡），只把「卡片存哪」「記到哪」換成記憶體
+        // 核對卡片的規則在 TrackProposalsService，所以用真的，只把存放和指標換成記憶體
         @Bean
         TrackProposalsService trackProposals(RecordedUsage usage) {
             InMemoryProposals proposals = new InMemoryProposals();
             return new TrackProposalsService(proposals, usage);
         }
 
-        // 假模型：使用者講「開會」就提議（呼叫 propose_events，拿到結果後回一句話），其他都回「早上還是晚上？」；
-        // failure 設了就丟那個例外
+        // 使用者講「開會」就呼叫 propose_events，其他都回「早上還是晚上？」；設了 failure 就丟那個例外
         @Bean
         CalendarAssistant calendarAssistant(AtomicReference<RuntimeException> failure) {
             ChatModel model = new ChatModel() {
@@ -375,7 +370,7 @@ class CalendarAssistantControllerTest {
                     return new ChatResponse(List.of(new Generation(new AssistantMessage("早上還是晚上？"))));
                 }
             };
-            // 每個擁有者一份記憶，跟真的實作一樣分開
+            // 每個擁有者一份記憶，跟 JdbcAssistantMemoryRepository 一樣分開
             Map<OwnerId, ChatMemory> memories = new ConcurrentHashMap<>();
             return new CalendarAssistant(model, owner -> memories.computeIfAbsent(owner, o -> MessageWindowChatMemory.builder().maxMessages(Integer.MAX_VALUE).build()),
                     description -> List.of(CalendarEvent.startingAt("開會", LocalDateTime.of(2026, 10, 7, 15, 0))),
@@ -390,7 +385,7 @@ class CalendarAssistantControllerTest {
                 .build())));
     }
 
-    /** 記下每一筆用量，寫成「shown 1」這種字串，比對時一眼看得懂。 */
+    /** 寫成「shown 1」這種字串，比對失敗時一眼看得懂。 */
     static final class RecordedUsage implements RecordUsagePort {
 
         final List<String> events = new ArrayList<>();

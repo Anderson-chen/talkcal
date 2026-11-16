@@ -13,21 +13,16 @@ import java.time.Duration;
 import java.util.Optional;
 
 /**
- * 系統測試用的「瀏覽器」：照前端的方式跟後端講話。
- *
- * - 記得 cookie（session、XSRF-TOKEN），每個請求自動帶上 —— 瀏覽器本來就會這樣
- * - 送會改東西的請求（POST、DELETE）時，從 XSRF-TOKEN cookie 讀出 token、放進 X-XSRF-TOKEN header ——
- *   這是前端要自己做的那一步（Spring Security 的 csrf.spa() 規定的格式）
- * - 登入用表單格式送 username、password（Spring Security 的 formLogin 吃的是表單，不是 JSON）
- *
- * 每個 BrowserSession 是一個獨立的瀏覽器：兩個 session 就像兩個人，cookie 不互通。
+ * 照前端的方式送請求：保存 cookie；POST、PUT、DELETE 時把 XSRF-TOKEN cookie 的值放進 X-XSRF-TOKEN header
+ * （Spring Security 的 csrf.spa() 規定的格式）；登入用表單格式，formLogin 不接受 JSON。
+ * 每個 BrowserSession 是一個獨立的瀏覽器，cookie 不共用。
  */
 final class BrowserSession {
 
     private final String baseUrl;
     private final CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
     private final HttpClient http;
-    // 想模擬「別的網站騙瀏覽器送請求」時關掉：cookie 照樣帶，但讀不到我們的 XSRF-TOKEN、送不出 header
+    // 關掉就是模擬別的網站讓瀏覽器送出請求：cookie 照樣帶，但別的網站讀不到 XSRF-TOKEN
     private boolean sendCsrfHeader = true;
 
     BrowserSession(int port) {
@@ -73,7 +68,6 @@ final class BrowserSession {
         return send(request("/api/auth/logout").POST(HttpRequest.BodyPublishers.noBody()), true);
     }
 
-    /** 註冊再登入，回到「已登入」的狀態。 */
     BrowserSession signUpAndLogIn(String username, String password) throws Exception {
         var registered = register(username, password);
         if (registered.statusCode() != 201) {
@@ -92,13 +86,13 @@ final class BrowserSession {
     }
 
     private HttpRequest.Builder request(String path) {
-        // 助理那一題會等模型，給到跟 app 呼叫模型一樣的兩分鐘
+        // 問助理會等模型，不能比 app 的 spring.ai.openai.chat.timeout 短，改設定時這裡一起改
         return HttpRequest.newBuilder(URI.create(baseUrl + path)).timeout(Duration.ofMinutes(2));
     }
 
     private HttpResponse<String> send(HttpRequest.Builder request, boolean changesSomething) throws Exception {
         if (changesSomething && sendCsrfHeader) {
-            // 跟前端一樣：手上沒有 token 就先 GET 一次，讓後端發 XSRF-TOKEN cookie 過來
+            // 前端也是這樣做：還沒有 token 就先 GET 一次，後端才會發 XSRF-TOKEN cookie
             if (cookie("XSRF-TOKEN").isEmpty()) {
                 get("/api/auth/me");
             }

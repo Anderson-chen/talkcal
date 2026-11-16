@@ -41,10 +41,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 /**
- * ArchiveController 走一遍真的 Spring MVC（#54、#274）：日期、月份怎麼綁，範圍不合規回 400，儲存出事回 502，擁有者只從登入者來。
- *
- * 查看封存用正式的 ListArchivedEventsService，只把物件儲存換成手寫的假物件：範圍的規則（400）是真的那一套，
- * 假的歸檔記下被要了誰的、哪幾個月。對話的還原也由假物件扮演，記下被叫了幾次、拿到什麼參數。
+ * 查看封存用正式的 ListArchivedEventsService，只把物件儲存換成假的：範圍不合規回 400 的規則是真的那一套。
  */
 @WebMvcTest(ArchiveController.class)
 @Import(ArchiveControllerTest.StubConfiguration.class)
@@ -70,7 +67,7 @@ class ArchiveControllerTest {
 
     MockMvc mockMvc;
 
-    // 跟 CalendarControllerTest 一樣：每個請求預設已登入、帶著 CSRF token
+    // 每個請求預設已登入、帶著 CSRF token，見 CalendarControllerTest 的 signedIn
     @BeforeEach
     void signedIn() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context)
@@ -184,7 +181,6 @@ class ArchiveControllerTest {
         assertTrue(restore.calls.isEmpty());
     }
 
-    /** 假的歸檔：記下被要了誰的、哪幾個月，回一筆固定的行程；需要時丟出設定好的例外。 */
     static final class FakeArchive implements EventArchivePort {
 
         final List<String> asked = new ArrayList<>();
@@ -210,7 +206,6 @@ class ArchiveControllerTest {
         }
     }
 
-    /** 對話的還原：記下呼叫。 */
     static final class StubRestore {
 
         final List<String> calls = new ArrayList<>();

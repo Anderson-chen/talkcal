@@ -30,10 +30,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * JdbcAssistantProposalAdapter 對真的 PostgreSQL（做法同 JdbcCalendarEventAdapterTest，#223）。
- *
- * 重點是「每張卡片最多算一次」靠的是同一句 UPDATE 的 outcome IS NULL 條件 —— 同時兩個表態只有一個改得到，
- * 這只有真的資料庫驗得準。
+ * 做法見 JdbcCalendarEventAdapterTest。每張卡片最多算一次，靠同一句 UPDATE 的 outcome IS NULL 條件：
+ * 同時兩個表態只有一個改得到，要對真的 PostgreSQL 才驗得準。
  */
 @Testcontainers
 @DisplayName("JdbcAssistantProposalAdapter（真的 PostgreSQL）")

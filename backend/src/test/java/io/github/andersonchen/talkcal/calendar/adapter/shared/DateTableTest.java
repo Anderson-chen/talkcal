@@ -38,7 +38,7 @@ class DateTableTest {
         assertTrue(table.contains("2026-10-07 = 這週三 = 今天"));
         assertTrue(table.contains("2026-10-08 = 這週四 = 明天"));
         assertTrue(table.contains("2026-10-09 = 這週五 = 後天"));
-        // 今天以前的日子不標
+        // 今天以前的日子不標相對說法
         assertTrue(table.contains("2026-10-06 = 這週二\n"));
     }
 

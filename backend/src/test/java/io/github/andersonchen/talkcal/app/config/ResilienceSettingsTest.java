@@ -21,16 +21,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 
 /**
- * application.properties 的 resilience4j.* 真的被讀進去了（#44）。
+ * starter 不檢查設定：名字寫錯、key 拼錯、設定裡沒寫的依賴，都會不報錯地用 Resilience4j 內建的預設建一個。
+ * 斷路器照樣在，只是門檻全錯（內建是 100 次的視窗、60 秒才算慢、bulkhead 25 個），從外面看不出來。
+ * 所以拿 app 實際建出來的那一組，逐項對設定檔寫的值。
  *
- * 為什麼要測：starter 對設定很寬容 —— 名字打錯、key 拼錯、沒寫在設定裡的依賴，都會靜靜用 Resilience4j 內建的預設建一個，
- * 不報錯。那樣斷路器照樣「有」，只是門檻全錯（內建是 100 次的視窗、60 秒才算慢、bulkhead 25 個），
- * 從外面看不出來。所以拿 app 實際建出來的那一組，逐項對設定檔寫的值。
- *
- * 起整個容器、不連資料庫，理由同 OpenApiDocumentationTest。
+ * 為什麼啟動整個 Spring 卻不需要資料庫，見 OpenApiDocumentationTest。
  */
 @SpringBootTest(properties = "spring.flyway.enabled=false")
-// 用不到 MockMvc，加上它只為了跟 OpenApiDocumentationTest 的設定一模一樣：Spring 測試會重用同一個容器，不必再起一次
+// 用不到 MockMvc：加上這個 annotation，設定才跟 OpenApiDocumentationTest 一模一樣，Spring 會重用同一個 context
 @AutoConfigureMockMvc
 @DisplayName("斷路器、bulkhead 的設定")
 class ResilienceSettingsTest {
@@ -85,7 +83,7 @@ class ResilienceSettingsTest {
     @Test
     @DisplayName("指標：斷路器狀態、bulkhead 剩幾個位子、擋掉幾個，都帶著 name=chat-model 出現在 /actuator/prometheus 那份")
     void metricsAreRegistered() {
-        // 先取一次，確保已經建好（registry 建了才會接上指標）
+        // 斷路器、bulkhead 第一次取用時才建，建了才有指標
         breakers.circuitBreaker(ChatModelConfiguration.CHAT_MODEL);
         bulkheads.bulkhead(ChatModelConfiguration.CHAT_MODEL);
 
@@ -95,10 +93,9 @@ class ResilienceSettingsTest {
     }
 
     /**
-     * starter 可以把斷路器狀態接進 /actuator/health，打開時 health 變 DOWN。那樣模型一掛，Docker 的 healthcheck 就判 app 不健康、
-     * 雲端的負載平衡器把它拿掉 —— 行程 CRUD 跟著不能用，正好是斷路器要防的事。
-     * 所以 health 裡不能有斷路器（starter 預設也是關的，這裡守著它）。
-     * 不看整體的 UP／DOWN：這個測試沒有資料庫，health 裡的資料庫檢查本來就是 DOWN（而且問一次要等連線逾時）。
+     * 斷路器狀態接進 /actuator/health 的話，模型一停止回應 health 就變 DOWN，Docker 的 healthcheck 判 app 不健康、
+     * 負載平衡器把 app 拿掉，行程的新增修改跟著不能用，正好是斷路器要防的事。starter 預設是關的，這裡檢查設定沒有打開。
+     * 不看整體的 UP／DOWN：這個測試沒有資料庫，資料庫那一項本來就是 DOWN，而且要等連線逾時。
      */
     @Test
     @DisplayName("反例：模型的斷路器打開時，health 裡也沒有斷路器這一項（模型掛了不等於 app 掛了）")

@@ -12,16 +12,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * 產出來的 OpenAPI 文件，真的長成我們以為的樣子。
- *
- * 為什麼用 @SpringBootTest 而不是 CalendarControllerTest 那種 @WebMvcTest：
- * springdoc 的自動設定不在 web 切片裡，切片測試根本看不到 /v3/api-docs。
- * 起整個容器也不必連任何 server —— Spring AI 的 ChatModel 建構時只記下位址，這裡一句話都不說。
- * 資料庫也一樣：連線池要等第一次查詢才真的連，只有 Flyway 會在啟動時就連上去建表，
- * 所以把 Flyway 關掉（spring.flyway.enabled=false），這個測試就不需要 PostgreSQL。
- *
- * 只驗「文件有沒有描述到契約」：路徑、欄位、各種狀態碼。
- * 版面長怎樣是 Swagger UI 的事，不值得測。
+ * 用 @SpringBootTest，不用 @WebMvcTest：springdoc 的自動設定不在 web 切片裡，切片測試看不到 /v3/api-docs。
+ * 啟動整個 Spring 也不用開模型和資料庫：ChatModel 建構時只記下位址，連線池等第一次查詢才連，
+ * 啟動時只有 Flyway 會連資料庫，所以關掉 Flyway。
  */
 @SpringBootTest(properties = "spring.flyway.enabled=false")
 @AutoConfigureMockMvc
@@ -43,8 +36,8 @@ class OpenApiDocumentationTest {
     @Test
     @DisplayName("助理列出成功、呼叫端送錯、上游出事、模型暫時不能用四種回應，成功和失敗的 body 形狀不同")
     void documentsEveryAssistantOutcome() throws Exception {
-        // 這四個碼就是助理的契約：200 正常、400 呼叫端送錯、502 這一次模型或資料庫那頭出事、
-        // 503 模型暫時不能用、這次沒叫它（#44）。少列一個，看文件的人就會以為那種情況不會發生
+        // 502 是這一次模型或資料庫出錯，503 是模型暫時不能用、這次沒有呼叫模型。
+        // 文件少列一個，看文件的人會以為那種情況不會發生
         String responses = "$.paths['/api/calendar/assistant'].post.responses";
         String schema = ".content['*/*'].schema['$ref']";
         mockMvc.perform(get("/v3/api-docs"))
@@ -72,7 +65,6 @@ class OpenApiDocumentationTest {
                 .andExpect(jsonPath("$.paths['/api/calendar/events'].get.parameters.length()").value(2))
                 .andExpect(jsonPath("$.paths['/api/calendar/events/{id}'].delete.parameters.length()").value(1))
                 .andExpect(jsonPath("$.paths['/api/calendar/assistant/{conversationId}'].get.parameters.length()").value(1))
-                // POST /events 唯一的參數是 #51 的 Idempotency-Key（選填的 header），一樣沒有擁有者
                 .andExpect(jsonPath("$.paths['/api/calendar/events'].post.parameters.length()").value(1))
                 .andExpect(jsonPath("$.paths['/api/calendar/events'].post.parameters[0].name").value("Idempotency-Key"))
                 .andExpect(jsonPath("$.paths['/api/calendar/events'].post.parameters[0].in").value("header"))

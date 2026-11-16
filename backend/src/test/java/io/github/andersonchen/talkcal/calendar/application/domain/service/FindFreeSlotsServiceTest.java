@@ -49,7 +49,7 @@ class FindFreeSlotsServiceTest {
 
         assertEquals(List.of(OWNER), owners);
         assertEquals(List.of(new DateRange(WED, WED.plusDays(1))), asked);
-        // 12:00–13:00 已經過去了，所以從 13:00 開始
+        // 現在是 13:00，12:00 起的空檔只剩 13:00 之後
         assertEquals(List.of(new FreeSlot(WED.atTime(13, 0), WED.atTime(15, 0)), new FreeSlot(WED.atTime(16, 0), WED.atTime(18, 0))), slots);
     }
 

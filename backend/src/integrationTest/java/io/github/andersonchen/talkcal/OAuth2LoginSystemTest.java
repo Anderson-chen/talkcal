@@ -25,11 +25,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 設了 Google、GitHub 的 client id 之後，app 這一側接起來的樣子（#105）。
- *
- * 測不到的部分：真的到 Google 登入、Google 轉回來帶著 code、拿 code 換 token —— 那要真的 OAuth 應用程式和真人按同意。
- * 那一段之後「對帳號」的邏輯由 ExternalUserServicesTest、JdbcAccountAdapterTest 測；這裡測的是頭尾：
- * 按鈕連過去會轉到對的地方（回呼網址、scope、state 都對），以及轉回來的東西不對時會被擋。
+ * 到 Google 登入、帶 code 轉回來、用 code 換 token 這一段要真的 OAuth 應用程式和真人按同意，測不到。
+ * 這裡測前後兩端：轉址時帶的回呼網址、scope、state，以及轉回來的參數不對時會被擋。
+ * 拿到使用者資料之後怎麼對到帳號，見 ExternalUserServicesTest、JdbcAccountAdapterTest。
  */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
@@ -88,7 +86,7 @@ class OAuth2LoginSystemTest {
     @Test
     @DisplayName("#127 雲端前面有 Caddy 解 HTTPS：nginx 帶著 X-Forwarded-Proto: https 轉過來，回呼網址要是 https://（反例：上面沒帶的那題還是 http://）")
     void callbackUsesSchemeFromProxy() throws Exception {
-        // 照雲端上 nginx 轉給 app 的樣子送：app 自己收到的是 http，原本的 scheme 在 header 裡
+        // 雲端上 nginx 轉給 app 的是 http，原本的 https 只在 header 裡
         HttpResponse<String> response = HttpClient.newHttpClient().send(
                 HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/auth/oauth2/authorization/google"))
                         .header("X-Forwarded-Proto", "https")
@@ -123,7 +121,7 @@ class OAuth2LoginSystemTest {
         HttpResponse<String> cancelled = amy.get("/api/auth/oauth2/callback/google?error=access_denied&state=forged-state");
 
         assertEquals(302, forged.statusCode());
-        // 轉回同一個網址的首頁（Tomcat 會補成完整網址，host 是請求進來時的那個）
+        // Tomcat 把 Location 補成完整網址，host 用請求進來時的那個
         assertEquals("http://localhost:" + port + "/?login_error=oauth", forged.headers().firstValue("Location").orElseThrow());
         assertEquals("http://localhost:" + port + "/?login_error=oauth", cancelled.headers().firstValue("Location").orElseThrow());
         assertEquals(401, amy.get("/api/auth/me").statusCode());

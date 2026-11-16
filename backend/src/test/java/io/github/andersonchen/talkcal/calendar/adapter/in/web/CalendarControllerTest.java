@@ -55,11 +55,10 @@ import org.springframework.web.context.WebApplicationContext;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * CalendarController 走一遍真的 Spring MVC：這個類別幾乎每一行都在跟 Spring 講話
- * （路由、JSON 綁定、狀態碼、例外翻譯），不起 MockMvc 就等於沒測。
+ * 用 MockMvc：CalendarController 幾乎每一行都依賴 Spring 的行為（路由、JSON 綁定、狀態碼、例外翻譯），直接呼叫方法等於沒測。
  *
- * 四個 use case 由一個手寫的假物件同時扮演。假物件照著核心真正的規則演
- * （期間交給 DateRange 檢查、不存在的 id 丟 EventNotFoundException），測試才不會描述一個不存在的情境。
+ * use case 換成手寫的 StubCalendar，照核心真正的規則實作（期間交給 DateRange 檢查、不存在的 id 丟 EventNotFoundException）；
+ * 假物件的行為跟核心不一樣的話，測試描述的是不會發生的情境。
  */
 @WebMvcTest(CalendarController.class)
 @Import(CalendarControllerTest.StubConfiguration.class)
@@ -72,8 +71,8 @@ class CalendarControllerTest {
     MockMvc mockMvc;
 
     /**
-     * 這裡測的是 controller 本身（路由、JSON、狀態碼），不是認證：每個請求預設都是「已經登入、帶著 CSRF token」。
-     * 沒登入回 401、沒帶 CSRF 回 403 這些規則，在 AuthSystemTest（integrationTest）對真的 SecurityFilterChain 測。
+     * 每個請求預設已登入、帶著 CSRF token，這裡只測 controller。
+     * 沒登入回 401、沒帶 CSRF 回 403，在 integrationTest 的 AuthSystemTest 對真的 SecurityFilterChain 測。
      */
     @BeforeEach
     void signedIn() {
@@ -114,7 +113,7 @@ class CalendarControllerTest {
                     .andExpect(jsonPath("$.events[0].id").value(DINNER_ID.toString()))
                     .andExpect(jsonPath("$.events[0].end").value("2026-10-06T17:30:00"));
 
-            // 使用者把結束時間改成 17:30，存進去的就是改過的那個；沒帶分類就是 domain 的預設
+            // 存的是使用者改過的結束時間；沒帶分類就用 domain 的預設
             assertEquals(List.of(new CalendarEvent("跟小明吃飯",
                     LocalDateTime.of(2026, 10, 6, 15, 0), LocalDateTime.of(2026, 10, 6, 17, 30))), calendar.added);
             assertEquals(Category.DEFAULT, calendar.added.getFirst().category());
@@ -235,7 +234,7 @@ class CalendarControllerTest {
     @DisplayName("PUT /api/calendar/events/{id}（#259）")
     class Update {
 
-        // 改之前看到的樣子（DINNER）＋改好的樣子
+        // expected 是改之前看到的 DINNER
         private static final String BODY = """
                 {"expected": {"title": "跟小明吃飯", "start": "2026-10-06T15:00:00", "end": "2026-10-06T16:00:00",
                               "category": "SOCIAL", "location": "拉麵店"},
@@ -373,8 +372,8 @@ class CalendarControllerTest {
     }
 
     /**
-     * Idempotency-Key header（#51）：controller 只負責把 header 交給 use case、把結果翻成狀態碼和 Idempotent-Replayed。
-     * 「同一個鍵真的只存一次」在 JdbcCalendarEventAdapterTest 對真的 PostgreSQL 測。
+     * controller 只把 header 交給 use case、把結果翻成狀態碼和 Idempotent-Replayed。
+     * 同一個鍵真的只存一次，在 JdbcCalendarEventAdapterTest 對真的 PostgreSQL 測。
      */
     @Nested
     @DisplayName("POST /api/calendar/events 帶 Idempotency-Key")
@@ -382,8 +381,8 @@ class CalendarControllerTest {
 
         private static final String DINNER_JSON =
                 "{\"events\":[{\"title\":\"吃飯\",\"start\":\"2026-10-06T15:00\",\"end\":\"2026-10-06T16:00\"}]}";
-        // 一看就是測試值，而且不到 10 個字：gitleaks 的 generic-api-key 會把「名字有 key、值 10 個字以上」的字串當成真的 key
-        // （長得像 UUID 的、test-idempotency-key-1 都被抓過，PR #156 的 secrets 檢查紅燈）
+        // 不到 10 個字：gitleaks 的 generic-api-key 會把名字有 key、值 10 個字以上的字串當成真的 key，
+        // 長得像 UUID 的、test-idempotency-key-1 都會被抓
         private static final String IDEMPOTENCY_KEY = "test-key";
 
         @Test
@@ -500,12 +499,8 @@ class CalendarControllerTest {
         }
     }
 
-    /**
-     * 一個假物件同時扮演三個 use case：記下收到什麼，每題可以換掉行為。
-     */
     static final class StubCalendar implements AddEventsUseCase, ListEventsUseCase, UpdateEventUseCase, RemoveEventUseCase {
 
-        // 預設行為照核心的規則演：期間交給 DateRange 檢查
         private static final Function<DateRange, List<ScheduledEvent>> DEFAULT_LIST =
                 range -> List.of(new ScheduledEvent(DINNER_ID, DINNER));
 
@@ -517,7 +512,7 @@ class CalendarControllerTest {
         final List<EventId> removed = new ArrayList<>();
         final List<CalendarEvent> expected = new ArrayList<>();
         final List<IdempotencyKey> keys = new ArrayList<>();
-        // 照真正的 use case 演：同一個鍵第二次來，內容一樣就是重送、不一樣就丟例外
+        // 同一個鍵第二次來：內容一樣是重送，不一樣就丟例外
         private final Map<IdempotencyKey, List<CalendarEvent>> seen = new HashMap<>();
 
         @Override
@@ -551,7 +546,7 @@ class CalendarControllerTest {
             return list.apply(range);
         }
 
-        // 只有 DINNER_ID 存在，內容是 DINNER：其他 id 丟「找不到」，expected 不是 DINNER 丟「被改過了」，照真正的 use case 演
+        // 只有 DINNER_ID 存在，內容是 DINNER：其他 id 一律當成找不到；expected 不是 DINNER 時，當成已經被別人改過
         @Override
         public ScheduledEvent updateEvent(OwnerId owner, EventId id, CalendarEvent expected, CalendarEvent replacement) {
             owners.add(owner);
@@ -565,7 +560,6 @@ class CalendarControllerTest {
             return new ScheduledEvent(id, replacement);
         }
 
-        // 只有 DINNER_ID 存在；其他 id 照真正的 use case 那樣丟「找不到」
         @Override
         public void removeEvent(OwnerId owner, EventId id) {
             owners.add(owner);

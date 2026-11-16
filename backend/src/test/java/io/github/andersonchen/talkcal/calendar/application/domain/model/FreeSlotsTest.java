@@ -17,7 +17,7 @@ class FreeSlotsTest {
     private static final LocalDate WED = LocalDate.of(2026, 10, 7);
     private static final DateRange WED_ONLY = new DateRange(WED, WED.plusDays(1));
     private static final DateRange WED_THU = new DateRange(WED, WED.plusDays(2));
-    // 「現在」在這些日子之前，不影響結果
+    // 早於所有測試日期，「已經過去的時段不算」不會影響結果
     private static final LocalDateTime EARLIER = LocalDateTime.of(2026, 10, 6, 11, 30);
     private static final Duration HOUR = Duration.ofHours(1);
 
@@ -85,7 +85,6 @@ class FreeSlotsTest {
         LocalDateTime threePm = LocalDateTime.of(2026, 10, 7, 15, 0);
 
         assertEquals(List.of(slot(7, 15, 0, 18, 0)), FreeSlots.find(WED_ONLY, DayPeriod.AFTERNOON, HOUR, List.of(), threePm));
-        // 時段整個過去了：沒有空檔
         assertEquals(List.of(), FreeSlots.find(WED_ONLY, DayPeriod.MORNING, HOUR, List.of(), threePm));
     }
 

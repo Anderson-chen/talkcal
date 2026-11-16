@@ -40,14 +40,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * 行程歸檔的整條路（#54、#274）：真的 PostgreSQL、真的 S3 相容儲存（RustFS），中間是正式的 use case 和 adapter，跟 app 裡接的一樣。
- *
- * 每個規則都配一個反例：
- * - 舊的搬走 ↔ 不舊的（昨天、剛好在期限上）留著
- * - 存好才刪 ↔ 上傳失敗時資料庫一筆都沒少（整個儲存掛掉、只有某一包失敗都是）
- * - 歸檔 → 查看跟原本一模一樣 ↔ 查看不寫資料庫，查完線上的筆數不變
- * - 跨月的行程查得到 ↔ 範圍外的、剛好碰到邊界的不出現
- * - 只查得到自己的 ↔ 別人查同一段期間拿不到我的
+ * 用真的 PostgreSQL 和 RustFS，中間用的是正式的 use case 和 adapter，不經過 Spring。
+ * 每個規則都配一個反例，例如「存好才刪」配上「上傳失敗時資料庫一筆都沒少」。
  */
 @Testcontainers
 @DisplayName("行程歸檔：PostgreSQL ↔ S3 相容儲存")
@@ -62,7 +56,7 @@ class EventArchiveFlowTest {
     private static final OwnerId ALICE = OwnerId.of("3f1c8a2e-0000-4000-8000-00000000000a");
     private static final OwnerId BOB = OwnerId.of("3f1c8a2e-0000-4000-8000-00000000000b");
 
-    // 「現在」固定在 2026-10-19，保留 2 年 → 2024-10-19 之前結束的算舊
+    // 「現在」當成 2026-10-19，保留 2 年，2024-10-19 之前結束的算舊
     private static final LocalDateTime CUTOFF = LocalDateTime.of(2024, 10, 19, 4, 30);
     private static final YearMonth MAY_2023 = YearMonth.of(2023, 5);
 
@@ -107,12 +101,11 @@ class EventArchiveFlowTest {
         return new ScheduledEvent(EventId.newId(), new CalendarEvent(title, start, end));
     }
 
-    // 那個人在資料庫裡的全部行程，依結束時間排（月曆的 load 一次最多 100 天，這裡借「找舊行程」那句把期限開到很遠）
+    // 月曆的 load 一次最多查 100 天，要取得全部的行程，只能用 loadEndedBefore 並把期限設得很遠
     private static List<ScheduledEvent> online(OwnerId owner) {
         return events.loadEndedBefore(LocalDateTime.of(2100, 1, 1, 0, 0), 1000).getOrDefault(owner, List.of());
     }
 
-    // 資料庫裡全部的行程筆數，不分人
     private static long onlineRows() {
         return jdbc.sql("SELECT count(*) FROM calendar_event").query(Long.class).single();
     }
@@ -122,7 +115,7 @@ class EventArchiveFlowTest {
     void archivesOnlyOldEvents() {
         ScheduledEvent old = at("三年前", LocalDateTime.of(2023, 5, 1, 9, 0));
         ScheduledEvent yesterday = at("昨天", LocalDateTime.of(2026, 10, 18, 9, 0));
-        // 結束時間剛好等於 cutoff：不算「早於」，留著
+        // 結束時間等於 cutoff 不算早於，要留著
         ScheduledEvent onTheLine = new ScheduledEvent(EventId.newId(),
                 new CalendarEvent("剛好在期限上", CUTOFF.minusHours(1), CUTOFF));
         events.save(ALICE, List.of(old, yesterday, onTheLine));
@@ -200,7 +193,7 @@ class EventArchiveFlowTest {
         assertEquals(List.of(detailed, plain),
                 viewing.listArchivedEvents(ALICE, LocalDate.of(2023, 5, 1), LocalDate.of(2023, 5, 31)));
 
-        // 查看不放回資料庫：筆數不變，那兩筆也沒有回到月曆上
+        // 查看不寫回資料庫
         assertEquals(rowsBefore, onlineRows());
         assertEquals(List.of(recent), online(ALICE));
     }
@@ -211,7 +204,7 @@ class EventArchiveFlowTest {
         ScheduledEvent trip = between("出差", LocalDateTime.of(2023, 5, 30, 9, 0), LocalDateTime.of(2023, 6, 2, 18, 0));
         events.save(ALICE, List.of(trip));
         archiving(archive).archiveEndedBefore(CUTOFF);
-        // 先確認它真的放在六月的包，不在五月：這一題才是在驗「往後多讀一個月」
+        // 先確認這一筆在六月的包、不在五月，下面查得到才證明有往後多讀一個月
         assertTrue(archive.load(ALICE, MAY_2023, MAY_2023).isEmpty());
 
         assertEquals(List.of(trip), viewing.listArchivedEvents(ALICE, LocalDate.of(2023, 5, 30), LocalDate.of(2023, 5, 31)));
@@ -266,7 +259,7 @@ class EventArchiveFlowTest {
     void eventEditedAfterLoadingIsNotDeleted() {
         ScheduledEvent old = at("三年前", LocalDateTime.of(2023, 5, 1, 9, 0));
         events.save(ALICE, List.of(old));
-        // 模擬：排程讀出來之後、刪之前，使用者把它改到下個月
+        // 排程讀出來之後、刪之前，使用者把這一筆改到下個月
         jdbc.sql("UPDATE calendar_event SET start_at = '2026-11-01 09:00', end_at = '2026-11-01 10:00' WHERE id = :id")
                 .param("id", old.id().value()).update();
 
@@ -280,7 +273,7 @@ class EventArchiveFlowTest {
         ScheduledEvent edited = at("三年前", LocalDateTime.of(2023, 5, 1, 9, 0));
         ScheduledEvent untouched = at("沒動過", LocalDateTime.of(2023, 5, 2, 9, 0));
         events.save(ALICE, List.of(edited, untouched));
-        // 模擬：排程讀出來之後、刪之前，使用者補上備註
+        // 排程讀出來之後、刪之前，使用者補上備註
         jdbc.sql("UPDATE calendar_event SET note = '補上的備註' WHERE id = :id").param("id", edited.id().value()).update();
 
         assertEquals(1, events.deleteArchived(ALICE, List.of(edited, untouched)));

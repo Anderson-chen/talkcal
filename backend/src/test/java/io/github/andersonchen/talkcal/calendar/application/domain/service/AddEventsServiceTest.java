@@ -46,7 +46,7 @@ class AddEventsServiceTest {
     private static final SaveEventsOncePort MUST_NOT_SAVE_ONCE = (owner, key, events) -> fail("沒帶冪等鍵，不該走 saveOnce");
     private static final IdempotencyKey KEY = new IdempotencyKey("test-key");
 
-    // 假的用量紀錄：記成「ASSISTANT 2」這種字串
+    // 記成「ASSISTANT 2」這種字串，比對失敗時一眼看得懂
     private static final class RecordingUsage implements RecordUsagePort {
         final List<String> events = new ArrayList<>();
 
@@ -70,7 +70,6 @@ class AddEventsServiceTest {
     private final InMemoryProposals proposals = new InMemoryProposals();
     private static final OwnerId OTHER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000002");
 
-    // 假資料庫：記下每次收到的那一批
     private static final class RecordingPort implements SaveEventsPort {
         int calls;
         OwnerId owner;
@@ -115,7 +114,7 @@ class AddEventsServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.addEvents(OWNER, Arrays.asList(DINNER, null), List.of()));
         assertThrows(IllegalArgumentException.class, () -> service.addEvents(OWNER, List.of(DINNER), null));
         assertThrows(IllegalArgumentException.class, () -> service.addEvents(OWNER, List.of(DINNER), Arrays.asList(card, null)));
-        // 一筆行程刷兩張卡片的採納
+        // 一筆行程拿來採納兩張卡片
         assertThrows(IllegalArgumentException.class, () -> service.addEvents(OWNER, List.of(DINNER), List.of(card, proposals.issue(OWNER))));
         assertEquals(null, proposals.outcomeOf(card), "被擋下的請求不能把卡片標成已表態");
     }
@@ -195,8 +194,8 @@ class AddEventsServiceTest {
     }
 
     /**
-     * 帶冪等鍵的那條路（#51）。「同一個鍵真的只存一次」是資料庫的唯一約束保證的，
-     * 在 JdbcCalendarEventAdapterTest 對真的 PostgreSQL 測；這裡只測 service 把 port 的三種結果翻成什麼、指標記不記。
+     * 同一個鍵只存一次靠資料庫的唯一約束，在 JdbcCalendarEventAdapterTest 對真的 PostgreSQL 測。
+     * 這裡只測 service 怎麼處理 port 的三種結果、指標記不記。
      */
     @Nested
     @DisplayName("帶冪等鍵")
@@ -235,7 +234,7 @@ class AddEventsServiceTest {
 
             assertTrue(added.replayed());
             assertEquals(earlier, added.events());
-            // 反例在 noKeyCountsTheRetryAsManual：不帶鍵的重送會被算成一筆手動新增
+            // 反例見 noKeyCountsTheRetryAsManual：不帶鍵的重送會被算成一筆手動新增
             assertEquals(List.of(), usage.events);
             assertEquals(null, proposals.outcomeOf(card), "重送不碰卡片：第一次存的時候已經表態過了");
         }

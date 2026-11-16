@@ -11,8 +11,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 記憶體版的提議卡片存放，照 JdbcAssistantProposalAdapter 的規則演：
- * 是 owner 的、還沒表態過的卡片，表態才算。真的 SQL 由 JdbcAssistantProposalAdapterTest 對 PostgreSQL 驗。
+ * 照 JdbcAssistantProposalAdapter 的規則實作：是 owner 的、還沒表態過的卡片，表態才算。
+ * 兩邊的行為不一樣的話，用 InMemoryProposals 的 service 測試會描述不會發生的情境；SQL 本身見 JdbcAssistantProposalAdapterTest。
  */
 public final class InMemoryProposals implements ProposalStorePort {
 
@@ -36,7 +36,6 @@ public final class InMemoryProposals implements ProposalStorePort {
         return decided;
     }
 
-    /** 測試直接塞一張 owner 的卡片，不經過 service。 */
     public ProposalId issue(OwnerId owner) {
         ProposalId id = ProposalId.newId();
         saveProposals(owner, List.of(id));
