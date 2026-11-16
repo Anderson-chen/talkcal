@@ -12,7 +12,7 @@ cd "$(dirname "$0")/.."
 
 commit="$(git rev-parse HEAD)"
 
-# 只接受 v數字.數字.數字，其他名字的 tag 不當成版本。同一個 commit 有好幾個時取版本號最大的
+# 只接受 v<主>.<次>.<修>，其他名字的 tag 不當成版本。同一個 commit 有好幾個時取版本號最大的
 tag="$(git tag --points-at HEAD --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
 version="${tag:-${commit:0:7}}"
 

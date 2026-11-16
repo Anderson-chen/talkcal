@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # git push 之前先掃祕密、在乾淨的容器裡執行一遍 CI（ci/run.sh），沒過就不推。
-# GitHub 的 CI 沒有 GPU，模型相關的測試只有在這台開著 llama-server 的電腦上才會真的執行。
+# GitHub 的 CI 沒有 GPU，要真模型的測試只有在這台開著 llama-server 的電腦上才會真的執行。
 #
 # 每個 clone 要自己啟用一次，git clone 不會帶上 hook：
 #   git config core.hooksPath .githooks
@@ -22,7 +22,7 @@ while read -r local_ref local_sha _ _; do
     # 祕密先掃：只要幾秒，而且測試失敗可以修好再推，key 送出去就只能作廢重發。
     # --not --remotes 是還不在任何遠端分支上的 commit，也就是這次真的會送出去的那些
     ci/secrets.sh "$local_sha" --not --remotes </dev/null
-    # AI eval 要一分多鐘，只在這次送出去的 commit 改到 prompt 或模型相關的檔案時執行。
+    # AI eval 要一分多鐘，只在這次送出去的 commit 改到 EVAL_PATHS 列的檔案時執行。
     # 改了 prompt 卻沒執行的話，模型的回答變差也沒人發現
     if git log --name-only --format= "$local_sha" --not --remotes | grep -qE "$EVAL_PATHS"; then
         echo "pre-push：改到 prompt 或模型相關的檔案，這次也跑 AI eval"

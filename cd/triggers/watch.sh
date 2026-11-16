@@ -24,7 +24,7 @@ main() {
   local branch=master
   local workflow=ci.yml
 
-  # 自己可能在 cd/triggers/（手動執行），也可能在 .git/（排程執行的副本），從 git 找 clone 的根目錄
+  # 手動執行時這支在 cd/triggers/，排程執行的是 .git/ 裡的副本，所以從 git 找 clone 的根目錄
   cd "$(dirname "$0")"
   local git_dir
   git_dir="$(git rev-parse --absolute-git-dir)"

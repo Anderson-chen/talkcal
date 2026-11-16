@@ -4,8 +4,8 @@
 # （例如 11 起 ADD COLUMN ... DEFAULT 常數不會重寫整張表），版本寫錯會誤擋或漏擋
 pg_version = "18.0"
 
-# Flyway 預設把每支 migration 包在一個交易裡執行。這裡設定成 true，squawk 才抓得到「同一個交易裡先 ADD 再 VALIDATE」這類
-# 鎖一路拿到交易結束的問題。CONCURRENTLY 這種不能在交易裡執行的檔案，用 -- squawk-disable-assume-in-transaction 個別關掉
+# Flyway 預設把每支 migration 包在一個交易裡執行。這裡設定成 true，squawk 才抓得到這類問題：
+# 同一個交易裡先 ADD 再 VALIDATE，鎖會一路拿到交易結束。CONCURRENTLY 這種不能在交易裡執行的檔案，用 -- squawk-disable-assume-in-transaction 個別關掉
 assume_in_transaction = true
 
 # 預設規則擋的就是新舊版本同時在線會壞、或會鎖住整張表的寫法，只關掉一條：

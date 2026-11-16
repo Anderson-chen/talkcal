@@ -4,7 +4,7 @@
 # 要檢查什麼寫在 ci/checks.sh、在什麼環境檢查寫在 ci/Dockerfile，本機的 pre-push hook 也執行同一支 ci/run.sh
 # （分層的理由見 ci/README.md）。
 #
-# GitHub 的機器沒有 GPU，模型相關的測試在這裡會跳過；結果頁的摘要會列出來，綠燈不包含這些測試。
+# GitHub 的機器沒有 GPU，要真模型的測試在這裡會跳過；結果頁的摘要會列出來，綠燈不包含這些測試。
 
 name: CI
 
