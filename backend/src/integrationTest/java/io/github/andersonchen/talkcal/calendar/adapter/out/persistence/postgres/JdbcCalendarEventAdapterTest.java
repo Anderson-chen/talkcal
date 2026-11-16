@@ -71,7 +71,7 @@ class JdbcCalendarEventAdapterTest {
     static TransactionTemplate transaction;
 
     // 直接寫 SQL 的測試也要帶擁有者：不帶的話每一筆都先被 V11 的 NOT NULL 擋下，
-    // 測 CHECK 的題目會因為別的原因失敗，照樣通過
+    // INSERT 因為別的原因失敗，測 CHECK 的題目照樣通過
     private static final OwnerId OWNER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000001");
     private static final OwnerId OTHER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000002");
 

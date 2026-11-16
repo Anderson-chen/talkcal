@@ -140,7 +140,7 @@ class SystemTest {
         Assumptions.assumeTrue(modelIsUp(), () -> "llama-server 沒有在 " + modelBaseUrl + " 執行，跳過需要模型的系統測試");
 
         // app 用的是正式的時鐘，這裡也照真的時間算「明天」。剛好在台北午夜前後執行的話，
-        // 兩邊認定的「明天」可能不同，機率小到不值得換掉時鐘
+        // 兩邊算出的「明天」可能不同，機率小到不值得換掉時鐘
         LocalDate tomorrow = LocalDate.now(zone).plusDays(1);
         assertEquals(201, post("/api/calendar/events", """
                 {"events": [{"title": "瑜珈課", "start": "%sT18:00:00", "end": "%sT19:00:00", "category": "HEALTH"}]}

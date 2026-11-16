@@ -17,7 +17,7 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 
 /**
- * 只測失敗的路，假模型丟例外就夠。正常抽行程要真模型，見 integrationTest 的 SpringAiExtractEventsAdapterTest。
+ * 只測失敗的情況，假模型丟例外就夠。正常抽行程要真模型，見 integrationTest 的 SpringAiExtractEventsAdapterTest。
  */
 @DisplayName("SpringAiExtractEventsAdapter 失敗時")
 class SpringAiExtractEventsAdapterFailureTest {

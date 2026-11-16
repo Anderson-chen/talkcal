@@ -337,7 +337,7 @@ licenseReport {
     renderers = [new InventoryHtmlReportRenderer('index.html', 'talkcal 後端依賴的授權')]
 }
 
-// 外掛的 up-to-date 判斷不可靠：加了 GPL 的依賴、報告也重產了，checkLicense 還是 UP-TO-DATE、沿用上次的「通過」。每次重新執行只要幾秒
+// 外掛的 up-to-date 判斷不可靠：加了 GPL 的依賴、報告也重新產生了，checkLicense 還是 UP-TO-DATE、沿用上次的「通過」。每次重新執行只要幾秒
 ['generateLicenseReport', 'checkLicense'].each { name ->
     tasks.named(name) { outputs.upToDateWhen { false } }
 }

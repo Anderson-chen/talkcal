@@ -54,9 +54,9 @@ class ArchitectureTest {
                     .because("inbound 只該透過 port 使喚 core，core 才決定要不要呼叫 outbound");
 
     /**
-     * 不點名 adapter.out 底下的子樹（persistence、extraction…）：一個子樹寫一條的話，
-     * 新加的子樹（例如 auth 的 security）忘了補規則就不受檢查。
-     * adapter.out 裡的類別互相依賴不歸這條管，見 outboundAdapterSubtreesMustNotDependOnEachOther。
+     * 不點名 adapter.out 底下的子樹（persistence、extraction…）。一個子樹寫一條的話，
+     * 新加的子樹忘了補規則就不受檢查，例如 auth 的 security。
+     * adapter.out 裡的類別互相依賴不在這條的檢查範圍，見 outboundAdapterSubtreesMustNotDependOnEachOther。
      */
     @ArchTest
     static final ArchRule onlyTheCompositionRootMayKnowOutboundAdapters =

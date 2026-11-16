@@ -546,7 +546,7 @@ class CalendarControllerTest {
             return list.apply(range);
         }
 
-        // 只有 DINNER_ID 存在，內容是 DINNER：其他 id 是找不到，expected 不是 DINNER 是被別人改過了
+        // 只有 DINNER_ID 存在，內容是 DINNER：其他 id 一律當成找不到；expected 不是 DINNER 時，當成已經被別人改過
         @Override
         public ScheduledEvent updateEvent(OwnerId owner, EventId id, CalendarEvent expected, CalendarEvent replacement) {
             owners.add(owner);

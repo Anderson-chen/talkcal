@@ -168,7 +168,7 @@ class ArchiveSystemTest {
                 .param("owner", UUID.fromString(amyId))
                 .param("id", UUID.fromString(conversation))
                 .update();
-        // 期限放在一分鐘後，剛寫的那段就算沒再說話
+        // 期限設在一分鐘後，剛寫的那段對話也會被當成之後沒再說話
         assertEquals(1, conversationArchive.archiveInactiveSince(Instant.now().plusSeconds(60)).archived());
         assertEquals(0, getJson(amy, "/api/calendar/assistant/" + conversation).at("/messages").size());
 

@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test;
 class JdbcTracingConfigurationTest {
 
     private final ObservationRegistry registry = ObservationRegistry.create();
-    // 被 predicate 擋掉的是 noop，不會走到 handler，所以這裡只有真的開了的
+    // 被 predicate 擋掉的是 noop，不會走到 handler，所以這裡只有真的開始的 Observation
     private final List<String> started = new ArrayList<>();
 
     @BeforeEach

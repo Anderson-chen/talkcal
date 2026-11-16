@@ -41,7 +41,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * 用真的 PostgreSQL 和 RustFS，中間用的是正式的 use case 和 adapter，不經過 Spring。
- * 每個規則都配一個反例，例如存好才刪配上傳失敗時資料庫一筆都沒少。
+ * 每個規則都配一個反例，例如「存好才刪」配上「上傳失敗時資料庫一筆都沒少」。
  */
 @Testcontainers
 @DisplayName("行程歸檔：PostgreSQL ↔ S3 相容儲存")
@@ -101,7 +101,7 @@ class EventArchiveFlowTest {
         return new ScheduledEvent(EventId.newId(), new CalendarEvent(title, start, end));
     }
 
-    // 月曆的 load 一次最多 100 天，要拿全部只能借 loadEndedBefore 把期限開到很遠
+    // 月曆的 load 一次最多查 100 天，要取得全部的行程，只能用 loadEndedBefore 並把期限設得很遠
     private static List<ScheduledEvent> online(OwnerId owner) {
         return events.loadEndedBefore(LocalDateTime.of(2100, 1, 1, 0, 0), 1000).getOrDefault(owner, List.of());
     }

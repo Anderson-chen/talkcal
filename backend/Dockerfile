@@ -51,7 +51,7 @@ LABEL org.opencontainers.image.title="talkcal-app" \
 USER ubuntu
 WORKDIR /app
 
-# 對外發佈成哪一號由 deploy/compose.yaml 的 ports 決定
+# 對外開哪個 port 由 deploy/compose.yaml 的 ports 決定
 EXPOSE 8090
 
 # JVM 預設只拿容器記憶體上限的 1/4 當 heap；容器裡只執行這個程式，給到 75%，剩下留給 heap 以外的記憶體。
