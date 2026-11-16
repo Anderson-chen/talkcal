@@ -39,7 +39,7 @@ jobs:
       # gradle-wrapper.jar 是會被執行的二進位檔，PR 裡換掉這個檔案，CI 就會執行被換掉的程式。先確認檔案跟 Gradle 官方發的一樣
       - uses: gradle/actions/wrapper-validation@v6
 
-      # 依賴快取沒有跨次保留（每次都是新機器），每次都重新下載。先求跟本機一致，嫌慢再接 actions/cache
+      # 依賴快取沒有跨次保留（每次都是新機器），每次都重新下載。先求跟本機一致，嫌慢再加上 actions/cache
       - run: ci/run.sh
 
       - name: 測試摘要貼到結果頁

@@ -57,7 +57,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, *args):
-        pass  # 每次被抓都印一行，沒用
+        pass  # 預設每次被抓都印一行 log，這裡關掉
 
 
 class PostgresExporterHandler(BaseHTTPRequestHandler):

@@ -2,7 +2,7 @@
 # 在 ci/sast/Dockerfile 的容器裡執行 CodeQL（由 ci/sast.sh 啟動），/work 是要掃的程式碼。
 #
 # 三種語言都不編譯（build-mode none）：
-#   java-kotlin            後端。CodeQL 還是會執行 ./gradlew 下載依賴，才認得外部函式庫的型別（見 ci/sast/Dockerfile）
+#   java-kotlin            後端。CodeQL 還是會執行 ./gradlew 下載依賴，才解析得到外部函式庫的型別（見 ci/sast/Dockerfile）
 #   javascript-typescript  前端的 .ts 和 .vue 的 <script>。模板裡的 v-html 追不到，由 ESLint 的 vue/no-v-html 擋
 #   actions                .github/workflows/：${{ }} 直接貼進 run 的注入、PR 觸發卻拿到寫入權限這類問題
 #

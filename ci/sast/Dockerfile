@@ -21,8 +21,8 @@ RUN tar -xzf /tmp/codeql.tar.gz -C /opt \
 FROM node:22-bookworm-slim AS node
 
 # 下載的壓縮檔（約 700 MB）留在 fetch 那一段，這一段只拿解開的 /opt/codeql。
-# 用 JDK：Java 雖然不編譯，CodeQL 還是會執行 ./gradlew 下載 jar，才認得外部函式庫的型別。
-# 拿不到時 CodeQL 只能猜，Spring 的 JdbcClient 就認不出來，jdbc.sql("..." + 使用者輸入) 會是綠燈
+# 用 JDK：Java 雖然不編譯，CodeQL 還是會執行 ./gradlew 下載 jar，才解析得到外部函式庫的型別。
+# 下載不到時 CodeQL 解析不到外部型別，也就抓不到 Spring 的 JdbcClient，jdbc.sql("..." + 使用者輸入) 會是綠燈
 FROM eclipse-temurin:25-jdk-noble
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 # jq：ci/sast/analyze.sh 用 jq 讀 SARIF 報告

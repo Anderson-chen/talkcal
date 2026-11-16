@@ -10,7 +10,7 @@
 #     裝好的每個套件都有自己的 package.json，讀得到授權
 #   - 套件從 pnpm store 拿，checks.sh 前面的 pnpm install 已經下載過，不會再連網
 #
-# Trivy 照 SPDX 分類授權並給嚴重度：擋 CRITICAL（AGPL、SSPL、CC-BY-NC…）、HIGH（GPL、LGPL…）和 UNKNOWN（認不出來的）。
+# Trivy 照 SPDX 分類授權並給嚴重度：擋 CRITICAL（AGPL、SSPL、CC-BY-NC…）、HIGH（GPL、LGPL…）和 UNKNOWN（無法辨識授權的）。
 # MPL、EPL 這類只限檔案本身的 copyleft 是 MEDIUM，放行。授權分類內建在 Trivy 裡，不必下載漏洞資料庫。
 
 set -euo pipefail

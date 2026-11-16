@@ -1,4 +1,4 @@
-﻿# 把本機 CD 登記成 Windows 工作排程，每幾分鐘在這個 clone 跑一輪 cd/triggers/watch.sh local。
+﻿# 把本機 CD 登記成 Windows 工作排程，每幾分鐘在這個 clone 執行一輪 cd/triggers/watch.sh local。
 # 在部署用的 clone 裡用 PowerShell 執行：
 #
 #   .\cd\triggers\install-local.ps1              # 每 5 分鐘

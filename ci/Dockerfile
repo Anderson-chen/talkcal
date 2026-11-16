@@ -22,7 +22,7 @@ FROM eclipse-temurin:25-jdk-noble
 COPY --from=shellcheck /bin/shellcheck /usr/local/bin/shellcheck
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
-# 只接 corepack，不接 npm、npx：前端指令都走 pnpm（理由見 web/README.md 的「用 pnpm 不用 npm」）。
+# 只為 corepack 建立連結，不建 npm、npx 的：前端指令都走 pnpm（理由見 web/README.md 的「用 pnpm 不用 npm」）。
 # pnpm 實際用哪一版，等下面讀到 package.json 的 packageManager 才決定
 RUN ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
     && corepack enable --install-directory /usr/local/bin

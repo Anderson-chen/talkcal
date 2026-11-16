@@ -50,7 +50,7 @@ running_version() {
   docker inspect --format '{{.Config.Image}}' "$id" | sed 's/^.*://'
 }
 
-# app 映像檔 label 上的 commit，只認 40 碼。沒有 label、或沒經過 apply.sh 直接 build 的
+# app 映像檔 label 上的 commit，只接受 40 碼。沒有 label、或沒經過 apply.sh 直接 build 的
 # （Dockerfile 的預設值是 unknown）都當成沒有：不知道裡面是哪個 commit，退過去的結果無法預期
 revision_of() {
   local rev

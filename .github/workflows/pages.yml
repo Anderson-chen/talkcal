@@ -1,5 +1,5 @@
 # 把 docs/architecture/ 的互動架構圖發佈成 GitHub Pages：https://anderson-chen.github.io/talkcal/
-# GitHub 在 repo 裡打開 .html 只顯示原始碼，要互動得當網頁送出去。
+# GitHub 在 repo 裡打開 .html 只顯示原始碼，要能互動，就得發佈成網頁。
 #
 # 只上傳這一頁，不用 Pages 的「從 docs/ 發佈」：那樣 docs/ 底下所有文件都會變成公開網站。
 #
@@ -19,7 +19,7 @@ permissions:
   pages: write
   id-token: write
 
-# 新的進來不取消正在執行的，發佈到一半不會被切斷
+# 有新的發佈時不取消正在執行的那次，發佈才不會中途中斷
 concurrency:
   group: pages
   cancel-in-progress: false
