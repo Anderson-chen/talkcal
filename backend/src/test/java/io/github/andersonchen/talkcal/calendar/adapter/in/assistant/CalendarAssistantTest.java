@@ -204,7 +204,7 @@ class CalendarAssistantTest {
     @DisplayName("#50 同一段對話同時送兩句：先送的還在跑模型、後送的就存好了，兩句和兩個回覆都留著")
     void concurrentRepliesKeepBothTurns() {
         // 用重入代替兩條執行緒，順序固定、每次都一樣：第一句讀完歷史、正在等模型的時候，第二句從頭執行到存好，第一句才繼續存。
-        // 反例：存檔寫成把「讀到的歷史 + 這一輪」整段寫回（saveAll）的話，第一句存的時候會把第二句那一輪蓋掉，這個測試會紅
+        // 反例：存檔寫成把「讀到的歷史 + 這一輪」整段寫回（saveAll）的話，第一句存的時候會把第二句那一輪蓋掉，這個測試會失敗
         CalendarAssistant[] self = new CalendarAssistant[1];
         ChatModel model = new ChatModel() {
             @Override

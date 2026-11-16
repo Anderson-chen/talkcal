@@ -25,7 +25,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 
 /**
  * Loki 上「到 Tempo 看這個請求」的按鈕，靠 access log 帶著 traceId。AccessLogFilter 要排在 Spring 開 trace 的 filter 裡面才有，
- * 那個 filter 排在哪由 Spring 決定。排錯了不會報錯，log 只會少一個欄位，所以測最終結果，不只相信 @Order 的常數。
+ * 那個 filter 排在哪由 Spring 決定。排錯了不會報錯，log 只會少一個欄位，所以測最終結果，不只看 @Order 的常數。
  *
  * 啟動真的 server：MockMvc 自己組 filter 鏈，驗到的不一定是 Servlet 容器裡那一條。
  * 請求沒登入也沒帶 CSRF token，在 Spring Security 就被擋下，用不到模型和資料庫。

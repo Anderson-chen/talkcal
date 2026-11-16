@@ -140,7 +140,7 @@ class JdbcAssistantMemoryRepositoryTest {
     @Test
     @DisplayName("#50 真的同時寫：多條執行緒同一瞬間往同一段對話接，一輪都不少、position 不重複、每一輪不被拆開")
     void concurrentAddsAreSerialized() throws Exception {
-        // 反例：拿掉 advisory lock 的話，每個交易讀到同一個 max(position)，INSERT 撞主鍵，這個測試會紅
+        // 反例：拿掉 advisory lock 的話，每個交易讀到同一個 max(position)，INSERT 違反主鍵，這個測試會失敗
         int writers = 8;
         // DriverManagerDataSource 每次都開新的連線，各個交易在資料庫裡才是真的同時執行
         JdbcAssistantMemoryRepository roomy = new JdbcAssistantMemoryRepository(jdbc,
@@ -354,7 +354,7 @@ class JdbcAssistantMemoryRepositoryTest {
     @Test
     @DisplayName("#50 歸檔的刪除跟接上新一輪排隊：新一輪 commit 之後才判斷，對話變新了就不刪")
     void archiveDeleteWaitsForAppend() throws Exception {
-        // 反例：deleteIfInactiveSince 不拿鎖的話，不用等就會把舊的刪掉，這個測試會紅
+        // 反例：deleteIfInactiveSince 不拿鎖的話，不用等就會把舊的刪掉，這個測試會失敗
         memory.add(id, oneTurnWithTool());
         makeOld(OWNER, id, 31);
 
@@ -367,7 +367,7 @@ class JdbcAssistantMemoryRepositoryTest {
     @Test
     @DisplayName("#50 還原跟接上新一輪排隊：新的先存好，還原就跳過，不撞主鍵")
     void restoreWaitsForAppend() throws Exception {
-        // 反例：restore 不拿鎖的話，不用等就會把舊的插回去，這個測試會紅
+        // 反例：restore 不拿鎖的話，不用等就會把舊的插回去，這個測試會失敗
         memory.add(id, oneTurnWithTool());
         makeOld(OWNER, id, 31);
         StoredConversation archived = store.findInactiveSince(cutoff(), 100).getFirst();

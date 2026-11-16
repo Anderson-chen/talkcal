@@ -13,7 +13,7 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
 
 /**
  * Java 的 package 沒有依賴方向：package-private 擋得住別人看見 ExtractionRequest，
- * 擋不住 ParseEventsService 去 import 一個 Spring AI 的 Adapter，編譯和其他測試都不會發現。
+ * 擋不住 ParseEventsService import Spring AI 的 Adapter，編譯和其他測試都不會發現。
  *
  * 每條規則的理由寫在 because(...)，違規時錯誤訊息直接印出來。
  * Javadoc 只寫 because 放不下的事：規則的範圍怎麼切、跟其他規則怎麼分工。
@@ -26,8 +26,8 @@ class ArchitectureTest {
     // 根 package 只有 Application，底下第一層是 app 和各業務模組
     static final String ROOT = "io.github.andersonchen.talkcal";
 
-    // 組裝根：app 裡只有 config（@Configuration）和 job（排程，直接維護某張表）可以 import adapter 的具體類別、
-    // 同時 import 好幾個模組。app.observability 不算組裝根：全站共用的觀測不准 import 任何一門業務
+    // 組裝根：app 裡只有 config 和 job 可以 import adapter 的具體類別、同時 import 好幾個模組。
+    // config 放 @Configuration，job 放直接維護某張表的排程。app.observability 不算組裝根：全站共用的觀測不准 import 任何一門業務
     static final String CONFIG = ROOT + ".app.config..";
     static final String JOB = ROOT + ".app.job..";
 
@@ -45,7 +45,7 @@ class ArchitectureTest {
                     .because("業務規則不該知道誰在呼叫它，也不該知道資料從哪來");
 
     /**
-     * onlyTheCompositionRootMayKnowOutboundAdapters 也擋得到同一種 import。這條另外留著，錯誤訊息才會講 inbound 該怎麼做。
+     * onlyTheCompositionRootMayKnowOutboundAdapters 也擋得到同一種 import。這條另外留著，錯誤訊息才會寫出 inbound 該怎麼做。
      */
     @ArchTest
     static final ArchRule inboundAdaptersMustNotDependOnOutboundAdapters =
@@ -66,7 +66,7 @@ class ArchitectureTest {
                             + "別的地方一認識具體類別，換實作就不只是改 app.config");
 
     /**
-     * 例如 SQL 和表的長相只在 persistence，日期表、JSON Schema 這些只對某顆模型有效的做法只在 extraction。
+     * 例如 SQL 和表結構只在 persistence，日期表、JSON Schema 這些只對某顆模型有效的做法只在 extraction。
      * 兩個子樹要合作，由 core 的 use case 分別呼叫兩個 port。
      * 每個模組的每個子樹各一片：calendar 的 persistence 和 auth 的 persistence 是兩片。
      */
@@ -77,7 +77,7 @@ class ArchitectureTest {
                     .because("一個子樹的細節漏進另一個子樹，換掉其中一家就得改兩包");
 
     /**
-     * 例如 persistence.postgres、security.spring：第二家供應商來的時候放隔壁，不用先搬第一家。
+     * 例如 persistence.postgres、security.spring：加第二家供應商時放在同一層的另一個 package，第一家不用搬。
      * 直接放在 adapter.out 底下的類別不屬於任何子樹，outboundAdapterSubtreesMustNotDependOnEachOther 切不到，
      * 每個子樹都能 import，這條規則不准類別放在那裡。
      */
@@ -100,7 +100,7 @@ class ArchitectureTest {
                             + "不然從名字看不出它站在哪一層");
 
     /**
-     * 沒 import adapter，core 自己用 java.net.http 的話，協定細節一樣滲進來。
+     * 沒 import adapter，core 自己用 java.net.http 的話，core 一樣會依賴協定細節。
      */
     @ArchTest
     static final ArchRule coreMustNotTouchHttp =
@@ -122,7 +122,7 @@ class ArchitectureTest {
 
     /**
      * 兩個套件都要擋：Jackson 3 把 core、databind 搬到 tools.jackson，註解（@JsonProperty 那些）還在 com.fasterxml.jackson.annotation。
-     * 最容易滲進來的是在 domain 欄位上加 @JsonProperty、@JsonIgnore，好讓 CalendarEvent 直接丟給 Jackson。
+     * 最常見的違規是在 domain 欄位上加 @JsonProperty、@JsonIgnore，好讓 CalendarEvent 直接丟給 Jackson。
      * 要序列化，就在 adapter 定義自己的 wire format，例如 CalendarController 的 request、response record。
      */
     @ArchTest
@@ -151,8 +151,8 @@ class ArchitectureTest {
 
     /**
      * 根 package 底下第一層各一片，app 也是一片。從組裝根出發的依賴不算，app.observability 沒有這個豁免。
-     * 一個模組要用另一個模組的能力，在自己模組定義 outbound port，由 app.config 接上對方的 use case；
-     * 例子見 SignedIn（calendar 不認得 auth，也拿得到登入者）。AI 助理之後要拆成自己的模組，見 AssistantMemoryArchive。
+     * 一個模組要用另一個模組的能力，在自己模組定義 outbound port，由 app.config 設定成呼叫對方的 use case；
+     * 例子見 SignedIn（calendar 不 import auth，也拿得到登入者）。
      */
     @ArchTest
     static final ArchRule modulesMustNotDependOnEachOther =

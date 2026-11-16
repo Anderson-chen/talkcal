@@ -65,7 +65,7 @@ class CalendarAssistantControllerTest {
     // 預設的請求用 ME 登入
     private static final String ME = "3f1c8a2e-0000-4000-8000-000000000001";
     private static final String OTHER = "3f1c8a2e-0000-4000-8000-000000000002";
-    // 假模型聽到「改」「刪」時，拿這一筆的編號呼叫工具
+    // 假模型收到含「改」「刪」的訊息時，拿這一筆的編號呼叫工具
     static final ScheduledEvent LUNCH = new ScheduledEvent(EventId.of("3f1c8a2e-6b0d-4d7e-9a51-2c4e8f7b9d99"),
             CalendarEvent.startingAt("午餐", LocalDateTime.of(2026, 10, 7, 12, 0)).withDetails("拉麵店", null));
     private static final String UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";

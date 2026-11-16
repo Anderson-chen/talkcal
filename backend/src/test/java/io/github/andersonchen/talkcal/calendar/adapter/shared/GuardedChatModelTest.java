@@ -31,7 +31,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
 
 /**
- * 門檻照 application.properties 的形狀（10 次裡至少 5 次、一半失敗），只有時間縮短，測試才不必等 30 秒。
+ * 門檻的比例照 application.properties（10 次裡至少 5 次、一半失敗），只有時間縮短，測試才不必等 30 秒。
  */
 @DisplayName("GuardedChatModel")
 class GuardedChatModelTest {
@@ -41,7 +41,7 @@ class GuardedChatModelTest {
     private static final Duration CALL_TIMEOUT = Duration.ofMinutes(2);
     private static final Prompt PROMPT = new Prompt("明天有什麼行程？");
 
-    /** 數自己被叫了幾次，才看得出被擋下來的請求沒有叫到模型。 */
+    /** 記錄自己被呼叫幾次，才看得出被擋下來的請求沒有呼叫到模型。 */
     static final class FakeModel implements ChatModel {
         final AtomicInteger calls = new AtomicInteger();
         final AtomicReference<Runnable> behavior = new AtomicReference<>(() -> { });
@@ -139,7 +139,7 @@ class GuardedChatModelTest {
                         // 建議多久再試，就是斷路器保持打開的時間
                         assertThat(e.retryAfter()).isEqualTo(OPEN_FOR);
                     })
-                    // 也還是 IllegalStateException：不認得 ModelUnavailableException 的呼叫端當成一般的失敗
+                    // 也還是 IllegalStateException：沒有處理 ModelUnavailableException 的呼叫端會當成一般的失敗
                     .isInstanceOf(IllegalStateException.class);
         }
         assertThat(model.calls).as("打開之後一次都沒叫到模型").hasValue(5);
@@ -166,7 +166,7 @@ class GuardedChatModelTest {
         }
 
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
-        // 被包在別的例外裡也要認得
+        // 被包在別的例外裡也要判斷得出來
         assertThat(new ModelFailurePredicate().test(new RuntimeException("包一層", tooLong))).isFalse();
         assertThat(new ModelFailurePredicate().test(new RuntimeException("包一層", connectionRefused()))).isTrue();
     }

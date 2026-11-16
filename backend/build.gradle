@@ -33,7 +33,7 @@ dependencies {
 
     // 蓋過 Boot BOM 帶的 Tomcat、Jackson 版本，修 ci/vulns.sh 掃到的漏洞：同一個套件有兩個版本要求時，Gradle 挑高的。
     // 只升 patch，行為不變。Boot 的 BOM 追上這些版本之後，這段整段刪掉。
-    // Jackson 2、3 都要：Boot 4 用 3（tools.jackson），Spring AI、springdoc 還在用 2（com.fasterxml）
+    // Jackson 2、3 都要。Boot 4 用 Jackson 3，套件是 tools.jackson；Spring AI、springdoc 還在用 Jackson 2，套件是 com.fasterxml
     implementation platform('com.fasterxml.jackson:jackson-bom:2.22.3')
     implementation platform('tools.jackson:jackson-bom:3.1.7')
     constraints {
@@ -48,12 +48,12 @@ dependencies {
 
     // Spring AI 自己發版，BOM 跟 Boot 的分開；2.0.x 是對 Boot 4.1 編的
     implementation platform('org.springframework.ai:spring-ai-bom:2.0.1')
-    // 本機的 llama-server 和雲端的 Bedrock 都講 OpenAI 的 chat completions，換後端只改 spring.ai.openai.* 設定。
-    // 底層是 openai-java SDK（OkHttp），不走 RestClient：叫模型沒有 http.client.requests 指標，
+    // 本機的 llama-server 和雲端的 Bedrock 都支援 OpenAI 的 chat completions API，換後端只改 spring.ai.openai.* 設定。
+    // 底層是 openai-java SDK（OkHttp），不走 RestClient：呼叫模型時沒有 http.client.requests 指標，
     // 指標和 span 來自 Spring AI 的 gen_ai.* 觀測
     implementation 'org.springframework.ai:spring-ai-starter-model-openai'
 
-    // 斷路器、bulkhead 的規則寫在 application.properties 的 resilience4j.*，starter 照設定建 registry、接上 Micrometer 指標。
+    // 斷路器、bulkhead 的規則寫在 application.properties 的 resilience4j.*，starter 照設定建 registry、註冊 Micrometer 指標。
     // 不用 Spring Cloud Circuit Breaker：那是在 Resilience4j 外面再包一層抽象，還多一套 release train 要追。
     // 不用 resilience4j-bom：2.4.0 的 BOM 沒有 spring-boot4 模組，所以版號在這裡寫一次
     def resilience4j = '2.4.0'
@@ -84,9 +84,9 @@ dependencies {
     // 提供 /actuator/prometheus 給 ops/ 的 Alloy 抓取。程式碼沒有 import，所以 runtimeOnly
     runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 
-    // trace 用 OTLP 推給 ops/ 的 Alloy，三塊各管一段：
+    // trace 用 OTLP 推給 ops/ 的 Alloy，由下面三個依賴分段處理：
     //   spring-boot-micrometer-tracing-opentelemetry：Boot 的自動設定，建 tracer、讀 management.* 屬性
-    //   micrometer-tracing-bridge-otel：把 Micrometer 的 Observation 翻成 OpenTelemetry 的 span，程式碼只認 Micrometer
+    //   micrometer-tracing-bridge-otel：把 Micrometer 的 Observation 翻成 OpenTelemetry 的 span，程式碼只 import Micrometer
     //   opentelemetry-exporter-otlp：把 span 用 OTLP 送出去
     // 不用 spring-boot-starter-opentelemetry：那個 starter 還會帶進 micrometer-registry-otlp，讓 app 另外推一份指標，
     // 跟 Alloy 抓的那份重複
@@ -179,7 +179,7 @@ testing {
         integrationTest(JvmTestSuite) {
             dependencies {
                 implementation project()
-                // 用真的 PostgreSQL，不用 H2：SQL 方言不同（例如 ON CONFLICT），H2 上綠燈不代表 PostgreSQL 會過
+                // 用真的 PostgreSQL，不用 H2：SQL 方言不同（例如 ON CONFLICT），H2 上通過不代表 PostgreSQL 會通過
                 implementation 'org.springframework.boot:spring-boot-testcontainers'
                 implementation 'org.testcontainers:testcontainers-postgresql'
                 implementation 'org.testcontainers:testcontainers-junit-jupiter'
@@ -317,7 +317,7 @@ tasks.named('deployWeb') { mustRunAfter 'deployApp' }
 // 授權的規則、理由、反例見 docs/licenses.md。
 // ./gradlew checkLicense 檢查；./gradlew generateLicenseReport 只產清單（build/reports/dependency-license/index.html）
 
-// 只認套件宣告的授權（POM、jar 的 manifest），不認 jar 裡附帶的授權檔。外掛預設兩種都算，
+// 只採用套件宣告的授權（POM、jar 的 manifest），不採用 jar 裡附帶的授權檔。外掛預設兩種都算，
 // 而一個套件有好幾個授權時只要一個在允許清單就過：itextpdf 是 AGPL，但 jar 裡附了一份給內嵌元件用的 Apache 授權檔，預設設定會讓 itextpdf 通過
 class DeclaredLicensesOnly implements DependencyFilter {
     ProjectData filter(ProjectData data) {

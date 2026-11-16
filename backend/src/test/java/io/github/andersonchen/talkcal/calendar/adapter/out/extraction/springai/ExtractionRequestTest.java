@@ -28,7 +28,7 @@ class ExtractionRequestTest {
     // 2026-10-05 是星期一
     private static final LocalDateTime MONDAY_MORNING = LocalDateTime.of(2026, 10, 5, 9, 30);
 
-    // 扮演 application.properties 給 ChatModel 的預設，模型名稱只寫在那裡
+    // 代替 application.properties 給 ChatModel 的預設，模型名稱只寫在那裡
     private static final OpenAiChatOptions DEFAULTS = OpenAiChatOptions.builder()
             .model("qwen-from-properties")
             .temperature(0.6)

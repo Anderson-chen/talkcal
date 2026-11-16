@@ -35,7 +35,7 @@ import tools.jackson.databind.ObjectMapper;
  * 其他測試各自只用一段真的元件，各段都對不代表組在一起也正常。這裡測的是整個 app 組在一起才會出錯的地方：
  * bean 組裝、設定檔、migration 跟實際 SQL 對不上、JSON 序列化、例外對到哪個狀態碼。
  *
- * 送 JSON 字串、讀 JSON 樹，不引用 controller 的 record：record 改了名字或欄位，這裡要紅燈，不能跟著一起改掉。
+ * 送 JSON 字串、讀 JSON 樹，不引用 controller 的 record：record 改了名字或欄位，這裡要失敗，不能跟著一起改掉。
  *
  * 問助理那一題要真的 llama-server，沒開就跳過，所以只在本機執行；GitHub 上的 CI 只執行行程那幾題。
  * ChatModel 和歸檔的 bucket 都是第一次用到才連線，所以模型沒開、物件儲存指到連不上的位址，app 都能啟動。

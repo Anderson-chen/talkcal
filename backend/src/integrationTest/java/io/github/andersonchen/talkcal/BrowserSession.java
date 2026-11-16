@@ -22,7 +22,7 @@ final class BrowserSession {
     private final String baseUrl;
     private final CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
     private final HttpClient http;
-    // 關掉就是別的網站騙瀏覽器送請求：cookie 照樣帶，但別的網站讀不到 XSRF-TOKEN
+    // 關掉就是模擬別的網站讓瀏覽器送出請求：cookie 照樣帶，但別的網站讀不到 XSRF-TOKEN
     private boolean sendCsrfHeader = true;
 
     BrowserSession(int port) {

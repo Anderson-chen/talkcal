@@ -40,7 +40,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * 用真的 PostgreSQL 和 RustFS，中間接的是正式的 use case 和 adapter，不經過 Spring。
+ * 用真的 PostgreSQL 和 RustFS，中間用的是正式的 use case 和 adapter，不經過 Spring。
  * 每個規則都配一個反例，例如存好才刪配上傳失敗時資料庫一筆都沒少。
  */
 @Testcontainers

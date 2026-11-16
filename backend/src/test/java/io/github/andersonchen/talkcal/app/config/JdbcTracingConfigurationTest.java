@@ -12,8 +12,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * 用真的 ObservationRegistry，不直接呼叫 predicate：規則成不成立，要看 Micrometer 問 predicate 之前
- * 有沒有先把目前的 Observation 設成上層。只測 lambda 的話，Micrometer 改了這個順序測試也照樣綠。
+ * 用真的 ObservationRegistry，不直接呼叫 predicate：規則成不成立，要看 Micrometer 呼叫 predicate 之前
+ * 有沒有先把目前的 Observation 設成上層。只測 lambda 的話，Micrometer 改了這個順序測試也照樣通過。
  * Observation 名稱照 datasource-micrometer 實際用的寫。
  */
 @DisplayName("SQL 的 span 只留在請求裡的")

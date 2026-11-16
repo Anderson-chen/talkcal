@@ -32,7 +32,7 @@ import org.springframework.test.context.DynamicPropertySource;
  *
  * 模型換成 JDK 內建 HttpServer 做的假 OpenAI server，回寫死的 Chat Completions JSON，
  * usage 由真的 OpenAiChatModel 和 openai-java SDK 解析，SDK 有沒有把 usage 交給 Spring AI 也一起驗到。
- * 只叫 ChatModel、不碰資料庫，所以 Flyway 關掉（見 AccessLogTraceIdTest）。
+ * 只呼叫 ChatModel、不碰資料庫，所以 Flyway 關掉（見 AccessLogTraceIdTest）。
  *
  * backend 設成 bedrock，不用預設的 llama-cpp：值跟預設不同，才驗得出標籤是從設定讀的。
  * 每個測試讓假 server 回不同的模型名稱，counter 靠 gen_ai.response.model 分開，測試之間不會加到同一個。
@@ -91,7 +91,8 @@ class ModelTokenUsageMetricsTest {
         chatModel.call(new Prompt("明天下午三點開會"));
 
         // Spring AI 沒拿到 usage 就記 0，不報錯。供應商不回 usage 時（例如串流又沒開 include_usage），
-        // dashboard 上的花費會悄悄變少；能看出來的只有「每次叫模型平均 token」掉到 0（見 docs/cost.md）
+        // dashboard 上的花費會悄悄變少。
+        // 能看出來的只有「每次叫模型的平均 token」面板掉到 0，見 docs/cost.md
         Counter input = tokens("qwen-no-usage", "input");
         assertNotNull(input, "現有的是：" + tokenMeters());
         assertEquals(0, input.count());

@@ -22,7 +22,7 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * 擁有者要從登入者一路傳到 SQL 的 WHERE。controller 沒取登入者、service 沒往下傳、SQL 少了 owner_id 條件，
- * 哪一處漏了都會讓別人讀得到，單獨測各層都綠，只有整個 app 組在一起才測得出來。
+ * 哪一處漏了都會讓別人讀得到，單獨測各層都會通過，只有整個 app 組在一起才測得出來。
  *
  * 測的是 IDOR（OWASP API1）：拿別人的 id，用自己的 session 讀、刪。
  * 每一題都有反例：本人用同一個 id 會成功，證明被擋是因為不是自己的，id 本身沒問題。
@@ -115,7 +115,7 @@ class AuthorizationSystemTest {
     void cannotReadSomeoneElsesConversation() throws Exception {
         String amyId = JSON.readTree(amy.get("/api/auth/me").body()).at("/id").asString();
         String conversation = UUID.randomUUID().toString();
-        // 不叫模型，直接照 JdbcAssistantMemoryRepository 存的格式寫一段 amy 的對話
+        // 不呼叫模型，直接照 JdbcAssistantMemoryRepository 存的格式寫一段 amy 的對話
         jdbc.sql("""
                         INSERT INTO calendar_assistant_message (owner_id, conversation_id, position, type, content)
                         VALUES (:owner, :id, 0, 'USER', '明天幫我約牙醫'), (:owner, :id, 1, 'ASSISTANT', '早上還是下午？')

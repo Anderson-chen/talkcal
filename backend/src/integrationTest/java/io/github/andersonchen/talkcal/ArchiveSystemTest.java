@@ -36,9 +36,9 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * 整個 app 接上真的 PostgreSQL 和 RustFS。擁有者要從登入者一路帶到物件儲存的前綴，中間哪一層漏了，
- * 單獨測各層都綠，只有這裡會紅。
+ * 單獨測各層都會通過，只有這裡會失敗。
  *
- * 排程不等到凌晨，直接叫 app 裡同一個 ArchiveEventsUseCase、AssistantMemoryArchive。
+ * 排程不等到凌晨，直接呼叫 app 裡同一個 ArchiveEventsUseCase、AssistantMemoryArchive。
  * 每一題註冊新的 amy、bob，帳號 id 不同，歸檔的前綴也不同，所以不必清物件儲存。
  */
 @Testcontainers
@@ -143,7 +143,7 @@ class ArchiveSystemTest {
         assertEquals("仁愛路診所", dentist.at("/location").asString());
         assertEquals("帶健保卡", dentist.at("/note").asString());
 
-        // 查看不寫回資料庫，月曆上也不會冒出來
+        // 查看不寫回資料庫，月曆上也不會出現
         assertEquals(0, onlineRows());
         assertEquals(0, getJson(amy, "/api/calendar/events?from=2023-04-24&to=2023-06-05").at("/events").size());
     }
@@ -160,7 +160,7 @@ class ArchiveSystemTest {
     void conversationRestoreStillWorks() throws Exception {
         String amyId = getJson(amy, "/api/auth/me").at("/id").asString();
         String conversation = UUID.randomUUID().toString();
-        // 不叫模型，直接照 JdbcAssistantMemoryRepository 存的格式寫一段 amy 的對話
+        // 不呼叫模型，直接照 JdbcAssistantMemoryRepository 存的格式寫一段 amy 的對話
         jdbc.sql("""
                         INSERT INTO calendar_assistant_message (owner_id, conversation_id, position, type, content)
                         VALUES (:owner, :id, 0, 'USER', '明天幫我約牙醫'), (:owner, :id, 1, 'ASSISTANT', '早上還是下午？')

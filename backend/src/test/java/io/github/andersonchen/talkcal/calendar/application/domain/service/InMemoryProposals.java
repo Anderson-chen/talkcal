@@ -11,8 +11,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 照 JdbcAssistantProposalAdapter 的規則演：是 owner 的、還沒表態過的卡片，表態才算。
- * 兩邊演得不一樣的話，用 InMemoryProposals 的 service 測試會描述不會發生的情境；SQL 本身見 JdbcAssistantProposalAdapterTest。
+ * 照 JdbcAssistantProposalAdapter 的規則實作：是 owner 的、還沒表態過的卡片，表態才算。
+ * 兩邊的行為不一樣的話，用 InMemoryProposals 的 service 測試會描述不會發生的情境；SQL 本身見 JdbcAssistantProposalAdapterTest。
  */
 public final class InMemoryProposals implements ProposalStorePort {
 

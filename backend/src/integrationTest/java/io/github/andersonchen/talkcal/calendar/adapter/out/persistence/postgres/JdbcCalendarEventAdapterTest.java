@@ -71,7 +71,7 @@ class JdbcCalendarEventAdapterTest {
     static TransactionTemplate transaction;
 
     // 直接寫 SQL 的測試也要帶擁有者：不帶的話每一筆都先被 V11 的 NOT NULL 擋下，
-    // 測 CHECK 的題目會因為別的原因失敗，照樣綠燈
+    // 測 CHECK 的題目會因為別的原因失敗，照樣通過
     private static final OwnerId OWNER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000001");
     private static final OwnerId OTHER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000002");
 
@@ -544,7 +544,7 @@ class JdbcCalendarEventAdapterTest {
      * 表和理由見 V13。前幾題經過 AddEventsService 寫進真的資料庫，測的是使用者按兩次加入的情況，不只是 adapter 的方法。
      *
      * withoutKeyDuplicates 是對照組：同樣的操作不帶鍵會存成兩筆，證明這裡數重複的方法有效。
-     * 把 saveOnce 搶鍵的那句拿掉（每次都當成第一次）的話，sameKeyTwiceSavesOnce、concurrentRetriesSaveOnce 等題會紅。
+     * 把 saveOnce 搶先寫入鍵的那句拿掉（每次都當成第一次）的話，sameKeyTwiceSavesOnce、concurrentRetriesSaveOnce 等題會失敗。
      */
     @Nested
     @DisplayName("#51 冪等鍵：同一個鍵只存一次")

@@ -90,7 +90,7 @@ class AuthSystemTest {
                 {"events": [{"title": "牙醫回診", "start": "2030-01-15T10:00:00", "end": "2030-01-15T11:00:00"}]}""";
         BrowserSession amy = browser().signUpAndLogIn("amy", PASSWORD);
 
-        // 別的網站騙 amy 的瀏覽器送請求：session cookie 會帶上，但讀不到 XSRF-TOKEN，送不出 header
+        // 別的網站讓 amy 的瀏覽器送出請求：session cookie 會帶上，但讀不到 XSRF-TOKEN，送不出 header
         BrowserSession forged = amy.withoutCsrfHeader();
         HttpResponse<String> rejected = forged.postJson("/api/calendar/events", event);
         assertEquals(403, rejected.statusCode(), rejected.body());

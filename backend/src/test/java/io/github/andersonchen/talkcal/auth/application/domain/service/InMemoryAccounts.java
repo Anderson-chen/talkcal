@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 照 port 的約定，帳號名稱、identity 撞了就回 false，不丟例外。
+ * 照 port 的約定，帳號名稱、identity 重複就回 false，不丟例外。
  */
 final class InMemoryAccounts implements SaveAccountPort, LoadAccountPort {
 

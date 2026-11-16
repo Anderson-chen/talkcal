@@ -48,7 +48,7 @@ class ChatModelTimeoutTest {
     }
 
     /**
-     * 升級 Spring AI 後這條紅了，代表 Spring AI 會自己帶設定的逾時，GuardedChatModel 補逾時那段就可以拿掉。
+     * 升級 Spring AI 後這條失敗了，代表 Spring AI 會自己帶設定的逾時，GuardedChatModel 補逾時那段就可以拿掉。
      */
     @Test
     @DisplayName("反例：Spring AI 自動組裝的選項，每一次呼叫是它預設的 60 秒（所以 GuardedChatModel 要補）")

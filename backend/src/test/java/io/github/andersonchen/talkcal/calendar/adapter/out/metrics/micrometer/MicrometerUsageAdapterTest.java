@@ -9,7 +9,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * 名字和標籤寫死：dashboard（talkcal-product.json）的查詢用到這些名字，改了名字這裡會紅，dashboard 要一起改。
+ * 名字和標籤寫死：dashboard（talkcal-product.json）的查詢用到這些名字，改了名字這裡會失敗，dashboard 要一起改。
  */
 @DisplayName("MicrometerUsageAdapter")
 class MicrometerUsageAdapterTest {

@@ -21,7 +21,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 
 /**
- * starter 對設定很寬容：名字寫錯、key 拼錯、設定裡沒寫的依賴，都會不報錯地用 Resilience4j 內建的預設建一個。
+ * starter 不檢查設定：名字寫錯、key 拼錯、設定裡沒寫的依賴，都會不報錯地用 Resilience4j 內建的預設建一個。
  * 斷路器照樣在，只是門檻全錯（內建是 100 次的視窗、60 秒才算慢、bulkhead 25 個），從外面看不出來。
  * 所以拿 app 實際建出來的那一組，逐項對設定檔寫的值。
  *
