@@ -38,7 +38,7 @@ RUN apt-get update \
 COPY --from=build /app.jar /app/app.jar
 
 # 版本由 compose 的 build.args 傳進來（cd/version.sh 算的），`docker inspect` 看得到執行中的是哪個 commit。
-# 放在最後：只改了 web/、docs/ 的 commit 版本也會變，ARG 之後的每一層都要重新 build，放前面的話 apt-get 那層每次都用不到快取。
+# 放在最後：commit 只改了 web/、docs/，版本也會變，ARG 之後的每一層都要重新 build。放在前面的話，apt-get 那層每次都用不到快取。
 # 沒帶參數直接 docker build 時是 local / unknown
 ARG APP_VERSION=local
 ARG GIT_COMMIT=unknown
@@ -55,5 +55,5 @@ WORKDIR /app
 EXPOSE 8090
 
 # JVM 預設只拿容器記憶體上限的 1/4 當 heap；容器裡只執行這個程式，給到 75%，剩下留給 heap 以外的記憶體。
-# 用 exec 形式：java 是 PID 1，docker stop 的 SIGTERM 才會送到 JVM，Spring 才能處理完手上的請求再停
+# 用 exec 形式：java 是 PID 1，docker stop 的 SIGTERM 才會送到 JVM，Spring 才能處理完進行中的請求再停
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "/app/app.jar"]

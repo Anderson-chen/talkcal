@@ -28,7 +28,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
  * 啟動真的 server：要驗的是哪個埠回什麼，MockMvc 沒有埠。RANDOM_PORT 時 management 埠也是隨機的，
  * 設定檔寫的 8091 不會跟本機執行中的 bootRun 衝突。
  *
- * 資料庫指到沒人在聽的埠 1，用來驗 liveness、readiness 不看資料庫。啟動時只有 Flyway 會連資料庫，所以關掉 Flyway。
+ * 資料庫指到沒有程式監聽的埠 1，用來驗 liveness、readiness 不看資料庫。啟動時只有 Flyway 會連資料庫，所以關掉 Flyway。
  * properties 要跟 AccessLogTraceIdTest 一字不差，兩個測試才會共用同一個 Spring context。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,

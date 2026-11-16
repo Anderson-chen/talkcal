@@ -13,7 +13,7 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
 
 /**
  * Java 的 package 沒有依賴方向：package-private 擋得住別人看見 ExtractionRequest，
- * 擋不住 ParseEventsService import Spring AI 的 Adapter，編譯和其他測試都不會發現。
+ * 擋不住 ParseEventsService import Spring AI 的 Adapter，編譯會過，其他測試也不會失敗。
  *
  * 每條規則的理由寫在 because(...)，違規時錯誤訊息直接印出來。
  * Javadoc 只寫 because 放不下的事：規則的範圍怎麼切、跟其他規則怎麼分工。
@@ -66,8 +66,8 @@ class ArchitectureTest {
                             + "別的地方一認識具體類別，換實作就不只是改 app.config");
 
     /**
-     * 例如 SQL 和表結構只在 persistence，日期表、JSON Schema 這些只對某顆模型有效的做法只在 extraction。
-     * 兩個子樹要合作，由 core 的 use case 分別呼叫兩個 port。
+     * 例如 SQL 和表結構只在 persistence，日期表、JSON Schema 這些只對某個模型有效的做法只在 extraction。
+     * 一件事要用到兩個子樹時，由 core 的 use case 分別呼叫兩個 port。
      * 每個模組的每個子樹各一片：calendar 的 persistence 和 auth 的 persistence 是兩片。
      */
     @ArchTest
@@ -122,7 +122,7 @@ class ArchitectureTest {
 
     /**
      * 兩個套件都要擋：Jackson 3 把 core、databind 搬到 tools.jackson，註解（@JsonProperty 那些）還在 com.fasterxml.jackson.annotation。
-     * 最常見的違規是在 domain 欄位上加 @JsonProperty、@JsonIgnore，好讓 CalendarEvent 直接丟給 Jackson。
+     * 最常見的違規是在 domain 欄位上加 @JsonProperty、@JsonIgnore，好讓 CalendarEvent 直接交給 Jackson 序列化。
      * 要序列化，就在 adapter 定義自己的 wire format，例如 CalendarController 的 request、response record。
      */
     @ArchTest
