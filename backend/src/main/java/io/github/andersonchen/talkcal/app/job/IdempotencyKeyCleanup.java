@@ -34,7 +34,7 @@ public final class IdempotencyKeyCleanup {
         }
     }
 
-    // 跟對話的歸檔（四點）錯開。多台同時執行也沒關係，重複執行只是刪 0 個
+    // 跟對話的歸檔（四點）錯開，跟行程的歸檔同一時間。多台同時執行也沒關係，重複執行只是刪 0 個
     @Scheduled(cron = "0 30 4 * * *", zone = "${calendar.zone}")
     void run() {
         int deleted = events.deleteIdempotencyKeysCreatedBefore(clock.instant().minus(retention));

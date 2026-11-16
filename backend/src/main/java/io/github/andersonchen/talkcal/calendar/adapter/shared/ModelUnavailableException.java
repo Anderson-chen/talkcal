@@ -14,7 +14,7 @@ import java.util.Objects;
  * 沒有另外處理這個型別的呼叫端照樣當成一般失敗處理，契約不必改；CalendarAssistantController 另外處理，回 503。
  *
  * 放在 adapter.shared：丟出的是包著 ChatModel 的 GuardedChatModel，助理和抽行程兩邊都用，
- * 處理的是 inbound 的 controller；inbound 和 outbound 不能互相 import，共用的類別只能放這裡。
+ * 處理的是 inbound 的 controller；ArchitectureTest 不准 adapter.in import adapter.out，共用的類別只能放這裡。
  */
 public final class ModelUnavailableException extends IllegalStateException {
 

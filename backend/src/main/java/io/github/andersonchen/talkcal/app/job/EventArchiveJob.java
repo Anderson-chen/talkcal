@@ -36,7 +36,7 @@ public final class EventArchiveJob {
         }
     }
 
-    // 跟對話的歸檔（四點）錯開：兩個都要讀寫資料庫和物件儲存
+    // 跟對話的歸檔（四點）錯開：兩個都要讀寫物件儲存。IdempotencyKeyCleanup 也在四點半，只刪資料庫裡的冪等鍵
     @Scheduled(cron = "0 30 4 * * *", zone = "${calendar.zone}")
     void run() {
         LocalDateTime cutoff = LocalDateTime.now(clock).minus(retention);

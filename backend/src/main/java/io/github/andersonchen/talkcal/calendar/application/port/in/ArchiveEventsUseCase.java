@@ -13,6 +13,8 @@ public interface ArchiveEventsUseCase {
     Report archiveEndedBefore(LocalDateTime cutoff);
 
     /**
+     * 這一輪搬了幾筆、幾包沒搬成。
+     *
      * @param archived     存進歸檔、也從資料庫刪掉的筆數
      * @param failedGroups 存不進去的包數，那幾包的行程還在資料庫裡
      */

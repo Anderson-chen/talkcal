@@ -134,6 +134,8 @@ public final class AssistantMemoryArchive {
     }
 
     /**
+     * 這一輪搬了幾段、幾段沒搬成。
+     *
      * @param archived 存進歸檔、也從資料庫刪掉的段數
      * @param failed   存不進去、還在資料庫裡的段數
      */
