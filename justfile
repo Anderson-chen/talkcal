@@ -1,20 +1,20 @@
-# 本機常用腳本的入口（#238）：`just` 或 `just --list` 列出全部指令和說明，`just <指令> [參數]` 執行。
-# 這裡只轉呼叫原本的腳本，做法、參數的意思寫在各腳本開頭；腳本路徑沒變，直接執行照樣可以。
+# 本機常用腳本的入口：`just` 列出全部指令和說明，`just <指令> [參數]` 執行。
+# 每個指令只轉呼叫 repo 裡的腳本，做法和參數的意思寫在腳本開頭，直接執行腳本也一樣。
 #
-# 需要：just（winget install Casey.Just）、Git Bash。just 在 Windows 上用 PATH 裡的 `sh` 跑每一行，
-# 在 Git Bash 裡就找得到；要從 PowerShell、VS Code 的 task 跑，把 <Git 安裝目錄>\bin 加進使用者的 PATH。
-# 不寫死 bash 的路徑：Git 不一定裝在 C:\Program Files，PATH 裡第一個 bash 也可能是 WSL 的（見 cd/triggers/install-local.ps1）。
+# 需要 just（winget install Casey.Just）和 Git Bash。just 在 Windows 上用 PATH 裡的 `sh` 執行每一行：
+# 在 Git Bash 裡找得到；從 PowerShell、VS Code 的 task 執行的話，要把 <Git 安裝目錄>\bin 加進使用者的 PATH。
+# 不寫死 bash 的路徑：Git 不一定裝在 C:\Program Files，PATH 裡第一個 bash 也可能是 WSL 的。
 #
-# 只在 EC2 上跑、由 systemd 或 user_data 呼叫的（infra/envs/1-ec2/deploy.sh、backup-to-s3.sh、smoke.sh）不放進來。
+# 只在 EC2 上由 systemd、user_data 呼叫的腳本（infra/envs/1-ec2/deploy.sh、backup-to-s3.sh、smoke.sh）不放進來。
 #
-# 退版、真的還原、EC2 關機加了 [confirm]，執行前先問（--yes 跳過）。只擋從 just 進來的；直接跑腳本不會問。
+# 退版、真的還原、EC2 關機加了 [confirm]，執行前先問（--yes 跳過）；直接執行腳本不會問。
 # 同一支腳本的安全模式（--list、--unpin、--verify-only、start）拆成獨立的指令，才不必每次都回答。
 
 # 參數用 "$@" 原樣交給腳本：用 {{ }} 內插的話，帶空白、引號的參數會被拆開
 set positional-arguments
 
-# 收檔案路徑的指令加 [no-cd]，在使用者所在的目錄跑：just 預設會先切到 repo 根目錄，
-# 在子目錄給的相對路徑就會指錯地方。這時腳本要用 repo 的完整路徑叫
+# 收檔案路徑的指令加 [no-cd]，在使用者所在的目錄執行：just 預設先切到 repo 根目錄，
+# 在子目錄給的相對路徑就會指錯地方。這些指令要用 {{repo}} 呼叫腳本
 repo := justfile_directory()
 
 [private]
@@ -23,7 +23,7 @@ default:
 
 # ── CI：跟 GitHub Actions、pre-push hook 同一套檢查（ci/README.md）──
 
-# 在乾淨的容器裡跑全部 CI 檢查（不給 commit 就測 HEAD）
+# 在乾淨的容器裡執行全部 CI 檢查（不給 commit 就測 HEAD）
 [group('ci')]
 ci *commit:
     ci/run.sh "$@"
@@ -53,7 +53,7 @@ secrets *log_opts:
 vulns +images:
     ci/vulns.sh "$@"
 
-# 告警端到端測試，約 15 分鐘（KEEP=1 just alerting 跑完留著容器）
+# 告警端到端測試，約 15 分鐘（KEEP=1 just alerting 執行完留著容器）
 [group('ci')]
 alerting:
     ci/alerting.sh
@@ -66,7 +66,7 @@ arch *out:
 
 # ── CD：部署、發版、退版（cd/README.md、cd/release.md、cd/rollback.md）──
 
-# 把這台機器的服務換成目前 checkout 的版本，不先跑測試（要先跑測試用 ./gradlew deployApp）；不給服務就部署 app、web
+# 把這台機器的服務換成目前 checkout 的版本，不先執行測試（要先執行測試用 ./gradlew deployApp）；不給服務就部署 app、web
 [group('cd')]
 deploy env="local" *services:
     cd/apply.sh "$@"
@@ -76,12 +76,12 @@ deploy env="local" *services:
 version:
     cd/version.sh
 
-# 在本機打 release tag，不會推上去（例如 `just release v0.2.0`）
+# 在本機建 release tag，不會推上去（例如 `just release v0.2.0`）
 [group('cd')]
 release tag *commit:
     cd/release.sh "$@"
 
-# 列出這台機器退得回去的版本、現在跑哪個、有沒有釘住
+# 列出這台機器退得回去的版本、現在執行的是哪個、有沒有釘住
 [group('cd')]
 versions env="local":
     cd/rollback.sh "$1" --list
@@ -97,7 +97,7 @@ rollback env version:
 unpin env="local":
     cd/rollback.sh "$1" --unpin
 
-# 手動跑一輪 CD watcher：master 有新的綠燈版本就部署
+# 手動執行一輪 CD watcher：master 有新的綠燈版本就部署
 [group('cd')]
 watch env="local":
     cd/triggers/watch.sh "$1"
@@ -127,7 +127,7 @@ restore file:
 pg-diff old new *tables:
     deploy/backup/pg-diff.sh "$@"
 
-# 還原演練：在獨立的容器上跑備份 → 誤刪 → 還原，跑完全部刪掉
+# 還原演練：在獨立的容器上執行備份 → 誤刪 → 還原，執行完全部刪掉
 [group('backup')]
 drill:
     deploy/backup/drill.sh
@@ -147,7 +147,7 @@ ec2-stop:
 
 # ── 壓測（perf/README.md）──
 
-# 跑 k6 並把指標送進 ops/ 的 Grafana，例如 `just perf perf/knee.js`（後面的參數交給 k6 run）
+# 執行 k6 並把指標送進 ops/ 的 Grafana，例如 `just perf perf/knee.js`（後面的參數交給 k6 run）
 [group('perf')]
 [no-cd]
 perf script *k6_args:

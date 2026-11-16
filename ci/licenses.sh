@@ -1,21 +1,12 @@
 #!/usr/bin/env bash
-# 前端套件的授權檢查：會打包進前端、送到使用者瀏覽器的套件，不能是 GPL、AGPL 這類 copyleft，也不能查不出授權。
-# 後端的在 Gradle 的 checkLicense（backend/build.gradle），規則和理由整理在 docs/licenses.md。
+# 前端套件的授權檢查：會打包送到使用者瀏覽器的套件，不能是 GPL、AGPL 這類 copyleft，也不能查不出授權。
+# 規則和例外怎麼處理見 docs/licenses.md；後端的在 Gradle 的 checkLicense。
 #
-#   ci/licenses.sh        由 ci/checks.sh 在 CI 容器裡呼叫（容器裡有 node、Trivy）
+#   ci/licenses.sh        要有 node 和 Trivy，CI 容器（ci/Dockerfile）裡有
 #
-# 為什麼先另外裝一份「只有 dependencies」的 node_modules 再掃：
-#   - devDependencies（vite、vitest、playwright…）只在 build、測試時用，不會進到 dist/，不算散布出去，不必管
-#   - 不讀 lockfile 而是讀裝好的 package.json：pnpm-lock.yaml 沒有記授權 ——
-#     直接掃它時 Trivy 找得到 24 個套件、卻一個授權都沒有，檢查會靜靜地通過（2026-10-19 實測）。
-#     裝好的 node_modules 裡每個套件都有自己的 package.json，讀得到授權
-#   - 套件從 pnpm store 拿（run.sh 掛的 volume），前面 checks.sh 的 pnpm install 已經下載過，這裡不會再連網
-#
-# 用 Trivy（ci/vulns.sh 已經在用、版本釘死），不另外引入 license-checker 這類套件：
-# 它照 SPDX 把授權分成幾類並給嚴重度，這裡擋 CRITICAL（forbidden：AGPL、SSPL、CC-BY-NC…）、
-# HIGH（restricted：GPL、LGPL…）和 UNKNOWN（認不出來的授權字串）。MPL、EPL 這類只限檔案本身的 copyleft 是 MEDIUM，放行。
-#
-# 不連網：授權分類內建在 Trivy 裡，不必下載漏洞資料庫。
+# 為什麼另外裝一份只有 dependencies 的 node_modules 再掃、擋哪些授權等級，
+# 見 docs/licenses.md「前端：ci/licenses.sh（Trivy）」。
+# 授權分類內建在 Trivy 裡，所以 --skip-db-update，不必下載漏洞資料庫。
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -23,16 +14,16 @@ cd "$(dirname "$0")/.."
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-# pnpm-workspace.yaml 一起帶：pnpm 11 的設定（例如只裝滿兩週的版本）寫在那裡，少了它裝出來的跟 CI 的不一樣
+# pnpm-workspace.yaml 也要帶：pnpm 的設定（例如只裝發布滿兩週的版本）寫在那裡，少了這個檔案，裝出來的版本會不一樣
 cp web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml "$work/"
-# 輸出不丟掉：裝不起來時 pnpm 把原因（ERR_PNPM_…）印在 stdout
+# 輸出不丟掉：安裝失敗時 pnpm 把原因（ERR_PNPM_…）印在 stdout
 (cd "$work" && pnpm install --prod --frozen-lockfile --ignore-scripts)
 
 trivy rootfs --quiet --skip-db-update --scanners license --list-all-pkgs --format json \
     --output "$work/report.json" "$work"
 
-# 判斷寫在這裡，不交給 Trivy 的 --exit-code：要多擋兩種 Trivy 不會報的情況 ——
-#   一個套件都沒掃到（例如 node_modules 沒裝起來），和套件的 package.json 沒寫授權
+# 不用 Trivy 的 --exit-code，自己判斷：還要擋兩種 Trivy 不會報的情況，
+# 一個套件都沒掃到（例如 node_modules 沒裝好），和套件的 package.json 沒寫授權
 node - "$work/report.json" <<'EOF'
 const report = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
 const results = report.Results ?? [];

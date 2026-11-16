@@ -1,12 +1,10 @@
-# 把 docs/architecture/ 發佈成 GitHub Pages：https://anderson-chen.github.io/talkcal/
+# 把 docs/architecture/ 的互動架構圖發布成 GitHub Pages：https://anderson-chen.github.io/talkcal/
+# GitHub 在 repo 裡打開 .html 只顯示原始碼，要能互動，就得發布成網頁。
 #
-# 為什麼只發佈這個資料夾、不用「從 master 的 docs/ 發佈」：docs/ 裡還有上線準備清單、事後檢討這些
-# 給自己看的文件，用資料夾模式會全部變成公開網站。這裡只上傳互動架構圖那一頁。
+# 只上傳這一頁，不用 Pages 的「從 docs/ 發布」：那樣 docs/ 底下所有文件都會變成公開網站。
 #
-# 為什麼要 Pages：GitHub 在 repo 裡點開 .html 只會顯示原始碼，要能互動得有地方把它當網頁送出去。
-#
-# 為什麼每次 push 到 master 都發佈：頁面的 F、L 表記錨點，行號是發佈時才從這個 commit 的檔案算出來的（#275）。
-# 任何被引用的檔案多一行、少一行，頁面上的行號就要跟著變，只看 docs/architecture/ 有沒有改會漏掉。發佈一次不到一分鐘。
+# 每次 push 到 master 都發布：頁面上的行號是發布時從這個 commit 的檔案算出來的，
+# 任何被引用的檔案多一行、少一行都要重算，只看 docs/architecture/ 有沒有改會漏掉。發布一次不到一分鐘。
 
 name: Pages
 
@@ -15,13 +13,13 @@ on:
     branches: [master]
   workflow_dispatch:
 
-# deploy-pages 要的權限：寫 Pages、用 OIDC 證明「這次部署來自這個 repo 的這個 workflow」
+# deploy-pages 要寫 Pages，並用 OIDC 證明這次部署來自這個 repo 的這個 workflow
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# 同一時間只留一個部署；新的進來不取消正在跑的，避免發佈到一半被切斷
+# 有新的發布時不取消正在執行的那次，發布才不會中途中斷
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -36,9 +34,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/configure-pages@v6
-      # 錨點換成行號，寫到另一個資料夾再上傳：lines.mjs 本身不是網頁的一部分，不發佈。
-      # 錨點對不上就失敗、不發佈，線上留著上一版（PR 的 CI 已經先擋過一次）。
-      # ubuntu-latest 內建 Node，這支只用內建模組，不必 setup-node
+      # 換成行號的頁面寫到另一個資料夾再上傳，lines.mjs 本身不發布。
+      # 錨點對不上就失敗、不發布，線上留著上一版。runner 內建 Node，lines.mjs 只用內建模組
       - run: node docs/architecture/lines.mjs --out "$RUNNER_TEMP/pages"
       - uses: actions/upload-pages-artifact@v5
         with:

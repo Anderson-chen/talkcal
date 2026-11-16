@@ -1,6 +1,6 @@
 # METADATA
-# title: 容器明寫用 root 跑
-# description: 映像檔本來用一般使用者，compose 又改回 root；容器被打穿時拿到的就是 root
+# title: 容器明寫用 root 執行
+# description: 映像檔本來用一般使用者，compose 又改回 root；容器被入侵時攻擊者拿到的就是 root
 # custom:
 #   id: TALKCAL-COMPOSE-003
 #   avd_id: TALKCAL-COMPOSE-003
