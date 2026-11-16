@@ -1,10 +1,10 @@
-# 把 docs/architecture/ 的互動架構圖發佈成 GitHub Pages：https://anderson-chen.github.io/talkcal/
-# GitHub 在 repo 裡打開 .html 只顯示原始碼，要能互動，就得發佈成網頁。
+# 把 docs/architecture/ 的互動架構圖發布成 GitHub Pages：https://anderson-chen.github.io/talkcal/
+# GitHub 在 repo 裡打開 .html 只顯示原始碼，要能互動，就得發布成網頁。
 #
-# 只上傳這一頁，不用 Pages 的「從 docs/ 發佈」：那樣 docs/ 底下所有文件都會變成公開網站。
+# 只上傳這一頁，不用 Pages 的「從 docs/ 發布」：那樣 docs/ 底下所有文件都會變成公開網站。
 #
-# 每次 push 到 master 都發佈：頁面上的行號是發佈時從這個 commit 的檔案算出來的，
-# 任何被引用的檔案多一行、少一行都要重算，只看 docs/architecture/ 有沒有改會漏掉。發佈一次不到一分鐘。
+# 每次 push 到 master 都發布：頁面上的行號是發布時從這個 commit 的檔案算出來的，
+# 任何被引用的檔案多一行、少一行都要重算，只看 docs/architecture/ 有沒有改會漏掉。發布一次不到一分鐘。
 
 name: Pages
 
@@ -19,7 +19,7 @@ permissions:
   pages: write
   id-token: write
 
-# 有新的發佈時不取消正在執行的那次，發佈才不會中途中斷
+# 有新的發布時不取消正在執行的那次，發布才不會中途中斷
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -34,8 +34,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/configure-pages@v6
-      # 換成行號的頁面寫到另一個資料夾再上傳，lines.mjs 本身不發佈。
-      # 錨點對不上就失敗、不發佈，線上留著上一版。runner 內建 Node，lines.mjs 只用內建模組
+      # 換成行號的頁面寫到另一個資料夾再上傳，lines.mjs 本身不發布。
+      # 錨點對不上就失敗、不發布，線上留著上一版。runner 內建 Node，lines.mjs 只用內建模組
       - run: node docs/architecture/lines.mjs --out "$RUNNER_TEMP/pages"
       - uses: actions/upload-pages-artifact@v5
         with:

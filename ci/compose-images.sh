@@ -4,7 +4,7 @@
 #   ci/vulns.sh $(ci/compose-images.sh)
 #
 # 清單從 compose 讀，升版、加服務只改 compose，掃的清單自動跟上。
-# 用 compose config --images 解析，不用 grep：疊上去的檔案會蓋掉 image、有 profiles 的服務不會啟動，grep 都看不出來。
+# 用 compose config --images 解析，不用 grep：疊上去的檔案會蓋掉 image、有 profiles 的服務不會啟動，這兩種情況 grep 都抓不到。
 # --no-interpolate：不代換 ${}，就不需要 deploy/.env。
 #
 # 疊的檔案要跟 infra/envs/1-ec2/deploy.sh 一致，那邊改了這裡要跟著改；model_backend 用預設的 bedrock。

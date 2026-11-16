@@ -1,6 +1,6 @@
 # CI 的執行環境：ci/run.sh 在這個映像檔裡執行 ci/checks.sh。為什麼要自己的映像檔見 docs/adr/0008-ci-same-script-in-container.md。
 #
-# 很少變的（JDK、Node、pnpm、Gradle 本體、Playwright 的瀏覽器）裝進映像檔；
+# 很少變的（JDK、Node、pnpm、Gradle 本體、Playwright 的瀏覽器）裝進映像檔。
 # 常變的（Java 函式庫、前端套件）放 ci/run.sh 掛上來的 volume。
 # build context 是 ci/run.sh 從要測的 commit 用 git archive 取出的幾個檔案，不是資料夾。
 #

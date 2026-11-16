@@ -228,7 +228,7 @@ elif ! git diff --quiet "$target_rev" HEAD -- $COMPOSE_FILES; then
   git diff --stat "$target_rev" HEAD -- $COMPOSE_FILES
 fi
 
-# 2. 拿 watcher 的鎖，換到一半 watcher 不會插進來。
+# 2. 拿 watcher 的鎖，換到一半時 watcher 不會開始部署。
 # 殘留的鎖照 watch.sh 的規則清掉（超過 60 分鐘）：出事要退版時不該被殘留的鎖擋住
 if [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +60)" ]; then
   echo "鎖超過 60 分鐘，當成殘留清掉：$lock"

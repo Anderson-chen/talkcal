@@ -19,7 +19,7 @@
   // 一個人審得完的量，超過的排在 Dependency Dashboard 上
   prConcurrentLimit: 5,
   prHourlyLimit: 2,
-  // 新版發佈滿 14 天才開 PR：被植入惡意程式碼的版本通常幾天內就被發現下架（2025 年 npm 的 Shai-Hulud、2026-03 的 Trivy）。
+  // 新版發布滿 14 天才開 PR：被植入惡意程式碼的版本通常幾天內就被發現下架（2025 年 npm 的 Shai-Hulud、2026-03 的 Trivy）。
   // 不能比 web/pnpm-workspace.yaml 的 minimumReleaseAge 短：CI 的 pnpm install 遇到不滿兩週的版本直接失敗，PR 只會紅燈
   minimumReleaseAge: '14 days',
 
@@ -31,7 +31,7 @@
   labels: ['dependencies'],
   // 不自動合併：人看過、CI 綠燈才合（流程見 docs/dependency-updates.md）
   automerge: false,
-  // 間接依賴一個月整理一次，只動鎖檔。間接依賴的發佈日期 Renovate 管不到，
+  // 間接依賴一個月整理一次，只動鎖檔。間接依賴的發布日期 Renovate 管不到，
   // 靠 pnpm 照 pnpm-workspace.yaml 跳過不滿兩週的版本
   lockFileMaintenance: {
     enabled: true,
@@ -107,7 +107,7 @@
     },
     {
       // 映像檔那一處由下面的 customManagers 跟 wrapper 查同一個來源。不關掉 dockerfile 管理器的話兩邊查不同的地方：
-      // Docker Hub 拿不到發佈時間就不等，wrapper 會等滿 14 天，同一個 PR 會變成 wrapper 9.8.1、映像檔 9.8.2
+      // Docker Hub 拿不到發布時間就不等，wrapper 會等滿 14 天，同一個 PR 會變成 wrapper 9.8.1、映像檔 9.8.2
       description: 'backend/Dockerfile 的 gradle 映像檔不從 Docker Hub 追',
       matchManagers: ['dockerfile'],
       matchPackageNames: ['gradle'],

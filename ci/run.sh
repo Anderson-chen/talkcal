@@ -37,7 +37,7 @@ git archive "$commit" ci/Dockerfile backend/gradlew backend/gradle/wrapper web/p
 trap 'docker rm --force "$container" >/dev/null 2>&1 || true' EXIT
 
 # docker.sock：Testcontainers 開的 PostgreSQL 跟這個容器並排開在主機的 Docker 上，不在容器裡再包一層 Docker。
-#   所以 TESTCONTAINERS_HOST_OVERRIDE 要指向主機：資料庫的埠發佈在主機上，localhost 是這個容器自己
+#   所以 TESTCONTAINERS_HOST_OVERRIDE 要指向主機：資料庫的埠發布在主機上，localhost 是這個容器自己
 # host.docker.internal：容器裡找主機的名字。Docker Desktop 內建，Linux（GitHub 的 runner）要 --add-host 才有
 # 兩個 volume 是依賴快取，跨次保留，不然每次都重新下載幾百 MB。Gradle 只掛 caches/：Gradle 本體裝在映像檔的 wrapper/，掛整個家目錄會蓋掉 wrapper/
 # SPRING_AI_OPENAI_CHAT_BASEURL：模型測試連的 llama-server，預設是主機的 8080。連不到的話那些測試跳過，不算失敗

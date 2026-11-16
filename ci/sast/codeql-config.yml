@@ -3,5 +3,5 @@
 
 paths-ignore:
   # 設計稿是畫布工具匯出的 HTML，裡面的 JS 是那個工具的，不會上線。
-  # 會發佈到 GitHub Pages 的 docs/architecture/ 照樣掃
+  # 會發布到 GitHub Pages 的 docs/architecture/ 照樣掃
   - docs/design/**

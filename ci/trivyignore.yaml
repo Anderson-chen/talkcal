@@ -14,7 +14,7 @@
 #   - Caddy 2.11.6：對外的服務只有 Caddy，HTTP/2、Range 的 DoS 外面碰得到，只接受到升版為止。
 #     2.11.9 修掉了 x/net/html 以外的全部，2026-11-20 發布滿 14 天，Renovate 11-23 開 PR；到期日給到合併的隔天
 #   - 觀測堆疊：Grafana 只綁 127.0.0.1、其他只在 compose 網路裡，外面連不到；上游還沒帶修補，給一個月
-#   - postgres-exporter：v0.20.1 已是最新版，不發佈埠，只有 Alloy 會來抓；給兩個月
+#   - postgres-exporter：v0.20.1 已是最新版，不發布埠，只有 Alloy 會來抓；給兩個月
 vulnerabilities:
   - id: CVE-2025-61726
     paths: [usr/local/bin/gosu]
@@ -238,7 +238,7 @@ vulnerabilities:
     expired_at: 2027-01-10
 
 # ── 設定檢查（trivy config）──────────────────────────────────────────────
-# 規則：Trivy 內建的 DS-*（Dockerfile）、AWS-*（Terraform），和 ci/config-checks/ 的 TALKCAL-COMPOSE-*（compose）。
+# 規則：Dockerfile 用 Trivy 內建的 DS-*，Terraform 用 AWS-*，compose 用 ci/config-checks/ 的 TALKCAL-COMPOSE-*。
 # 本來就要這樣設計的給一年，到期重看一次；等著修的給短的
 misconfigurations:
   # 容器已經拿到等同主機 root 的 docker.sock，裡面改用一般使用者也擋不住什麼
@@ -246,7 +246,7 @@ misconfigurations:
     paths: [ci/Dockerfile, ci/sast/Dockerfile]
     statement: CI 容器掛 docker.sock，等同主機 root；只在 CI 跑完就丟
     expired_at: 2027-10-30
-  # 為什麼 master 用 root 見 web/Dockerfile。整個改成非 root 要換成 8080 埠，Caddy、compose、架構頁都要跟著改
+  # 為什麼 nginx 的 master process 用 root 見 web/Dockerfile。整個改成非 root 要換成 8080 埠，Caddy、compose、架構頁都要跟著改
   - id: DS-0002
     paths: [web/Dockerfile]
     statement: nginx master 是 root、worker 不是；改成非 root 要換埠，另外做

@@ -121,8 +121,8 @@ jobs:
         run: cat ci/build/sast/summary.md >> "$GITHUB_STEP_SUMMARY" || true
 
   # 掃前端 lockfile、自己 build 的映像檔、EC2 上的第三方映像檔。
-  # 第三方映像檔在排程、push 到 master 時都掃；PR 只有動到映像檔版本或例外時才掃：
-  # 把 compose 改回有漏洞的版本要在合併前紅，但無關的 PR 不必多拉約 1.5 GB，也不該因為剛公布的第三方 CVE 變成紅燈
+  # 第三方映像檔在排程、push 到 master 時都掃；PR 只有動到映像檔版本或例外時才掃。
+  # PR 把 compose 改回有漏洞的版本時，要在合併前紅燈；無關的 PR 不必多拉約 1.5 GB，也不該因為剛公布的第三方 CVE 變成紅燈
   vulns:
     runs-on: ubuntu-latest
     timeout-minutes: 30

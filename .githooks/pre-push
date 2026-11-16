@@ -12,8 +12,8 @@ set -euo pipefail
 # git 從 stdin 給每個要推的 ref：<本機 ref> <本機 sha> <遠端 ref> <遠端 sha>。
 # 測的是要推的那個 commit，不一定是 HEAD（例如推別的分支時）
 zero=0000000000000000000000000000000000000000
-# 改到這些就要執行 AI eval：助理和工具（system prompt 在這裡）、抽取（抽取也有 prompt）、eval 的題目和評分、
-# application.properties（用哪個模型、溫度、max-tokens）
+# 改到這些就要執行 AI eval：助理和工具、抽取（兩者都有 prompt）、eval 的題目和評分，
+# 以及設定模型、溫度、max-tokens 的 application.properties
 EVAL_PATHS='^backend/src/main/java/io/github/andersonchen/talkcal/calendar/adapter/(in/assistant|out/extraction)/|^backend/src/eval/|^backend/src/main/resources/application[^/]*\.properties$'
 while read -r local_ref local_sha _ _; do
     # 刪除遠端分支時本機 sha 是全 0，沒有東西要測
