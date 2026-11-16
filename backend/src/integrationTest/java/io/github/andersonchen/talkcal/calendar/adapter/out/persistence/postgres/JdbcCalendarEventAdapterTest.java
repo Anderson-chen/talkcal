@@ -55,7 +55,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * Testcontainers 啟動 PostgreSQL，Flyway 套用正式的 migration，adapter 直接 new，不啟動 Spring：
- * 測到的是正式的表結構和 SQL，又不必等整個 app 啟動。其他 Jdbc*Test 也這樣做。
+ * 測到的是正式的表結構和 SQL，又不必等整個 app 啟動。
  *
  * 「有重疊」在 port 上寫成一句話，實際由 SQL 的 && 和 tsrange 預設的 [) 邊界決定，要對真的 PostgreSQL 才驗得準。
  */

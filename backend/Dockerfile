@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/gradle-cache \
     gradle dependencies --no-daemon -q > /dev/null
 
 COPY src/ src/
-# 只打包、不執行測試：測試在打包之前執行（見 build.gradle 的 deployApp），整合測試要的模型和容器 build 環境裡也沒有
+# 只打包、不執行測試：本機的 ./gradlew deployApp 先執行測試，CD 等 CI 通過才部署。整合測試要的模型和容器 build 環境裡也沒有
 RUN --mount=type=cache,target=/gradle-cache \
     gradle bootJar --no-daemon -q \
     # 另一個 talkcal-plain.jar 只有自己的 class，不能直接執行
