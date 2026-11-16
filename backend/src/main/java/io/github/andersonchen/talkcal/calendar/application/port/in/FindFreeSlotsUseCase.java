@@ -15,7 +15,7 @@ import java.util.List;
  *
  * 失敗時：
  * - owner 是 null、期間不合規、最短長度不是正的 → IllegalArgumentException
- * - 資料庫出事 → IllegalStateException
+ * - 資料庫出錯 → IllegalStateException
  */
 public interface FindFreeSlotsUseCase {
 

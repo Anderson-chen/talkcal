@@ -6,7 +6,7 @@ import java.util.List;
 /**
  * 最近幾段時間內各有幾個人跟助理說過話、或存過行程。回傳的順序跟 windows 一樣。
  *
- * 失敗時：windows 是 null、空的，或裡面有 null、0、負的期間 → IllegalArgumentException；資料庫出事 → IllegalStateException。
+ * 失敗時：windows 是 null、空的，或裡面有 null、0、負的期間 → IllegalArgumentException；資料庫出錯 → IllegalStateException。
  */
 public interface CountActiveUsersUseCase {
 

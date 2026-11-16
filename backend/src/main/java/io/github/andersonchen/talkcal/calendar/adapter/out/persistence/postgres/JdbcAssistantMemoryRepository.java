@@ -31,7 +31,7 @@ import java.util.UUID;
  * AI 助理的對話記憶，連工具呼叫一起存（表在 V7__create_calendar_assistant_message.sql，為什麼另開一張表也寫在那裡）。
  *
  * 對話依擁有者分開（V11）：每一句 SQL 都帶著 owner_id，同一個 conversation_id 在不同人底下是兩段不同的對話，
- * 別人拿到你的 conversation_id 也讀不到、蓋不掉你的那段。
+ * 拿到別人的 conversation_id 也讀不到、蓋不掉那個人的對話。
  *
  * 寫入只往後接，不整段取代。照 Spring AI ChatMemoryRepository 的 saveAll 寫的話，是讀出整段、呼叫模型（好幾秒）、
  * 整段刪掉重插：同一段對話同時送兩句（兩個分頁、按了兩次送出）時，兩個請求讀到同一份歷史，晚存的整段蓋掉早的，

@@ -10,7 +10,7 @@ import io.github.andersonchen.talkcal.auth.application.port.out.SaveAccountPort;
 import java.util.Objects;
 
 /**
- * 不靠 email 找既有的帳號合併：那等於讓填了你 email 的人登進你的帳號（見 V10）。
+ * 不靠 email 找既有的帳號合併：那等於讓填了別人 email 的人登進那個人的帳號（見 V10）。
  * 代價是同一個人用 Google 和 GitHub 登入會是兩個帳號；要合併得等之後做「已登入時綁定」。
  */
 public final class SignInExternallyService implements SignInExternallyUseCase {

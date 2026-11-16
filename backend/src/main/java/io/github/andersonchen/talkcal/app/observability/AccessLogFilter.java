@@ -40,7 +40,7 @@ final class AccessLogFilter extends OncePerRequestFilter {
     // 不用類別全名：Loki 裡用 log_logger="access" 篩，要單獨調等級也只要 logging.level.access=WARN
     private static final Logger log = LoggerFactory.getLogger("access");
 
-    // 使用者的話是一兩句、助理的回覆是幾段文字加幾張卡片，8 KB 綽綽有餘；上限是怕大量內容進出時，log 一行太長。
+    // 使用者的話是一兩句、助理的回覆是幾段文字加幾張卡片，8 KB 綽綽有餘；設上限是為了避免大量內容進出時 log 一行太長。
     // 超過的部分照樣傳遞，只是不記
     private static final int MAX_BODY_BYTES = 8 * 1024;
 
@@ -50,7 +50,7 @@ final class AccessLogFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         // request 的 body 是串流，controller 的 @RequestBody 讀走之後就讀不到了。
-        // ContentCachingRequestWrapper 在 controller 讀的時候順手存一份；讀了才存，所以只能在 chain 走完之後拿
+        // ContentCachingRequestWrapper 在 controller 讀取時另存一份；讀了才存，所以只能在 chain 走完之後拿
         ContentCachingRequestWrapper cachingRequest = new ContentCachingRequestWrapper(request, MAX_BODY_BYTES);
         // ContentCachingResponseWrapper 把 controller 寫的 byte 全部攔在記憶體裡、不送出，
         // 最後一定要 copyBodyToResponse()，漏了的話客戶端收到空的回應
@@ -59,7 +59,7 @@ final class AccessLogFilter extends OncePerRequestFilter {
         try {
             chain.doFilter(cachingRequest, cachingResponse);
         } finally {
-            // finally：後面丟出例外的請求也要留紀錄，出事的最需要被看到
+            // finally：後面丟出例外的請求也要留紀錄，出錯的請求最需要留下紀錄
             long elapsedNanos = System.nanoTime() - start;
             long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(elapsedNanos);
             // 註冊、登入的請求裡有密碼：log 會進 Loki，記了等於密碼明碼存在另一個地方。回應裡沒有密碼，照記

@@ -12,7 +12,7 @@ import java.util.Objects;
 
 /**
  * 「現在」從建構子收的 Clock 取，不直接呼叫 LocalDateTime.now()：測試給固定時鐘，「明天」就是確定的日期；
- * 用哪個時區由組裝根決定，core 不處理時區。Clock 是 JDK 的型別，core 可以依賴。
+ * 用哪個時區由 app.config 決定，core 不處理時區。Clock 是 JDK 的型別，core 可以依賴。
  */
 public final class ParseEventsService implements ParseEventsUseCase {
 
@@ -26,7 +26,7 @@ public final class ParseEventsService implements ParseEventsUseCase {
 
     @Override
     public List<CalendarEvent> parseEvents(String description) {
-        // 空白的描述在這裡就擋下，不會叫到模型
+        // 空白的描述在這裡就擋下，不會呼叫模型
         EventDescription described = new EventDescription(description);
         // List.copyOf 會拒絕 null 元素：adapter 漏轉一筆的話，在這裡就丟例外，不會一路傳到畫面上
         return List.copyOf(extractEventsPort.extractEvents(described, LocalDateTime.now(clock)));

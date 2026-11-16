@@ -13,7 +13,7 @@ import java.util.List;
  *
  * 失敗時：
  * - owner 是 null、期間不合規 → IllegalArgumentException
- * - 資料庫出事、或資料庫裡有不合規則的行程 → IllegalStateException
+ * - 資料庫出錯、或資料庫裡有不合規則的行程 → IllegalStateException
  */
 public interface ListEventsUseCase {
 

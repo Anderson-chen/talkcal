@@ -11,7 +11,7 @@ import java.util.List;
  *
  * 一次收好幾個時間點：每日、每週、每月的活躍人數掃的是同一批資料，一句 SQL 一起數。
  *
- * 回傳的順序跟 sinces 一樣。失敗時：資料庫出事 → IllegalStateException。
+ * 回傳的順序跟 sinces 一樣。失敗時：資料庫出錯 → IllegalStateException。
  */
 public interface CountActiveOwnersPort {
 

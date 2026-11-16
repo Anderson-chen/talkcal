@@ -12,7 +12,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
  * 失敗時：
  * - owner 是 null、id 是 null → IllegalArgumentException
  * - owner 沒有這個行程（從來沒有、已經刪掉了、或是別人的）→ EventNotFoundException
- * - 資料庫出事 → IllegalStateException
+ * - 資料庫出錯 → IllegalStateException
  */
 public interface RemoveEventUseCase {
 

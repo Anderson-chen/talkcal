@@ -14,7 +14,7 @@ import java.util.List;
  *
  * 失敗時：
  * - owner 是 null、範圍不合規 → IllegalArgumentException
- * - 物件儲存出事、或封存的資料不合規則 → IllegalStateException
+ * - 物件儲存出錯、或封存的資料不合規則 → IllegalStateException
  */
 public interface ListArchivedEventsUseCase {
 

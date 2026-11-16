@@ -12,7 +12,7 @@ import java.util.List;
  *
  * 失敗時：
  * - 描述空白 → IllegalArgumentException
- * - 模型出事、或產生不合規則的行程 → IllegalStateException
+ * - 模型出錯、或產生不合規則的行程 → IllegalStateException
  */
 public interface ParseEventsUseCase {
 

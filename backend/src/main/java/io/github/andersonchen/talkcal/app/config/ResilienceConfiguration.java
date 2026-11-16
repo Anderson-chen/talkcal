@@ -17,7 +17,7 @@ import org.springframework.context.annotation.Configuration;
  * 每個依賴都一樣、而 Resilience4j starter 沒做的兩件事：斷路器狀態改變時留 log、數 bulkhead 擋掉幾個。
  * 斷路器和 bulkhead 本身由 starter 照 application.properties 的 resilience4j.* 建；怎麼包住模型見 GuardedChatModel。
  *
- * 用 RegistryEventConsumer：registry 每建一個就套上，之後多的依賴不必另外接。
+ * 用 RegistryEventConsumer：registry 每建一個就套上，之後新增的依賴不必另外設定。
  *
  * 要保護的地方明寫 decorator，不用 @CircuitBreaker 註解：多一層 AOP 代理，出問題時比較難追。
  */
@@ -33,7 +33,7 @@ class ResilienceConfiguration {
                 log.warn("斷路器狀態改變：name={} {}", event.getCircuitBreakerName(), event.getStateTransition())));
     }
 
-    // starter 接上的 bulkhead 指標只有「剩幾個位子」，沒有「擋掉幾個」
+    // starter 註冊的 bulkhead 指標只有「剩幾個位子」，沒有「擋掉幾個」
     @Bean
     RegistryEventConsumer<Bulkhead> countBulkheadRejections(MeterRegistry meters) {
         return new OnAdded<>(bulkhead -> {

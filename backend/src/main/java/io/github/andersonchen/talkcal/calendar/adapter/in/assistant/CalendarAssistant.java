@@ -210,7 +210,7 @@ public final class CalendarAssistant {
      * 只接這一輪新增的，不把讀出來的歷史整段寫回去：同一段對話同時送兩句時，兩個請求讀到同一份歷史，
      * 整段寫回的話，晚存的會把早存的那一輪蓋掉。同一段對話的寫入怎麼排隊見 JdbcAssistantMemoryRepository。
      *
-     * 失敗時（模型、資料庫出事、繞圈超過 MAX_STEPS）一律丟 IllegalStateException：背後的例外五花八門，
+     * 失敗時（模型或資料庫出錯、迴圈超過 MAX_STEPS）一律丟 IllegalStateException：背後的例外五花八門，
      * 混著 IllegalArgumentException 的話會被誤認成呼叫端送錯。ModelUnavailableException 本來就是 IllegalStateException，
      * 原樣丟出去，呼叫端才回得出 503；工具裡被擋下的也一樣（見 toolCallingManager）。
      */
@@ -278,7 +278,7 @@ public final class CalendarAssistant {
                         text = UNSAFE_LINK_FALLBACK;
                     }
                     // 內部設定不能從產品裡被問出來（OWASP LLM07 System Prompt Leakage）：
-                    // prompt 呼叫模型不要講只是請求，模型照樣會講，所以由程式比對回覆
+                    // 在 prompt 裡要求模型不要講只是請求，模型照樣會講，所以由程式比對回覆
                     if (revealsInternals(text, system.getText())) {
                         log.warn("AI 助理的回覆在講內部設定（工具名稱或照念指示），改成固定回覆：conversation={} reply={}",
                                 conversationId, text);
@@ -400,7 +400,7 @@ public final class CalendarAssistant {
      * - 「只有帶著時段的字才不用問」：寫成「從要做的事看得出來就不用問」的話，模型會把「七點吃飯」也當成看得出來、
      *   直接提議 19:00，但早上七點吃飯也很常見。所以界線看字：早餐、晚餐、晨跑這種字本身帶著時段，其他一律問
      * - 「叫你排時間就用 plan_events」：沒有這條時，「幫我規劃兩天讀書」模型查完空檔只報空檔，
-     *   使用者回「好」還反問幾點。用規則加範例呼叫模型自己挑時段再 propose_events 的話，模型常停在用文字列出時段，
+     *   使用者回「好」還反問幾點。用規則加範例要求模型自己挑時段、再呼叫 propose_events 的話，模型常停在用文字列出時段，
      *   範例一多又會照抄範例的文字、弄壞別的題目。所以挑時段交給程式（SessionPlanner），這裡只告訴模型用哪個工具
      */
     static String instruction(LocalDateTime now) {

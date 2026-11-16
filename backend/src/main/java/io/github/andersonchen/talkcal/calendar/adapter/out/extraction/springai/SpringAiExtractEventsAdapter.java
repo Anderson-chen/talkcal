@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * ChatModel 由組裝根注入，連到哪、等多久、HTTP 怎麼送都在 ChatModel 的設定裡。這裡只有抽行程這件工作的寫法：
+ * ChatModel 由 app.config 注入，連到哪、等多久、HTTP 怎麼送都在 ChatModel 的設定裡。這裡只有抽行程這件工作的寫法：
  * ExtractionRequest 組 prompt（日期表、JSON Schema、溫度 0），ExtractionResponse 把模型輸出轉成 CalendarEvent。
  *
  * 只收 ChatModel 介面，不收 OpenAiChatModel：換成別家的 ChatModel 也能用，要改的只有 ExtractionRequest.options() 的選項。

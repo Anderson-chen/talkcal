@@ -33,7 +33,7 @@ import java.util.Objects;
  * - 行程：GET，只讀。封存的行程不放回資料庫，放回去隔天的排程又會再封存一次
  * - 對話：POST，會寫資料庫。已經在線上的不會被蓋掉，按幾次結果都一樣，重試是安全的
  *
- * 對話不在 core 裡，還原由組裝根把 RestoreConversations 傳進來：這個 controller 不 import adapter.out。
+ * 對話不在 core 裡，還原由 app.config 把 RestoreConversations 傳進來：這個 controller 不 import adapter.out。
  * 回傳的行程跟月曆同一個形狀（CalendarController.SavedEvents），前端用同一個型別畫。
  */
 @RestController

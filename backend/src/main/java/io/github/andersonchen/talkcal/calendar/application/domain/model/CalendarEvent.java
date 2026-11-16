@@ -18,7 +18,7 @@ import java.util.Optional;
 public record CalendarEvent(String title, LocalDateTime start, LocalDateTime end,
                             Category category, Optional<String> location, Optional<String> note) {
 
-    // 業務決定，放在 domain，不寫進 prompt 呼叫模型猜：換一個模型、換一家供應商，「沒講就算一小時」都不會跟著變
+    // 業務決定，放在 domain，不寫進 prompt 讓模型猜：換一個模型、換一家供應商，「沒講就算一小時」都不會跟著變
     static final Duration DEFAULT_DURATION = Duration.ofHours(1);
 
     public CalendarEvent {

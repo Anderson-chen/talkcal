@@ -21,7 +21,7 @@ import java.util.List;
  *
  * 失敗時：
  * - owner 是 null，events、adopting 是 null 或含 null，adopting 比 events 多 → IllegalArgumentException
- * - 資料庫出事 → IllegalStateException，一筆都不會存進去
+ * - 資料庫出錯 → IllegalStateException，一筆都不會存進去
  */
 public interface AddEventsUseCase {
 
@@ -32,7 +32,7 @@ public interface AddEventsUseCase {
      *
      * 按了「加入」之後後端存好了、回應卻沒送到（逾時、502、斷線），畫面只看到失敗，使用者會再按一次；
      * 沒有鍵的話，後端分不出這是重送還是真的要再加一筆一樣的，只能照存。
-     * 卡片的 proposalId 擋不了這件事：proposalId 只用來記指標（記不下就算了），手動表單也沒有卡片。
+     * 卡片的 proposalId 擋不了這件事：proposalId 只用來記指標（記錄失敗也不影響存檔），手動表單也沒有卡片。
      *
      * 額外的失敗：
      * - 同一個鍵之前存的是不同的行程 → IdempotencyKeyReusedException（什麼都不存）

@@ -7,7 +7,7 @@ import io.github.andersonchen.talkcal.auth.application.domain.model.Username;
 
 import java.util.Optional;
 
-/** 查不到回 empty；資料庫出事丟 IllegalStateException。 */
+/** 查不到回 empty；資料庫出錯丟 IllegalStateException。 */
 public interface LoadAccountPort {
 
     Optional<Account> load(Username username);

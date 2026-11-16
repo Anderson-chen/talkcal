@@ -8,7 +8,7 @@ import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
  * 失敗時：
  * - 帳號名稱或密碼不合規則 → IllegalArgumentException（訊息直接給使用者看）
  * - 帳號名稱已經有人用了 → UsernameTakenException
- * - 資料庫出事 → IllegalStateException
+ * - 資料庫出錯 → IllegalStateException
  */
 public interface RegisterAccountUseCase {
 
