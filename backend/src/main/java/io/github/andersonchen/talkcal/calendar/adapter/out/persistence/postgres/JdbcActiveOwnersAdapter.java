@@ -17,15 +17,11 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
- * 從兩張表數出最近有動作的擁有者（#36 的活躍使用者）：calendar_event（存過行程）和 calendar_assistant_message（跟助理說過話）。
+ * 數出最近存過行程或跟助理說過話的擁有者（表是 calendar_event、calendar_assistant_message），時間都看 created_at。
+ * calendar_assistant_message 只往後接、舊輪會被刪掉，所以 created_at 是最近幾輪各自存進來的時間，正好看得出這段期間有沒有說話。
  *
- * 時間看兩張表的 created_at：
- * - calendar_event：寫進來的時間（V2）
- * - calendar_assistant_message：只往後接（#50），舊輪會被刪掉，所以 created_at 是最近幾輪各自存進來的時間 —— 看得出這段期間有沒有說話，正好是要的
- *
- * 幾個期間在同一句 SQL 裡用 FILTER 一起數：兩張表各掃一次，不是每個期間各掃一次。
- * 只掃最早那個時間點之後的資料（WHERE created_at >= 最早的 since），其他期間再從裡面篩。
- * 沒有 created_at 的索引：目前的資料量不痛；呼叫端（ActiveUsersMetrics）也會快取，資料多了先看這句的時間再決定加索引。
+ * 幾個期間在同一句 SQL 裡用 FILTER 一起數，兩張表各掃描一次；只掃描最早那個時間點之後的資料，其他期間再從裡面篩。
+ * created_at 沒有索引：目前的資料量查得很快，ActiveUsersMetrics 也會快取；資料多了先看這句 SQL 的時間再決定加不加。
  */
 public final class JdbcActiveOwnersAdapter implements CountActiveOwnersPort {
 
@@ -41,7 +37,7 @@ public final class JdbcActiveOwnersAdapter implements CountActiveOwnersPort {
         if (sinces.isEmpty()) {
             return List.of();
         }
-        // 欄位數跟著 sinces 走，但每個值都是參數（:s0、:s1…），沒有任何外來的字串拼進 SQL
+        // 欄位數跟著 sinces 變，但每個值都是參數（:s0、:s1…），沒有外來的字串拼進 SQL
         String counts = IntStream.range(0, sinces.size())
                 .mapToObj(i -> "count(DISTINCT owner_id) FILTER (WHERE created_at >= :s" + i + ")")
                 .collect(Collectors.joining(", "));
@@ -63,7 +59,7 @@ public final class JdbcActiveOwnersAdapter implements CountActiveOwnersPort {
         }
     }
 
-    // 帶著時區送：欄位是 TIMESTAMPTZ，用 java.sql.Timestamp 的話換算要看 JVM 的時區，容器（UTC）和本機（台北）會差 8 小時
+    // 帶時區傳：欄位是 TIMESTAMPTZ，用 java.sql.Timestamp 的話換算要看 JVM 的時區，容器是 UTC、本機是台北，會差 8 小時
     private static OffsetDateTime utc(Instant instant) {
         return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
     }

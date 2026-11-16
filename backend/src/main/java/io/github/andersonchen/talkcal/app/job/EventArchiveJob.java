@@ -12,12 +12,10 @@ import java.time.Period;
 import java.util.Objects;
 
 /**
- * 每天把舊行程搬到歸檔：結束超過保留期限的，交給 ArchiveEventsUseCase 壓縮、上傳、存好才刪。
+ * 每天把結束超過保留期限的行程交給 ArchiveEventsUseCase 歸檔。
+ * 行程在 core 裡，所以走 use case；對話不在 core 裡，AssistantMemoryArchive 才直接用 adapter。
  *
- * 這裡只管「什麼時候跑」和「多舊算舊」，怎麼搬（先存再刪、一包失敗只留那一包）是 core 的規則（ArchiveEventsService）。
- * 跟 AssistantMemoryArchive 不同：行程本來就在 core 裡，所以走 use case，不直接碰 adapter。
- *
- * 保留期限用 Period（天、月、年），不是 Duration：行程是牆上時間（LocalDateTime），「兩年前」要在日曆上算。
+ * 保留期限用 Period，不用 Duration：行程是牆上時間，「兩年前」要在日曆上算。
  * clock 要帶 calendar.zone 的時區，理由見 application.properties 的 calendar.zone。
  */
 public final class EventArchiveJob {
@@ -38,7 +36,7 @@ public final class EventArchiveJob {
         }
     }
 
-    // 四點半：跟對話的歸檔（四點）錯開，兩個都要讀寫資料庫和物件儲存，不必擠在同一刻
+    // 跟對話的歸檔（四點）錯開：兩個都要讀寫物件儲存。IdempotencyKeyCleanup 也在四點半，只刪資料庫裡的冪等鍵
     @Scheduled(cron = "0 30 4 * * *", zone = "${calendar.zone}")
     void run() {
         LocalDateTime cutoff = LocalDateTime.now(clock).minus(retention);

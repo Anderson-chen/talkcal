@@ -13,15 +13,10 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 用 Spring AI 的 ChatModel 把自然語言抽成行程。
+ * ChatModel 由 app.config 注入，連到哪、等多久、HTTP 怎麼送都在 ChatModel 的設定裡。這裡只有抽行程這件工作的寫法：
+ * ExtractionRequest 組 prompt（日期表、JSON Schema、溫度 0），ExtractionResponse 把模型輸出轉成 CalendarEvent。
  *
- * ChatModel 由組裝根注入：連到哪、等多久、HTTP 怎麼送都是它的事。
- * 留在這裡的只有「這件工作」的知識，分在兩塊 package-private 的零件裡：
- * ExtractionRequest 組 prompt（日期表、JSON Schema、溫度 0），
- * ExtractionResponse 把模型輸出翻成 CalendarEvent（含結束時間的核對）。
- *
- * 只收 ChatModel 這個介面，不收 OpenAiChatModel：換成別家的 ChatModel 也接得上，
- * 要改的只有 ExtractionRequest.options() 那份供應商專屬的選項。
+ * 只收 ChatModel 介面，不收 OpenAiChatModel：換成別家的 ChatModel 也能用，要改的只有 ExtractionRequest.options() 的選項。
  */
 public final class SpringAiExtractEventsAdapter implements ExtractEventsPort {
 
@@ -37,13 +32,12 @@ public final class SpringAiExtractEventsAdapter implements ExtractEventsPort {
         try {
             response = chatModel.call(ExtractionRequest.prompt(description, now, chatModel.getOptions()));
         } catch (ModelUnavailableException e) {
-            // 沒叫模型就被擋下（#44）：本來就是 IllegalStateException，不再包一層，
-            // 助理的工具框架認的是這個型別（見 CalendarAssistant 的 toolCallingManager），包了就認不出來
+            // 本來就是 IllegalStateException，不包第二層：助理的工具框架靠這個型別判斷要不要原樣丟出
+            // （見 CalendarAssistant 的 toolCallingManager），包了就判斷不出來
             throw e;
         } catch (RuntimeException e) {
-            // port 的契約是失敗丟 IllegalStateException。
-            // ChatModel 失敗時丟的是 OpenAI SDK 自己的例外，而且型別隨失敗原因不同（連不上、逾時、HTTP 4xx/5xx），
-            // 全部包成同一種；保留 cause，log 裡才看得到真正的原因
+            // ChatModel 失敗時丟 OpenAI SDK 自己的例外，型別隨失敗原因不同（連不上、逾時、HTTP 4xx/5xx），
+            // 全部包成 port 約定的 IllegalStateException；保留 cause，log 裡才看得到真正的原因
             throw new IllegalStateException("呼叫模型抽行程失敗：" + e.getMessage(), e);
         }
         return ExtractionResponse.events(response, description);

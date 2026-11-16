@@ -18,14 +18,14 @@ class ChatModelConfiguration {
     static final String GUARDED_CHAT_MODEL = "guardedChatModel";
 
     /**
-     * 斷路器和 bulkhead 的名字，要跟 application.properties 的 resilience4j.*.instances.chat-model 同名，對不上會怎樣見那一段的開頭。
-     * 指標上的 name tag 也是它：改了名字，照這個 tag 篩的告警會查不到資料。
+     * 要跟 application.properties 的 resilience4j.*.instances.chat-model 同名：對不上的話，starter 會用預設值另建一個，不報錯。
+     * 指標的 name tag 也是這個值，改名之後照 tag 篩的告警就查不到資料。
      */
     static final String CHAT_MODEL = "chat-model";
 
     /**
-     * defaultCandidate = false：不帶 @Qualifier(GUARDED_CHAT_MODEL) 注入 ChatModel 時，拿到的是 Spring AI 自動組裝的那個，
-     * 沒有保護，也不會報錯。
+     * defaultCandidate = false：注入 ChatModel 時沒帶 @Qualifier(GUARDED_CHAT_MODEL)，拿到的是 Spring AI 自動組裝、
+     * 沒有斷路器和 bulkhead 的那個，而且不會報錯。
      */
     @Bean(name = GUARDED_CHAT_MODEL, defaultCandidate = false)
     ChatModel guardedChatModel(ChatModel chatModel, CircuitBreakerRegistry breakers, BulkheadRegistry bulkheads,

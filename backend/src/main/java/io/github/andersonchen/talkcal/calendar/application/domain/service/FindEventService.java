@@ -9,7 +9,6 @@ import io.github.andersonchen.talkcal.calendar.application.port.out.LoadEventPor
 import java.util.Objects;
 import java.util.Optional;
 
-/** 實作「用 id 找一個行程」。 */
 public final class FindEventService implements FindEventUseCase {
 
     private final LoadEventPort loadEventPort;

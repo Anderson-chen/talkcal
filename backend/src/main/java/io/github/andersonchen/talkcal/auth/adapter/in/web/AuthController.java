@@ -27,11 +27,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 帳號的 HTTP 入口：註冊、看「目前是誰」、有哪些登入方式。
+ * 註冊、看目前是誰、有哪些登入方式。
  *
- * 登入、登出不在這裡：交給 Spring Security 的 filter（POST /api/auth/login、/api/auth/logout，
- * Google、GitHub 的 /api/auth/oauth2/*，設定在 app.config），
- * 它們會處理 session、CSRF token 換新、防 session fixation 這些細節，自己寫 controller 很容易漏掉。
+ * 登入、登出交給 Spring Security 的 filter（設定在 app.config 的 SecurityConfiguration）：
+ * session、CSRF token 換新、防 session fixation 這些細節，自己寫 controller 很容易漏掉。
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -51,26 +50,23 @@ public final class AuthController {
         this.loginProviders = Objects.requireNonNull(loginProviders, "loginProviders 不可為 null");
     }
 
-    /** 註冊用的帳密。 */
     public record RegisterRequest(
             @Schema(description = "帳號名稱：3～32 個字，英數、底線、點、減號（不分大小寫）", example = "amy") String username,
             @Schema(description = "密碼：8～72 bytes（中文一個字算 3）", example = "correct-horse") String password) {
     }
 
-    /** 目前登入的是誰。 */
     public record Me(
             @Schema(description = "帳號 ID：行程、對話的擁有者就是它") String id,
             @Schema(description = "給人看的名字：帳密登入的是帳號名稱，Google、GitHub 登入的是對方給的名字") String name,
             @Schema(description = "帳號名稱；只用 Google、GitHub 登入的帳號沒有，是 null", nullable = true) String username) {
     }
 
-    /** 除了帳密之外還能怎麼登入。 */
     public record Providers(
             @Schema(description = "開了的登入方式，前端照這個畫按鈕；按鈕連到 /api/auth/oauth2/authorization/{id}",
                     example = "[\"google\", \"github\"]") List<String> providers) {
     }
 
-    /** 失敗時的回應；欄位名稱跟 calendar 的錯誤一樣是 error，前端用同一套方式顯示。 */
+    /** 欄位名稱跟 calendar 的錯誤回應一樣是 error，前端用同一套方式顯示。 */
     public record AuthFailure(String error) {
     }
 
@@ -79,7 +75,7 @@ public final class AuthController {
     @Operation(summary = "註冊帳號（不會自動登入，註冊完要再呼叫 /api/auth/login）")
     public Me register(@RequestBody RegisterRequest request) {
         AccountId id = registerAccount.register(request.username(), request.password());
-        // 回傳的名字照資料庫裡存的（轉過小寫），不是使用者打的原樣
+        // 回傳資料庫裡存的名字（轉過小寫），不是使用者輸入的原樣
         return me(id).orElseThrow(() -> new IllegalStateException("剛註冊的帳號查不到：" + id));
     }
 
@@ -92,8 +88,7 @@ public final class AuthController {
     @GetMapping("/me")
     @Operation(summary = "目前登入的是誰；沒登入是 401")
     public ResponseEntity<Me> me(Authentication authentication) {
-        // 沒登入的請求進不到這裡（SecurityFilterChain 先回 401）。
-        // 但 session 還在、帳號卻已經不在了（例如被刪掉）時，也當成沒登入
+        // 沒登入的請求進不到這裡（SecurityFilterChain 先回 401）；session 還在、帳號卻已經不在時也當成沒登入
         return me(AccountId.of(authentication.getName()))
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());

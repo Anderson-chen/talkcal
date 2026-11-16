@@ -17,9 +17,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/**
- * 帳號存 PostgreSQL（表的定義在 db/migration/V9、V10）。寫法跟 calendar 的 JdbcCalendarEventAdapter 一致。
- */
+/** 表的定義在 db/migration/V9、V10。 */
 public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPort {
 
     private static final String COLUMNS = "account.id, account.display_name, account.username, account.password_hash";
@@ -37,8 +35,7 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
         Account.PasswordLogin login = account.password()
                 .orElseThrow(() -> new IllegalArgumentException("帳密註冊的帳號要有帳號名稱和密碼"));
         try {
-            // ON CONFLICT (username) DO NOTHING：撞名時插入 0 列、不丟錯。
-            // 判斷撞名的是資料庫的 UNIQUE，不是「先查再存」—— 兩個人同時註冊同一個名字時，只有一個會成功
+            // 撞名由資料庫的 UNIQUE 判斷，不先查再存：兩個人同時註冊同一個名字，只有一個會插入成功
             int inserted = jdbc.sql("""
                             INSERT INTO account (id, display_name, username, password_hash)
                             VALUES (:id, :displayName, :username, :hash)
@@ -58,14 +55,14 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
     @Override
     public boolean saveIfIdentityFree(Account account, ExternalIdentity identity) {
         try {
-            // 兩個 INSERT 放在同一個交易：identity 已經有人用了的話，剛插入的帳號也要撤掉，不留下沒人登得進的帳號
+            // 同一個交易：identity 已經有人用了的話，剛插入的帳號也撤掉，不留下沒人登得進的帳號
             Boolean saved = transaction.execute(status -> {
                 jdbc.sql("INSERT INTO account (id, display_name) VALUES (:id, :displayName)")
                         .param("id", account.id().value())
                         .param("displayName", account.displayName())
                         .update();
-                // 撞到主鍵 (provider, subject) 時插入 0 列、不丟錯。另一個交易正在插同一個 identity 時，
-                // PostgreSQL 會等它結束再決定：它 commit 了這邊就是 0 列，所以兩邊不會都以為自己建成功
+                // 另一個交易正在插同一個 identity 時，PostgreSQL 會等那個交易結束再決定：
+                // 那個交易 commit 了，這邊就是 0 列，兩邊不會都回報建立成功
                 int linked = jdbc.sql("""
                                 INSERT INTO account_identity (provider, subject, account_id)
                                 VALUES (:provider, :subject, :accountId)
@@ -127,7 +124,7 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
 
     private static Account toAccount(ResultSet rs) throws SQLException {
         String username = rs.getString("username");
-        // 資料庫的 CHECK 保證帳號名稱和密碼雜湊要嘛都有、要嘛都沒有
+        // V10 的 CHECK 規定帳號名稱和密碼雜湊一起有、一起沒有
         Account.PasswordLogin login = username == null
                 ? null
                 : new Account.PasswordLogin(new Username(username), rs.getString("password_hash"));

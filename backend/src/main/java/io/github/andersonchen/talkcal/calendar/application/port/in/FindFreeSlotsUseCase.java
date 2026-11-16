@@ -9,14 +9,13 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 找空檔（inbound port）：某幾天的某個時段裡，哪些時間沒有行程、而且夠長。
+ * 某幾天的某個時段裡，哪些時間沒有行程、而且夠長。期間的規則見 DateRange，已經過去的時間不算。
  *
- * 期間的規則跟 ListEventsUseCase 一樣（start 含、endExclusive 不含、最多 100 天），已經過去的時間不算。
- * 只看 owner 自己的行程：別人的行程不會讓這個人變忙，也不會從空檔的有無被推敲出來（#104）。
+ * 只看 owner 自己的行程：別人的行程不會讓這個人變忙，也不會從空檔的有無被推敲出來。
  *
  * 失敗時：
  * - owner 是 null、期間不合規、最短長度不是正的 → IllegalArgumentException
- * - 資料庫出事 → IllegalStateException
+ * - 資料庫出錯 → IllegalStateException
  */
 public interface FindFreeSlotsUseCase {
 

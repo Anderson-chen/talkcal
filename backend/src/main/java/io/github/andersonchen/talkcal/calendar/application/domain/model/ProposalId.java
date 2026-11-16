@@ -3,10 +3,10 @@ package io.github.andersonchen.talkcal.calendar.application.domain.model;
 import java.util.UUID;
 
 /**
- * AI 助理發出去的一張提議卡片的身分（#223）。
+ * AI 助理發出去的一張提議卡片的身分。伺服器發卡片時給，前端採納、拒絕時原樣帶回來，
+ * 伺服器才核對得了真的有這張卡片、而且屬於登入者。
  *
- * 伺服器發卡片時給，前端在採納（存檔）、拒絕時原樣帶回來，伺服器才核對得了「真的有這張卡片、而且是你的」。
- * 用 UUID 的理由同 EventId：猜不到別人的卡片編號，也不洩漏總共發過幾張。
+ * 用 UUID：猜不到別人的卡片編號，也不洩漏總共發過幾張。
  */
 public record ProposalId(UUID value) {
 
@@ -20,9 +20,7 @@ public record ProposalId(UUID value) {
         return new ProposalId(UUID.randomUUID());
     }
 
-    /**
-     * 從外部（例如 HTTP 請求）收到的字串。格式不對是呼叫端送錯，丟 IllegalArgumentException。
-     */
+    /** 格式不對是呼叫端送錯，丟 IllegalArgumentException。 */
     public static ProposalId of(String text) {
         if (text == null || text.isBlank()) {
             throw new IllegalArgumentException("提議 ID 不可為 null 或空白");

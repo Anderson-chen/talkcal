@@ -21,25 +21,23 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 歸檔用的那一個 bucket（#54）：放一包、讀一包、列出某個前綴底下的、刪掉某個前綴底下的。
+ * 歸檔用的 bucket。雲端是 AWS S3，本機是 RustFS（deploy/compose.yaml），都支援 S3 的 API，只差 endpoint 和帳密。
+ * SDK 的型別、例外只出現在這個類別，S3 的錯一律轉成 IllegalStateException。
  *
- * S3 的 API 是物件儲存的共通語言：雲端是 AWS S3，本機是 RustFS（deploy/compose.yaml），只差 endpoint 和帳密。
- * SDK 的型別、例外只留在這個類別裡，外面拿到的是 key 和 byte[]；S3 的錯一律翻成 IllegalStateException（port 的約定）。
+ * 不叫 Adapter：這個類別不實作 core 的 port。S3EventArchiveAdapter 存行程、app.job.AssistantMemoryArchive 存 AI 助理的對話，
+ * 兩邊共用同一個 bucket、同一套讀寫。
  *
- * 不叫 Adapter：它不實作 core 的 port，是這一包的零件 —— 行程（S3EventArchiveAdapter）和
- * AI 助理的對話（app.job.AssistantMemoryArchive）共用同一個 bucket、同一套讀寫。
+ * key 的排法只寫在這裡：&lt;root&gt;owner=&lt;擁有者&gt;/month=&lt;yyyy-MM&gt;/&lt;檔名&gt;（root 是 calendar-event/、assistant-conversation/）。
+ * - 擁有者在最前面：一個人的全部歸檔就是一個前綴，查看、還原只列自己的前綴，刪帳號時整個前綴刪掉，列不到也刪不到別人的；
+ *   行程和對話的前綴排法一樣，刪帳號時不會有一邊漏刪
+ * - owner=、month= 是 Hive 的分區慣例：之後用 Athena 直接查歸檔，不必搬資料就能依人、依月份過濾
  *
- * key 的排法也只在這裡：&lt;root&gt;owner=&lt;擁有者&gt;/month=&lt;yyyy-MM&gt;/&lt;檔名&gt;（root 是 calendar-event/、assistant-conversation/）。
- * - 擁有者在最前面：一個人的全部歸檔就是一個前綴，查看、還原只列自己的前綴，刪帳號（#52）整個前綴刪掉，列不到、也刪不到別人的
- * - owner=、month= 是 Hive 的分區慣例：哪天要用 Athena 直接查歸檔，不必搬資料就能依人、依月份過濾
- * 行程和對話共用這一套，刪帳號時兩邊的前綴長一樣，不會有一邊漏刪。
- *
- * 上傳成功的意思：PutObject 回 200 才算數，而 SDK v2 預設每次上傳都帶 CRC32 checksum、由服務端驗過才收，
- * 傳到一半斷掉、內容傳壞了都會是例外，不會是「看起來成功」。呼叫端只在 put 正常回傳之後才刪資料庫。
+ * PutObject 回 200 才算上傳成功；SDK v2 預設每次上傳都帶 CRC32 checksum、由伺服器端驗過才收，
+ * 傳到一半斷線、內容傳壞了都會丟例外，不會看起來成功。呼叫端只在 put 正常回傳之後才刪資料庫。
  */
 public final class ArchiveBucket {
 
-    // DeleteObjects 一次最多 1000 個 key（S3 的上限）
+    // S3 的上限
     private static final int DELETE_BATCH = 1000;
 
     private final S3Client s3;
@@ -54,14 +52,12 @@ public final class ArchiveBucket {
     }
 
     /**
-     * 連到 S3 或 S3 相容的儲存。
-     *
-     * 建這個物件不會連線，連不上要到真的用到才知道：物件儲存掛了不該讓整個 app 起不來，
+     * 建這個物件時不連線，連不連得上要等真的用到才會發現：物件儲存無法連線時，整個 app 不該因此無法啟動，
      * 歸檔晚一天沒關係（沒存好的不會被刪）。
      *
-     * @param endpoint  空白 = AWS S3 本身；給了就是 S3 相容的服務（本機的 RustFS），並改用 path-style
+     * @param endpoint  空白表示 AWS S3 本身；有值就是 S3 相容的服務（本機的 RustFS），並改用 path-style
      *                  （http://host/bucket/key）：自架的服務通常沒有「bucket 名稱當子網域」的 DNS
-     * @param accessKey 空白 = SDK 的預設憑證鏈（環境變數、EC2 角色…）；給了就用這組固定的
+     * @param accessKey 空白表示用 SDK 的預設憑證鏈（環境變數、EC2 角色…）
      */
     public static ArchiveBucket connect(String endpoint, String region, String bucket, String accessKey, String secretKey) {
         AwsCredentialsProvider credentials = accessKey == null || accessKey.isBlank()
@@ -90,7 +86,7 @@ public final class ArchiveBucket {
         }
     }
 
-    /** prefix 底下的全部 key，依字典順序（S3 列出來就是這個順序）。超過 1000 個會自動翻頁。 */
+    /** 依字典順序（S3 列出來就是這個順序），超過 1000 個會自動翻頁。 */
     public List<String> list(String prefix) {
         try {
             return s3.listObjectsV2Paginator(r -> r.bucket(bucket).prefix(prefix)).contents().stream()
@@ -110,9 +106,9 @@ public final class ArchiveBucket {
     }
 
     /**
-     * owner 在 first～last 這幾個月（兩端都含）的全部 key，依字典順序（= 月份、再依檔名）。
-     * 列一次這個人的前綴、再依 key 裡的月份挑，不是一個月列一次：24 個月就是 1 次而不是 24 次 LIST。
-     * 行程每天的排程各存一包，一個人一個月最多三十幾包；整個前綴列出來，十年也才幾頁（一頁 1000 個 key）。
+     * 依字典順序，也就是先依月份、再依檔名。
+     * 列一次這個人的前綴、再依 key 裡的月份挑，不一個月列一次：24 個月是 1 次 LIST，不是 24 次。
+     * 行程每天的排程各存一包，一個人一個月最多三十幾包，整個前綴列出來十年也才幾頁（一頁 1000 個 key）。
      */
     public List<String> keys(String root, OwnerId owner, YearMonth first, YearMonth last) {
         String prefix = ownerPrefix(root, owner);
@@ -124,7 +120,7 @@ public final class ArchiveBucket {
                 .toList();
     }
 
-    // key 裡 month= 那一段；不是這個排法的 key（例如有人手動放了別的檔案）當成範圍外，不讀
+    // 不是這個排法的 key（例如有人手動放了別的檔案）當成範圍外，不讀
     private static YearMonth monthOf(String key, String ownerPrefix) {
         String rest = key.substring(ownerPrefix.length());
         if (!rest.startsWith("month=") || rest.indexOf('/') < 0) {
@@ -137,7 +133,7 @@ public final class ArchiveBucket {
         }
     }
 
-    /** 刪掉 prefix 底下的全部，回傳刪了幾個。 */
+    /** 回傳刪了幾個。 */
     public int deleteAll(String prefix) {
         List<String> keys = list(prefix);
         try {

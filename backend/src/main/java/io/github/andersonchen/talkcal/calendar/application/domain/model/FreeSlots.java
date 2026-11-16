@@ -9,10 +9,9 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 找空檔的規則：每一天的某個時段，扣掉有行程的時間，留下夠長的那幾段。
+ * 每一天的某個時段扣掉有行程的時間，留下夠長的那幾段。
  *
- * 寫成 domain 的 policy（純計算、不碰資料庫），而不是交給模型看著行程清單自己算：
- * 時間區間的加減是小模型最常算錯的東西，而這件事程式算起來既簡單又確定。
+ * 純計算，不交給模型看著行程清單自己算：時間區間的加減是小模型最常算錯的東西，程式算起來簡單又確定。
  */
 public final class FreeSlots {
 
@@ -20,11 +19,8 @@ public final class FreeSlots {
     }
 
     /**
-     * @param range   要找的那幾天
-     * @param period  每天的哪個時段
-     * @param minimum 至少要多長才算空檔
-     * @param busy    這段期間的行程（跨夜、跨天的也算，擋到哪就扣到哪）
-     * @param now     現在：已經過去的時間不算空檔 —— 下午三點問「今天下午有空嗎」，不該回答「12:00 有空」
+     * @param busy 這段期間的行程；跨夜、跨天的也算，擋到哪就扣到哪
+     * @param now  已經過去的時間不算空檔：下午三點問「今天下午有空嗎」，不該回答「12:00 有空」
      */
     public static List<FreeSlot> find(DateRange range, DayPeriod period, Duration minimum,
                                       List<CalendarEvent> busy, LocalDateTime now) {
@@ -48,7 +44,7 @@ public final class FreeSlots {
                     break;
                 }
                 if (!event.end().isAfter(cursor) || !event.start().isBefore(windowEnd)) {
-                    continue; // 這個行程在游標之前就結束了、或在時段之後才開始
+                    continue; // 行程在游標之前就結束了，或在時段之後才開始
                 }
                 addIfLongEnough(slots, cursor, event.start(), minimum);
                 if (event.end().isAfter(cursor)) {

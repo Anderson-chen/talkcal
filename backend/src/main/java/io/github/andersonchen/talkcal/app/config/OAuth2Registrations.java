@@ -8,21 +8,18 @@ import org.springframework.security.config.oauth2.client.CommonOAuth2Provider;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 
 /**
- * Google、GitHub 這兩個 OAuth 應用程式的設定，從 talkcal.auth.google.*、talkcal.auth.github.* 組出來。
+ * Google、GitHub 的 OAuth client 設定，從 talkcal.auth.google.*、talkcal.auth.github.* 組出來。
  *
- * 為什麼不用 Spring Boot 現成的 spring.security.oauth2.client.registration.*：
- * - 它的回呼網址預設在 /login/oauth2/code/*，但 nginx 只把 /api 轉給 app，要改到 /api 底下就得每個 provider 都寫一次 redirect-uri
- * - 寫了 redirect-uri 卻沒給 client id，它會在啟動時直接失敗，沒申請 OAuth 應用程式的人連 app 都起不來。
- *   這裡只開有給 client id 的 provider，什麼都沒設就只有帳密登入
- *
- * client secret 只從設定讀（application.properties 再從環境變數接），不寫進程式碼或 repo。
- * 授權網址、token 網址、scope 這些公開的資訊用 Spring Security 內建的 CommonOAuth2Provider，不自己抄一份。
+ * 不用 Spring Boot 的 spring.security.oauth2.client.registration.*：
+ * - 回呼網址預設在 /login/oauth2/code/*，nginx 只把 /api 轉給 app，每個 provider 都得另寫 redirect-uri
+ * - 寫了 redirect-uri 卻沒給 client id，啟動就失敗，沒申請 OAuth 應用程式的人連 app 都無法啟動
+ * 這裡只開有 client id 的 provider，都沒設就只有帳密登入。
  */
 record OAuth2Registrations(List<ClientRegistration> all) {
 
-    /** 回呼網址：{baseUrl} 是使用者瀏覽器看到的網址（經過 vite 或 nginx 之後的那個），在 Google、GitHub 那邊要登記一模一樣的。 */
+    /** {baseUrl} 是瀏覽器看到的網址（經過 vite 或 nginx 之後的那個）；Google、GitHub 那邊要登記一模一樣的回呼網址。 */
     static final String REDIRECT_URI = "{baseUrl}/api/auth/oauth2/callback/{registrationId}";
-    /** 前端「用 Google 登入」按鈕連到的地方：{registrationId} 換成 google、github。 */
+    /** 前端的登入按鈕寫死這個路徑（web/src/auth.ts），改了要一起改。 */
     static final String AUTHORIZATION_BASE_URI = "/api/auth/oauth2/authorization";
     static final String CALLBACK_BASE_URI = "/api/auth/oauth2/callback/*";
 
@@ -30,7 +27,6 @@ record OAuth2Registrations(List<ClientRegistration> all) {
         all = List.copyOf(all);
     }
 
-    /** 設定了的 provider；一個都沒設就是空的，這時不開 OAuth2 登入。 */
     static OAuth2Registrations of(String googleClientId, String googleClientSecret,
                                   String githubClientId, String githubClientSecret) {
         List<ClientRegistration> registrations = new ArrayList<>();
@@ -44,7 +40,7 @@ record OAuth2Registrations(List<ClientRegistration> all) {
         if (isBlank(clientId)) {
             return Optional.empty();
         }
-        // 給了 id 卻沒給 secret：多半是環境變數漏設一個。啟動時就失敗，不要等到有人按登入才在 provider 那邊出錯
+        // 有 id 沒 secret 多半是漏設一個環境變數：啟動就失敗，不要等到有人按登入才在 provider 那邊出錯
         if (isBlank(clientSecret)) {
             throw new IllegalStateException("talkcal.auth." + id + ".client-id 有設定，但 client-secret 沒有（環境變數 "
                     + id.toUpperCase() + "_CLIENT_SECRET）");

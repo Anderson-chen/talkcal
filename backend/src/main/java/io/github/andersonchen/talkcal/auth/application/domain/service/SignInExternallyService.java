@@ -10,10 +10,8 @@ import io.github.andersonchen.talkcal.auth.application.port.out.SaveAccountPort;
 import java.util.Objects;
 
 /**
- * 實作「用 Google、GitHub 登入」：登入過就用原本的帳號，沒有就建一個新的。
- *
- * 不靠 email 去找既有的帳號合併：見 V10 的 migration，那等於讓填了你 email 的人登進你的帳號。
- * 代價是同一個人用 Google 和 GitHub 登入會是兩個帳號，要合併得等之後做「已登入時綁定」。
+ * 不靠 email 找既有的帳號合併：那等於讓填了別人 email 的人登進那個人的帳號（見 V10）。
+ * 代價是同一個人用 Google 和 GitHub 登入會是兩個帳號；要合併得等之後做「已登入時綁定」。
  */
 public final class SignInExternallyService implements SignInExternallyUseCase {
 
@@ -38,7 +36,7 @@ public final class SignInExternallyService implements SignInExternallyUseCase {
         if (saveAccountPort.saveIfIdentityFree(account, identity)) {
             return account.id();
         }
-        // 剛剛查的時候還沒有、存的時候已經有了：同一個人在兩個分頁同時第一次登入，另一邊先存好了。
+        // 查的時候還沒有、存的時候已經有了：同一個人在兩個分頁同時第一次登入，另一邊先存好。
         // 用那邊建的帳號，兩個分頁登進的才是同一個人
         return loadAccountPort.load(identity)
                 .map(Account::id)

@@ -1,14 +1,14 @@
 package io.github.andersonchen.talkcal.auth.application.domain.model;
 
 /**
- * 「某個 provider 的某個使用者」，例如「Google 的 sub=1234」。用它找出對應到我們的哪個帳號。
+ * 某個 provider 的某個使用者，例如 Google 的 sub=1234，用來找對應的帳號。
  *
- * subject 用 provider 發的、不會變的使用者 ID（Google 的 sub、GitHub 的數字 id），
- * 不用 email 或 GitHub 帳號名稱：那兩個使用者自己改得掉，改了就會對到另一個帳號（見 V10 的 migration）。
+ * subject 是 provider 發的、不會變的使用者 ID（Google 的 sub、GitHub 的數字 id）。不用 email 或 GitHub 帳號名稱：
+ * 使用者自己改得掉，改了就對到另一個帳號（見 V10）。
  */
 public record ExternalIdentity(Provider provider, String subject) {
 
-    /** 支援的 provider。資料庫存的是 id()，跟 Spring Security 設定裡的 registrationId 同一個字。 */
+    /** 資料庫存的是 id()，跟 Spring Security 設定裡的 registrationId 是同一個字。 */
     public enum Provider {
         GOOGLE("google"),
         GITHUB("github");
@@ -23,7 +23,7 @@ public record ExternalIdentity(Provider provider, String subject) {
             return id;
         }
 
-        /** 不認得的 provider 丟 IllegalArgumentException：設定裡多了一個沒寫對應方式的 provider，就該在第一次登入時出錯 */
+        /** 設定裡多了一個這裡沒有的 provider，第一次登入時就丟 IllegalArgumentException。 */
         public static Provider of(String id) {
             for (Provider provider : values()) {
                 if (provider.id.equals(id)) {

@@ -11,18 +11,16 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 產品用量記成 Micrometer 的 counter，經 /actuator/prometheus 讓 Alloy 抓進 Mimir（#36）。
- *
- * 指標（Prometheus 上的名字）：
+ * 產品用量記成 Micrometer 的 counter，Alloy 從 /actuator/prometheus 抓進 Mimir：
  * - talkcal_assistant_proposals_shown_total       助理給使用者看了幾張提議卡片
  * - talkcal_assistant_proposals_dismissed_total   其中被按掉（取消、移除）的
  * - talkcal_calendar_events_added_total{origin}   存進行事曆的行程，origin = assistant（採納）或 manual（手動）
  *
- * 標籤只有 origin 一個、兩個值：每個標籤值的組合就是一條時間序列，放使用者 ID、行程標題這種會一直長的值，
- * Mimir 的序列數就跟著人數長（基數爆炸），查詢變慢、費用變高。「誰」的問題留給 log 和資料庫。
+ * 標籤只有 origin 一個、兩個值：每個標籤值的組合就是一條時間序列，放使用者 ID、行程標題這種會一直增加的值，
+ * Mimir 的序列數就跟著人數長，查詢變慢、費用變高。哪個人做了什麼，查 log 和資料庫。
  *
- * counter 在建構時就先建好，不等第一次發生才建：從來沒發生過的事在 Prometheus 上是「沒有這條序列」，
- * 不是 0 —— 採納率的分母分子有一邊不存在，dashboard 會整格空白，看起來像壞掉。
+ * counter 在建構時就建好，不等第一次發生：從來沒發生過的事在 Prometheus 上是沒有這條序列，不是 0，
+ * 採納率的分子分母有一邊不存在，dashboard 會整格空白，看起來像壞了。
  */
 public final class MicrometerUsageAdapter implements RecordUsagePort {
 
@@ -61,8 +59,8 @@ public final class MicrometerUsageAdapter implements RecordUsagePort {
         added.get(origin).increment(count);
     }
 
-    // 標籤值在這裡寫死，不用 origin.name().toLowerCase()：enum 改名不該順手改掉 dashboard 查的值。
-    // 沒有 default：EventOrigin 多了新值，這裡會編譯失敗，逼你決定它在指標上叫什麼
+    // 寫死，不用 origin.name().toLowerCase()：enum 改名不該連帶改掉 dashboard 查的值。
+    // 沒有 default：EventOrigin 多了新值，這裡會編譯失敗，強制決定新值在指標上叫什麼
     private static String tagValue(EventOrigin origin) {
         return switch (origin) {
             case ASSISTANT -> "assistant";

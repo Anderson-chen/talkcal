@@ -20,13 +20,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * 行程的歸檔放在 S3 相容的物件儲存（#54）。
- *
- * key 長這樣：calendar-event/owner=&lt;擁有者&gt;/month=&lt;結束的月份&gt;/&lt;存的時間&gt;-&lt;亂數&gt;.jsonl.gz
- * （前面的排法和理由在 ArchiveBucket，跟對話共用）
- * - 檔名帶存的時間：同一個月每天的排程各一包，不會互相蓋掉；照字典順序列出來就是時間順序，
+ * calendar-event/owner=&lt;擁有者&gt;/month=&lt;結束的月份&gt;/&lt;存的時間&gt;-&lt;亂數&gt;.jsonl.gz
+ * （key 前綴的排法見 ArchiveBucket）
+ * - 檔名帶存的時間：同一個月每天的排程各一包，不會互相覆蓋；照字典順序列出來就是時間順序，
  *   同一筆行程出現好幾次時，後存的那份（比較新）蓋掉先存的
- * - 再加亂數：多台機器同一秒都在跑排程，也不會撞到同一個 key 互相蓋掉
+ * - 再加亂數：多台機器同一秒都在執行排程，也不會寫到同一個 key
  */
 public final class S3EventArchiveAdapter implements EventArchivePort {
 
@@ -52,7 +50,7 @@ public final class S3EventArchiveAdapter implements EventArchivePort {
 
     @Override
     public List<ScheduledEvent> load(OwnerId owner, YearMonth firstMonth, YearMonth lastMonth) {
-        // 依 id 收：同一筆出現好幾次只留一筆（同一個月的 key 依存的時間排，後讀到的比較新）
+        // 依 id 收，同一筆只留一筆：同一個月的 key 依存的時間排，後讀到的比較新
         Map<UUID, ScheduledEvent> events = new LinkedHashMap<>();
         for (String key : bucket.keys(ROOT, owner, firstMonth, lastMonth)) {
             for (EventLine line : JsonLinesGzip.decode(bucket.get(key), EventLine.class)) {
@@ -68,9 +66,9 @@ public final class S3EventArchiveAdapter implements EventArchivePort {
     }
 
     /**
-     * 歸檔裡一行的形狀：自己的 record，不直接序列化 domain 的型別 —— domain 改了欄位，舊的歸檔照樣讀得回來。
-     * v 是格式的版本：哪天欄位的意思變了，讀的時候看 v 決定怎麼翻，不必猜。
-     * 擁有者不寫進每一行：它就在 key 裡，一包只有一個人的。
+     * 不直接序列化 domain 的型別：domain 改了欄位，舊的歸檔照樣讀得回來。
+     * v 是格式的版本：之後欄位的意思變了，讀的時候看 v 決定怎麼轉換。
+     * 擁有者不寫進每一行：擁有者在 key 裡，一包只有一個人的。
      */
     record EventLine(int v, UUID id, String title, LocalDateTime start, LocalDateTime end,
                      String category, String location, String note) {
@@ -83,7 +81,7 @@ public final class S3EventArchiveAdapter implements EventArchivePort {
                     e.category().name(), e.location().orElse(null), e.note().orElse(null));
         }
 
-        // 讀回來的每一筆重新走一次 domain 的規則，跟從資料庫讀出來一樣：壞掉的歸檔在這裡擋下，不會顯示給使用者
+        // 讀回來的每一筆重新檢查 domain 的規則：壞掉的歸檔在這裡擋下，不會顯示給使用者
         ScheduledEvent toScheduledEvent(String key) {
             if (v != VERSION) {
                 throw new IllegalStateException("不認得的歸檔格式版本 " + v + "：" + key);

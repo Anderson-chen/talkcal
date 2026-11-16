@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration(proxyBeanMethods = false)
 class ArchiveStorageConfiguration {
 
-    // 建這個物件不會連線，原因見 ArchiveBucket.connect
+    // 啟動時不連線，見 ArchiveBucket.connect
     @Bean
     ArchiveBucket archiveBucket(@Value("${talkcal.archive.endpoint}") String endpoint,
                                 @Value("${talkcal.archive.region}") String region,

@@ -10,10 +10,6 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * 實作「列出一段期間裡的行程」。
- * 約定：service 只呼叫 model 的方法與 port，不自己判斷業務規則 —— 期間合不合規交給 DateRange。
- */
 public final class ListEventsService implements ListEventsUseCase {
 
     private final LoadEventsPort loadEventsPort;

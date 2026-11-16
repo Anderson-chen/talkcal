@@ -48,23 +48,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * 行事曆的 HTTP 入口（inbound adapter）。
+ * 一句話變成行程草稿不在這裡：那是 AI 助理的工作（CalendarAssistantController），使用者確認後才送到 POST /events。
  *
- * 四個端點對應四個 use case：
- * 1. POST   /events       —— 使用者確認過的助理提議、或手動表單填的行程 → 存起來
- * 2. GET    /events       —— 月曆一頁的行程
- * 3. PUT    /events/{id}  —— 把一個行程改成另一個樣子（詳情的「修改」、助理的修改卡片）
- * 4. DELETE /events/{id}  —— 拿掉一個行程
+ * 誰的行事曆由登入者決定，網址、body 都不收擁有者參數（見 SignedIn）。
  *
- * 一句話變成行程草稿不在這裡：那是 AI 助理的工作（CalendarAssistantController），
- * 草稿以 proposals 回給前端，使用者確認後才送到 POST /events。
- *
- * 誰的行事曆（#104）由登入者決定，不收任何「擁有者」參數：網址、body 裡都沒有，想改也改不了。
- * 登入者怎麼變成擁有者見 SignedIn。
- *
- * POST /events 收選填的 Idempotency-Key header（#51，照 IETF 草案 draft-ietf-httpapi-idempotency-key-header 的名字）：
+ * POST /events 收選填的 Idempotency-Key header，名字照 IETF 草案 draft-ietf-httpapi-idempotency-key-header：
  * 帶了的話，同一個鍵再送一次不會多存，回的是第一次存的那幾筆，回應多一個 Idempotent-Replayed: true。
- * 選填而不是必填：前後端不一定同時部署（舊版前端沒帶），k6 這類腳本也不必為了壓測自己產鍵；不帶就跟以前一樣每次都存。
+ * 選填：前後端不一定同時部署，舊版前端不會帶；k6 這類腳本也不必為了壓測自己產生鍵。
  */
 @RestController
 @RequestMapping("/api/calendar")
@@ -87,7 +77,7 @@ public final class CalendarController {
     }
 
     @PostMapping("/events")
-    // 201：這是在建立新資源。回應裡帶著每筆的 id，就是新資源的身分（寫在 ResponseEntity 裡，因為重送時要多帶 header）
+    // 寫成 ResponseEntity：重送時要多帶 header
     @Operation(summary = "把確認過的行程存進行事曆",
             description = "通常是 AI 助理提議、使用者確認過的行程（可能改過），或手動表單填的。全部存或全部不存。")
     @ApiResponse(responseCode = "201", description = "存好了，每筆都有了 id")
@@ -106,10 +96,9 @@ public final class CalendarController {
         if (request.events() == null) {
             throw new IllegalArgumentException("events 不可為 null");
         }
-        // 「確認時重驗規則」就發生在這一行：每一筆都得先成為 CalendarEvent，
-        // 使用者在確認卡片上改壞的（結束早於開始、清空標題）在這裡就丟 IllegalArgumentException → 400
+        // 每一筆都得先成為 CalendarEvent：使用者在確認卡片上改壞的（結束早於開始、清空標題）在這裡就丟 IllegalArgumentException → 400
         List<CalendarEvent> events = request.events().stream().map(CalendarController::toDomain).toList();
-        // 從助理卡片來的那幾筆帶著卡片的 id（#223）；是不是真的採納由 use case 核對，這裡只負責轉型別
+        // 是不是真的採納由 use case 核對
         List<ProposalId> adopting = request.events().stream()
                 .map(EventFields::proposalId).filter(Objects::nonNull).map(ProposalId::of).toList();
         OwnerId owner = SignedIn.owner(signedIn);
@@ -117,8 +106,7 @@ public final class CalendarController {
             return ResponseEntity.status(HttpStatus.CREATED).body(SavedEvents.of(addEvents.addEvents(owner, events, adopting)));
         }
         AddedEvents added = addEvents.addEvents(owner, new IdempotencyKey(idempotencyKey), events, adopting);
-        // 重送也回 201、內容跟第一次一樣：IETF 草案和 Stripe 都是這樣，呼叫端不必為了重送多寫一條路。
-        // 想知道是不是重送，看 Idempotent-Replayed
+        // 重送也回 201、內容跟第一次一樣：IETF 草案和 Stripe 都這樣做，呼叫端不必為了重送多寫一條路
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header("Idempotent-Replayed", String.valueOf(added.replayed()))
                 .body(SavedEvents.of(added.events()));
@@ -156,7 +144,7 @@ public final class CalendarController {
             content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
     public SavedEvent update(Principal signedIn, @Parameter(description = "行程的 ID") @PathVariable String id,
                              @RequestBody UpdateEventRequest request) {
-        // 先轉 id、再轉兩份內容：格式錯的、規則不合的在這裡就是 400，不必走到資料庫
+        // 格式錯的、規則不合的在這裡就是 400，不會碰到資料庫
         EventId eventId = EventId.of(id);
         CalendarEvent expected = toDomain(request.expected());
         CalendarEvent replacement = toDomain(request.event());
@@ -164,7 +152,6 @@ public final class CalendarController {
     }
 
     @DeleteMapping("/events/{id}")
-    // 204：刪掉了，沒有東西要回。比回 200 加一個空物件誠實
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "從行事曆拿掉一個行程")
     @ApiResponse(responseCode = "204", description = "刪掉了")
@@ -175,11 +162,11 @@ public final class CalendarController {
     @ApiResponse(responseCode = "502", description = "資料庫出事；稍後重試",
             content = @Content(schema = @Schema(implementation = CalendarFailure.class)))
     public void remove(Principal signedIn, @Parameter(description = "行程的 ID") @PathVariable String id) {
-        // 收 String 自己轉，不讓 Spring 直接轉成 UUID：格式錯的時候錯誤訊息是 EventId 的那句話，跟其他 400 一致
+        // 收 String 自己轉，不讓 Spring 直接轉成 UUID：格式錯時的錯誤訊息才是 EventId 的那句，跟其他 400 一致
         removeEvent.removeEvent(SignedIn.owner(signedIn), EventId.of(id));
     }
 
-    // JSON 裡的 events 陣列可能夾著 null（[{...}, null]），修改的 expected、event 也可能沒帶。不先擋的話 toDomain 會 NullPointerException → 500
+    // events 陣列可能夾著 null（[{...}, null]），修改的 expected、event 也可能沒帶；不先擋的話 NullPointerException 會變成 500
     private static CalendarEvent toDomain(EventFields fields) {
         if (fields == null) {
             throw new IllegalArgumentException("行程不可為 null");
@@ -211,26 +198,21 @@ public final class CalendarController {
         return ResponseEntity.badRequest().body(new CalendarFailure(e.getMessage()));
     }
 
-    // 只攔 IllegalStateException，不攔整個 RuntimeException：
-    // 攔太寬會把 Spring 自己的 4xx（JSON 格式不對、參數型別不對）誤標成 502
+    // 不攔整個 RuntimeException：攔太寬會把 Spring 自己的 4xx（JSON 格式不對、參數型別不對）誤標成 502
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<CalendarFailure> onUpstreamFailure(IllegalStateException e) {
         log.error("資料庫失敗，回 502", e);
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(new CalendarFailure(e.getMessage()));
     }
 
-    // ── wire format：只服務 HTTP/JSON，不外流到 core ──────────────────────────
-    // 名字都帶著業務的字（CalendarFailure、不叫 Failure）：
-    // springdoc 用類別的簡單名稱當 schema 名稱，跟別的 controller 撞名的話文件裡會互相蓋掉。
+    // ── HTTP/JSON 的格式，不傳進 core ──────────────────────────
+    // 名字都帶著業務的字（CalendarFailure，不叫 Failure）：springdoc 用類別的簡單名稱當 schema 名稱，
+    // 跟別的 controller 撞名的話，文件裡會互相覆蓋
 
     /**
-     * 一筆行程的欄位，助理的提議（proposals）和確認的請求共用同一個形狀：
-     * 前端把助理提議的卡片原樣（或改過）送回 /events，不必做任何轉換。
-     * 時間是 ISO 格式的牆上時間（台北），不帶時區。
+     * 助理的提議（proposals）和確認的請求共用這個形狀：前端把卡片原樣或改過之後送回 /events，不必轉換。
      *
-     * 分類在線路上是字串（"WORK"…），不是直接把 domain 的 Category 放上來：
-     * enum 改個名字不該順手改掉 API 契約。對照寫在 toCategory()／fromCategory() 兩個方法裡。
-     * 地點、備註沒有就是 null（JSON 裡不帶或寫 null 都行）。
+     * 分類在 API 上是字串，不直接用 domain 的 Category：enum 改名不該連帶改掉 API 契約，對照寫在 toCategory()、fromCategory()。
      */
     public record EventFields(
             @Schema(description = "要做的事", example = "跟小明吃飯") String title,
@@ -243,12 +225,11 @@ public final class CalendarController {
             @Schema(description = "從哪張助理提議卡片來的（#223）：助理的回覆裡每張卡片都有；確認時原樣帶回來才算採納。手動填的不帶",
                     nullable = true) String proposalId) {
 
-        // 助理的提議：帶著伺服器剛發的卡片 id
         static EventFields of(CalendarEvent event, ProposalId proposal) {
             return of(event, proposal.toString());
         }
 
-        // 助理的修改卡片：只是行程內容，不是要新增的提議，不帶卡片 id
+    // 修改卡片只是行程內容，不是要新增的提議，不帶卡片 id
         static EventFields of(CalendarEvent event) {
             return of(event, (String) null);
         }
@@ -264,7 +245,7 @@ public final class CalendarController {
         }
     }
 
-    // 線路上的字串 → domain。沒帶就是 domain 的預設；帶了但不認得是呼叫端送錯（400），不偷偷改成預設
+    // 沒帶就是 domain 的預設；帶了對應不到的值是呼叫端送錯（400），不改成預設
     private static Category toCategory(String text) {
         if (text == null) {
             return Category.DEFAULT;
@@ -278,7 +259,7 @@ public final class CalendarController {
         };
     }
 
-    // domain → 線路上的字串。沒有 default：Category 多了新值，這裡會編譯失敗，逼你決定它在 API 上叫什麼
+    // 沒有 default：Category 多了新值，這裡會編譯失敗，強制決定新值在 API 上叫什麼
     private static String fromCategory(Category category) {
         return switch (category) {
             case WORK -> "WORK";

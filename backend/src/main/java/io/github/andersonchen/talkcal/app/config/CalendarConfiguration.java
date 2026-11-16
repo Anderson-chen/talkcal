@@ -86,14 +86,14 @@ class CalendarConfiguration {
 
     // ── 助理工具背後的 use case ────────────────────────────────────────────
 
-    // 回傳型別寫實作本身：它實作好幾個 port，寫成其中一個介面的話，其他 port 注入時可能找不到它（要看 bean 建立的順序）
+    // 回傳型別寫實作：這個類別實作好幾個 port，寫成其中一個介面的話，注入其他 port 時找不找得到這個 bean 要看建立的順序
     @Bean
     JdbcCalendarEventAdapter calendarEventStore(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
         return new JdbcCalendarEventAdapter(jdbcClient, new TransactionTemplate(transactionManager));
     }
 
-    // 跟 AI 助理共用 ChatModelConfiguration 包好保護的模型，逾時也一起共用（spring.ai.openai.chat.timeout）；
-    // 抽行程失控靠 ExtractionRequest 的 max_tokens 擋
+    // 跟 AI 助理用同一個 GuardedChatModel，逾時也是同一個（spring.ai.openai.chat.timeout）；
+    // 抽行程不會等到逾時，靠的是 ExtractionRequest 的 max_tokens
     @Bean
     ExtractEventsPort extractEventsPort(@Qualifier(ChatModelConfiguration.GUARDED_CHAT_MODEL) ChatModel chatModel) {
         return new SpringAiExtractEventsAdapter(chatModel);
@@ -126,7 +126,7 @@ class CalendarConfiguration {
 
     // ── 新增行程、記下卡片的去向 ───────────────────────────────────────────
 
-    // 助理發出的提議卡片：ProposalStorePort 的實作，歸檔排程也用它刪舊卡片
+    // 回傳型別寫實作，理由見 calendarEventStore
     @Bean
     JdbcAssistantProposalAdapter assistantProposals(JdbcClient jdbcClient) {
         return new JdbcAssistantProposalAdapter(jdbcClient);
@@ -167,14 +167,14 @@ class CalendarConfiguration {
         return new JdbcActiveOwnersAdapter(jdbcClient);
     }
 
-    // 活躍使用者算的是真實的時間點（created_at 帶時區），用 UTC 就好，跟行事曆的牆上時間無關
+    // 活躍使用者比的是真實的時間點（created_at 帶時區），跟行事曆的牆上時間無關，用 UTC
     @Bean
     CountActiveUsersUseCase countActiveUsers(CountActiveOwnersPort countActiveOwners) {
         return new CountActiveUsersService(countActiveOwners, Clock.systemUTC());
     }
 
-    // MeterBinder 型別的 bean，actuator 會自動拿去 bindTo 自己的 registry，不必手動註冊。
-    // 一分鐘重數一次：活躍人數變得很慢，Alloy 15 秒抓一次只會讀到快取
+    // MeterBinder 型別的 bean 會被 actuator 自動 bindTo 自己的 registry，不必手動註冊。
+    // 一分鐘重數一次：活躍人數變得很慢，Alloy 每 15 秒來抓，多半讀到快取
     @Bean
     ActiveUsersMetrics activeUsersMetrics(CountActiveUsersUseCase countActiveUsers) {
         return new ActiveUsersMetrics(countActiveUsers, Duration.ofMinutes(1), Clock.systemUTC());
@@ -182,13 +182,13 @@ class CalendarConfiguration {
 
     // ── 資料歸檔 ────────────────────────────────────────────────────────
 
-    // 歸檔的檔名帶著「存的時間」，用 UTC：跟 S3 自己記的時間同一個基準，不必換算
+    // 歸檔的檔名帶著存的時間，用 UTC：跟 S3 自己記的時間同一個基準
     @Bean
     EventArchivePort eventArchive(ArchiveBucket archiveBucket) {
         return new S3EventArchiveAdapter(archiveBucket, Clock.systemUTC());
     }
 
-    // 一批 500 筆：一筆行程不到 1KB，一批讀進記憶體也才幾百 KB
+    // 一批 500 筆：一筆行程不到 1 KB，一批讀進記憶體也才幾百 KB
     @Bean
     ArchiveEventsUseCase archiveEvents(LoadEndedEventsPort loadEndedEvents, EventArchivePort eventArchive,
                                        DeleteArchivedEventsPort deleteArchivedEvents) {
@@ -200,7 +200,7 @@ class CalendarConfiguration {
         return new ListArchivedEventsService(eventArchive);
     }
 
-    // 還原 API 放回的對話（行程不放回，見 ArchiveController）：controller 不認識 app.job，這裡把方法接過去
+    // 對話的還原（行程不還原，見 ArchiveController）：controller 不 import app.job，在這裡把還原的方法傳給 controller
     @Bean
     ArchiveController.RestoreConversations restoreConversations(AssistantMemoryArchive assistantMemoryArchive) {
         return assistantMemoryArchive::restore;
