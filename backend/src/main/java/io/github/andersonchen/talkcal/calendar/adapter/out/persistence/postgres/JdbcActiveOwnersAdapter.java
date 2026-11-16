@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
- * 數出最近存過行程（calendar_event）或跟助理說過話（calendar_assistant_message）的擁有者，時間都看 created_at。
+ * 數出最近存過行程或跟助理說過話的擁有者（表是 calendar_event、calendar_assistant_message），時間都看 created_at。
  * calendar_assistant_message 只往後接、舊輪會被刪掉，所以 created_at 是最近幾輪各自存進來的時間，正好看得出這段期間有沒有說話。
  *
  * 幾個期間在同一句 SQL 裡用 FILTER 一起數，兩張表各掃描一次；只掃描最早那個時間點之後的資料，其他期間再從裡面篩。
@@ -59,7 +59,7 @@ public final class JdbcActiveOwnersAdapter implements CountActiveOwnersPort {
         }
     }
 
-    // 帶時區傳：欄位是 TIMESTAMPTZ，用 java.sql.Timestamp 的話換算要看 JVM 的時區，容器（UTC）和本機（台北）會差 8 小時
+    // 帶時區傳：欄位是 TIMESTAMPTZ，用 java.sql.Timestamp 的話換算要看 JVM 的時區，容器是 UTC、本機是台北，會差 8 小時
     private static OffsetDateTime utc(Instant instant) {
         return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
     }

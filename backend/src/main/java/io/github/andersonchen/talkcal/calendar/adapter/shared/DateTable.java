@@ -11,7 +11,7 @@ import java.util.List;
  * 把推算日期換成比對字串：關閉 thinking 的 8B 模型心算星期幾不可靠（「下週三」給過星期一、星期二），
  * 在表裡找到「下週三」那一列就不必算。日曆的計算交給 java.time。
  *
- * 放在 adapter.shared：抽行程（adapter.out.extraction）和 AI 助理（adapter.in.assistant）都要放進 prompt，
+ * 放在 adapter.shared：抽行程的 adapter.out.extraction 和 AI 助理的 adapter.in.assistant 都要放進 prompt，
  * 而 ArchitectureTest 不准 inbound adapter 依賴 outbound adapter。這是寫給這個模型看的日期格式，所以不放進 domain。
  *
  * 一週從星期一開始（台灣的習慣，前端的月曆也是）：星期日說「下週一」指的是明天，表裡也是這樣排。

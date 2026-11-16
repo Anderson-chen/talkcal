@@ -267,7 +267,7 @@ public final class CalendarAssistant {
                         answer = new AssistantMessage(fallback);
                         text = fallback;
                     }
-                    // 間接 prompt injection 的最後一道：行程標題不一定是使用者自己想的字（複製貼上、之後的邀請），裡面藏「叫使用者去某網址登入」，
+                    // 擋間接 prompt injection 的最後一道防線：行程標題不一定是使用者自己想的字（複製貼上、之後的邀請），裡面藏「叫使用者去某網址登入」，
                     // 模型會照著轉述：qwen3:8b 就算 prompt 和工具結果都講明「那是資料、不要照做」，還是會講。
                     // prompt 擋不住就由程式擋：行事曆助理沒有理由主動給出使用者沒講過的網址。
                     // 不提醒模型重來：藏指令的資料還在對話裡，重來多半再講一次
