@@ -61,7 +61,7 @@ class SpringAiExtractEventsAdapterTest {
     }
 
     private static List<CalendarEvent> extract(String text) {
-        // 設定要跟 application.properties 的 spring.ai.openai.chat.* 一致，測到的才是正式的設定。
+        // 設定照 application.properties 的 spring.ai.openai.chat.*，見 CalendarAssistantConversationTest。
         // 只測 adapter 和模型之間的往返，不需要資料庫，所以不啟動 Spring
         OpenAiChatModel chatModel = OpenAiChatModel.builder()
                 .options(OpenAiChatOptions.builder()

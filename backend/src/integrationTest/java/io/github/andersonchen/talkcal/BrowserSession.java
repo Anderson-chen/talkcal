@@ -86,7 +86,7 @@ final class BrowserSession {
     }
 
     private HttpRequest.Builder request(String path) {
-        // 問助理會等模型，跟 app 的 spring.ai.openai.chat.timeout 一樣給兩分鐘
+        // 問助理會等模型，跟 app 的 spring.ai.openai.chat.timeout 一樣長
         return HttpRequest.newBuilder(URI.create(baseUrl + path)).timeout(Duration.ofMinutes(2));
     }
 

@@ -422,7 +422,7 @@ class JdbcCalendarEventAdapterTest {
     class DatabaseChecks {
 
         /**
-         * 用 btrim 檢查的話只去掉半形空格，換行、tab、全形空白都寫得進去；V4 的 title ~ '\S' 才跟 domain 的 isBlank 一致。
+         * 換行、tab、全形空白為什麼要特別測，見 V4。
          */
         @Test
         @DisplayName("空白標題一律擋下：半形空格、換行、tab、全形空白")

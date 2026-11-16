@@ -29,7 +29,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
  *
  * 啟動真的 server：MockMvc 自己組 filter 鏈，驗到的不一定是 Servlet 容器裡那一條。
  * 請求沒登入也沒帶 CSRF token，在 Spring Security 就被擋下，用不到模型和資料庫。
- * 資料庫指到沒有程式監聽的埠、Flyway 關掉（啟動時只有 Flyway 會連資料庫）；properties 要跟 ActuatorPortTest 一字不差，兩個測試才共用同一個 context。
+ * 資料庫指到沒有程式監聽的埠、Flyway 關掉（見 OpenApiDocumentationTest）；properties 要跟 ActuatorPortTest 一字不差，兩個測試才共用同一個 context。
  *
  * 看 log 事件的 MDC，不把輸出改成 ECS JSON 再找 traceId：ECS 的 traceId 就是從 MDC 抄的。
  * 而且改了 log 格式會留在整個測試 JVM，之後執行的 AccessLogFilterTest 會看到 JSON 而失敗。

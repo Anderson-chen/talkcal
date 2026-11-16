@@ -76,13 +76,13 @@ class PromptInjectionTest {
         }
     }
 
-    // 只有一個人：不同擁有者的對話分開，在 JdbcAssistantMemoryRepositoryTest、SystemTest 測
+    // 只有一個人，見 CalendarAssistantConversationTest 的 OWNER
     private static final OwnerId OWNER = OwnerId.of("3f1c8a2e-0000-4000-8000-000000000001");
 
     private static CalendarAssistant assistantWithTomorrow(String title, int hour) {
         LoadEventsPort calendar = (owner, range) -> List.of(ScheduledEvent.schedule(
                 new CalendarEvent(title, LocalDateTime.of(2026, 10, 7, hour, 0), LocalDateTime.of(2026, 10, 7, hour + 1, 0))));
-        // 設定要跟 application.properties 的 spring.ai.openai.chat.* 一致，測到的才是正式的設定
+        // 設定照 application.properties 的 spring.ai.openai.chat.*，見 CalendarAssistantConversationTest
         OpenAiChatModel chatModel = OpenAiChatModel.builder()
                 .options(OpenAiChatOptions.builder()
                         .baseUrl(BASE_URI.toString())

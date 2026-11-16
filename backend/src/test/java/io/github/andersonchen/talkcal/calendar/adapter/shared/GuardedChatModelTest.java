@@ -31,7 +31,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
 
 /**
- * 門檻的比例照 application.properties（10 次裡至少 5 次、一半失敗），只有時間縮短，測試才不必等 30 秒。
+ * 門檻的比例照 application.properties 的 resilience4j.*，只有時間縮短，測試才不必等斷路器打開的那段時間。
  */
 @DisplayName("GuardedChatModel")
 class GuardedChatModelTest {
@@ -91,7 +91,6 @@ class GuardedChatModelTest {
         try {
             guarded.call(PROMPT);
         } catch (RuntimeException ignored) {
-            // 只看 breaker 記了什麼
         }
     }
 
@@ -166,7 +165,6 @@ class GuardedChatModelTest {
         }
 
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
-        // 被包在別的例外裡也要判斷得出來
         assertThat(new ModelFailurePredicate().test(new RuntimeException("包一層", tooLong))).isFalse();
         assertThat(new ModelFailurePredicate().test(new RuntimeException("包一層", connectionRefused()))).isTrue();
     }
