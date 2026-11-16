@@ -39,7 +39,7 @@ import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 
 /**
- * 換了模型或改了 prompt，先執行這組測試。溫度 0，同一段對話每次走同一條路，所以提議的時間可以斷言得很精確；
+ * 換了模型或改了 prompt，先執行這組測試。溫度 0，同一段對話每次都產生相同的工具呼叫和回覆，所以提議的時間可以斷言得很精確；
  * 回覆的措辭換一版模型就會變，只比對關鍵字。
  *
  * 行事曆是固定兩筆的假資料，對話記憶放在記憶體，抽取 adapter 和 service 都是正式的。

@@ -77,7 +77,7 @@ class ExtractionRequestTest {
     @DisplayName("JSON Schema")
     class Schema {
 
-        // SCHEMA 是字串，寫壞了編譯器不會發現，讀得成 JSON 本身就是一道檢查
+        // SCHEMA 是字串，寫壞了編譯也會過，讀得成 JSON 本身就是一道檢查
         private final JsonNode schema = parse(ExtractionRequest.SCHEMA);
 
         @Test

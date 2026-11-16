@@ -12,7 +12,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
 /**
- * Java 的 package 沒有依賴方向：package-private 擋得住別人看見 ExtractionRequest，
+ * Java 的 package 沒有依賴方向：package-private 擋得住其他 package 存取 ExtractionRequest，
  * 擋不住 ParseEventsService import Spring AI 的 Adapter，編譯會過，其他測試也不會失敗。
  *
  * 每條規則的理由寫在 because(...)，違規時錯誤訊息直接印出來。
