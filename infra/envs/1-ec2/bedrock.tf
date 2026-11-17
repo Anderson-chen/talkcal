@@ -49,7 +49,7 @@ resource "aws_iam_user_policy" "bedrock" {
 }
 
 # Terraform 產生 key，連同其他設定寫進 SSM 的 .env（secrets.tf），機器部署時才拉下來。
-# key 的明碼會在 Terraform state 裡，靠 bootstrap 的 state bucket 加密、不公開。
+# key 的明碼會進 Terraform state（見 secrets.tf 開頭）。
 # 到期前換新：terraform apply -replace='aws_iam_service_specific_credential.bedrock[0]'，再到機器上重新執行 deploy.sh
 resource "aws_iam_service_specific_credential" "bedrock" {
   count               = local.gpu ? 0 : 1

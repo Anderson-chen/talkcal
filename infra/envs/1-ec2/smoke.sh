@@ -5,7 +5,7 @@
 #   bash smoke.sh env deploy/.env        # 啟動容器之前：.env 的換行、告警收件人
 #   bash smoke.sh services deploy/.env   # 全部啟動之後：網站、觀測、Bedrock、告警寄信
 #
-# compose 檔裡 ${X:?} 的必要 key 不在這裡查：`docker compose config -q` 會查，清單只留 compose 檔那一份。
+# compose 檔裡 ${X:?} 的必要 key 不在這裡查，見 deploy.sh 的 `docker compose config -q`。
 # 只印 key 的名字和結果，不印值。
 # 每次部署都寄一封測試信（主旨 DeploySmokeTest）：部署是手動、偶爾才做，多一封信換來每次都證明 SMTP 帳密還能用。
 # 同一天要連續部署好幾次時，用 SMOKE_SEND_EMAIL=0 關掉

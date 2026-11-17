@@ -50,7 +50,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "archive" {
 }
 
 # ── app 存取歸檔用的身分 ──────────────────────────────────────────────────────
-# app 在容器裡執行，而機器的 IMDS hop limit 設成 1（ec2.tf）：容器拿不到機器角色的憑證。
+# app 在容器裡執行，拿不到機器角色的憑證（見 ec2.tf 的 http_put_response_hop_limit）。
 # 所以開一個專用 user，只准讀寫這個 bucket；key 經 SSM 的 .env 交給 app（secrets.tf）。
 # key 外流最多就是這個 bucket 被讀寫，碰不到帳號的其他東西。
 #
@@ -85,7 +85,7 @@ resource "aws_iam_user_policy" "archive" {
   })
 }
 
-# key 的明碼會在 Terraform state 裡，靠 bootstrap 的 state bucket 加密、不公開。
+# key 的明碼會進 Terraform state（見 secrets.tf 開頭）。
 # 換 key：terraform apply -replace=aws_iam_access_key.archive，再到機器上重新執行 deploy.sh
 resource "aws_iam_access_key" "archive" {
   user = aws_iam_user.archive.name

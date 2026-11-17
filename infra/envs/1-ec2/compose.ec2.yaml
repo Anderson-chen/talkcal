@@ -9,7 +9,7 @@
 # 變數都在 deploy/.env，內容見 secrets.tf。
 
 services:
-  # 密碼只在 volume 第一次初始化時生效。Terraform 換了密碼，deploy.sh 會再 ALTER ROLE 同步
+  # 什麼時候讀密碼見 deploy/compose.yaml。Terraform 換了密碼，deploy.sh 會再 ALTER ROLE 同步
   postgres:
     environment:
       POSTGRES_PASSWORD: ${DB_PASSWORD:?缺 DB_PASSWORD}

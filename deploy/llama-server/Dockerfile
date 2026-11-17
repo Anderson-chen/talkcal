@@ -1,5 +1,5 @@
-# llama-server 的 CUDA 版。不用官方的 ghcr.io/ggml-org/llama.cpp:server-cuda：本機從 ghcr 拉太慢，
-# 自己編反而快（數字見 docs/adr/0002）。EC2 用 gpu 時也在機器上 build 這份。
+# llama-server 的 CUDA 版。為什麼不用官方的 ghcr.io/ggml-org/llama.cpp:server-cuda、自己 build，見 docs/adr/0002。
+# EC2 用 gpu 時也在機器上 build 這份。
 #
 # 兩段式：build 段用 devel 映像檔（有 nvcc，好幾 GB）編譯，最後的映像檔只有 runtime 段，只帶 CUDA 函式庫和編好的執行檔。
 

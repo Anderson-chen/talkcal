@@ -5,7 +5,7 @@
 services:
   alloy:
     environment:
-      # 一般請求只留 10%，錯的和慢的不論比例都留（規則見 ops/README.md 的「Trace 取樣」）。本機不設，全留
+      # 一般請求只留 10%，其他規則見 ops/README.md 的「Trace 取樣」。本機不設，全留
       TRACE_SAMPLING_PERCENT: "10"
       # 要比最慢的請求久，慢請求的根 span 才趕得上：呼叫模型的逾時 2 分鐘（spring.ai.openai.chat.timeout）再加 5 秒
       TRACE_SAMPLING_DECISION_WAIT: 125s
