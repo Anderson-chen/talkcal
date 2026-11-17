@@ -1,29 +1,27 @@
-// outage —— 模型掛掉演練（#44）：模型斷線或卡住的時候，助理是不是快速失敗、行程 API 是不是照常可用。
+// outage：模型斷線或卡住時，助理是不是快速失敗、行程 API 是不是照常。
 //
-// 同時跑兩群人：
-//   assistant —— 每分鐘 RATE_PER_MIN 個人跟助理說一句（跟 deploy.js 一樣用 constant-arrival-rate：
-//                模型掛了也不會因此多來人，數字才能直接比）
-//   calendar  —— 每秒 1 個人讀一個月的行程（GET /api/calendar/events），不經過模型
+// 同時有兩群人，都用 constant-arrival-rate，模型壞了也不會多來人，前後的數字才比得起來：
+//   assistant：每分鐘 RATE_PER_MIN 個人跟助理說一句
+//   calendar：每秒 1 個人讀一個月的行程，不經過模型
 //
-// 故障由 k6 自己按時製造：給了 FAULT，就在第 FAULT_AT_S 秒透過 Toxiproxy 的 API 弄壞 app 跟模型之間那一段，
-// 第 RECOVER_AT_S 秒恢復（deploy/ 要疊 compose.chaos.yaml 起，app 才經過 Toxiproxy）。每一次都同樣的時間點，結果才能重現：
-//   FAULT=down  斷線：停用那段 proxy                → 連不上，幾毫秒就失敗
-//   FAULT=hang  卡住：連得上、回應晚 10 分鐘才到（latency 毒）→ 比叫模型的逾時還久，要等到逾時才失敗
-//   FAULT=slow  很慢：每個回應慢 SLOW_MS 毫秒（latency 毒，預設 40 秒）→ 會回，但超過 30 秒的慢呼叫門檻
-// 不給 FAULT 就不碰 Toxiproxy，由人在另一個終端機弄壞（toxiproxy-cli，見 deploy/README.md 的「故障演練」）。
-// 每一句的結果都印一行（帶時間），弄壞、恢復的那一刻也各印一行，對著看。
+// 給了 FAULT，k6 會在第 FAULT_AT_S 秒透過 Toxiproxy 的 API 讓 PROXY 那一段故障、第 RECOVER_AT_S 秒恢復，每次時間點一樣才能重現。
+// deploy/ 要疊上 compose.chaos.yaml 啟動，app 才經過 Toxiproxy：
+//   FAULT=down  停用那段 proxy，幾毫秒就失敗
+//   FAULT=hang  回應晚 10 分鐘才到，比呼叫模型的逾時還久，要等到逾時才失敗
+//   FAULT=slow  每個回應慢 SLOW_MS（預設 40 秒），會回，但超過 30 秒的慢呼叫門檻
+// 不給 FAULT 就不碰 Toxiproxy，由人在另一個終端機製造故障（見 deploy/README.md 的「故障演練」）。
+// 每一句的結果、故障和恢復的那一刻都各印一行，帶時間。
 //
-// 收工印一張表：助理的每種結果（200、502、503 的兩種 code）各幾個、各花多久；行程 API 成功幾個、p95 多久。
-// 預期（門檻、理由在 application.properties 的 resilience4j.*（chat-model））：
-//   - 模型掛掉後，前 5 次失敗讓熔斷打開；之後助理一律回 503 MODEL_UNAVAILABLE，幾毫秒
-//   - 卡住的時候還在等的請求最多 50 個（bulkhead），再多就回 503 MODEL_BUSY
+// 預期的結果如下，門檻在 application.properties 的 resilience4j.*（chat-model）：
+//   - 前 5 次失敗讓熔斷打開，之後助理幾毫秒就回 503 MODEL_UNAVAILABLE
+//   - 卡住時同時在等的最多 50 個（bulkhead），再多就回 503 MODEL_BUSY
 //   - 行程 API 從頭到尾都是 200
 //   - 模型恢復後 30 秒內熔斷試探、關回來，助理又回 200
 //
-// 怎麼跑（打哪台用 BASE_URL，預設是 docker 那台 18090；Toxiproxy 的 API 用 TOXIPROXY_URL，預設 localhost:8474）：
+// 預設送到 Docker 裡的 app（18090），Toxiproxy 的 API 用 TOXIPROXY_URL（預設 localhost:8474）：
 //   FAULT=down k6 run perf/outage.js
 //   FAULT=hang DURATION_S=360 RECOVER_AT_S=220 k6 run perf/outage.js   # 卡住要等逾時，拉長一點
-//   PROXY=postgres FAULT=down k6 run perf/outage.js                     # 換弄壞資料庫那一段
+//   PROXY=postgres FAULT=down k6 run perf/outage.js                     # 讓資料庫那一段故障
 
 import './lib/docker-target.js';
 import http from 'k6/http';
@@ -31,35 +29,33 @@ import { sleep } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
 import { ASSISTANT_URL, MESSAGES, field, jsonParams, listMonth, signIn, useSession } from './lib/assistant.js';
 
-const RATE_PER_MIN = Number(__ENV.RATE_PER_MIN || 20); // 要低於容量，理由同 deploy.js
+const RATE_PER_MIN = Number(__ENV.RATE_PER_MIN || 20); // 要低於容量，量到的失敗才都是故障造成的
 const DURATION_S = Number(__ENV.DURATION_S || 300);
 
 // ── 故障注入（Toxiproxy）──
 const FAULT = __ENV.FAULT || '';
 const TOXIPROXY_URL = __ENV.TOXIPROXY_URL || 'http://localhost:8474';
 const PROXY = __ENV.PROXY || 'llm'; // deploy/toxiproxy.json 裡的名字：llm 或 postgres
-const FAULT_AT_S = Number(__ENV.FAULT_AT_S || 60); // 前一分鐘是正常的，當對照
+const FAULT_AT_S = Number(__ENV.FAULT_AT_S || 60); // 前一分鐘當正常的對照
 const RECOVER_AT_S = Number(__ENV.RECOVER_AT_S || 180);
 const SLOW_MS = Number(__ENV.SLOW_MS || 40000);
-const HANG_MS = 600000; // 10 分鐘：比叫模型的逾時（2 分鐘）久，對 app 來說就是永遠不回
-const TOXIC = 'outage'; // 這支腳本加的毒都叫這個名字，恢復時照名字拿掉
+const HANG_MS = 600000; // 比呼叫模型的逾時（2 分鐘）久，對 app 來說就是永遠不回
+const TOXIC = 'outage'; // 恢復時照名字拿掉
 
-// 每種故障：怎麼弄壞、怎麼恢復。都只動 PROXY 那一段，另一段照常
 const FAULTS = {
   down: {
     inject: () => setEnabled(false),
     recover: () => setEnabled(true),
   },
   hang: {
-    // 用超長的 latency，不用 Toxiproxy 的 timeout 毒（「資料不轉、連線不關」）：實測 timeout 毒擋不住「關連線」——
-    // 加在 downstream，模型回完就關連線；加在 upstream，請求到不了模型，llama-server 對閒置 5 秒的連線也會關掉。
-    // 兩種 Toxiproxy 都把關閉傳回 app，app 幾秒就收到「連線中斷」，那是斷線不是卡住（2026-10-29 兩種都踩過）。
-    // latency 毒會把回應連同關閉一起延後，app 這端就真的是一直等
+    // 不能用 Toxiproxy 的 timeout toxic，這種 toxic 擋不住連線被關閉：加在 downstream，模型回完就關；
+    // 加在 upstream，請求到不了模型，llama-server 對閒置 5 秒的連線也會關。兩種都會把關閉傳回 app，
+    // app 幾秒就收到連線中斷，變成斷線。latency toxic 把回應連同關閉一起延後，app 才是真的一直等
     inject: () => addToxic('latency', { latency: HANG_MS }, 'downstream'),
     recover: removeToxic,
   },
   slow: {
-    // 加在 downstream：請求照常送到、模型照常回，只是回應晚 SLOW_MS 才到 app
+    // 加在 downstream：模型照常收到、照常回，回應晚 SLOW_MS 才到 app
     inject: () => addToxic('latency', { latency: SLOW_MS }, 'downstream'),
     recover: removeToxic,
   },
@@ -67,7 +63,7 @@ const FAULTS = {
 if (FAULT && !FAULTS[FAULT]) {
   throw new Error(`FAULT 只能是 ${Object.keys(FAULTS).join('、')}，收到 ${FAULT}`);
 }
-// 時間點要依序：不然不是根本沒弄壞（跑完一張全 200 的表，看起來像斷路器有效），就是弄壞了來不及恢復
+// 時間點錯了的話，可能根本沒造成故障，結果是一張全 200 的表，看起來像熔斷有效
 if (FAULT && !(0 <= FAULT_AT_S && FAULT_AT_S < RECOVER_AT_S && RECOVER_AT_S < DURATION_S)) {
   throw new Error(`要 0 ≤ FAULT_AT_S < RECOVER_AT_S < DURATION_S，收到 ${FAULT_AT_S}、${RECOVER_AT_S}、${DURATION_S}`);
 }
@@ -86,7 +82,6 @@ function removeToxic() {
   return http.del(`${TOXIPROXY_URL}/proxies/${PROXY}/toxics/${TOXIC}`);
 }
 
-// 助理的結果依 code 分開記：200、502（這次失敗）、503 的兩種（沒叫模型）、其他（含連線失敗）
 const OUTCOMES = {
   ok: '200 正常回覆',
   ASSISTANT_FAILED: '502 ASSISTANT_FAILED（叫了、失敗）',
@@ -94,7 +89,7 @@ const OUTCOMES = {
   MODEL_BUSY: '503 MODEL_BUSY（滿載，沒叫模型）',
   other: '其他（含沒拿到回應）',
 };
-// 次數也從 Trend 拿（options 的 summaryTrendStats 有 count），不另外數
+// 次數從 Trend 的 count 拿，不另外數
 const assistantMs = Object.fromEntries(Object.keys(OUTCOMES).map((k) => [k, new Trend(`outage_assistant_${k}`, true)]));
 const calendarMs = new Trend('outage_calendar', true);
 const calendarFailed = new Counter('outage_calendar_failed');
@@ -107,7 +102,7 @@ export const options = {
       rate: RATE_PER_MIN,
       timeUnit: '1m',
       duration: `${DURATION_S}s`,
-      // 模型卡住時一個請求佔住一個 VU 2 分鐘，備足才不會 dropped_iterations
+      // 模型卡住時一個請求占住一個 VU 2 分鐘，VU 不夠 k6 就會跳過那幾輪
       preAllocatedVUs: 50,
       maxVUs: 300,
       gracefulStop: '150s',
@@ -121,7 +116,6 @@ export const options = {
       preAllocatedVUs: 5,
       maxVUs: 50,
     },
-    // 給了 FAULT 才有：一個 VU 跑一次，按時弄壞、按時恢復
     ...(FAULT ? {
       fault: {
         executor: 'per-vu-iterations',
@@ -132,9 +126,9 @@ export const options = {
       },
     } : {}),
   },
-  // 收工的表要次數、中位數、最久；p(95) 給行程 API 的門檻
+  // p(95) 給行程 API 的門檻，其他給結束時印的表
   summaryTrendStats: ['count', 'med', 'p(95)', 'max'],
-  // 行程 API 是這次要守住的：模型怎麼壞都要 100% 成功、而且不被拖慢
+  // 模型怎麼壞，行程 API 都要全部成功、不被拖慢
   thresholds: {
     outage_calendar_failed: ['count==0'],
     outage_calendar: ['p(95)<1000'],
@@ -143,7 +137,7 @@ export const options = {
 
 export function setup() {
   if (FAULT) {
-    // 上一次演練中途被中斷的話，毒可能還留著：先全部清掉（所有 proxy 接回、拿掉所有毒），從正常開始
+    // 上一次中途被中斷的話 toxic 可能還留著，先把所有 proxy 接回、所有 toxic 拿掉
     const res = http.post(`${TOXIPROXY_URL}/reset`);
     if (res.status !== 204) {
       throw new Error(`連不到 Toxiproxy（${TOXIPROXY_URL}）：${res.status}。deploy/ 要疊 compose.chaos.yaml 起`);
@@ -152,7 +146,7 @@ export function setup() {
   return signIn();
 }
 
-// 不管怎麼結束（跑完、Ctrl+C、中途出錯）都清掉毒：留著的話，本機的 app 之後每個請求都會失敗，直到有人想起來
+// 正常結束、Ctrl+C、中途出錯都會執行 teardown。toxic 留著的話，本機的 app 之後每個請求都會失敗
 export function teardown() {
   if (FAULT) {
     http.post(`${TOXIPROXY_URL}/reset`);
@@ -166,7 +160,7 @@ export function fault() {
   toxiproxy(`恢復 ${PROXY}`, FAULTS[FAULT].recover());
 }
 
-// 弄壞、恢復的那一刻各印一行，跟每一句的結果排在一起看；Toxiproxy 沒照做就讓演練失敗，不要跑完才發現根本沒弄壞
+// Toxiproxy 的 API 呼叫失敗就讓演練失敗，不然要等到結束才發現根本沒造成故障
 function toxiproxy(what, res) {
   if (res.status < 200 || res.status >= 300) {
     throw new Error(`${what} 失敗：${res.status} ${res.body}`);
@@ -202,7 +196,7 @@ export function calendar(session) {
   }
 }
 
-// 印出來的每一行都帶時間（本機時區），才對得上「幾點停掉模型」
+// 本機時區，跟 Grafana、app 的 log 對時間用
 function now() {
   return new Date().toTimeString().slice(0, 8);
 }

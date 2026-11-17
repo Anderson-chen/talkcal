@@ -1,11 +1,8 @@
-// smoke —— 最小規模的「路走得通嗎」測試。
+// smoke：1 個 VU 執行 3 輪，確認 k6 連得到 AI 助理，而且回應照契約。做負載測試前先執行這支。
 //
-// 不是壓力測試：1 個虛擬使用者、跑幾次就好。目的是在花力氣做真正的負載測試之前，
-// 先單獨證明一件事 —— k6 打得到 AI 助理（POST /api/calendar/assistant），而且兩側契約都對得上。
-//
-// 怎麼跑（app 要先在 8090 上跑起來，PostgreSQL 也要在）：
+// 預設送到本機 bootRun 的 app（8090），PostgreSQL 要先啟動：
 //   k6 run perf/smoke.js
-// 指到別台機器（例如容器裡的 app）就覆蓋 BASE_URL，不必改這支腳本：
+// 送到別台就覆蓋 BASE_URL：
 //   PowerShell:  $env:BASE_URL="http://192.168.0.10:8090"; k6 run perf/smoke.js
 //   bash:        BASE_URL=http://192.168.0.10:8090 k6 run perf/smoke.js
 
@@ -14,25 +11,20 @@ import { check, sleep } from 'k6';
 import { ASSISTANT_URL, MESSAGES, say, jsonParams, signIn, useSession } from './lib/assistant.js';
 
 export const options = {
-  // 最小規模：一個人、說幾輪。smoke 要的是「快、確定」，不是「多」。
   vus: 1,
   iterations: 3,
 
-  // k6 判定成敗的門檻。沒過的話 k6 會以非 0 結束碼收工，CI 才擋得住。
   thresholds: {
-    // 契約要 100% 正確：狀態碼、格式錯了就是壞，沒有「99% 就好」的空間 ——
-    // smoke 總共才送幾次，錯一次就是真的錯，不是抖動。
+    // 總共才送幾次，錯一次就是真的錯，不是抖動
     checks: ['rate==1.0'],
 
-    // 為什麼延遲門檻放這麼寬？因為每個請求後面是一顆真的 LLM 在生字，而且助理一輪可能叫它好幾次；
-    // Qwen3 的 thinking 會先燒掉幾百個看不見的 token，好幾秒才回來是正常的。
-    // 拿一般 web API 的 p95<500ms 來套只會全紅、量錯東西。
-    // 這裡的 60 秒不是「效能目標」，是「離譜線」：超過它八成是卡住而不是慢。
+    // 60 秒只抓卡死，不是效能目標：後面是真的 LLM 在生成，一輪可能呼叫好幾次，
+    // Qwen3 的 thinking 還會先用掉幾百個看不見的 token，好幾秒才回來是正常的
     http_req_duration: ['p(95)<60000'],
   },
 };
 
-// 登入一次，所有 VU 共用（理由見 lib/assistant.js 的 signIn）
+// 登入一次，所有 VU 共用（理由見 lib/assistant.js 的登入那段）
 export function setup() {
   return signIn();
 }
@@ -40,21 +32,16 @@ export function setup() {
 export default function (session) {
   useSession(session);
   contractRejectsBlankMessage();
-  // 契約的另一半：正常訊息該回 200、reply 要有東西（檢查寫在 lib/assistant.js 的 say）。
-  // 照順序輪流說池子裡的前幾句 —— smoke 要可重現，不要隨機。
+  // 照順序說，不隨機：每次執行的內容一樣
   say(MESSAGES[__ITER % MESSAGES.length]);
 
-  // 每輪之間喘一下，別把單機的 llama.cpp 逼到滿載 —— smoke 只是要證明能通，不是要壓垮它。
   sleep(1);
 }
 
-// 契約的一半：空白訊息該被擋成 400。
-// 這條由 CalendarAssistant 用 IllegalArgumentException 擋、CalendarAssistantController 翻成 400。
-// 它在讀記憶、叫模型之前就擋下，所以又快又穩 —— 就算 llama.cpp 沒開，這個 check 也該過。
-// 模型掛掉時，say 那條會紅、這裡會綠，一眼看出是「模型層 down」而不是「整條路壞了」。
+// 空白訊息在讀記憶、呼叫模型之前就回 400，llama.cpp 沒開也會過。
+// 模型無法連線時 say 那條紅、這條綠，看得出問題在模型，整條路還是通的
 function contractRejectsBlankMessage() {
-  // 告訴 k6「這個請求回 400 才是對的」。不標的話 k6 把所有非 2xx 都算進 http_req_failed，
-  // 報表上會出現一個嚇人的 50% 失敗率 —— 其實全是這些故意送錯的請求。
+  // 不標的話 k6 把 400 算進 http_req_failed，報表上的失敗率全是這些故意送錯的請求
   const params = jsonParams({ responseCallback: http.expectedStatuses(400) });
   const res = http.post(ASSISTANT_URL, JSON.stringify({ message: '   ' }), params);
   check(res, {

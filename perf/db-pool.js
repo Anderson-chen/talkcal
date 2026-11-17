@@ -1,22 +1,18 @@
-// db-pool —— 把 app 的資料庫連線池（HikariCP，預設 10 條）壓到不夠用，看 dashboard 上 pending 從 0 爬起來（#32）。
+// db-pool：把 app 的 HikariCP 連線池（預設 10 條）壓到不夠用，看 pending 從 0 往上升。
 //
-// 其他腳本都壓 AI 助理，瓶頸在模型（一輪好幾秒），資料庫連線只借幾毫秒，池子永遠用不滿。
-// 這支改壓只碰資料庫的 GET /api/calendar/events（月曆一頁）：不叫模型，一個請求就是「借連線 → 查 → 還」。
-// 同時在跑的請求一多過池子的 10 條，多出來的就得排隊等連線 —— 就是要讓這件事在圖上看得到。
+// 壓助理的話瓶頸在模型，連線只借幾毫秒，池子用不滿。所以這支腳本壓的是只讀資料庫、不呼叫模型的 GET /api/calendar/events。
 //
-// 看哪裡：Grafana 的 talkcal — Spring app（http://localhost:3000/d/talkcal-app）的「資料庫連線池」那一排：
-//   - 連線 active 貼上 max 的虛線（10）
-//   - pending 離開 0
-//   - acquire（等連線）從微秒跳到毫秒
-// 指標每 15 秒抓一次，每一階要撐得比 15 秒久，圖上才抓得到。
+// 看 Grafana 的 talkcal-app dashboard（http://localhost:3000/d/talkcal-app）「資料庫連線池」那一排：
+// active 貼到 max（10）、pending 離開 0、acquire 從微秒跳到毫秒。
+// 指標每 15 秒抓一次，每一階要維持超過 15 秒，圖上才看得到。
 //
-// 預設打 docker 那台 app（18090，Alloy 只抓它的指標），全程約 2 分半：
+// 預設送到 Docker 裡的 app（18090，Alloy 只抓這台的指標），全程約 2 分半：
 //   perf/run-to-grafana.sh perf/db-pool.js
 // 自訂每一階的 VU 數、每階多久：
 //   STAGES=20,100,300 HOLD_S=30 perf/run-to-grafana.sh perf/db-pool.js
 //
-// 為什麼最多到 300：Tomcat 預設最多 200 條執行緒同時處理請求，超過的在 Tomcat 的佇列裡等、碰不到連線池。
-// 所以 pending 最多大約 200 − 10；再加 VU 只會讓 Tomcat 那層排隊，連線池的圖不會再變。
+// 最多到 300：Tomcat 預設最多 200 條執行緒，多的請求在 Tomcat 的佇列裡等、碰不到連線池，
+// pending 最多約 200 − 10；VU 再加上去，連線池的圖也不會變。
 
 import './lib/docker-target.js';
 import http from 'k6/http';
@@ -26,13 +22,12 @@ import { BASE_URL, jsonParams, signIn, useSession } from './lib/assistant.js';
 const STAGES = (__ENV.STAGES || '5,50,150,300').split(',').map(Number);
 const HOLD_S = Number(__ENV.HOLD_S || 30);
 
-// 用一段很遠的期間（2030 年），種的假行程不會出現在 perf-user 平常會看的月份
+// 預先建立的測試行程放在 2030 年，不會出現在 perf-user 平常會看的月份
 const FROM = '2030-01-01';
-const TO = '2030-04-01';            // 90 天，在 API 的上限（100 天）內
-const SEED_EVENTS = 200;            // 每次查詢回幾筆：讓查詢真的有事做，連線被占用的時間不是 0
+const TO = '2030-04-01';            // 90 天：API 一次最多查 100 天
+const SEED_EVENTS = 200;            // 查詢要讀到足夠的資料，連線才會被占住一段時間
 
 export const options = {
-  // ramping-vus：一階一階往上加，每一階停 HOLD_S 秒（爬坡 5 秒）。
   // 不 sleep：VU 數 = 持續壓在 app 上的請求數
   scenarios: {
     pool: {
@@ -46,16 +41,16 @@ export const options = {
     },
   },
   thresholds: {
-    // 池子不夠用時請求只是變慢（排隊），不該失敗；失敗代表等連線超過 connectionTimeout（30 秒）了
+    // 池子不夠用時請求只是排隊變慢，失敗代表等連線超過 HikariCP 的 connectionTimeout（30 秒）
     http_req_failed: ['rate<0.01'],
   },
 };
 
 export function setup() {
-  // 登入一次，所有 VU 共用（理由見 lib/assistant.js 的 signIn）
+  // 登入一次，所有 VU 共用（理由見 lib/assistant.js 的登入那段）
   const session = signIn();
   useSession(session);
-  // 已經種過就不再種：重跑這支不會讓那段期間的行程一直變多、查詢一次比一次重
+  // 已經建立過就不再建立，不然每執行一次，查詢要讀的資料就多一些
   const existing = http.get(eventsUrl()).json('events') || [];
   if (existing.length < SEED_EVENTS) {
     const events = [];

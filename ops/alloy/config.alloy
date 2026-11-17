@@ -1,50 +1,26 @@
-// Grafana Alloy：整套觀測唯一的收集器。三種訊號都經過它，再分送到各自的資料庫：
-//
-//   指標 metrics ── Alloy 去「抓」/metrics ────────────────────▶ Mimir
-//   日誌 logs    ── Alloy 讀容器 stdout ──────────────────────▶ Loki
-//   追蹤 traces  ── app 用 OTLP「推」給 Alloy ─────────────────▶ Tempo
-//
-// 為什麼收集器只有一個、資料庫卻有三個：三種資料長得完全不一樣（數字 / 一行文字 / 一棵 span 樹），
-// 存法和查法各自最佳化，所以資料庫要分開；但「找到來源、加標籤、送出去」是同一種工作，
-// 一個收集器包辦就好，標籤（service、env）也能三邊一致。
-//
-// 為什麼不是 Promtail：Promtail 是 Loki 舊的收集器，官方已停止開發，新專案都用 Alloy。
-// 為什麼不讓 Mimir、Tempo 直接收：它們只管存。抓誰、多久抓一次、怎麼加標籤，集中在這份檔案，
-// 之後換儲存（例如 Tempo 換別家）只改這裡的出口，app 和被抓的服務都不必動。
-//
-// Alloy 的設定是一條條管線：每個區塊是一個元件，用「元件.名字.輸出」把上一個的輸出接到下一個的輸入。
-// 管線畫成圖看：http://localhost:12345
+// 三種訊號都經過這個 Alloy：Alloy 抓指標寫進 Mimir、讀 deploy/ 容器的 stdout 送進 Loki，
+// 也接收 app、nginx 用 OTLP 送來的 trace，轉進 Tempo。為什麼只有一個收集器，見 docs/adr/0007-alloy-to-mimir-loki-tempo.md。
+// 管線圖：http://localhost:12345
 
 
 // ═══ 指標 ═══════════════════════════════════════════════════════════
 //
-//   prometheus.scrape（每 15 秒去拉） ──▶ prometheus.remote_write ──▶ Mimir
-//
-// 指標用「拉」：數字隨時讀都是當下的值，由收集端決定抓誰、多久抓一次；抓不到本身就是訊號（up = 0）。
-// 代價：Alloy 停了的那段時間指標就是空白，補不回來（log 不會，見下面）。
-//
-// target 直接寫「服務名:容器內的埠」：Alloy 加入了 deploy/ 的網路（見 compose.yaml），
-// 跟 deploy/ 裡 app 打 http://llm-chat:8080 是同一套規則，不看主機發佈成幾號埠。
-// 本機 bootRun 的 app 不在這個網路裡，不會被抓；要看它的指標直接開 localhost:8091/actuator/prometheus。
-//
-// job_name 寫明：不寫的話 job 標籤會變成元件名（prometheus.scrape.talkcal_app），儀表板的查詢就對不上了。
-// scrape_interval 寫明：Alloy 預設 60 秒，比 Prometheus 慣用的 15 秒粗很多。
+// target 寫「服務名:容器內的埠」：Alloy 接在 deploy/ 的 Docker 網路上（見 ops/compose.yaml）。
+// 本機 bootRun 的 app 不在那個網路裡，抓不到。
+// job_name 每個都寫明：不寫的話 job 標籤是元件名（prometheus.scrape.talkcal_app），dashboard 和告警的查詢都對不上。
+// scrape_interval 也寫明：Alloy 預設 60 秒，告警的 for 是照 15 秒抓一次算的。
 
-// (1) 我們的 Spring app —— deploy/ 的 app 服務。8091 是 actuator 專用的 management 埠（#33），
-//     API 的 8090 上沒有 /actuator。8091 沒有發佈到主機，只有同一個 Docker 網路裡的 Alloy 連得到。
+// /actuator 只在 management 埠 8091，API 的 8090 上沒有
 prometheus.scrape "talkcal_app" {
   job_name        = "talkcal-app"
   targets         = [{"__address__" = "app:8091"}]
-  metrics_path    = "/actuator/prometheus"   // Spring Boot 吐 Prometheus 指標的預設路徑
+  metrics_path    = "/actuator/prometheus"
   scrape_interval = "15s"
   forward_to      = [prometheus.remote_write.mimir.receiver]
 }
 
-// (2) llama.cpp 的 llama-server —— LLM 那顆本體（deploy/ 的 llm-chat）。帶了 --metrics 就在 /metrics 吐指標。
-//     看得到的指標：predicted_tokens_seconds（生成速度 t/s）、prompt_tokens_seconds（prompt t/s）、
-//     requests_processing（處理中）、requests_deferred（排隊中，併發塞車看它）、
-//     tokens_predicted_total / prompt_tokens_total（累計 counter）。
-//     實際清單以 `curl localhost:8080/metrics` 這個 build 吐出來的為準（此 build 沒有 kv_cache 相關指標）。
+// llama-server 要帶 --metrics 才有 /metrics。這個 build 沒有 kv_cache 相關的指標，
+// 有哪些以 `curl localhost:8080/metrics` 為準
 prometheus.scrape "llama_cpp" {
   job_name        = "llama-cpp"
   targets         = [{"__address__" = "llm-chat:8080"}]
@@ -52,10 +28,7 @@ prometheus.scrape "llama_cpp" {
   forward_to      = [prometheus.remote_write.mimir.receiver]
 }
 
-// (3) PostgreSQL —— deploy/ 的 postgres-exporter 替資料庫翻成 Prometheus 格式（#32）。
-//     看得到的指標：pg_settings_max_connections（上限）、pg_stat_activity_count{state=...}（各狀態幾條連線）、
-//     pg_up（exporter 連不連得上資料庫；它自己的 up 是 1 不代表資料庫活著）。
-//     跟 app 的 hikaricp_connections_* 疊在一起看：app 借了幾條 vs. 資料庫那頭實際開著幾條。
+// 資料庫是否正常看 pg_up，不看這個 job 的 up：up 只代表 exporter 本身在執行
 prometheus.scrape "postgres" {
   job_name        = "postgres"
   targets         = [{"__address__" = "postgres-exporter:9187"}]
@@ -63,13 +36,11 @@ prometheus.scrape "postgres" {
   forward_to      = [prometheus.remote_write.mimir.receiver]
 }
 
-// (4) 資料庫備份 —— 不是一個服務，是每小時跑一次就結束的批次工作（#45 的 backup-to-s3.sh），沒有 /metrics 可以抓。
-//     做法照 node_exporter 的 textfile collector：工作成功時把「最後成功時間」寫成一個 .prom 檔，這裡定時讀。
-//     為什麼不用 Pushgateway：還要多養一個服務，而且它會一直保留最後一次推上來的值 —— 跟 textfile 一樣，沒有比較好。
-//     看得到的指標：talkcal_backup_last_success_timestamp_seconds（備份腳本寫的）、
-//     node_boot_time_seconds（stat collector；容器跟主機共用同一個核心，讀到的是主機開機時間）。告警兩個一起用（#39）。
-//     只開這兩個 collector：其他的（CPU、磁碟…）在容器裡讀到的不完全是主機的，要看主機的話另外裝 node_exporter。
-//     資料夾由 compose.yaml 掛進來；本機沒有備份排程，資料夾是空的，就只有開機時間。
+// 備份是執行完就結束的批次工作（infra/envs/1-ec2/backup-to-s3.sh），沒有 /metrics。
+// 備份成功時寫 .prom 檔（textfile collector），這裡讀；資料夾由 ops/compose.yaml 掛進來，本機是空的。
+// 為什麼用 textfile、不用 Pushgateway，見 docs/alerts.md 的備份那段。
+// stat 給 node_boot_time_seconds：容器跟主機共用核心，讀到的是主機開機時間，備份告警用這個值排除剛開機
+// （見 grafana/provisioning/alerting/respond.yaml）。其他 collector 在容器裡讀到的不是主機的值，不開。
 prometheus.exporter.unix "backup" {
   set_collectors = ["textfile", "stat"]
   textfile {
@@ -77,8 +48,8 @@ prometheus.exporter.unix "backup" {
   }
 }
 
-// exporter 給的 target 自己帶 job="integrations/unix"，會蓋掉下面的 job_name（實測過），所以先改掉。
-// instance 也換成固定的名字：預設是容器的 hostname，Alloy 容器重建一次就換一個，序列會斷成兩條
+// exporter 的 target 自帶 job="integrations/unix"，target 上的 job 會蓋過 scrape 的 job_name，只能在這裡改。
+// instance 預設是容器的 hostname，Alloy 容器重建一次就換一個，序列會斷成兩條
 discovery.relabel "backup" {
   targets = prometheus.exporter.unix.backup.targets
   rule {
@@ -94,20 +65,16 @@ discovery.relabel "backup" {
 prometheus.scrape "backup" {
   job_name        = "talkcal-backup"
   targets         = discovery.relabel.backup.output
-  // 一小時才變一次的值，不必 15 秒讀一次；但告警的查詢只往回找 5 分鐘內的點，間隔要比 5 分鐘短
+  // 告警的查詢只往回找 5 分鐘內的點，間隔要比 5 分鐘短
   scrape_interval = "1m"
   forward_to      = [prometheus.remote_write.mimir.receiver]
 }
 
-// (5) 監控自己（#40）：Alloy、Mimir、Loki、Tempo、Grafana 也是會掛的服務。
-//     沒抓它們的話，誰停了 dashboard 只會一片空白，看起來跟「沒流量」一模一樣。
-//     抓了之後每個元件都有一條 up：Loki、Tempo 掛了 → up = 0（Alloy 還活著，照樣記下「抓不到」）；
-//     Alloy 自己掛了 → 連 up 都不再進來，告警看的是「最後一個點多久以前」（見 grafana/provisioning/alerting/meta-monitoring.yaml）。
-//     附帶好處：Alloy 自己的指標裡有 remote_write、loki.write 送失敗的計數，之後要查「送不出去」看得到。
+// Alloy 抓自己：Alloy 停了，up{job="alloy"} 就不再有新的點，告警看最後一個點有多舊
+// （見 grafana/provisioning/alerting/meta-monitoring.yaml）
 prometheus.exporter.self "alloy" { }
 
-// exporter.self 給的 target 自己帶了 job="integrations/self"，target 上的 job 會蓋過 job_name，
-// 所以這裡改名成 alloy，跟其他元件一樣用自己的名字查
+// 自帶 job="integrations/self"，原因同上面 discovery.relabel "backup"
 discovery.relabel "alloy" {
   targets = prometheus.exporter.self.alloy.targets
   rule {
@@ -122,8 +89,7 @@ prometheus.scrape "alloy" {
   forward_to      = [prometheus.remote_write.mimir.receiver]
 }
 
-// 四個都在 ops/ 自己的網路上，用服務名找。路徑都是 /metrics（Prometheus 的預設），埠是各自服務的 HTTP 埠。
-// job 用服務名：告警、查詢都寫 up{job="loki"} 這樣，不必記 target 位址
+// job 是告警查詢用的名字（up{job="loki"}），改了要一起改 meta-monitoring.yaml
 prometheus.scrape "observability" {
   targets = [
     {"__address__" = "mimir:9009",   "job" = "mimir"},
@@ -135,8 +101,7 @@ prometheus.scrape "observability" {
   forward_to      = [prometheus.relabel.observability_up_only.receiver]
 }
 
-// 只留 up：告警只看它。四個元件自己吐的指標合起來有好幾千條，全收的話小機器上的 Mimir 白白多存一份；
-// 要查某個元件的內部狀況時，把這段拿掉就全收了
+// 只留 up，告警只用到 up。這四個元件自己的指標有好幾千條，全收會讓小機器上的 Mimir 多存一大份
 prometheus.relabel "observability_up_only" {
   rule {
     source_labels = ["__name__"]
@@ -146,14 +111,10 @@ prometheus.relabel "observability_up_only" {
   forward_to = [prometheus.remote_write.mimir.receiver]
 }
 
-// 抓到的指標推進 Mimir。remote_write 是 Prometheus 生態「把指標送去別處存」的標準協定，
-// 送 Mimir、送雲端服務都是同一個元件，只差 url。
-// 附帶的 exemplar（某個指標點上掛的 trace id）也會一起送，Grafana 圖上才點得進那次請求的 trace。
 prometheus.remote_write "mimir" {
   endpoint {
     url = "http://mimir:9009/api/v1/push"
-    // native histogram 也送：k6 的延遲用 exponential histogram 送進來（見下面「壓測」那一段），
-    // 不開的話 remote_write 會把它們整批丟掉、不留任何錯誤訊息
+    // k6 的延遲是 native histogram（見 perf/run-to-grafana.sh）。不開的話 remote_write 會整批丟掉，不留錯誤訊息
     send_native_histograms = true
   }
 }
@@ -161,54 +122,42 @@ prometheus.remote_write "mimir" {
 
 // ═══ 日誌 ═══════════════════════════════════════════════════════════
 //
-//   discovery.docker  ──找出要收哪些容器──▶  loki.source.docker  ──讀它們的 stdout──▶  loki.write  ──▶  Loki
-//                                              ▲ 套用 discovery.relabel 的規則，決定每筆 log 帶什麼標籤
-//
-// log 用「推」：事件發生了就要送走，沒辦法等人來拉。
-// Alloy 停一陣子不會掉 log：Docker 照樣把 stdout 寫在自己的 log 檔，Alloy 回來後依位置檔接著讀（只是延遲）。
+// Alloy 停止一段時間也不會遺失 log：Docker 照樣寫自己的 log 檔，Alloy 重新啟動後照位置檔接著讀。
 
-// ── 1. 找容器 ───────────────────────────────────────────────────────
-// 透過 Docker 的 API（docker.sock）列出容器。新容器起來會自動被發現，不必改這份設定。
 discovery.docker "deploy" {
   host = "unix:///var/run/docker.sock"
 
-  // 只收 deploy/ 那組（compose 專案名 talkcal-deploy）：app、llm-chat、postgres、web、model-seed。
-  // 不加這個會連這台機器上別的專案、還有 ops 自己（Loki、Grafana…）的 log 一起收進來。
+  // 只收 deploy/ 那組。不過濾的話，這台機器上別的專案和 ops/ 自己的容器 log 都會收進來
   filter {
     name   = "label"
     values = ["com.docker.compose.project=talkcal-deploy"]
   }
 }
 
-// ── 2. 決定標籤 ─────────────────────────────────────────────────────
-// Loki 只替「標籤」建索引，內容不建索引——所以查詢時先靠標籤縮小範圍，再掃內容。
-// 標籤要少而穩定：容器名、服務名這種「值只有幾個」的才適合；
-// 把 request id、trace id、使用者這種每筆都不同的值放進標籤，索引會爆掉（high cardinality）。
-// trace id 因此留在 log 內容裡，Grafana 再從內容把它認出來、做成跳到 Tempo 的連結（見 datasources.yaml）。
+// Loki 只替標籤建索引，每多一種值就多一條 stream。標籤只放值只有幾種的（容器名、服務名）；
+// trace id、使用者這種每筆不同的值放進標籤，stream 數會多到 Loki 無法負荷。trace id 留在內容裡，
+// 由 Grafana 用 regex 從內容找出 trace id，做成連結（見 grafana/provisioning/datasources/datasources.yaml）。
 discovery.relabel "deploy" {
-  // targets 留空：這裡只是定義規則，由下面 loki.source.docker 拿去套用
+  // 只定義規則，由 loki.source.docker 的 relabel_rules 套用
   targets = []
 
-  // Docker 給的容器名前面多一個斜線（/talkcal-app），去掉
   rule {
     source_labels = ["__meta_docker_container_name"]
     regex         = "/(.*)"
     target_label  = "container"
   }
-  // compose 的服務名（app、llm-chat…）：容器重建、改名都不變，查詢用這個最穩
+  // 查詢用 service：compose 的服務名，容器重建、改名都不變
   rule {
     source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
     target_label  = "service"
   }
-  // 標上環境。這組全是 docker 環境；之後本機開發或雲端的 log 也送進來時，用這個分開
   rule {
     target_label = "env"
     replacement  = "docker"
   }
 }
 
-// ── 3. 讀 log ──────────────────────────────────────────────────────
-// 讀的是 Docker 收下來的 stdout/stderr——這就是為什麼容器裡的 log 一律寫 stdout、不寫檔。
+// 只讀得到 Docker 收下來的 stdout/stderr，容器裡寫進檔案的 log 收不到
 loki.source.docker "deploy" {
   host          = "unix:///var/run/docker.sock"
   targets       = discovery.docker.deploy.targets
@@ -216,8 +165,6 @@ loki.source.docker "deploy" {
   forward_to    = [loki.write.local.receiver]
 }
 
-// ── 4. 送進 Loki ───────────────────────────────────────────────────
-// 跟 Loki 在同一個 compose 網路上，用服務名稱 loki 找它
 loki.write "local" {
   endpoint {
     url = "http://loki:3100/loki/api/v1/push"
@@ -227,17 +174,11 @@ loki.write "local" {
 
 // ═══ 追蹤 ═══════════════════════════════════════════════════════════
 //
-//   app ──OTLP/HTTP──┐
-//   web ──OTLP/gRPC──┴▶ otelcol.receiver.otlp ──▶ otelcol.processor.transform（為 service map 改屬性）
-//                       ──▶ otelcol.processor.tail_sampling（錯的、慢的全留，其餘抽樣）──▶ otelcol.processor.batch ──▶ otelcol.exporter.otlp ──▶ Tempo
-//
-// trace 也是「推」：span 在請求結束時才完整，只能由 app 主動送出來。
-// OTLP 是 OpenTelemetry 的標準協定，app 那頭只認得它，不知道後面接的是 Tempo。
-// otelcol.* 這組元件就是 OpenTelemetry Collector 的元件，Alloy 把它們內建進來。
+// receiver → transform（改 service map 用的屬性）→ tail_sampling → batch → Tempo
 
-// 收：開 OTLP 的 HTTP 入口（4318 是 OTLP/HTTP 的慣用埠）。
-// app 在容器裡用 http://alloy:4318 找到這裡；本機 bootRun 走 compose 發佈到主機的 127.0.0.1:4318。
-// gRPC 入口（4317）給前端的 nginx（#31）：它的 OpenTelemetry 模組只會講 gRPC。只在 deploy/ 的網路裡用，不發佈到主機
+// app 用 HTTP（4318）：容器裡找 alloy:4318，本機 bootRun 走 ops/compose.yaml 發佈到主機的 127.0.0.1:4318。
+// nginx 的 OpenTelemetry 模組只支援 gRPC，所以另開 4317，只在 deploy/ 的網路裡用。
+// k6 的指標也從 4318 進來（見最下面的壓測）。
 otelcol.receiver.otlp "default" {
   http {
     endpoint = "0.0.0.0:4318"
@@ -247,22 +188,18 @@ otelcol.receiver.otlp "default" {
   }
   output {
     traces  = [otelcol.processor.transform.service_graph.input]
-    metrics = [otelcol.processor.batch.default.input]   // k6 壓測的指標，見下面「壓測」那一段
+    metrics = [otelcol.processor.batch.default.input]
   }
 }
 
-// 送進 Tempo 之前改兩個屬性，讓 Tempo 畫的 service map 對得上真的架構（#31，Tempo 怎麼畫見 tempo/tempo.yaml）。
-// Tempo 認邊的規則：一個 client span + 接在它底下的 server span 是一條邊；client span 底下沒有 server span 的
-// （資料庫、模型不送 span），就照 peer.service 這類屬性造一個虛擬節點。
+// Tempo 畫 service map 時，client span 加上接在底下的 server span 算一條邊；沒有 server span 的怎麼造節點見 tempo/tempo.yaml。
 //
-// (1) nginx 的 span 改標成 client：nginx 的 OpenTelemetry 模組一個請求只開一個 server span（收到瀏覽器的請求），
-//     沒有另外開「轉給 app」的 client span，app 的 server span 直接接在另一個 server span 下面，Tempo 配不成對，
-//     圖上 talkcal-web 和 talkcal 之間就沒有邊。nginx 這個 span 本來就同時是「收」和「轉送」
-//     （從收到到 app 回完，時間幾乎一樣長），標成 client 就配得起來。
-//     代價：圖上少了 nginx 前面的「user」節點（Tempo 只替最上層的 server span 造它）——瀏覽器那段要等前端自己送 span（Faro）才真的有。
-// (2) SQL span 的 peer.service 換成資料庫種類：datasource-micrometer 把它設成資料庫名稱，我們的資料庫剛好也叫 talkcal，
-//     圖上會變成 talkcal 自己連自己（Tempo 給資料庫節點取名時 peer.service 優先，tempo.yaml 改不掉）。
-//     換成 db.system.name 的值（postgresql）。只動有 db.system.name 的 span，也就是只動 SQL
+// 第一條：nginx 的模組一個請求只開一個 server span，沒有轉給 app 的 client span，
+//   app 的 server span 直接接在 server span 底下，Tempo 配不成邊，圖上 talkcal-web 和 talkcal 之間就斷了。
+//   這個 span 從收到請求到 app 回應結束，本來就涵蓋轉送，標成 client 後 Tempo 就能配成邊。
+//   代價是圖上少了 nginx 前面的 user 節點：Tempo 只替最上層的 server span 造這個節點。
+// 第二條：datasource-micrometer 把 SQL span 的 peer.service 設成資料庫名稱，資料庫剛好也叫 talkcal，
+//   圖上會變成 talkcal 連自己。Tempo 取節點名稱時 peer.service 優先，tempo.yaml 改不掉，只能在這裡換成 postgresql
 otelcol.processor.transform "service_graph" {
   error_mode = "ignore"
   trace_statements {
@@ -277,38 +214,28 @@ otelcol.processor.transform "service_graph" {
   }
 }
 
-// 取樣：決定哪些 trace 留進 Tempo（#37，為什麼這樣選見 README 的「Trace 取樣」）。
+// 錯的、慢的全留，其餘照比例抽。為什麼在這裡做 tail sampling、不在 app 端做 head sampling，見 ops/README.md 的「Trace 取樣」。
+// app 端要維持全送，理由見 application.properties 的 management.tracing.sampling.probability。
+// 一個 trace 的 span 都要進同一個 Alloy 才判斷得了；Alloy 變成多個時，前面要先照 trace id 分流。
 //
-// 為什麼在這裡（tail）而不是 app 端（head，management.tracing.sampling.probability）：
-// head 在請求「剛開始」就擲骰子，那時還不知道它會不會出錯、會不會慢，丟掉的 90% 裡錯誤和慢請求一樣被丟。
-// tail 等一個 trace 的 span 到齊、看完整棵樹才決定，所以能「錯的、慢的全留，其餘抽樣」。
-// 代價：每個 trace 要在 Alloy 記憶體裡等 decision_wait；所有 span 必須進同一個 Alloy（現在只有一個）。
-// 所以 app 端一律 100% 全送（application.properties），只在這裡丟。
-//
-// 本機和雲端用同一份，差在環境變數：本機不設，用下面 coalesce 的預設值；雲端由 infra/envs/1-ec2/compose.ops.yaml 給：
-//   TRACE_SAMPLING_PERCENT       一般請求留幾 %。本機 100（每筆都找得到）、雲端 10
-//   TRACE_SAMPLING_DECISION_WAIT 等多久才決定。本機 5s（打完請求很快就查得到）、雲端 125s（見下面）
+// 本機不設環境變數，用 coalesce 的預設值（全留、5 秒）；雲端由 infra/envs/1-ec2/compose.ops.yaml 給 10%、125 秒。
 otelcol.processor.tail_sampling "default" {
-  // 從 trace 的第一個 span 到達開始算。span 是「結束時」才送出，根 span（整個 HTTP 請求）最後到；
-  // 等不夠久就決定的話，慢請求的根 span 還沒到，看起來不慢 → 被當一般請求抽掉。
-  // 所以雲端要比最慢的請求還久：叫模型的逾時是 2 分鐘（spring.ai.openai.chat.timeout），取 125s。
-  // 本機 100% 怎麼決定都是留，等短一點只是讓 trace 早點進 Tempo。
+  // 從第一個 span 到達開始算。根 span 在請求結束時才送、最後到，等不夠久的話慢請求看起來不慢，會被當一般請求抽掉。
+  // 雲端要比最久的請求還長：呼叫模型最多等 2 分鐘（spring.ai.openai.chat.timeout），所以設成 125 秒。
+  // 本機全留，等多久都一樣，短一點 trace 才早點查得到
   decision_wait = coalesce(sys.env("TRACE_SAMPLING_DECISION_WAIT"), "5s")
 
-  // 同時在記憶體裡等決定的 trace 上限，滿了最舊的先被迫決定。
-  // 雲端估算：每秒 50 個請求 × 等 125 秒 ≈ 6,250 個，留三倍餘裕。現在的流量遠低於此。
+  // 同時在記憶體裡等待取樣決定的 trace 數；滿了就先對最舊的 trace 做決定。每秒 50 個請求 × 125 秒 ≈ 6,250，留三倍
   num_traces = 20000
 
-  // 決定之後還晚到的 span（例如等太久才結束的請求）：記住「這個 trace id 留過／丟過」，照同一個決定處理。
-  // 不記的話晚到的 span 會被當成新 trace 重新擲骰，Tempo 裡出現只有半截的 trace。
-  // 只存 trace id，很省，所以給得比 num_traces 大得多（官方文件的建議）。
+  // 決定之後才到的 span 照同一個決定處理。不記的話晚到的 span 會被當新 trace 重新抽，Tempo 裡出現半截的 trace。
+  // 只存 trace id，官方建議給得比 num_traces 大很多
   decision_cache = {
     sampled_cache_size     = 200000,
     non_sampled_cache_size = 200000,
   }
 
-  // 多條規則：任一條說「留」就留。
-  // (1) span 狀態是 ERROR：丟例外的請求、叫模型失敗之類
+  // 任一條 policy 判定保留，trace 就保留
   policy {
     name = "errors"
     type = "status_code"
@@ -317,9 +244,8 @@ otelcol.processor.tail_sampling "default" {
     }
   }
 
-  // (2) 回 5xx 的請求。不能只靠 (1)：Spring 的 HTTP span 回 500 時狀態是空的（UNSET），
-  //     只有 outcome 這個屬性記著 SERVER_ERROR（實測：連線池等不到連線的 500，status 是 {}）。
-  //     4xx（CLIENT_ERROR）不在這裡：未登入的 401、打錯的 404 是使用者的事，量大又不代表系統出問題。
+  // 5xx 要另外一條：Spring 的 HTTP span 回 500 時狀態是 UNSET，只有 outcome 屬性記著 SERVER_ERROR
+  // （例如連線池等不到連線的 500）。4xx 不全留：未登入、找不到量大，又不代表系統出問題
   policy {
     name = "server-errors"
     type = "string_attribute"
@@ -329,10 +255,8 @@ otelcol.processor.tail_sampling "default" {
     }
   }
 
-  // (3) 慢的：整個 trace 超過 5 秒。
-  //     AI 助理一次正常約 2–3 秒（後面是 LLM），行程的增刪查是幾十毫秒；5 秒是助理正常值的兩倍，
-  //     行程 API 慢到這樣一定是出事。代價：行程 API 在 1–5 秒之間的「有點慢」只按比例留。
-  //     等 #34 定了 SLO，門檻改成跟 SLO 的延遲目標對齊。
+  // 助理正常一次約 2～3 秒，行程 API 幾十毫秒，5 秒是助理正常值的兩倍。
+  // 門檻沒跟 SLO 的延遲目標（mimir/rules/anonymous/slo.yaml）對齊：比行程 SLO 慢、但不到 5 秒的只照比例留
   policy {
     name = "slow"
     type = "latency"
@@ -341,12 +265,12 @@ otelcol.processor.tail_sampling "default" {
     }
   }
 
-  // (4) 其餘的按比例留。依 trace id 雜湊決定，同一個 trace 的 span 一定同進同出。
+  // 照 trace id 的雜湊抽，同一個 trace 的 span 不會一半留一半丟
   policy {
     name = "baseline"
     type = "probabilistic"
     probabilistic {
-      // 環境變數是字串，sampling_percentage 要數字，用 JSON 解析轉成數字
+      // 環境變數是字串，sampling_percentage 要數字
       sampling_percentage = encoding.from_json(coalesce(sys.env("TRACE_SAMPLING_PERCENT"), "100"))
     }
   }
@@ -356,7 +280,6 @@ otelcol.processor.tail_sampling "default" {
   }
 }
 
-// 攢一批再送：一個 span 送一次太浪費連線，湊一批（或等一小段時間）再一次送出
 otelcol.processor.batch "default" {
   output {
     traces  = [otelcol.exporter.otlp.tempo.input]
@@ -364,8 +287,7 @@ otelcol.processor.batch "default" {
   }
 }
 
-// 送進 Tempo：OTLP/gRPC，Tempo 只在 compose 內部網路開 4317。
-// insecure：同一台機器的內部網路，不走 TLS。跨機器、上雲端時要拿掉，改用憑證。
+// 不走 TLS：Tempo 的 4317 只開在同一台機器的 compose 網路裡。Tempo 搬到別台機器時要改用憑證
 otelcol.exporter.otlp "tempo" {
   client {
     endpoint = "tempo:4317"
@@ -378,16 +300,10 @@ otelcol.exporter.otlp "tempo" {
 
 // ═══ 壓測（k6）══════════════════════════════════════════════════════
 //
-//   k6 ──OTLP/HTTP──▶ otelcol.receiver.otlp（跟 trace 同一個入口）──▶ batch ──▶ otelcol.exporter.prometheus ──▶ Mimir
-//
-// k6 是短命的程式：跑完就結束，沒有 /metrics 可以等人來拉，所以跟 trace 一樣由它「推」過來。
-// 走 Alloy 而不是讓 k6 直接 remote-write 進 Mimir：收集器只有一個這條規則不破例，
-// 之後換儲存只改這裡；也不必為了 k6 在 Mimir 上多開一個對主機的入口。
-// 用 k6 的 opentelemetry 輸出而不是 experimental-prometheus-rw：前者在 k6 v2 已經是正式版，後者還掛著 experimental。
-//
-// 收進來是 OpenTelemetry 的指標，Mimir 只吃 Prometheus 格式，這個元件負責翻譯：
-// 名稱裡的點換成底線、單位接在名稱後面（例如 k6_http_req_duration_milliseconds）、
-// resource 上的 service.name（k6）變成 job 標籤。實際的名稱以 Mimir 裡查到的為準，dashboard 照那個寫。
+// k6 用 OTLP 把指標推到 4318（perf/run-to-grafana.sh），這裡翻成 Prometheus 格式寫進 Mimir。
+// 為什麼經過 Alloy、不讓 k6 直接寫 Mimir，見 ops/README.md 的「壓測」。
+// 翻譯後名稱的點換成底線、單位接在後面（k6_http_req_duration_milliseconds），service.name 變成 job 標籤；
+// dashboard 照 Mimir 裡實際查到的名稱寫。
 otelcol.exporter.prometheus "k6" {
   forward_to = [prometheus.remote_write.mimir.receiver]
 }

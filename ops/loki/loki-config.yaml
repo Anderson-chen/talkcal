@@ -1,44 +1,42 @@
-# Loki 的工作：集中存 log，並提供查詢 API 給 Grafana。
-# 這是「單機 / 學習」用的最小設定 —— 全部塞在一個容器、資料寫本機檔案，不碰任何雲端物件儲存。
-# 正式大規模會拆成多個元件 + 接 S3 那類物件儲存，那是之後的事。
+# 單機設定：所有元件在一個容器裡執行，資料寫本機的 loki-data volume，不接物件儲存。
 
-auth_enabled: false          # 關掉多租戶驗證。單機自己用不需要，少一層麻煩
+auth_enabled: false          # 關掉多租戶，Alloy 送、Grafana 查都不必帶租戶 header
 
 server:
-  http_listen_port: 3100     # API 埠，跟 compose 對外開的一致
+  http_listen_port: 3100
 
 common:
   instance_addr: 127.0.0.1
-  path_prefix: /loki         # 所有資料 / 狀態的根目錄（對應 compose 掛進來的 loki-data volume）
+  path_prefix: /loki         # ops/compose.yaml 把 loki-data volume 掛在這
   storage:
-    filesystem:              # 存本機檔案就好，不接 S3 / GCS
+    filesystem:
       chunks_directory: /loki/chunks
       rules_directory: /loki/rules
-  replication_factor: 1      # 單機只有一份，不做複製
+  replication_factor: 1      # 只有一個實例，寫不出第二份
   ring:
     kvstore:
-      store: inmemory        # 叢集協調狀態放記憶體，單機夠用
+      store: inmemory        # 只有一個實例，ring 不必跟其他實例共用
 
 schema_config:
   configs:
     - from: 2020-10-24
-      store: tsdb            # Loki 3.x 建議的索引格式
+      store: tsdb
       object_store: filesystem
-      schema: v13            # 搭配 tsdb 的 schema 版本（Loki 3.x 要求 v13）
+      schema: v13            # Loki 3.x 的 tsdb 要 v13
       index:
         prefix: index_
-        period: 24h          # 保存期限要靠 24h 的索引週期才能用（見下面的 compactor）
+        period: 24h          # compactor 的 retention 要求索引週期是 24h
 
-# 保存期限（#270）：超過 30 天的 log 由 compactor 刪掉，不設的話永久保留。為什麼要設見 ops/README.md。
-# 30 天跟 mimir.yaml 的指標一樣長：指標查得到的範圍，那段時間的 log 一定還在。
-# 以 chunk 為單位刪：一個 chunk 裡最新的一筆也超過 30 天，整個 chunk 才會刪，所以剛過 30 天的 log 可能還查得到一陣子。
+# 不設保存期限的話 log 永久保留，本機 volume 會一直變大。
+# 30 天跟 mimir.yaml 的指標一樣長：指標查得到的那段時間，log 也還在。
+# compactor 以 chunk 為單位刪，chunk 裡最新的一筆也過期才刪，所以剛過 30 天的 log 可能還查得到一陣子。
 compactor:
   retention_enabled: true
-  delete_request_store: filesystem   # 開 retention 時必填：刪除請求存在哪，單機跟 chunk 放同一個地方
+  delete_request_store: filesystem   # 開 retention 時必填
 
 limits_config:
   retention_period: 30d
 
-# 關掉「用量回報」，跟 Grafana 那邊同個理由：學習環境不往外送任何東西
+# 不把用量回報給 Grafana Labs
 analytics:
   reporting_enabled: false

@@ -1,19 +1,16 @@
-// slo —— 一直有人在用的「平常流量」：行程 CRUD 為主，偶爾跟助理說一句。給 SLO（docs/slo.md）用的。
+// slo：一直有人在用的平常流量，行程 API 為主、偶爾跟助理說一句。兩個用途：
+//   1. 量一般 API 的延遲基準，docs/slo.md 的門檻從這裡來：結束時印行程 API 和助理各自的 p95、p99、5xx 比例。
+//   2. 驗 burn-rate 告警：開著這支當背景流量，再讓依賴失效（停止資料庫、模型位址指錯），
+//      burn rate 要往上衝、告警進 firing；依賴恢復、只剩這支時告警不該響。
 //
-// 兩個用途：
-//   1. 量一般 API 的延遲基準（docs/slo.md 的門檻從這裡來）：收工印行程 API 與助理各自的 p95、p99、5xx 比例。
-//   2. 驗 burn-rate 告警：開著這支當背景流量，再讓依賴掛掉（停資料庫、模型位址指錯），
-//      看 SLO 儀表板的 burn rate 往上衝、告警進 firing；依賴恢復、只剩這支的時候告警不該響（反例）。
+// 用 constant-arrival-rate：SLO 看的是來的人有幾成被好好服務，到達速率不能跟著 server 變慢而降。
 //
-// 跟 knee.js 的差別：knee 量「持續 N 個人在用」到哪裡會塞，這支用 constant-arrival-rate 照固定節奏送，
-// 不管 server 回得快不快——SLO 看的是「使用者來了，有幾成被好好服務」，到達速率不該跟著 server 變慢而降。
-//
-// 預設打 docker 那台 app（18090），跑 DURATION（預設 2m）：
+// 預設送到 Docker 裡的 app（18090）：
 //   k6 run perf/slo.js
-// 參數（環境變數）：
+// 環境變數：
 //   CRUD_RPS        行程 API 每秒幾個請求（預設 10，GET 列表 : 新增+刪除 ≈ 8 : 2）
 //   ASSIST_PER_MIN  每分鐘跟助理說幾句（預設 6；0 = 不碰模型）
-//   DURATION        跑多久（預設 2m）
+//   DURATION        執行多久（預設 2m）
 
 import './lib/docker-target.js';
 import http from 'k6/http';
@@ -49,8 +46,8 @@ if (ASSIST_PER_MIN > 0) {
   };
 }
 
-// 不拿門檻判成敗（造錯的時候本來就該失敗），只是讓收工報表分開印行程 API 和助理（k6 只印有門檻的子指標）。
-// api tag 設在 scenario 上，那個 scenario 發的請求都會帶；setup() 的登入不在 scenario 裡，不會被算進去。
+// 門檻不判成敗（造故障時本來就該失敗），是為了讓結束時的報表分開印行程 API 和助理：k6 只印有門檻的子指標。
+// api tag 設在 scenario 上，setup() 的登入不在 scenario 裡，不會被算進去
 export const options = {
   scenarios,
   thresholds: {
@@ -68,7 +65,7 @@ export function setup() {
 
 export function crud(session) {
   useSession(session);
-  // 十次裡兩次「新增一筆再刪掉」：寫入路徑也算進來，又不讓測試帳號的行程越積越多
+  // 兩成是新增一筆再刪掉：寫入也算進來，測試帳號的行程又不會越積越多
   if (Math.random() < 0.2) {
     const body = { events: [{ title: 'slo 壓測', start: '2026-10-20T09:00:00', end: '2026-10-20T10:00:00', category: 'WORK' }] };
     const created = http.post(`${BASE_URL}/api/calendar/events`, JSON.stringify(body), jsonParams());

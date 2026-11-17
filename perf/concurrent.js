@@ -1,25 +1,14 @@
-// concurrent —— USERS 個人在 WINDOW_S 秒內陸續湧進來，每人只跟助理說一句。
+// concurrent：USERS 個人在 WINDOW_S 秒內陸續進來，每人跟助理說一句就走，量活動開始那種尖峰。
+// 一個助理請求會呼叫模型、讀寫 PostgreSQL，兩邊一起壓到。預設 1000 人會留下 1000 段對話（見 lib/assistant.js）。
 //
-// 跟 knee.js 的差別：knee 是「固定 N 個人一直說」，量穩定狀態；
-// 這支是「一波人在短時間內各說一句就走」，像活動開始、大家同時打開網頁的那種尖峰。
-// 一個助理請求會叫 llm-chat（8080）一到數次，也會讀寫 PostgreSQL，
-// 所以只打這一支，模型和資料庫就都被壓到了。預設 1000 人會留下 1000 段對話（見 lib/assistant.js）。
+// constant-arrival-rate：k6 照固定節奏開始新的一輪，不等前面的回來，所以人數 = 輪數 = 請求數。
+// 結果裡出現 dropped_iterations，代表 VU 不夠、沒送到設定的人數，數字不能信。
 //
-// 用 constant-arrival-rate：k6 照固定節奏「開始」新的請求，不管前面的回來了沒。
-// 預設 1000 人 / 60 秒 ≈ 每秒來 16.7 個人，平均分散在 60 秒內，不是第 0 秒一次全進來。
-// 每一輪只送一個請求，所以「輪數」=「人數」= 請求數。
-//
-// 怎麼看結果：
-//   http_req_duration —— 每個人等了多久。越後面來的人，前面排隊的越多，max 會遠大於 min
-//   dropped_iterations —— 有出現就代表 k6 的 VU 不夠用，沒送到你設定的人數，數字不能信
-//
-// 預設打 docker 那台 app（deploy/compose.yaml 發佈在 18090）。
-// 要打本機 bootRun 的就覆蓋 BASE_URL：
+// 預設送到 Docker 裡的 app（18090），要送到本機 bootRun 的 app 就覆蓋 BASE_URL：
 //   PowerShell:  $env:BASE_URL="http://localhost:8090"; k6 run perf/concurrent.js
-// 人數與時間窗都能調：
+// 調人數和時間窗：
 //   PowerShell:  $env:USERS="50"; $env:WINDOW_S="5"; k6 run perf/concurrent.js
 
-// lib/assistant.js 在 import 時就讀 BASE_URL，所以預設值要在這裡、import 之前補上
 import './lib/docker-target.js';
 import { MESSAGES, say, signIn, useSession } from './lib/assistant.js';
 
@@ -30,15 +19,14 @@ export const options = {
   scenarios: {
     burst: {
       executor: 'constant-arrival-rate',
-      // 每 WINDOW_S 秒開始 USERS 輪，持續 WINDOW_S 秒 → 剛好 USERS 輪
+      // 每 WINDOW_S 秒開始 USERS 輪、持續 WINDOW_S 秒，剛好 USERS 輪
       rate: USERS,
       timeUnit: `${WINDOW_S}s`,
       duration: `${WINDOW_S}s`,
-      // 一個 VU 一次只能送一個請求。最壞情況是所有人都還在排隊沒回來，
-      // 所以 VU 要備到跟人數一樣多，否則 k6 會跳過那幾輪（記在 dropped_iterations）
+      // 一個 VU 一次只送一個請求，最壞情況是所有人都還沒回來，所以 VU 要跟人數一樣多
       preAllocatedVUs: USERS,
       maxVUs: USERS,
-      // 最後一個人在第 WINDOW_S 秒才進來，還要排隊加生成；給足時間讓大家都拿到回覆
+      // 最後一個人在第 WINDOW_S 秒才進來，還要排隊和生成
       gracefulStop: '120s',
     },
   },
@@ -46,14 +34,14 @@ export const options = {
   thresholds: {
     http_req_failed: ['rate<0.01'],
     checks: ['rate>0.99'],
-    // 沿用 load.js 的離譜線：尖峰時最後幾個人本來就會等比較久，這裡只要求別卡死
+    // 只抓卡死：尖峰時最後來的人本來就會等很久
     http_req_duration: ['p(95)<60000'],
   },
 };
 
-// 暖身：第一個請求常特別慢（暖 KV cache 等）。在 setup 裡跑掉，不算進這一波的數字
+// 第一個請求常特別慢（KV cache 還沒暖），在 setup 裡先說一句，不算進這一波
 export function setup() {
-  // 登入一次，所有 VU 共用（理由見 lib/assistant.js 的 signIn）
+  // 登入一次，所有 VU 共用（理由見 lib/assistant.js 的登入那段）
   const session = signIn();
   useSession(session);
   say(MESSAGES[0]);
