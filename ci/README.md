@@ -33,7 +33,9 @@ git push --no-verify                    # 確定要跳過檢查時
 | `checks.sh` | 要檢查什麼 | 不動 |
 | `Dockerfile` | 在什麼環境檢查（JDK 25、Node 22、Gradle 本體、Playwright 的 Chromium） | 不動 |
 | `run.sh` | 怎麼把程式碼放進容器、跑完怎麼拿回結果 | 不動 |
+| `build-image.sh` | 映像檔怎麼 build，快取放哪裡 | 加上那個平台的快取類型（目前只有 `gha`） |
 | `.github/workflows/ci.yml` | 什麼時候、在哪台機器跑，結果貼到哪 | 換成 `.gitlab-ci.yml`、`bitbucket-pipelines.yml`、`Jenkinsfile` |
+| `.github/actions/buildx-cache` | GitHub 上 buildx 要的 builder 和存取快取的 token | 拿掉 |
 
 道理跟後端的六角架構一樣：`checks.sh` 是核心，各平台的設定檔是 adapter。如果 `ci.yml` 自己寫一串 `setup-java`、`./gradlew test`，等於把業務規則寫進 adapter；換到 GitLab 要整份重寫，本機的 hook 也得另外抄一份，兩邊遲早會不一樣。
 
@@ -51,7 +53,7 @@ git push --no-verify                    # 確定要跳過檢查時
 
 | 代價 | 處理 |
 |---|---|
-| 每次全新環境，東西要重新下載 | 很少變的（JDK、Node、Gradle 本體）烤進映像檔。常變的 Java 函式庫、前端套件放具名 volume，跨次保留；GitHub 上 Java 函式庫存進 `actions/cache`。程式碼都不放 |
+| 每次全新環境，東西要重新下載 | 很少變的（JDK、Node、Gradle 本體）烤進映像檔。常變的 Java 函式庫、前端套件放具名 volume，跨次保留；GitHub 上 Java 函式庫存進 `actions/cache`，映像檔每一層存進 buildx 的 GitHub Actions cache。程式碼都不放 |
 | Windows 把資料夾掛進容器很慢（實測約 20 MB/s） | 不掛資料夾，用 `git archive` 複製 |
 | 整合測試要開 PostgreSQL（Testcontainers） | 把主機的 `docker.sock` 接進來，PostgreSQL 開在主機的 Docker 上、跟 CI 容器並排，不在容器裡再包一層 |
 | 模型測試要連 llama-server | 經 `host.docker.internal:8080` 連主機上的；要連別台就設 `SPRING_AI_OPENAI_CHAT_BASEURL` |
