@@ -2,7 +2,7 @@ import { send } from './http'
 
 export { NotFoundError } from './http'
 
-// 跟後端 /api/calendar/* 的契約，形狀照 CalendarController 的 record。兩邊沒有共用的型別，
+// 跟後端 /api/calendar/* 的契約，形狀照 CalendarController、CalendarAssistantController、ArchiveController 的 record。兩邊沒有共用的型別，
 // 後端改了欄位要在同一個 commit 改這裡，不然格式對不上，編譯也不會報錯。
 //
 // 時間是不帶時區的 ISO 牆上時間字串（例如 "2026-10-06T15:00:00"），不要轉成 Date：Date 一定帶時區，

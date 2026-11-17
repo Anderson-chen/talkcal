@@ -5,7 +5,7 @@
 FROM node:22-alpine AS build
 WORKDIR /src
 
-# pnpm 由 corepack 照 package.json 的 packageManager 下載（理由見 README.md）。不關掉提示的話，下載前會停下來問 Y/n。
+# pnpm 由 corepack 照 package.json 的 packageManager 下載（理由見 README.md「為什麼這樣選」的「用 pnpm 不用 npm」）。不關掉提示的話，下載前會停下來問 Y/n。
 # pnpm 本體下載在獨立的映像檔層，只有 package.json 改了才重新下載。放 BuildKit 的快取不行：
 # 快取只掛在那一個 RUN 上，後面的 pnpm run build 讀不到，又會再下載一次
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
