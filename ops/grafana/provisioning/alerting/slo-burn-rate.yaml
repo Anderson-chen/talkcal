@@ -35,10 +35,10 @@ groups:
               expression: A
               conditions:
                 - evaluator: { type: gt, params: [0] }
-        # 沒有 SLO 在燒時查詢是空的，所以沒資料是正常。指標斷掉時響的是 rules.yaml 的 talkcal-app-down
+        # 沒有 SLO 的 error budget 消耗過快時查詢是空的，所以沒資料是正常。指標斷掉時響的是 rules.yaml 的 talkcal-app-down
         noDataState: OK
         execErrState: Error
-        # 短視窗已經在確認「現在還在燒」，不另外加 for
+        # 短視窗已經在確認「現在還在快速消耗」，不另外加 for
         for: 0s
         labels:
           severity: critical

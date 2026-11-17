@@ -17,7 +17,7 @@ common:
 
 blocks_storage:
   tsdb:
-    dir: /data/tsdb          # 還沒打包成區塊的資料和 WAL，要在 volume 裡重啟才不掉
+    dir: /data/tsdb          # 還沒打包成區塊的資料和 WAL，放在 volume 裡，重啟才不會遺失
   bucket_store:
     sync_dir: /data/tsdb-sync
 
@@ -52,7 +52,7 @@ distributor:
 # exemplar（指標點上的 trace id）預設是 0，不收，Grafana 圖上就點不進 Tempo。數字是整個租戶同時記住的上限
 limits:
   max_global_exemplars_per_user: 100000
-  # 預設 0 是永久保留，本機 volume 會一直長。
+  # 預設 0 是永久保留，本機 volume 會一直變大。
   # 至少要 28 天：SLO 的 error budget 是滾動 28 天（rules/anonymous/slo.yaml 的 ratio_rate28d），短了就算不出來；多 2 天當緩衝。
   # 查詢範圍也受這個值限制，超過 30 天的時間就算區塊還沒刪也查不到
   compactor_blocks_retention_period: 30d

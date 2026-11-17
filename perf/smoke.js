@@ -38,7 +38,7 @@ export default function (session) {
   sleep(1);
 }
 
-// 空白訊息在讀記憶、叫模型之前就回 400，llama.cpp 沒開也會過。
+// 空白訊息在讀記憶、呼叫模型之前就回 400，llama.cpp 沒開也會過。
 // 模型無法連線時 say 那條紅、這條綠，看得出問題在模型，整條路還是通的
 function contractRejectsBlankMessage() {
   // 不標的話 k6 把 400 算進 http_req_failed，報表上的失敗率全是這些故意送錯的請求

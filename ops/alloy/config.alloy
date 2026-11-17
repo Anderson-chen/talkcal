@@ -28,7 +28,7 @@ prometheus.scrape "llama_cpp" {
   forward_to      = [prometheus.remote_write.mimir.receiver]
 }
 
-// 資料庫活著看 pg_up，不看這個 job 的 up：up 只代表 exporter 自己活著
+// 資料庫是否正常看 pg_up，不看這個 job 的 up：up 只代表 exporter 本身在執行
 prometheus.scrape "postgres" {
   job_name        = "postgres"
   targets         = [{"__address__" = "postgres-exporter:9187"}]
@@ -122,7 +122,7 @@ prometheus.remote_write "mimir" {
 
 // ═══ 日誌 ═══════════════════════════════════════════════════════════
 //
-// Alloy 停一陣子不會掉 log：Docker 照樣寫自己的 log 檔，Alloy 回來後照位置檔接著讀。
+// Alloy 停止一段時間也不會遺失 log：Docker 照樣寫自己的 log 檔，Alloy 重新啟動後照位置檔接著讀。
 
 discovery.docker "deploy" {
   host = "unix:///var/run/docker.sock"
@@ -215,14 +215,14 @@ otelcol.processor.transform "service_graph" {
   }
 }
 
-// 錯的、慢的全留，其餘照比例抽。為什麼在這裡做（tail）、不在 app 端做（head），見 ops/README.md 的「Trace 取樣」。
+// 錯的、慢的全留，其餘照比例抽。為什麼在這裡做 tail sampling、不在 app 端做 head sampling，見 ops/README.md 的「Trace 取樣」。
 // app 端要維持全送（application.properties 的 management.tracing.sampling.probability=1.0）：app 先丟掉的這裡看不到。
 // 一個 trace 的 span 都要進同一個 Alloy 才判斷得了；Alloy 變成多個時，前面要先照 trace id 分流。
 //
-// 本機不設環境變數，用 coalesce 的預設值（全留、5 秒）；雲端由 infra/envs/1-ec2/compose.ops.yaml 給 10%、125s。
+// 本機不設環境變數，用 coalesce 的預設值（全留、5 秒）；雲端由 infra/envs/1-ec2/compose.ops.yaml 給 10%、125 秒。
 otelcol.processor.tail_sampling "default" {
   // 從第一個 span 到達開始算。根 span 在請求結束時才送、最後到，等不夠久的話慢請求看起來不慢，會被當一般請求抽掉。
-  // 雲端要比最久的請求還長：叫模型最多等 2 分鐘（spring.ai.openai.chat.timeout），所以 125s。
+  // 雲端要比最久的請求還長：呼叫模型最多等 2 分鐘（spring.ai.openai.chat.timeout），所以設成 125 秒。
   // 本機全留，等多久都一樣，短一點 trace 才早點查得到
   decision_wait = coalesce(sys.env("TRACE_SAMPLING_DECISION_WAIT"), "5s")
 

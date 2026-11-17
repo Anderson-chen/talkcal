@@ -2,9 +2,9 @@
 //
 // 用 constant-arrival-rate，每分鐘固定來 RATE_PER_MIN 個人、各說一句，失敗數 ≈ 部署期間進來的人數，
 // 可以直接拿來比部署流程改之前和改之後。用 knee.js 那種固定 VU、說完立刻再說的寫法會量錯：
-// app 停掉時每個請求幾毫秒就失敗、VU 立刻再送，十幾秒能刷出九萬個失敗，只反映 k6 重送得多快。
+// app 停掉時每個請求幾毫秒就失敗、VU 立刻再送，十幾秒就累積九萬個失敗，只反映 k6 重送得多快。
 //
-// 失敗分三種，各記一個 counter（收工印成表，也送進 Grafana）：
+// 失敗分三種，各記一個 counter（結束時印成表，也送進 Grafana）：
 //   deploy_fast_fail：不到 1 秒、沒拿到回應。app 已經不收新請求，或新的還沒啟動
 //   deploy_slow_fail：超過 1 秒、沒拿到回應，連線被中斷。可能是處理到一半容器被 SIGKILL，
 //                     也可能是在連線佇列裡沒被處理就斷了。client 端分不出來，要對照舊容器的結束碼（137 = SIGKILL）和 app 的 log
@@ -13,9 +13,9 @@
 // 執行方式（先啟動 ops/ 才看得到圖）：
 //   1. perf/run-to-grafana.sh perf/deploy.js
 //   2. 大約 60 秒後，在另一個終端機：cd backend && ./gradlew deployApp -x test
-//   3. 看收工的表和 Grafana「talkcal — 壓測（k6）」上的部署線
+//   3. 看結束時印的表和 Grafana「talkcal — 壓測（k6）」上的部署線
 //
-// 預設送到 docker 那台 app（18090），部署的也是這台。
+// 預設送到 Docker 裡的 app（18090），部署的也是這台。
 
 import './lib/docker-target.js';
 import http from 'k6/http';

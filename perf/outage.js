@@ -4,13 +4,13 @@
 //   assistant：每分鐘 RATE_PER_MIN 個人跟助理說一句
 //   calendar：每秒 1 個人讀一個月的行程，不經過模型
 //
-// 給了 FAULT，k6 會在第 FAULT_AT_S 秒透過 Toxiproxy 的 API 弄壞 PROXY 那一段、第 RECOVER_AT_S 秒恢復，每次時間點一樣才能重現。
+// 給了 FAULT，k6 會在第 FAULT_AT_S 秒透過 Toxiproxy 的 API 讓 PROXY 那一段故障、第 RECOVER_AT_S 秒恢復，每次時間點一樣才能重現。
 // deploy/ 要疊上 compose.chaos.yaml 啟動，app 才經過 Toxiproxy：
 //   FAULT=down  停用那段 proxy，幾毫秒就失敗
-//   FAULT=hang  回應晚 10 分鐘才到，比叫模型的逾時還久，要等到逾時才失敗
+//   FAULT=hang  回應晚 10 分鐘才到，比呼叫模型的逾時還久，要等到逾時才失敗
 //   FAULT=slow  每個回應慢 SLOW_MS（預設 40 秒），會回，但超過 30 秒的慢呼叫門檻
-// 不給 FAULT 就不碰 Toxiproxy，由人在另一個終端機弄壞（見 deploy/README.md 的「故障演練」）。
-// 每一句的結果、弄壞和恢復的那一刻都各印一行，帶時間。
+// 不給 FAULT 就不碰 Toxiproxy，由人在另一個終端機製造故障（見 deploy/README.md 的「故障演練」）。
+// 每一句的結果、故障和恢復的那一刻都各印一行，帶時間。
 //
 // 預期的結果如下，門檻在 application.properties 的 resilience4j.*（chat-model）：
 //   - 前 5 次失敗讓熔斷打開，之後助理幾毫秒就回 503 MODEL_UNAVAILABLE
@@ -18,10 +18,10 @@
 //   - 行程 API 從頭到尾都是 200
 //   - 模型恢復後 30 秒內熔斷試探、關回來，助理又回 200
 //
-// 預設送到 docker 那台 app（18090），Toxiproxy 的 API 用 TOXIPROXY_URL（預設 localhost:8474）：
+// 預設送到 Docker 裡的 app（18090），Toxiproxy 的 API 用 TOXIPROXY_URL（預設 localhost:8474）：
 //   FAULT=down k6 run perf/outage.js
 //   FAULT=hang DURATION_S=360 RECOVER_AT_S=220 k6 run perf/outage.js   # 卡住要等逾時，拉長一點
-//   PROXY=postgres FAULT=down k6 run perf/outage.js                     # 弄壞資料庫那一段
+//   PROXY=postgres FAULT=down k6 run perf/outage.js                     # 讓資料庫那一段故障
 
 import './lib/docker-target.js';
 import http from 'k6/http';
@@ -39,7 +39,7 @@ const PROXY = __ENV.PROXY || 'llm'; // deploy/toxiproxy.json 裡的名字：llm 
 const FAULT_AT_S = Number(__ENV.FAULT_AT_S || 60); // 前一分鐘當正常的對照
 const RECOVER_AT_S = Number(__ENV.RECOVER_AT_S || 180);
 const SLOW_MS = Number(__ENV.SLOW_MS || 40000);
-const HANG_MS = 600000; // 比叫模型的逾時（2 分鐘）久，對 app 來說就是永遠不回
+const HANG_MS = 600000; // 比呼叫模型的逾時（2 分鐘）久，對 app 來說就是永遠不回
 const TOXIC = 'outage'; // 恢復時照名字拿掉
 
 const FAULTS = {
@@ -63,7 +63,7 @@ const FAULTS = {
 if (FAULT && !FAULTS[FAULT]) {
   throw new Error(`FAULT 只能是 ${Object.keys(FAULTS).join('、')}，收到 ${FAULT}`);
 }
-// 時間點錯了的話，可能根本沒弄壞，結果是一張全 200 的表，看起來像熔斷有效
+// 時間點錯了的話，可能根本沒造成故障，結果是一張全 200 的表，看起來像熔斷有效
 if (FAULT && !(0 <= FAULT_AT_S && FAULT_AT_S < RECOVER_AT_S && RECOVER_AT_S < DURATION_S)) {
   throw new Error(`要 0 ≤ FAULT_AT_S < RECOVER_AT_S < DURATION_S，收到 ${FAULT_AT_S}、${RECOVER_AT_S}、${DURATION_S}`);
 }
@@ -126,7 +126,7 @@ export const options = {
       },
     } : {}),
   },
-  // p(95) 給行程 API 的門檻，其他給收工的表
+  // p(95) 給行程 API 的門檻，其他給結束時印的表
   summaryTrendStats: ['count', 'med', 'p(95)', 'max'],
   // 模型怎麼壞，行程 API 都要全部成功、不被拖慢
   thresholds: {
@@ -160,7 +160,7 @@ export function fault() {
   toxiproxy(`恢復 ${PROXY}`, FAULTS[FAULT].recover());
 }
 
-// Toxiproxy 的 API 呼叫失敗就讓演練失敗，不然要等到結束才發現根本沒弄壞
+// Toxiproxy 的 API 呼叫失敗就讓演練失敗，不然要等到結束才發現根本沒造成故障
 function toxiproxy(what, res) {
   if (res.status < 200 || res.status >= 300) {
     throw new Error(`${what} 失敗：${res.status} ${res.body}`);

@@ -95,7 +95,7 @@ groups:
               refId: A
               instant: true
               # 左：近 5 分鐘熔斷擋下的請求數（也是信裡寫的人數）。右：這 5 分鐘一次都沒關回來。
-              # 不能只看 state="open"：沒開自動轉半開，打開之後要等下一個請求才換狀態，
+              # 不能只看 state="open"：application.properties 沒開 automatic-transition-from-open-to-half-open-enabled（預設關閉），打開之後要等下一個請求才換狀態，
               # 沒人用時會一直停在 open，模型早好了還在響；模型一直沒好時又在 open、half_open 之間跳，響了又解除
               expr: >-
                 sum(increase(resilience4j_circuitbreaker_not_permitted_calls_total{job="talkcal-app", name="chat-model"}[5m]))

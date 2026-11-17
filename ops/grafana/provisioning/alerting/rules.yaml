@@ -5,7 +5,7 @@
 
 apiVersion: 1
 
-# 這三條已經由 SLO 告警接手。provisioning 只新增、更新，檔案裡拿掉的規則會留在 grafana-data volume 裡，
+# 這三條要抓的情況，SLO 告警已經涵蓋。provisioning 只新增、更新，檔案裡拿掉的規則會留在 grafana-data volume 裡，
 # 不明寫刪除的話，啟動過的 Grafana 會一直留著這三條、跟 SLO 告警重複寄信。刪不存在的 uid 不會報錯；
 # 所有環境都重啟過一次之後可以拿掉這段
 deleteRules:

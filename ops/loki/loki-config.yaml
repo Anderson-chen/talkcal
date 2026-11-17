@@ -27,7 +27,7 @@ schema_config:
         prefix: index_
         period: 24h          # compactor 的 retention 要求索引週期是 24h
 
-# 不設保存期限的話 log 永久保留，本機 volume 會一直長。
+# 不設保存期限的話 log 永久保留，本機 volume 會一直變大。
 # 30 天跟 mimir.yaml 的指標一樣長：指標查得到的那段時間，log 也還在。
 # compactor 以 chunk 為單位刪，chunk 裡最新的一筆也過期才刪，所以剛過 30 天的 log 可能還查得到一陣子。
 compactor:

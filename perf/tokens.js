@@ -7,10 +7,10 @@
 // 預設送到本機 bootRun 的 app（8090），要先啟動：
 //   k6 run perf/tokens.js
 //   PowerShell:  $env:ROUNDS="3"; k6 run perf/tokens.js
-// 換算費用的單價（USD / 每 1M token）可以覆蓋，預設是 Bedrock 東京 Qwen3 32B 的 Standard（來源見 docs/cost.md）：
+// 換算費用的單價（USD / 每 1M token）可以覆蓋，預設是 Bedrock 東京 Qwen3 32B 的 Standard，來源見 docs/cost.md：
 //   $env:PRICE_IN="0.18"; $env:PRICE_OUT="0.73"; k6 run perf/tokens.js
 // 指標在 management 埠 8091，預設把 BASE_URL 結尾的 :8090 換成 :8091。
-// docker 那台 app 的 8091 沒有發佈到主機（deploy/compose.yaml），所以要送到本機 bootRun 的 app；別的位置就覆蓋 METRICS_URL。
+// Docker 裡的 app 的 8091 沒有發佈到主機（deploy/compose.yaml），所以要送到本機 bootRun 的 app；別的位置就覆蓋 METRICS_URL。
 
 import http from 'k6/http';
 import { BASE_URL, MESSAGES, say, signIn, useSession } from './lib/assistant.js';
@@ -37,7 +37,7 @@ export const options = {
 function snapshot() {
   const res = http.get(METRICS_URL);
   if (res.status !== 200) {
-    // status 0 = 連不上：多半是送到了 docker 的 app（management 埠沒發佈），或 bootRun 沒啟動
+    // status 0 = 連不上：多半是送到了 Docker 裡的 app（management 埠沒發佈），或 bootRun 沒啟動
     throw new Error(`讀不到指標 ${METRICS_URL}：${res.status || res.error}。指標在 management 埠，見這支開頭的說明`);
   }
   const totals = { calls: 0, requests: 0, tokens: {} };
@@ -63,7 +63,7 @@ function snapshot() {
 }
 
 export function setup() {
-  // 先讀指標：讀不到就馬上停。登入不叫模型，排在後面不影響相減的結果
+  // 先讀指標：讀不到就馬上停。登入不呼叫模型，排在後面不影響相減的結果
   const before = snapshot();
   return { session: signIn(), before };
 }

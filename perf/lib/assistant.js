@@ -1,7 +1,7 @@
 // 各支壓測腳本共用的請求：位址、登入、跟 AI 助理（POST /api/calendar/assistant）說話和檢查回覆。
 // 送多少、送多久、門檻多少由各腳本自己定。
 //
-// 助理的一個請求是一段 agent loop：可能叫模型好幾次（選工具、生成回覆，提議行程時工具還會再叫一次模型抽行程），
+// 助理的一個請求是一段 agent loop：可能呼叫模型好幾次（選工具、生成回覆，提議行程時工具還會再叫一次模型抽行程），
 // 所以延遲看句子差很多。助理也會讀寫 PostgreSQL。
 // 每個請求都不帶 conversationId，等於開一段新對話：壓一次就在 calendar_assistant_message 留下一堆對話，
 // 不想留就對著用完即丟的資料庫壓。助理只提議行程，不會新增。
@@ -12,7 +12,7 @@ import { check } from 'k6';
 export const BASE_URL = __ENV.BASE_URL || 'http://localhost:8090';
 export const ASSISTANT_URL = `${BASE_URL}/api/calendar/assistant`;
 
-// 句子短，生成長度才有上界。句子要多樣：併發時大家說同一句，會命中 llama.cpp 的 prompt 快取，量出不真實的快。
+// 句子短，生成長度才有上界。句子要多樣：併發時大家說同一句，會命中 llama.cpp 的 prompt 快取，量出來的延遲比實際短。
 // 查詢（list_events、find_free_slots）和提議（propose_events）都要有
 export const MESSAGES = [
   '明天有什麼行程？',
@@ -61,7 +61,7 @@ export function field(res, name) {
   }
 }
 
-// 只碰資料庫、不叫模型的請求。各腳本都讀同一個月，結果才比得起來
+// 只碰資料庫、不呼叫模型的請求。各腳本都讀同一個月，結果才比得起來
 export function listMonth() {
   return http.get(`${BASE_URL}/api/calendar/events?from=2026-10-01&to=2026-11-01`);
 }

@@ -6,7 +6,7 @@ apiVersion: 1
 policies:
   - orgId: 1
     receiver: email               # contact-points.yaml 的 name
-    # 同一條規則的告警合成一封：好幾個 SLO 同時在燒時（每個 SLO 一個實例）只寄一封
+    # 同一條規則的告警合成一封：好幾個 SLO 的 error budget 同時消耗過快時（每個 SLO 一個實例）只寄一封
     group_by: ['grafana_folder', 'alertname']
     # 等 30 秒再寄，同時響的湊進同一封
     group_wait: 30s

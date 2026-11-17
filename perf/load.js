@@ -1,4 +1,4 @@
-// load：同時跟助理說話的人數到多少開始排隊。分三段，每段各自有門檻，收工時 k6 分段印出 p95：
+// load：同時跟助理說話的人數到多少開始排隊。分三段，每段各自有門檻，結束時 k6 分段印出 p95：
 //   below：1 個 VU，基準線
 //   at：SLOTS 個 VU，剛好等於 llama-server 的 slot 數
 //   above：SLOTS×2 個 VU，多的請求只能排隊（requests_deferred 會離開 0）
@@ -55,12 +55,12 @@ export const options = {
   },
 
   thresholds: {
-    // 只送正常訊息，非 2xx 都是真的失敗（通常是 llama.cpp 那頭出事的 502）。
-    // 第二條：失敗率過 10% 就提前收工，server 已經停止回應，再送幾分鐘也只量到 502
+    // 只送正常訊息，非 2xx 都是真的失敗（通常是 llama.cpp 出錯時的 502）。
+    // 第二條：失敗率過 10% 就提前結束，server 已經停止回應，再送幾分鐘也只量到 502
     http_req_failed: ['rate<0.01', { threshold: 'rate<0.1', abortOnFail: true, delayAbortEval: '30s' }],
     checks: ['rate>0.99'],
 
-    // 收工報表只印有設門檻的子指標，這三條拿掉的話就看不到各段的 p95。
+    // 結束時的報表只印有設門檻的子指標，這三條拿掉的話就看不到各段的 p95。
     // 30 秒是暫定的服務目標，還沒照實測的數字調過
     'http_req_duration{scenario:below}': ['p(95)<30000'],
     'http_req_duration{scenario:at}': ['p(95)<30000'],

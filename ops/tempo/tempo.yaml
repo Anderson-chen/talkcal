@@ -16,11 +16,11 @@ storage:
   trace:
     backend: local
     wal:
-      path: /var/tempo/wal   # 還沒打包的 span，在 volume 裡重啟才不掉
+      path: /var/tempo/wal   # 還沒打包的 span，放在 volume 裡，重啟才不會遺失
     local:
       path: /var/tempo/blocks
 
-# 不設的話 volume 一直長。trace 用來查最近的單一請求，留 3 天。
+# 不設的話 volume 一直變大。trace 用來查最近的單一請求，留 3 天。
 # Tempo 3 沒有 compactor，刪過期資料是 backend-worker 的事，保存期限要寫在這裡
 backend_worker:
   compaction:
@@ -45,7 +45,7 @@ metrics_generator:
     service_graphs:
       # 資料庫、模型不送 span，只有 app 的 client span。依序找這些屬性，用第一個有值的當虛擬節點的名字：
       # SQL span 用 peer.service（Alloy 換成 postgresql，見 alloy/config.alloy 的 transform），
-      # 叫模型的 HTTP client span 用 target.host（llm-chat）
+      # 呼叫模型的 HTTP client span 用 target.host（llm-chat）
       peer_attributes:
         - peer.service
         - db.system.name

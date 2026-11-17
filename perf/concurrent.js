@@ -1,11 +1,11 @@
 // concurrent：USERS 個人在 WINDOW_S 秒內陸續進來，每人跟助理說一句就走，量活動開始那種尖峰。
 // knee.js 量的是固定 N 個人一直說的穩定狀態。
-// 一個助理請求會叫模型、讀寫 PostgreSQL，兩邊一起壓到。預設 1000 人會留下 1000 段對話（見 lib/assistant.js）。
+// 一個助理請求會呼叫模型、讀寫 PostgreSQL，兩邊一起壓到。預設 1000 人會留下 1000 段對話（見 lib/assistant.js）。
 //
 // constant-arrival-rate：k6 照固定節奏開始新的一輪，不等前面的回來，所以人數 = 輪數 = 請求數。
 // 結果裡出現 dropped_iterations，代表 VU 不夠、沒送到設定的人數，數字不能信。
 //
-// 預設送到 docker 那台 app（18090），要送到本機 bootRun 的 app 就覆蓋 BASE_URL：
+// 預設送到 Docker 裡的 app（18090），要送到本機 bootRun 的 app 就覆蓋 BASE_URL：
 //   PowerShell:  $env:BASE_URL="http://localhost:8090"; k6 run perf/concurrent.js
 // 調人數和時間窗：
 //   PowerShell:  $env:USERS="50"; $env:WINDOW_S="5"; k6 run perf/concurrent.js

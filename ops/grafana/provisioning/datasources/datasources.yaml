@@ -1,6 +1,6 @@
 # 三個資料源互相連著：Mimir 圖上的 exemplar、Loki 的 log 都點得進 Tempo 的 trace，
 # trace 又點得回那個請求的 log 和當時的指標。
-# uid 都釘死：dashboard JSON 和這些跳轉設定用 uid 找資料源，不釘的話 Grafana 隨機產一個就對不上。
+# uid 都固定寫死：dashboard JSON 和這些跳轉設定用 uid 找資料源，不固定的話 Grafana 隨機產一個就對不上。
 # 這個檔裡的 $ 要寫成 $$：Grafana 讀檔時會把 $XXX 當環境變數展開。
 
 apiVersion: 1

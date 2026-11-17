@@ -1,9 +1,9 @@
 // knee：同時人數從 1 一階一階往上加，找吞吐量不再增加、延遲開始往上衝的那一階（臨界值）。
-// 收工印一張每階一列的表。load.js 只量三段，concurrent.js 量的是一瞬間湧進來的尖峰。
+// 結束時印一張每階一列的表。load.js 只量三段，concurrent.js 量的是一瞬間湧進來的尖峰。
 //
 // 每一階是 constant-vus、說完立刻再說（不 sleep），VU 數 = 持續壓在 server 上的請求數。
 //
-// 預設送到 docker 那台 app（18090），全程約 STEPS 階數 × (HOLD_S + GAP_S) 秒：
+// 預設送到 Docker 裡的 app（18090），全程約 STEPS 階數 × (HOLD_S + GAP_S) 秒：
 //   k6 run perf/knee.js
 // 先確認腳本沒寫錯，每階縮成 10 秒：
 //   PowerShell:  $env:HOLD_S="10"; k6 run perf/knee.js

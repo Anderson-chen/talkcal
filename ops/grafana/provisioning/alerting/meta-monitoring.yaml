@@ -42,7 +42,7 @@ groups:
               conditions:
                 # 60 秒 = 連續 4 次沒進來。Alloy 重啟只要幾秒，到不了 60
                 - evaluator: { type: gt, params: [60] }
-        # 重啟卡久一點（拉新映像、WAL 重放）也不叫人
+        # 重啟比較久（拉新映像、WAL 重放）也不通知
         for: 2m
         # 停超過 5 分鐘後連最後的點都查不到，變成沒資料，一樣是停了
         noDataState: Alerting
@@ -69,7 +69,7 @@ groups:
             model:
               refId: A
               instant: true
-              # 只看查不查得到：Mimir 活著一定回 1，連不上、逾時由 execErrState: Alerting 算成出事
+              # 只看查不查得到：Mimir 正常時一定回 1，連不上、逾時由 execErrState: Alerting 算成出事
               expr: vector(1)
           - refId: C
             datasourceUid: __expr__

@@ -13,7 +13,7 @@
 # 延遲：壞 = 全部 - 落在門檻 bucket 以內的。app 要有剛好在門檻上的 bucket
 #   （application.properties 的 management.metrics.distribution.slo.http.server.requests=300ms,8s），門檻要兩邊一起改。
 # calendar-* 是一般 API：行程的增刪查、讀對話紀錄、拒絕卡片。assistant-* 是 POST /api/calendar/assistant，
-#   後面要叫模型好幾次，門檻分開定。
+#   後面要呼叫模型好幾次，門檻分開定。
 #
 # 沒有 5xx 時壞事件那一項是空的，空 / 數字 = 空，SLI 會變沒資料，所以補 or vector(0)。
 # 分母加 > 0：沒人用時 rate 是 0，0/0 會錄成 NaN；當成沒資料，不算好也不算壞。
