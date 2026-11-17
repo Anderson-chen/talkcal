@@ -45,7 +45,7 @@ export function gridRange(days: string[]): { from: string; to: string } {
 /**
  * 一筆行程要畫在哪幾天的格子裡：從開始那天，到結束那天。
  * 跟後端「結束不含」同一套規則：剛好在 00:00 結束的行程，不算進結束那天
- * （22:00 到隔天 00:00 的行程只佔一格，不會在隔天多出一段零長度的行程）。
+ * （22:00 到隔天 00:00 的行程只占一格，不會在隔天多出一段零長度的行程）。
  */
 export function daysCovered(start: string, end: string): string[] {
   const first = start.slice(0, 10)

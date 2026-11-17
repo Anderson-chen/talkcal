@@ -38,7 +38,7 @@ export function message(e: unknown): string {
 /** fetch 本身丟例外時，瀏覽器的訊息是英文的「Failed to fetch」，看不出該怎麼辦 */
 const UNREACHABLE_MESSAGE = '連不上伺服器，請確認網路連線後再試一次'
 
-/** Retry-After 也可能是 HTTP 日期，這個後端和 nginx 都不用，讀不懂就當成沒有 */
+/** Retry-After 也可能是 HTTP 日期，這個後端和 nginx 都不用，解析不了就當成沒有 */
 export function retryAfterOf(header: string | null): number | null {
   if (!header || !/^\d+$/.test(header.trim())) return null
   return Number(header.trim())
@@ -72,13 +72,13 @@ interface Failure {
 export interface SendOptions {
   // 登入要送表單：Spring Security 的 formLogin 只收表單格式
   contentType?: string
-  // 登入失敗也是 401，那時不該跳走，要留在登入頁顯示錯誤
+  // 登入失敗也是 401，那時不該通知 App 換頁，要留在登入頁顯示錯誤
   notifyUnauthorized?: boolean
 }
 
 /**
  * 非 2xx 一律丟 ApiError，訊息優先用後端回的 {"error": ...}；proxy 連不上 app 時回的不是 JSON，就附上狀態碼。
- * 送不出去也丟 ApiError，呼叫端不必另外接 fetch 自己的 TypeError。
+ * 送不出去也丟 ApiError，呼叫端不必另外捕捉 fetch 丟出的 TypeError。
  */
 export async function send(url: string, init: RequestInit, options: SendOptions = {}): Promise<Response> {
   const headers = new Headers(init.headers)

@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [vue()],
   build: {
     // 打包進來的套件授權全文寫成 dist/licenses.txt：MIT、BSD 要求散布時附上版權和授權聲明，
-    // 送到使用者瀏覽器的 js 就是散布（見 docs/licenses.md）。用 .txt：nginx 不認得 .md，會當成下載檔
+    // 送到使用者瀏覽器的 js 就是散布（見 docs/licenses.md）。用 .txt：nginx 不會把 .md 當成文字顯示，會當成下載檔
     license: { fileName: 'licenses.txt' },
   },
   server: {

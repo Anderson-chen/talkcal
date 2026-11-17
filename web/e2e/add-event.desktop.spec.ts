@@ -13,7 +13,7 @@ test('新增一筆行程：送出填的資料，存好之後出現在月曆上',
   await page.goto('/')
 
   // 找元素都用使用者看得到的東西：按鈕上的字、欄位的 label、對話框的標題。
-  // exact：name 預設是「包含」就算：月曆每一格都有「在10月6日新增行程」，不加會找到 43 個按鈕。
+  // exact：name 預設只要包含就算符合。月曆每一格都有「在10月6日新增行程」，不加會找到 43 個按鈕。
   // 找到不只一個時 Playwright 直接報錯、不會隨便挑一個點（strict mode），點錯了才不會沒人發現
   await page.getByRole('button', { name: '新增行程', exact: true }).click()
   const form = page.getByRole('dialog', { name: '新增行程' })
@@ -117,7 +117,7 @@ test('#51 在標題欄連按兩下 Enter：只送出一次', async ({ page }) =>
   const form = page.getByRole('dialog', { name: '新增行程' })
   await form.getByLabel('標題').fill('產品週會')
   // 存檔慢一點（300ms）：假後端瞬間就回，第二下 Enter 到的時候第一筆早就存完、表單也關了，測不到「第一下還在送」。
-  // 後註冊的 route 先執行；等完交回 fakeApi 那個處理
+  // 後註冊的 route 先執行；等待結束後再交給 fakeApi 註冊的 route 處理
   await page.route('**/api/calendar/events', async (route) => {
     if (route.request().method() === 'POST') await new Promise((resolve) => setTimeout(resolve, 300))
     await route.fallback()

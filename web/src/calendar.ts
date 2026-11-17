@@ -8,7 +8,7 @@ export { NotFoundError } from './http'
 // 時間是不帶時區的 ISO 牆上時間字串（例如 "2026-10-06T15:00:00"），不要轉成 Date：Date 一定帶時區，
 // 瀏覽器會用使用者電腦的時區解讀。字串原樣傳，後端存的台北三點就一直是三點。
 
-/** 線路上的寫法，對照見 CalendarController 的 toCategory／fromCategory */
+/** API 傳輸時的寫法，對照見 CalendarController 的 toCategory／fromCategory */
 export type Category = 'WORK' | 'PERSONAL' | 'HEALTH' | 'SOCIAL'
 
 export const CATEGORIES: readonly Category[] = ['WORK', 'PERSONAL', 'HEALTH', 'SOCIAL']

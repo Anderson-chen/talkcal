@@ -10,7 +10,7 @@
 // 回不了的時候（每一種顯示什麼見 assistantFailure.ts）：
 // - 使用者那句留在對話裡、標成「沒送出」，附「再試一次」，不必重打
 // - 後端給了要等幾秒就倒數，倒數完之前送不出去，輸入框照樣能打字
-// - 模型最久可能想 2 分鐘，等太久時「思考中」會顯示已經等了幾秒，讓使用者知道請求還在處理
+// - 模型最久可能 2 分鐘才回應，等太久時「思考中」會顯示已經等了幾秒，讓使用者知道請求還在處理
 // - 還沒送出的字放 sessionStorage：登入過期跳回登入頁、或重新整理，回來時還在
 
 import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
@@ -67,7 +67,7 @@ export const SUGGESTIONS = ['明天下午3點和 Amy 開會', '明天有什麼�
 
 const GREETING = '嗨！我是你的行事曆助理。可以幫你新增、修改、刪除行程，查某天的安排，或找出空檔。不管哪一種，我都會整理成卡片讓你確認後才動行事曆。'
 
-// 私密視窗、被封鎖的網站資料會讓 localStorage 丟例外，下面一律吞掉，最壞就是重新整理後開新對話。
+// 私密視窗、被封鎖的網站資料會讓 localStorage 丟例外，下面一律捕捉後忽略，最壞就是重新整理後開新對話。
 // key 帶登入者的 id，換人登入才不會讀回上一個人的對話。擋住讀別人對話的是後端的授權，這裡只是不主動去要
 const storageKey = () => `talkcal.calendar.assistant.conversation.${me.value?.id ?? 'anonymous'}`
 // key 在建立助理時算一次就好：登入過期時 401 的通知比例外早到，me 已經是 null，那時才算會存到 anonymous 的 key

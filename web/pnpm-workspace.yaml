@@ -1,6 +1,6 @@
 # pnpm 11 從這裡讀設定，pnpm add、pnpm update 自動套用，不靠人記得帶參數
 
-# 只安裝發布超過兩週（單位是分鐘）的版本，間接依賴也算：被植入惡意程式碼的版本通常幾天內就被發現
+# 只安裝發布超過兩週的版本（設定值的單位是分鐘），間接依賴也算：被植入惡意程式碼的版本通常幾天內就被發現
 minimumReleaseAge: 20160
 # 例外只給修 HIGH、CRITICAL 漏洞的版本，寫成「套件@版本」並註明漏洞編號，滿兩週後刪掉（見 README.md）
 # minimumReleaseAgeExclude:

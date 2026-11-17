@@ -1,4 +1,4 @@
-// 元件有沒有接好，交給 Playwright（e2e/）。
+// 元件有沒有正確呼叫這些函式，由 Playwright 測（e2e/）。
 import { describe, expect, it } from 'vitest'
 import { daysApart, endDayOffset, isOvernight, toDraft, type FormFields } from './eventDraft'
 

@@ -13,9 +13,9 @@ export default mergeConfig(
       include: ['src/**/*.test.ts'],
       environment: 'node',
       // 用法見 docs/test-coverage.md。由 pnpm test 的 --coverage 開啟，不寫 enabled: true：
-      // 寫了的話 test:watch 每存一次檔都重新產生報告、洗掉終端機的輸出
+      // 寫了的話 test:watch 每存一次檔都重新產生報告、清掉終端機的輸出
       coverage: {
-        // v8 用 Node 內建的覆蓋率，不必插樁。Vitest 4 起靠 AST 重新對映，準確度跟 istanbul 相同
+        // v8 用 Node 內建的覆蓋率，不必在程式碼裡另外加記錄用的程式（instrumentation）。Vitest 4 起靠 AST 重新對映，準確度跟 istanbul 相同
         provider: 'v8',
         // Vitest 4 拿掉了 coverage.all，不寫 include 的話，沒有任何測試 import 的檔案不會出現在報告裡，
         // 那些正是要找的漏測。只算 .ts：.vue 元件由 Playwright 測
