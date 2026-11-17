@@ -93,7 +93,7 @@ done
 # postgres 只在第一次初始化時讀 POSTGRES_PASSWORD。Terraform 換了密碼的話，app 拿新的、資料庫還是舊的，app 就連不上，
 # 所以先只啟動 postgres，把密碼設成 .env 這一份，再啟動 app。密碼沒換時就是設成同一組
 docker compose "${compose_files[@]}" up -d --wait postgres
-# 走 local socket（官方映像檔設成 trust），不用帶舊密碼。密碼從 stdin 送：放在指令參數的話 ps 看得到。
+# 走 Unix socket（官方映像檔對這種連線設成 trust），不用帶舊密碼。密碼從 stdin 送：放在指令參數的話 ps 看得到。
 # 密碼只有英數字（secrets.tf 的 special = false），直接放進 SQL 字串不用跳脫
 db_password="$(grep '^DB_PASSWORD=' deploy/.env | cut -d= -f2-)"
 printf "ALTER ROLE talkcal PASSWORD '%s';\n" "$db_password" \

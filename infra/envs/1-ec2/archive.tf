@@ -55,7 +55,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "archive" {
 # key 外流最多就是這個 bucket 被讀寫，碰不到帳號的其他東西。
 #
 # 另一條路是把 hop limit 改成 2、讓容器用機器角色（臨時憑證，不必換 key）：代價是容器裡任何一個 SSRF 都拿得到機器的權限，
-# 包括讀 SSM 裡的整份 .env。這個專案先選「key 的權限很窄」而不是「沒有長期 key」。
+# 包括讀 SSM 裡的整份 .env。這個專案先選「key 的權限很窄」，暫時接受有長期 key。
 resource "aws_iam_user" "archive" {
   name = "${var.project}-archive"
 }
@@ -68,7 +68,7 @@ resource "aws_iam_user_policy" "archive" {
     Version = "2012-10-17"
     Statement = [
       {
-        # 放一包、讀一包、刪一包（刪帳號）。沒有 PutBucket*、DeleteBucket：bucket 的設定只由 Terraform 修改
+        # 上傳、讀取、刪除物件（刪除用於刪帳號）。沒有 PutBucket*、DeleteBucket：bucket 的設定只由 Terraform 修改
         Sid      = "ReadWriteObjects"
         Effect   = "Allow"
         Action   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]

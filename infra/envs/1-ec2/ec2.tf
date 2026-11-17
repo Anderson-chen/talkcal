@@ -70,7 +70,7 @@ resource "aws_instance" "app" {
   })
 
   # user_data 只在第一次開機執行：準備環境、clone、第一次部署。
-  # 之後改 compose 或換版本是重新執行 deploy.sh，不該重建機器（重建會掉 volume 裡的資料）。
+  # 之後改 compose 或換版本是重新執行 deploy.sh，不該重建機器（重建會遺失 volume 裡的資料）。
   user_data_replace_on_change = false
 
   lifecycle {

@@ -33,11 +33,11 @@ trap 'rm -f "$tmp"' EXIT
 start=$(date +%s)
 log "pg_dump $PG_CONTAINER/$PG_DB → $final"
 # -Fc：有壓縮、能只還原某幾張表，pg_restore 也讀得出目錄（下面的檢查靠這個）。
-# 在容器裡執行：pg_dump 跟伺服器同版，主機不必裝用戶端；走 local socket（官方映像檔設成 trust），不用帶密碼
+# 在容器裡執行：pg_dump 跟伺服器同版，主機不必裝用戶端；走 Unix socket（官方映像檔對這種連線設成 trust），不用帶密碼
 docker exec "$PG_CONTAINER" pg_dump -U "$PG_USER" -d "$PG_DB" -Fc > "$tmp"
 
 # 檢查一：讀得出目錄。擋得到不是 dump 檔、檔頭壞了、空檔案；
-# 擋不到後半截不見（目錄在檔頭），那要靠 pg-restore.sh --verify-only 整份還原一次
+# 擋不到後半部被截斷的檔案（目錄在檔頭），那要靠 pg-restore.sh --verify-only 整份還原一次
 if ! toc=$(docker exec -i "$PG_CONTAINER" pg_restore --list < "$tmp"); then
   log "備份檔讀不出目錄，不保留：$tmp"
   exit 1
@@ -45,7 +45,7 @@ fi
 entries=$(grep -c ' TABLE DATA ' <<< "$toc" || true)
 
 mv "$tmp" "$final"
-# 檢查二：雜湊。之後複製、上傳、下載途中壞掉，還原前一比就知道
+# 檢查二：雜湊。之後複製、上傳、下載途中壞掉的話，還原前比對雜湊就看得出來
 ( cd "$BACKUP_DIR" && sha256sum "$name" > "$name.sha256" )
 
 size=$(wc -c < "$final" | tr -d ' ')

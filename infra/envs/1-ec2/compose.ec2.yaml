@@ -23,7 +23,7 @@ services:
       TALKCAL_ARCHIVE_ENDPOINT: ""
       TALKCAL_ARCHIVE_BUCKET: ${ARCHIVE_BUCKET:?缺 ARCHIVE_BUCKET}
       TALKCAL_ARCHIVE_REGION: ${ARCHIVE_REGION:?缺 ARCHIVE_REGION}
-    # 沒有上限的話，JVM 的 MaxRAMPercentage=75 算的是整台機器：8 GB（gpu 是 16 GB）還要分給 Postgres 和整組觀測，
+    # 沒有上限的話，JVM 的 MaxRAMPercentage=75 算的是整台機器：8 GB（gpu 是 16 GB）還要分給 PostgreSQL 和整組觀測，
     # app 一用就是大半台。設了 2g，75% 就是約 1.5 GB heap
     mem_limit: 2g
 

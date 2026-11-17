@@ -1,9 +1,9 @@
-# 故障演練：在 app 和模型、app 和 PostgreSQL 之間各插一段 Toxiproxy，用來弄壞連線。
+# 故障演練：在 app 和模型、app 和 PostgreSQL 之間各插一段 Toxiproxy，用來製造連線故障。
 #
 #   docker compose -f deploy/compose.yaml -f deploy/compose.chaos.yaml up -d
 #
 # 只在演練時疊，EC2 的 deploy.sh 不疊：多經過一層 proxy，就多一個會壞的地方。
-# 為什麼用 Toxiproxy、手動弄壞的指令見 deploy/README.md 的「故障演練」；照時間表弄壞並量 app 的反應用 perf/outage.js。
+# 為什麼用 Toxiproxy、手動製造故障的指令見 deploy/README.md 的「故障演練」；照時間表製造故障並量 app 的反應用 perf/outage.js。
 
 services:
   toxiproxy:

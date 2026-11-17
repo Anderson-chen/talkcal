@@ -76,7 +76,7 @@ services:
     command:
       - -m
       - /models/Qwen3-8B-Q4_K_M.gguf
-      # 聽 127.0.0.1 的話只收得到容器自己發的請求，Docker 轉進來的進不去。對外開不開由 ports 控制
+      # 監聽 127.0.0.1 的話只收得到容器自己發的請求，Docker 轉進來的請求進不去。對外開不開由 ports 控制
       - --host
       - 0.0.0.0
       - --port
@@ -154,7 +154,7 @@ services:
     restart: unless-stopped
 
   # ── 資料庫那一端的指標：postgres_exporter ────────────────────────
-  # app 的連線池只看得到自己借了幾條；max_connections、各狀態的連線數（pg_stat_activity）要查資料庫才拿得到，
+  # app 的連線池只記錄自己借出幾條連線；max_connections、各狀態的連線數（pg_stat_activity）要查資料庫才拿得到，
   # PostgreSQL 又不輸出 Prometheus 格式，所以加一個 exporter，ops/ 的 Alloy 在這組網路上抓 exporter 的 :9187。
   # 放在 deploy/ 不放 ops/：exporter 要用 deploy/.env 的 DB_PASSWORD
   postgres-exporter:
@@ -177,7 +177,7 @@ services:
     restart: unless-stopped
 
   # ── 舊資料的歸檔：S3 相容的物件儲存 ──────────────────────────────
-  # app 把舊行程、舊對話壓成 JSON Lines + gzip 放進來，存好才從 postgres 刪。雲端換成 S3（infra/envs/1-ec2/archive.tf），
+  # app 把舊行程、舊對話壓成 JSON Lines + gzip 放進來，存好才從 PostgreSQL 刪。雲端換成 S3（infra/envs/1-ec2/archive.tf），
   # app 只差 endpoint。用 RustFS：MinIO 不發社群版的映像檔了；整合測試（RustFsContainer）也用這個映像檔
   archive:
     image: rustfs/rustfs:1.0.3
