@@ -23,11 +23,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -41,15 +39,15 @@ import tools.jackson.databind.ObjectMapper;
  * ChatModel 和歸檔的 bucket 都是第一次用到才連線，所以模型沒開、物件儲存指到連不上的位址，app 都能啟動。
  * 物件儲存連不上時只有查看封存失敗、月曆照常，也在這裡驗；真的接上儲存的情境見 ArchiveSystemTest。
  */
-@Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "talkcal.archive.endpoint=http://127.0.0.1:1")
 @DisplayName("系統測試：整個應用接起來")
 class SystemTest {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.6-alpine");
+    @DynamicPropertySource
+    static void database(DynamicPropertyRegistry registry) {
+        TestPostgres.newDatabase().register(registry);
+    }
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final HttpClient HTTP = HttpClient.newHttpClient();

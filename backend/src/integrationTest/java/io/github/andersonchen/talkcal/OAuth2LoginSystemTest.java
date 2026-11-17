@@ -17,10 +17,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -29,7 +27,6 @@ import tools.jackson.databind.ObjectMapper;
  * 這裡測前後兩端：轉址時帶的回呼網址、scope、state，以及轉回來的參數不對時會被擋。
  * 拿到使用者資料之後怎麼對到帳號，見 ExternalUserServicesTest、JdbcAccountAdapterTest。
  */
-@Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "talkcal.auth.google.client-id=google-client-id",
         "talkcal.auth.google.client-secret=google-client-secret",
@@ -38,9 +35,10 @@ import tools.jackson.databind.ObjectMapper;
 @DisplayName("系統測試：Google、GitHub 登入")
 class OAuth2LoginSystemTest {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.6-alpine");
+    @DynamicPropertySource
+    static void database(DynamicPropertyRegistry registry) {
+        TestPostgres.newDatabase().register(registry);
+    }
 
     private static final ObjectMapper JSON = new ObjectMapper();
 

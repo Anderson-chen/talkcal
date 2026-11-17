@@ -3,6 +3,7 @@ package io.github.andersonchen.talkcal.app.job;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.andersonchen.talkcal.TestPostgres;
 import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.ArchiveBucket;
 import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.RustFsContainer;
 import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.S3EventArchiveAdapter;
@@ -26,7 +27,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.IntStream;
 
-import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,7 +37,6 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * 用真的 PostgreSQL 和 RustFS，中間用的是正式的 use case 和 adapter，不經過 Spring。
@@ -47,8 +46,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @DisplayName("行程歸檔：PostgreSQL ↔ S3 相容儲存")
 class EventArchiveFlowTest {
 
-    @Container
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.6-alpine");
+    static final TestPostgres.Database DATABASE = TestPostgres.newDatabase().migrated();
 
     @Container
     static final RustFsContainer RUSTFS = new RustFsContainer();
@@ -68,12 +66,7 @@ class EventArchiveFlowTest {
 
     @BeforeAll
     static void setUp() {
-        Flyway.configure()
-                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
-                .load()
-                .migrate();
-        DriverManagerDataSource dataSource =
-                new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        DriverManagerDataSource dataSource = DATABASE.dataSource();
         jdbc = JdbcClient.create(dataSource);
         events = new JdbcCalendarEventAdapter(jdbc, new TransactionTemplate(new DataSourceTransactionManager(dataSource)));
         RUSTFS.createBucket("talkcal-archive");

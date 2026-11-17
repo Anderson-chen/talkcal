@@ -179,8 +179,8 @@ testing {
         integrationTest(JvmTestSuite) {
             dependencies {
                 implementation project()
-                // 用真的 PostgreSQL，不用 H2：SQL 方言不同（例如 ON CONFLICT），H2 上通過不代表 PostgreSQL 會通過
-                implementation 'org.springframework.boot:spring-boot-testcontainers'
+                // 用真的 PostgreSQL，不用 H2：SQL 方言不同（例如 ON CONFLICT），H2 上通過不代表 PostgreSQL 會通過。
+                // 測試怎麼共用容器見 TestPostgres
                 implementation 'org.testcontainers:testcontainers-postgresql'
                 implementation 'org.testcontainers:testcontainers-junit-jupiter'
             }

@@ -3,6 +3,7 @@ package io.github.andersonchen.talkcal.app.job;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.andersonchen.talkcal.TestPostgres;
 import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.ArchiveBucket;
 import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.RustFsContainer;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository;
@@ -20,7 +21,6 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
-import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -36,7 +36,6 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * 對話歸檔跟行程歸檔照同一組規則（存好才刪、只拿得到自己的、不舊的不搬），反例也一題一題對到 EventArchiveFlowTest，
@@ -46,8 +45,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @DisplayName("AssistantMemoryArchive：PostgreSQL ↔ S3 相容儲存")
 class AssistantMemoryArchiveTest {
 
-    @Container
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.6-alpine");
+    static final TestPostgres.Database DATABASE = TestPostgres.newDatabase().migrated();
 
     @Container
     static final RustFsContainer RUSTFS = new RustFsContainer();
@@ -67,12 +65,7 @@ class AssistantMemoryArchiveTest {
 
     @BeforeAll
     static void setUp() {
-        Flyway.configure()
-                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
-                .load()
-                .migrate();
-        DriverManagerDataSource dataSource =
-                new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        DriverManagerDataSource dataSource = DATABASE.dataSource();
         jdbc = JdbcClient.create(dataSource);
         memory = new JdbcAssistantMemoryRepository(jdbc, new TransactionTemplate(new DataSourceTransactionManager(dataSource)), 10);
         RUSTFS.createBucket("talkcal-archive");
