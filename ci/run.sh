@@ -41,9 +41,12 @@ trap 'docker rm --force "$container" >/dev/null 2>&1 || true' EXIT
 # host.docker.internal：容器裡找主機的名字。Docker Desktop 內建，Linux（GitHub 的 runner）要 --add-host 才有
 # 兩個 volume 是依賴快取，跨次保留，不然每次都重新下載幾百 MB。Gradle 只掛 caches/：Gradle 本體裝在映像檔的 wrapper/，掛整個家目錄會蓋掉 wrapper/
 # SPRING_AI_OPENAI_CHAT_BASEURL：模型測試連的 llama-server，預設是主機的 8080。連不到的話那些測試跳過，不算失敗
+# CI_GRADLE_CACHE：Gradle 下載的 Java 函式庫放在哪裡。沒有設定時用具名 volume talkcal-ci-gradle；
+#   給主機上的絕對路徑就改掛那個資料夾。GitHub 上掛的是 actions/cache 存取的資料夾，下一台新機器直接拿到函式庫（見 .github/workflows/ci.yml）。
+#   Windows 上不要給：掛資料夾進容器很慢（見開頭）
 docker create --name "$container" \
     --volume /var/run/docker.sock:/var/run/docker.sock \
-    --volume talkcal-ci-gradle:/opt/gradle-home/caches \
+    --volume "${CI_GRADLE_CACHE:-talkcal-ci-gradle}:/opt/gradle-home/caches" \
     --volume talkcal-ci-pnpm:/cache/pnpm-store \
     --add-host host.docker.internal:host-gateway \
     --env TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \

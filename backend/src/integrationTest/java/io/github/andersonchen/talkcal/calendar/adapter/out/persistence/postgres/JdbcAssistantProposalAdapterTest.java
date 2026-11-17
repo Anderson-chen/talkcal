@@ -3,6 +3,7 @@ package io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import io.github.andersonchen.talkcal.TestPostgres;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalOutcome;
@@ -17,7 +18,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -25,20 +25,15 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * 做法見 JdbcCalendarEventAdapterTest。每張卡片最多算一次，靠同一句 UPDATE 的 outcome IS NULL 條件：
  * 同時兩個表態只有一個改得到，要對真的 PostgreSQL 才驗得準。
  */
-@Testcontainers
 @DisplayName("JdbcAssistantProposalAdapter（真的 PostgreSQL）")
 class JdbcAssistantProposalAdapterTest {
 
-    @Container
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.6-alpine");
+    static final TestPostgres.Database DATABASE = TestPostgres.newDatabase().migrated();
 
     static JdbcClient jdbc;
     static JdbcAssistantProposalAdapter adapter;
@@ -48,11 +43,7 @@ class JdbcAssistantProposalAdapterTest {
 
     @BeforeAll
     static void migrateAndConnect() {
-        Flyway.configure()
-                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
-                .load()
-                .migrate();
-        jdbc = JdbcClient.create(new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword()));
+        jdbc = JdbcClient.create(DATABASE.dataSource());
         adapter = new JdbcAssistantProposalAdapter(jdbc);
     }
 

@@ -11,11 +11,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -27,14 +25,14 @@ import tools.jackson.databind.ObjectMapper;
  * 測的是 IDOR（OWASP API1）：拿別人的 id，用自己的 session 讀、刪。
  * 每一題都有反例：本人用同一個 id 會成功，證明被擋是因為不是自己的，id 本身沒問題。
  */
-@Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DisplayName("系統測試：授權（只看得到、改得到自己的）")
 class AuthorizationSystemTest {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.6-alpine");
+    @DynamicPropertySource
+    static void database(DynamicPropertyRegistry registry) {
+        TestPostgres.newDatabase().register(registry);
+    }
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String PASSWORD = "correct-horse";

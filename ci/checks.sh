@@ -19,6 +19,24 @@ echo "── 架構圖：每個錨點都對得上檔案 ──"
 # 錨點的規則見 docs/architecture/lines.mjs 開頭。lines.mjs 只用 Node 內建模組，不必等 pnpm install
 node docs/architecture/lines.mjs --check || status=1
 
+# 前端和後端互不相依，同時執行：這一段花的時間是比較久的那一邊（後端），不是兩邊加起來。
+# 前端的每一行加上「[前端]」再印，跟後端的行交錯時分得出來。不先存檔、等後端結束才印：
+# 前端卡住、整個 job 逾時被中止的話，存起來的輸出就印不出來，看不出卡在哪一步
+frontend() {
+    local s=0
+    echo "── 前端：lint、單元測試、型別檢查、打包、E2E ──"
+    # 照快到慢排，前面失敗後面就不執行。型別錯誤只有 build（vue-tsc）抓得到，所以 build 排在 E2E 前面。
+    # E2E 的 API 是假的，不需要後端
+    (cd web && pnpm install --frozen-lockfile && pnpm run lint && pnpm test && pnpm run build && pnpm run e2e) || s=1
+
+    echo "── 授權：前端會打包的套件 ──"
+    ci/licenses.sh || s=1
+    return $s
+}
+# $! 必須是 frontend 本身：接 | sed 的話 $! 是 sed，wait 拿到的是 sed 的結束碼，前端失敗時 CI 仍然會通過
+frontend > >(sed -u 's/^/[前端] /') 2>&1 &
+frontend_pid=$!
+
 echo "── 後端：單元測試、架構規則、整合測試（編譯時 Error Prone 一起跑）──"
 # 要真模型的測試連不到 llama-server 就跳過，下面的摘要會列出來。
 # evalClasses：AI eval 要真模型、執行一分多鐘，不在這裡執行，但要編譯得過；
@@ -34,13 +52,7 @@ if [ "${RUN_EVAL:-0}" = 1 ]; then
     (cd backend && ./gradlew --no-daemon eval) || status=1
 fi
 
-echo "── 前端：lint、單元測試、型別檢查、打包、E2E ──"
-# 照快到慢排，前面失敗後面就不執行。型別錯誤只有 build（vue-tsc）抓得到，所以 build 排在 E2E 前面。
-# E2E 的 API 是假的，不需要後端
-(cd web && pnpm install --frozen-lockfile && pnpm run lint && pnpm test && pnpm run build && pnpm run e2e) || status=1
-
-echo "── 授權：前端會打包的套件 ──"
-ci/licenses.sh || status=1
+wait "$frontend_pid" || status=1
 
 # ── 測試摘要 ─────────────────────────────────────────────────────
 # 跳過的測試要另外列出來：模型沒開時，要真模型的測試全部跳過，綠燈看起來卻跟全部測過一樣

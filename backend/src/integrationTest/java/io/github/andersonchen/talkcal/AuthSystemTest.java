@@ -12,11 +12,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -24,14 +22,14 @@ import tools.jackson.databind.ObjectMapper;
  * 用 BrowserSession 照前端的方式送請求，測的是前端實際會遇到的流程。
  * 每條規則都配一個反例：該擋的會擋，正常的請求不會被擋。
  */
-@Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DisplayName("系統測試：認證")
 class AuthSystemTest {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.6-alpine");
+    @DynamicPropertySource
+    static void database(DynamicPropertyRegistry registry) {
+        TestPostgres.newDatabase().register(registry);
+    }
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String PASSWORD = "correct-horse";

@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.andersonchen.talkcal.TestPostgres;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.Category;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.DateRange;
@@ -39,7 +40,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -49,9 +49,6 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * Testcontainers 啟動 PostgreSQL，Flyway 套用正式的 migration，adapter 直接 new，不啟動 Spring：
@@ -59,12 +56,10 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  *
  * 「有重疊」在 port 上寫成一句話，實際由 SQL 的 && 和 tsrange 預設的 [) 邊界決定，要對真的 PostgreSQL 才驗得準。
  */
-@Testcontainers
 @DisplayName("JdbcCalendarEventAdapter（真的 PostgreSQL）")
 class JdbcCalendarEventAdapterTest {
 
-    @Container
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.6-alpine");
+    static final TestPostgres.Database DATABASE = TestPostgres.newDatabase().migrated();
 
     static JdbcCalendarEventAdapter adapter;
     static JdbcClient jdbc;
@@ -84,12 +79,7 @@ class JdbcCalendarEventAdapterTest {
 
     @BeforeAll
     static void migrateAndConnect() {
-        Flyway.configure()
-                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
-                .load()
-                .migrate();
-        DriverManagerDataSource dataSource =
-                new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        DriverManagerDataSource dataSource = DATABASE.dataSource();
         jdbc = JdbcClient.create(dataSource);
         transaction = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         adapter = new JdbcCalendarEventAdapter(jdbc, transaction);

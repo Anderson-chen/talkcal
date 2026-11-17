@@ -3,32 +3,28 @@ package io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import io.github.andersonchen.talkcal.TestPostgres;
+
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * 做法見 JdbcCalendarEventAdapterTest。一個人在兩張表、同一張表都有好幾筆紀錄時只算一次，靠 SQL 的 UNION，要對真的 PostgreSQL 才驗得準。
  * 資料用 SQL 直接寫進去：存檔時 created_at 是現在，造不出八天前的紀錄。
  */
-@Testcontainers
 @DisplayName("JdbcActiveOwnersAdapter（真的 PostgreSQL）")
 class JdbcActiveOwnersAdapterTest {
 
-    @Container
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.6-alpine");
+    static final TestPostgres.Database DATABASE = TestPostgres.newDatabase().migrated();
 
     static JdbcClient jdbc;
     static JdbcActiveOwnersAdapter adapter;
@@ -41,11 +37,7 @@ class JdbcActiveOwnersAdapterTest {
 
     @BeforeAll
     static void migrateAndConnect() {
-        Flyway.configure()
-                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
-                .load()
-                .migrate();
-        jdbc = JdbcClient.create(new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword()));
+        jdbc = JdbcClient.create(DATABASE.dataSource());
         adapter = new JdbcActiveOwnersAdapter(jdbc);
     }
 
