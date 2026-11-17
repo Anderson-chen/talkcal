@@ -25,7 +25,7 @@ export K6_OTEL_HTTP_EXPORTER_INSECURE=true
 export K6_OTEL_METRIC_PREFIX=k6_
 
 # 預設的固定 bucket 最大只到 10 秒，模型一排隊，p95 就被壓在 10 秒，看起來像沒再變慢。
-# 這是 OpenTelemetry SDK 的標準環境變數，k6 認得；Alloy 要開 send_native_histograms 才收得下
+# 這是 OpenTelemetry SDK 的標準環境變數，k6 會讀；Alloy 要開 send_native_histograms 才收得下
 export OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION=base2_exponential_bucket_histogram
 
 # 預設 10 秒。短的壓測一階只有十幾秒，10 秒一次只剩一兩個點，rate() 算不出來

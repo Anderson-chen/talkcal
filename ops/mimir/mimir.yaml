@@ -39,7 +39,7 @@ ruler:
 ingester:
   ring:
     replication_factor: 1
-    instance_addr: 127.0.0.1  # ring 裡只有自己，不必去猜容器 IP
+    instance_addr: 127.0.0.1  # ring 裡只有這個實例，不必偵測容器 IP
 
 store_gateway:
   sharding_ring:

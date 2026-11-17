@@ -12,7 +12,7 @@
 // 不給 FAULT 就不碰 Toxiproxy，由人在另一個終端機弄壞（見 deploy/README.md 的「故障演練」）。
 // 每一句的結果、弄壞和恢復的那一刻都各印一行，帶時間。
 //
-// 預期的結果（門檻在 application.properties 的 resilience4j.*（chat-model））：
+// 預期的結果如下，門檻在 application.properties 的 resilience4j.*（chat-model）：
 //   - 前 5 次失敗讓熔斷打開，之後助理幾毫秒就回 503 MODEL_UNAVAILABLE
 //   - 卡住時同時在等的最多 50 個（bulkhead），再多就回 503 MODEL_BUSY
 //   - 行程 API 從頭到尾都是 200
@@ -102,7 +102,7 @@ export const options = {
       rate: RATE_PER_MIN,
       timeUnit: '1m',
       duration: `${DURATION_S}s`,
-      // 模型卡住時一個請求佔住一個 VU 2 分鐘，VU 不夠 k6 就會跳過那幾輪
+      // 模型卡住時一個請求占住一個 VU 2 分鐘，VU 不夠 k6 就會跳過那幾輪
       preAllocatedVUs: 50,
       maxVUs: 300,
       gracefulStop: '150s',
@@ -160,7 +160,7 @@ export function fault() {
   toxiproxy(`恢復 ${PROXY}`, FAULTS[FAULT].recover());
 }
 
-// Toxiproxy 沒照做就讓演練失敗，不然要等到結束才發現根本沒弄壞
+// Toxiproxy 的 API 呼叫失敗就讓演練失敗，不然要等到結束才發現根本沒弄壞
 function toxiproxy(what, res) {
   if (res.status < 200 || res.status >= 300) {
     throw new Error(`${what} 失敗：${res.status} ${res.body}`);

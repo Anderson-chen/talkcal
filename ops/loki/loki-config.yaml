@@ -15,7 +15,7 @@ common:
   replication_factor: 1      # 只有一個實例，寫不出第二份
   ring:
     kvstore:
-      store: inmemory        # 只有一個實例，ring 不必跟別人共用
+      store: inmemory        # 只有一個實例，ring 不必跟其他實例共用
 
 schema_config:
   configs:

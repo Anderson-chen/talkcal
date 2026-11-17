@@ -78,7 +78,7 @@ export function handleSummary(data) {
     ['拿到錯誤碼（非 200）', count('deploy_error')],
     ['k6 沒送出去（dropped_iterations）', count('dropped_iterations')],
   ];
-  // 數字放前面：中文字在終端機裡佔兩格，padStart 只算字數，標籤放前面對不齊
+  // 數字放前面：中文字在終端機裡占兩格，padStart 只算字數，標籤放前面對不齊
   const lines = rows.map(([label, n]) => `  ${String(n).padStart(5)}  ${label}`);
   return { stdout: `\n部署期間的請求（每分鐘 ${RATE_PER_MIN} 人，共 ${DURATION_S} 秒）\n${lines.join('\n')}\n` };
 }

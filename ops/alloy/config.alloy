@@ -38,7 +38,7 @@ prometheus.scrape "postgres" {
 
 // 備份是執行完就結束的批次工作（infra/envs/1-ec2/backup-to-s3.sh），沒有 /metrics。
 // 備份成功時寫 .prom 檔（textfile collector），這裡讀；資料夾由 ops/compose.yaml 掛進來，本機是空的。
-// 不用 Pushgateway：要多養一個服務，而且一樣只留最後一次的值。
+// 不用 Pushgateway：要多維護一個服務，而且一樣只留最後一次的值。
 // stat 給 node_boot_time_seconds：容器跟主機共用核心，讀到的是主機開機時間，備份告警用這個值排除剛開機
 // （見 grafana/provisioning/alerting/respond.yaml）。其他 collector 在容器裡讀到的不是主機的值，不開。
 prometheus.exporter.unix "backup" {
@@ -136,9 +136,9 @@ discovery.docker "deploy" {
 
 // Loki 只替標籤建索引，每多一種值就多一條 stream。標籤只放值只有幾種的（容器名、服務名）；
 // trace id、使用者這種每筆不同的值放進標籤，stream 數會多到 Loki 無法負荷。trace id 留在內容裡，
-// 由 Grafana 從內容認出來做成連結（見 grafana/provisioning/datasources/datasources.yaml）。
+// 由 Grafana 用 regex 從內容找出 trace id，做成連結（見 grafana/provisioning/datasources/datasources.yaml）。
 discovery.relabel "deploy" {
-  // 只定義規則，由 loki.source.docker 的 relabel_rules 拿去套
+  // 只定義規則，由 loki.source.docker 的 relabel_rules 套用
   targets = []
 
   rule {
@@ -177,7 +177,7 @@ loki.write "local" {
 // receiver → transform（改 service map 用的屬性）→ tail_sampling → batch → Tempo
 
 // app 用 HTTP（4318）：容器裡找 alloy:4318，本機 bootRun 走 ops/compose.yaml 發佈到主機的 127.0.0.1:4318。
-// nginx 的 OpenTelemetry 模組只會 gRPC，所以另開 4317，只在 deploy/ 的網路裡用。
+// nginx 的 OpenTelemetry 模組只支援 gRPC，所以另開 4317，只在 deploy/ 的網路裡用。
 // k6 的指標也從 4318 進來（見最下面的壓測）。
 otelcol.receiver.otlp "default" {
   http {
@@ -193,7 +193,7 @@ otelcol.receiver.otlp "default" {
 }
 
 // Tempo 畫 service map 時，client span 加上接在底下的 server span 算一條邊；
-// 底下沒有 server span 的（資料庫、模型不送 span），照 peer.service 這類屬性造一個虛擬節點（見 tempo/tempo.yaml）。
+// 資料庫、模型不送 span，底下沒有 server span，Tempo 照 peer.service 這類屬性造一個虛擬節點（見 tempo/tempo.yaml）。
 //
 // 第一條：nginx 的模組一個請求只開一個 server span，沒有轉給 app 的 client span，
 //   app 的 server span 直接接在 server span 底下，Tempo 配不成邊，圖上 talkcal-web 和 talkcal 之間就斷了。
@@ -236,7 +236,7 @@ otelcol.processor.tail_sampling "default" {
     non_sampled_cache_size = 200000,
   }
 
-  // 任一條 policy 說留就留
+  // 任一條 policy 判定保留，trace 就保留
   policy {
     name = "errors"
     type = "status_code"
