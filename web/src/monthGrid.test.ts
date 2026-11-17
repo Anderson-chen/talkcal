@@ -1,9 +1,3 @@
-// monthGrid.ts 的單元測試。全部是純函式：給一樣的輸入就一定得到一樣的輸出，不碰畫面、不碰網路，所以最好測。
-//
-// 結構：
-//   describe —— 把同一個函式的測試放一組，報告裡一層一層顯示
-//   it       —— 一個測試，名字寫成一句話，讀起來就是規格：「它應該……」
-//   expect   —— 斷言：實際值跟預期不一樣，這個測試就失敗，訊息會列出兩邊的值
 import { describe, expect, it } from 'vitest'
 import { daysCovered, gridRange, monthGrid, toIsoDate, weekdayName } from './monthGrid'
 

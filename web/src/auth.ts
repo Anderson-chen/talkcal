@@ -1,17 +1,13 @@
-// 跟後端 /api/auth/* 的契約，以及「目前是誰」的狀態（#103）。
+// /api/auth/* 的契約，和「目前是誰」的狀態。
 //
-// 登入狀態存在後端的 session，瀏覽器只拿到一個 HttpOnly cookie，這裡讀不到也不用讀；
-// 前端要知道「有沒有登入、是誰」，就問 GET /api/auth/me。
-//
-// 登入、登出走 Spring Security 的 /api/auth/login、/api/auth/logout：登入要送表單格式（不是 JSON），成功回 204。
-//
-// 用 Google、GitHub 登入（#105）不經過這裡的 fetch：那是整頁轉址（到 Google 同意、再轉回首頁），
-// 回到首頁時 session 已經是登入的，App 照常 loadMe() 就知道是誰。
+// session 在後端，瀏覽器只拿到 HttpOnly cookie，目前登入的人由 GET /api/auth/me 回傳。
+// 登入、登出是 Spring Security 的端點：登入送表單格式，成功回 204。
+// Google、GitHub 登入是整頁轉址，不經過這裡的 fetch；轉回首頁時 session 已經登入，App 照常 loadMe()。
 
 import { ref } from 'vue'
 import { message, onUnauthorized, send, UnauthorizedError } from './http'
 
-/** 目前登入的人。id 是行程、對話的擁有者；name 是給人看的。 */
+/** id 是行程、對話的擁有者；name 給人看 */
 export interface Me {
   id: string
   // 帳密登入的是帳號名稱，Google、GitHub 登入的是對方給的名字
@@ -20,10 +16,10 @@ export interface Me {
   username: string | null
 }
 
-/** 除了帳密之外開了的登入方式（後端有設定 client id 的才有）。 */
+/** 帳密以外的登入方式，後端有設定 client id 的才會開 */
 export type Provider = 'google' | 'github'
 
-/** 開了哪些登入方式。問不到（後端沒開、網路斷了）就當成沒有：只顯示帳密，不擋住登入頁。 */
+/** 查不到就當成沒有：只顯示帳密，不擋住登入頁 */
 export async function loadProviders(): Promise<Provider[]> {
   try {
     const res = await send('/api/auth/providers', { method: 'GET' }, { notifyUnauthorized: false })
@@ -34,32 +30,30 @@ export async function loadProviders(): Promise<Provider[]> {
   }
 }
 
-/** 「用 Google 登入」按鈕連到哪裡：整頁轉過去，後端再轉到 Google。 */
+/** 整頁轉過去，後端再轉到 Google、GitHub */
 export function providerLoginUrl(provider: Provider): string {
   return `/api/auth/oauth2/authorization/${provider}`
 }
 
 /**
- * 整個 App 共用的登入狀態：
- * - undefined：還不知道（剛打開頁面，正在問後端）
+ * - undefined：還不確定（剛打開頁面，還在等後端回應）
  * - null：沒登入
  * - Me：登入了
  */
 export const me = ref<Me | null | undefined>(undefined)
 
-// 任何 API 回 401（登入過期、在別的分頁登出了）：換回登入畫面
+// 任何 API 回 401（登入過期、在別的分頁登出）都換回登入畫面
 onUnauthorized(() => {
   me.value = null
 })
 
 /**
- * 打開頁面時問不到「我是誰」的原因（#43）。null 是沒出事。
- * 只有 401 才代表「沒登入」；連不上、伺服器出錯時就說連不上，不畫登入頁 —— 登入著的人在伺服器重啟時重新整理，
- * 看到登入頁會以為被登出、去重打密碼，而那時候登入也一樣會失敗
+ * 打開頁面時查不到「我是誰」的原因，null 是沒有問題。只有 401 才算沒登入：伺服器重啟時重新整理，
+ * 畫登入頁會讓登入著的人以為被登出、去重打密碼，而那時登入也一樣會失敗
  */
 export const meUnreachable = ref<string | null>(null)
 
-/** 問後端「我是誰」：有登入就記下是誰，401 就是 null（沒登入）。其他錯誤照樣丟出去，由呼叫的地方決定怎麼顯示。 */
+/** 401 記成沒登入，其他錯誤丟出去 */
 export async function loadMe(): Promise<void> {
   try {
     const res = await send('/api/auth/me', { method: 'GET' }, { notifyUnauthorized: false })
@@ -70,7 +64,7 @@ export async function loadMe(): Promise<void> {
   }
 }
 
-/** 打開頁面（和按「重新連線」）時問一次；問不到就記下原因，畫「連不上」而不是登入頁。 */
+/** 查不到就記下原因，畫「連不上」而不是登入頁 */
 export async function connect(): Promise<void> {
   try {
     await loadMe()
@@ -80,14 +74,14 @@ export async function connect(): Promise<void> {
   }
 }
 
-/** 登入。帳密錯會丟錯（訊息是「帳號或密碼錯誤」），留在登入頁顯示，不跳走。 */
+/** 帳密錯丟 UnauthorizedError 但不通知 App，留在登入頁顯示 */
 export async function logIn(username: string, password: string): Promise<void> {
   await send('/api/auth/login', { method: 'POST', body: new URLSearchParams({ username, password }) },
     { contentType: 'application/x-www-form-urlencoded', notifyUnauthorized: false })
   await loadMe()
 }
 
-/** 註冊再登入：後端的註冊不會自動登入，這裡接著登入，使用者感覺上是一步。 */
+/** 後端的註冊不會自動登入，這裡接著登入，使用者感覺是一步 */
 export async function signUp(username: string, password: string): Promise<void> {
   await send('/api/auth/register', { method: 'POST', body: JSON.stringify({ username, password }) },
     { notifyUnauthorized: false })

@@ -1,18 +1,15 @@
-// 跟後端講話的共用部分：每個 API（行事曆、助理、帳號）都經過這裡的 send()。
+// 每個 API 都經過 send()，認證帶來的兩件事集中在這裡：
+// - CSRF：會改東西的請求要把 XSRF-TOKEN cookie 的值放進 X-XSRF-TOKEN header（Spring Security 的 csrf.spa()）。
+//   別的網站誘使瀏覽器送請求時 cookie 照樣會帶，但那個網站讀不到這個網域的 cookie，放不進 header
+// - 401：通知 App 換回登入畫面
 //
-// 認證（#103）帶來的兩件事集中在這裡，各 API 不必各自處理：
-// - CSRF：會改東西的請求（POST、DELETE）要把 XSRF-TOKEN cookie 的值放進 X-XSRF-TOKEN header（Spring Security 的 csrf.spa()）。
-//   別的網站騙瀏覽器送請求時 cookie 照樣會帶上，但它讀不到我們網域的 cookie，送不出對的 header —— 所以擋得住
-// - 401：登入過期（或從沒登入）時，通知 App 換回登入畫面
-//
-// 登入狀態本身是 HttpOnly 的 session cookie，JavaScript 讀不到、也不用讀：瀏覽器自己會帶。
+// 登入狀態是 HttpOnly 的 session cookie，JavaScript 讀不到，瀏覽器自己會帶。
 
 /**
- * 後端（或中間的 nginx）回了錯誤，或根本連不上。message 是給人看的話；
- * detail 給畫面決定「怎麼說、可以怎麼做」（#43）：
- * - status：HTTP 狀態碼；null 是根本沒拿到回應（網路斷了、伺服器整台連不上）
- * - code：後端分類好的原因（助理的 AssistantFailure.code），例如 MODEL_UNAVAILABLE；nginx 自己回的錯誤沒有
- * - retryAfterSeconds：幾秒後再試才有意義。body 的 retryAfterSeconds 優先，沒有就看 Retry-After header（nginx 的 429 只有 header）
+ * 後端或中間的 nginx 回了錯誤，或根本連不上。message 給人看，detail 給畫面決定顯示什麼、可以怎麼做：
+ * - status：null 是沒拿到回應（網路斷了、伺服器整台連不上）
+ * - code：後端分類好的原因，例如 MODEL_UNAVAILABLE；nginx 自己回的錯誤沒有
+ * - retryAfterSeconds：body 的優先，沒有才看 Retry-After header（nginx 的 429 只有 header）
  */
 export class ApiError extends Error {
   constructor(message: string, readonly detail: FailureDetail = NO_RESPONSE) {
@@ -28,27 +25,25 @@ export interface FailureDetail {
 
 const NO_RESPONSE: FailureDetail = { status: null, code: null, retryAfterSeconds: null }
 
-/** 404：要的東西不存在。跟其他錯誤分開，呼叫端才能決定「重新讀一次」而不是只顯示錯誤。 */
+/** 跟其他錯誤分開，呼叫端才能選擇重新讀一次，不只是顯示錯誤 */
 export class NotFoundError extends ApiError {}
 
-/** 401：沒登入、登入過期，或登入時帳密錯誤。 */
+/** 沒登入、登入過期，或登入時帳密錯誤 */
 export class UnauthorizedError extends ApiError {}
 
-/** 接到的例外變成給人看的一句話。 */
 export function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
-/** 連不上的時候（fetch 本身丟例外）給人看的話。瀏覽器原本的訊息是英文的「Failed to fetch」，看不出該怎麼辦 */
+/** fetch 本身丟例外時，瀏覽器的訊息是英文的「Failed to fetch」，看不出該怎麼辦 */
 const UNREACHABLE_MESSAGE = '連不上伺服器，請確認網路連線後再試一次'
 
-/** Retry-After header 的秒數。也可能是 HTTP 日期格式（我們的後端和 nginx 都不用），讀不懂就當成沒有 */
+/** Retry-After 也可能是 HTTP 日期，這個後端和 nginx 都不用，解析不了就當成沒有 */
 export function retryAfterOf(header: string | null): number | null {
   if (!header || !/^\d+$/.test(header.trim())) return null
   return Number(header.trim())
 }
 
-/** 從 document.cookie 那種字串（"a=1; XSRF-TOKEN=abc"）讀出某個 cookie 的值，沒有就是 null。 */
 export function readCookie(cookies: string, name: string): string | null {
   for (const part of cookies.split(';')) {
     const [key, ...value] = part.trim().split('=')
@@ -57,12 +52,10 @@ export function readCookie(cookies: string, name: string): string | null {
   return null
 }
 
-/** 會改東西的方法要帶 CSRF token；GET 這類只讀的不用（也不該用 GET 改東西）。 */
 export function needsCsrf(method: string | undefined): boolean {
   return !['GET', 'HEAD', 'OPTIONS'].includes((method ?? 'GET').toUpperCase())
 }
 
-// 401 時要通知誰（App 註冊一個：換回登入畫面）
 const unauthorizedListeners = new Set<() => void>()
 
 export function onUnauthorized(listener: () => void): () => void {
@@ -77,19 +70,17 @@ interface Failure {
 }
 
 export interface SendOptions {
-  // 預設送 JSON；登入要送表單（Spring Security 的 formLogin 吃的是表單）
+  // 登入要送表單：Spring Security 的 formLogin 只收表單格式
   contentType?: string
-  // 預設 401 會通知 App 回登入畫面。登入失敗也是 401，那時候不該跳走，要留在登入頁顯示錯誤
+  // 登入失敗也是 401，那時不該通知 App 換頁，要留在登入頁顯示錯誤
   notifyUnauthorized?: boolean
 }
 
 /**
- * 錯誤處理：非 2xx 一律丟 ApiError，訊息優先用後端回的 {"error": ...}，
- * 拿不到（proxy 連不上 app，回的不是 JSON）就說「伺服器暫時沒有回應」並附上狀態碼。
- * 連請求都送不出去（網路斷了）也丟 ApiError（status 是 null），呼叫端不必另外接 fetch 自己的 TypeError。
+ * 非 2xx 一律丟 ApiError，訊息優先用後端回的 {"error": ...}；proxy 連不上 app 時回的不是 JSON，就附上狀態碼。
+ * 送不出去也丟 ApiError，呼叫端不必另外捕捉 fetch 丟出的 TypeError。
  */
 export async function send(url: string, init: RequestInit, options: SendOptions = {}): Promise<Response> {
-  // 呼叫端自己的 header（例如新增行程的 Idempotency-Key）照帶，再補上每個請求都要的
   const headers = new Headers(init.headers)
   headers.set('Content-Type', options.contentType ?? 'application/json')
   if (needsCsrf(init.method)) {
@@ -120,8 +111,7 @@ export async function send(url: string, init: RequestInit, options: SendOptions 
 }
 
 /**
- * 手上的 CSRF token。登入、登出之後 Spring Security 會換一個新的（舊的作廢），
- * cookie 被清掉時就先 GET 一次，讓後端發新的 XSRF-TOKEN cookie 過來。
+ * 登入、登出之後 Spring Security 會換掉 token、清掉 cookie。沒有 cookie 時先 GET 一次，讓後端發新的過來。
  */
 async function csrfToken(): Promise<string | null> {
   let token = readCookie(document.cookie, 'XSRF-TOKEN')

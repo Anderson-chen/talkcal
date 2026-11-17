@@ -1,7 +1,5 @@
 <script setup lang="ts">
-// 週、日視圖的時間軸：一天一欄，每小時一格，行程依起訖畫成方塊，重疊的並排。
-//
-// 跟設計稿不同的地方：從 00:00 畫到 24:00（設計稿從 06:00 開始），打開時捲到 07:00。
+// 跟設計稿不同：從 00:00 畫到 24:00（設計稿從 06:00 開始），打開時捲到 07:00。
 // 這樣跨夜行程的凌晨那一段（例如前一晚 22:00 唱到 01:00）在隔天也畫得出來。
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { timeOf } from '../monthGrid'
@@ -37,7 +35,7 @@ const nowMinutes = ref(minutesNow())
 let timer: number | undefined
 onMounted(() => {
   timer = window.setInterval(() => (nowMinutes.value = minutesNow()), 60_000)
-  // 打開時捲到早上七點：凌晨通常沒事，但要捲得上去看
+  // 打開時捲到早上七點：凌晨通常沒有行程，但要捲得上去看
   if (scroller.value) scroller.value.scrollTop = 7 * hourHeight.value - 8
 })
 onBeforeUnmount(() => window.clearInterval(timer))

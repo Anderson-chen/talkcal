@@ -1,9 +1,8 @@
-// eventDraft.ts 的單元測試：新增表單的每一條規則。
-// 從 EventForm 抽出來之後，不必掛元件、不必等畫面更新，一種情況一行。元件有沒有接好，交給 Playwright（e2e/）。
+// 元件有沒有正確呼叫這些函式，由 Playwright 測（e2e/）。
 import { describe, expect, it } from 'vitest'
 import { daysApart, endDayOffset, isOvernight, toDraft, type FormFields } from './eventDraft'
 
-// 一份合法的表單；每個測試只改它要測的那一欄，一眼看得出差在哪
+// 一份合法的表單；每個測試只改要測的那一欄，一眼看得出差在哪
 const valid: FormFields = {
   title: '產品週會', date: '2026-10-06', start: '09:00', end: '10:00', category: 'WORK', location: '', note: '',
 }

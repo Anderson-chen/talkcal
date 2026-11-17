@@ -1,12 +1,5 @@
 <script setup lang="ts">
-// AI 助理的對話區：訊息、建議說法、輸入框。外框（桌面版側欄、手機版底部面板）由外面決定。
-//
-// 每個解析出的行程一張卡片，卡片上可以「修改」（帶到新增表單）或「移除」；
-// 訊息底下的「加入行事曆」把還沒處理的那幾筆一次存起來。
-// 修改、刪除卡片（#259）每張有自己的按鈕：「確認修改」「自己調整」（帶到修改表單）「確定刪除」「取消」。
-//
-// 回不了的時候（#43）：沒送出的那句標「沒送出」，助理那邊是一則說明＋「再試一次」。
-// 要等的話按鈕上倒數，送出鈕、建議說法也一起停用，輸入框照樣可以打字。
+// AI 助理的對話區。外框（桌面版側欄、手機版底部面板）由外面決定，卡片和失敗時的行為見 useAssistant.ts。
 import { computed } from 'vue'
 import { addDays, dayLabel, timeOf } from '../monthGrid'
 import type { EventFields } from '../calendar'
@@ -122,10 +115,9 @@ const thinking = computed(() =>
 .large .bubble { font-size: 15px; }
 .me { align-self: flex-end; max-width: 82%; border-radius: 16px 16px 4px 16px; background: var(--accent); color: var(--onAccent); line-height: 1.5; }
 .ai { align-self: flex-start; border-radius: 16px 16px 16px 4px; background: var(--seg); color: var(--ink); display: flex; flex-direction: column; gap: 10px; }
-/* 沒送出的那句：淡一點、加虛線框，底下標「沒送出」 */
 .me.failed { background: transparent; color: var(--ink); border: 1px dashed var(--danger); display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .unsent { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 600; color: var(--danger); }
-/* 回不了的說明：跟一般回覆同一個位置，左邊一條警示色，一眼分得出不是助理的回答 */
+/* 回不了的說明左邊一條警示色，一眼分得出不是助理的回答 */
 .notice { background: var(--dangerSoft); border-left: 3px solid var(--danger); }
 .retry { align-self: flex-start; height: 36px; padding: 0 14px; border: 1px solid var(--accent); border-radius: 9px; background: var(--card); color: var(--accent); font-size: 13px; font-weight: 700; }
 .retry:disabled { border-color: var(--field); color: var(--muted); }
@@ -144,7 +136,6 @@ const thinking = computed(() =>
 .large .primary, .large .secondary { height: 44px; font-size: 14px; }
 .secondary { height: 40px; padding: 0 12px; border: 1px solid var(--field); border-radius: 9px; background: transparent; color: var(--ink); font-size: 13px; }
 .error { font-size: 13px; color: var(--danger); }
-/* 修改、刪除卡片（#259）：最上面標明是哪一種，原本的樣子劃掉 */
 .kind { font-size: 12px; font-weight: 700; color: var(--accent); }
 .kind.danger { color: var(--danger); }
 .before { font-size: 13px; color: var(--muted); text-decoration: line-through; }

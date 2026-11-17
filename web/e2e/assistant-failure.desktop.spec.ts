@@ -1,9 +1,7 @@
-// 失敗時的使用者體驗（#43）：每一種失敗，畫面說了什麼、可以怎麼做。
+// 錯誤格式見 assistantReplies.ts。nginx 自己回的（429、app 停掉時的 502/504）沒有 code，網路斷了連回應都沒有。
+// 每一種用 page.route 模擬一次：後註冊的 route 先比對，會比 fakeApi 攔截所有 /api 請求的 route 先生效。
 //
-// 助理的錯誤格式照 #44 的 AssistantFailure：{ error, code, retryAfterSeconds? }。nginx 自己回的（429、app 停掉時的 502/504）
-// 沒有 code；網路斷了連回應都沒有。每一種用 page.route 演一次（後註冊的 route 先比對，蓋得過 fakeApi 的總攔截）。
-//
-// 倒數用 Playwright 的假時鐘（page.clock）：不必真的等 30 秒，也證明得了「倒數完之前送不出去」。
+// 倒數用 Playwright 的假時鐘（page.clock）：不必真的等 30 秒，也證明得了倒數完之前送不出去。
 import { expect, test, type Page } from '@playwright/test'
 import { assistantReplies, failure, hang, ok } from './assistantReplies'
 import { fakeApi } from './fakeApi'

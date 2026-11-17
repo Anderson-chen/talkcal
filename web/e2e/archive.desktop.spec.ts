@@ -1,7 +1,5 @@
-// 查看封存的行程（#274）：月曆翻到 2 年以前的月份，看得到說明和入口；照一天或一段期間查，結果只能看。
-// 「哪幾個月算封存」「日期合不合規」「時間怎麼寫」在 src/calendar/archive.test.ts 測透了，
-// 「範圍內怎樣算重疊」是後端的規則（ArchivePeriodTest、EventArchiveFlowTest），假後端照同一套演。
-// 這裡測的是接起來：說明出現在對的月份、送出去的日期對、查到的每個欄位都畫出來、沒有修改刪除、失敗了月曆照常。
+// 「哪幾個月算封存」「日期合不合規」「時間怎麼寫」在 src/calendar/archive.test.ts 測；
+// 「怎樣算重疊」是後端的規則（ArchivePeriodTest、EventArchiveFlowTest），假後端照同一套規則回應。這裡只測串接後的行為。
 import { expect, test, type Page } from '@playwright/test'
 import { fakeApi, type FakeEvent } from './fakeApi'
 

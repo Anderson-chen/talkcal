@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 桌面版側欄的小月曆：選一天就跳過去。在月視圖點日期會切到日視圖（照設計稿），週、日視圖則維持原視圖
+// 照設計稿：在月視圖點日期會切到日視圖，週、日視圖維持原視圖
 import { computed } from 'vue'
 import { monthDayLabel } from '../monthGrid'
 import Icon from './Icon.vue'

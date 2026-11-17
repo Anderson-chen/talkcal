@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// AI 助理的「清空對話」：按兩次才清（「清空」→「確定清空？」），跟刪除行程同一套 ——
-// 清掉的是畫面上這段對話，這台瀏覽器之後接不回來（後端的紀錄不刪，留給清理排程）。三秒內沒按第二下就退回原狀，免得按鈕一直停在「確定清空？」
+// 按兩次才清（「清空」→「確定清空？」）：清掉之後這台瀏覽器就接不回這段對話。
+// 三秒內沒按第二下就退回原狀，免得按鈕一直停在「確定清空？」
 import { onBeforeUnmount, ref } from 'vue'
 import Icon from './Icon.vue'
 import { useAssistantState } from './useAssistant'

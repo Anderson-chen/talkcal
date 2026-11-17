@@ -1,10 +1,9 @@
-// submitOnce.ts：連點不重送、失敗再按帶同一把冪等鍵（#51）。
 // 「後端看到同一把鍵只存一次」在後端的 JdbcCalendarEventAdapterTest 對真的 PostgreSQL 測；這裡測前端有沒有把鍵帶對。
 import { describe, expect, it } from 'vitest'
 import { ref } from 'vue'
 import { oneAtATime, retryKey } from './submitOnce'
 
-/** 一個要等外面放行才會結束的送出動作：用來模擬「第一下還在送」。 */
+/** 要等外部放行才會結束的送出動作：用來模擬「第一下還在送」。 */
 function pendingSave() {
   let finish!: (ok: boolean) => void
   let calls = 0

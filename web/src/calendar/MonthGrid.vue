@@ -1,6 +1,5 @@
 <script setup lang="ts">
-// 桌面版的月視圖：6 週 × 7 天，每格最多三個行程標籤，再多就「+N 更多」（點了進日視圖）。
-// 點日期數字進日視圖、點「+」在那天新增、點行程看詳情 —— 都照設計稿。
+// 每格最多三個行程標籤、「+N 更多」、點日期數字進日視圖，都照設計稿。
 import { computed } from 'vue'
 import type { SavedEvent } from '../calendar'
 import { monthDayLabel, timeOf } from '../monthGrid'

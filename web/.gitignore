@@ -1,9 +1,8 @@
 node_modules/
 dist/
 
-# Playwright 的輸出：失敗時的截圖、trace、HTML 報告。每次跑都會重產，不進版控
+# Playwright、Vitest 每次執行都重新產生的報告
 test-results/
 playwright-report/
 
-# Vitest 的覆蓋率報告（#23）：每次 pnpm test 都會重產
 coverage/

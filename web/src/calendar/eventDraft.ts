@@ -1,9 +1,6 @@
-// 新增表單的規則：欄位填得對不對、怎麼變成要送給後端的資料。
-// 從 EventForm.vue 抽出來的純函式：不碰畫面、不碰 API，給一樣的欄位就得到一樣的結果，所以用單元測試就能把每種情況測透。
-// EventForm 只負責畫面和接線（呼叫這裡、把錯誤顯示出來、存檔）。
+// 新增、修改表單的規則：欄位填得對不對、怎麼變成要送出的資料。抽成純函式，才能用單元測試把每種情況測透。
 //
-// 存檔走同一個 POST /events，所以規則還是後端的 CalendarEvent 說了算；
-// 這裡先擋最常見的幾種（沒標題、結束等於開始），讓使用者不必等一趟來回才知道。
+// 規則由後端的 CalendarEvent 決定，這裡只先擋最常見的幾種（沒標題、結束等於開始），使用者不必等一趟來回。
 import type { Category, EventFields } from '../calendar'
 import { addDays } from '../monthGrid'
 
@@ -16,12 +13,12 @@ export interface FormFields {
   category: Category
   location: string
   note: string
-  // 結束在開始那天之後的第幾天（#259）。只有修改跨天的行程時才有：表單只有一個日期欄，
+  // 結束在開始那天之後的第幾天。只有修改跨天的行程時才有：表單只有一個日期欄，
   // 不記住的話，改一個三天的出差只改標題，存起來就變成當天結束。沒有就照 isOvernight 判斷
   endDays?: number
 }
 
-/** 結束在開始之後的第幾天：表單記著原本的跨幾天就照它，不然結束早於開始算隔天 */
+/** 結束在開始之後的第幾天：表單記著原本跨幾天就照記的天數，不然結束早於開始算隔天 */
 export function endDayOffset(form: Pick<FormFields, 'start' | 'end' | 'endDays'>): number {
   return form.endDays ?? (isOvernight(form.start, form.end) ? 1 : 0)
 }
@@ -34,14 +31,13 @@ export function daysApart(start: string, end: string): number {
 
 /**
  * 結束時間早於開始時間：不當成錯誤，當成「結束在隔天」。
- * 不然「晚上十點到凌晨一點」在表單裡根本填不出來 —— 而 AI 解析得出來。
+ * 不然「晚上十點到凌晨一點」在表單裡根本填不出來，AI 卻解析得出來。
  * 'HH:mm' 字串可以直接比大小：位數固定，字典序就是時間順序。
  */
 export function isOvernight(start: string, end: string): boolean {
   return start !== '' && end !== '' && end < start
 }
 
-/** 欄位 → 要送出的資料；有問題就回給使用者看的錯誤訊息。 */
 export function toDraft(form: FormFields): { draft: EventFields } | { error: string } {
   if (!form.title.trim()) return { error: '請輸入行程標題' }
   if (!form.date) return { error: '請選擇日期' }

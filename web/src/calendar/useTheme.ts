@@ -1,5 +1,3 @@
-// 目前的主題：哪一個、它的顏色、分類在這個主題下的顏色。CalendarView 建一份、provide 給底下的元件。
-
 import { computed, inject, ref, type InjectionKey } from 'vue'
 import type { Category } from '../calendar'
 import { categoryColors, loadThemeKey, saveThemeKey, THEMES, type ThemeKey } from './theme'
@@ -14,7 +12,6 @@ export function useTheme() {
     saveThemeKey(next)
   }
 
-  /** 分類標籤（圓角小膠囊）的顏色 */
   const chipStyle = (category: Category) => ({ background: colors.value[category].soft, color: colors.value[category].ink })
 
   return { key, theme, colors, choose, chipStyle }

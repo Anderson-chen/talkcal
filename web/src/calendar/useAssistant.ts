@@ -1,21 +1,17 @@
-// AI 助理：跟後端的 agent（POST /api/calendar/assistant）對話。
+// AI 助理的對話狀態（POST /api/calendar/assistant）。
 //
-// 助理自己決定要做什麼：時間不確定就反問、查行程、找空檔，或提議行程。
-// 提議的行程顯示成卡片 —— 還是「先預覽再確認」：按了「加入行事曆」才送 /events 存起來。
-// 一句話可以提議好幾筆，每筆一張卡片；可以先「修改」（帶到新增表單）或「移除」某一筆，再一次全部加入。
-// 要改、要刪已經在行事曆上的行程（#259），助理給的是修改卡片（原本 → 改成）和刪除卡片，一樣按了確認才送 PUT、DELETE。
-// 這兩種卡片一張一張確認：改錯一筆比漏加一筆麻煩，不做「全部確認」。
+// 助理提議的新增、修改、刪除都先變成卡片，使用者按了確認才送 /events。
+// 新增卡片可以整則一起加入；修改、刪除卡片要一張一張確認，因為改錯一筆比漏加一筆難收拾。
 //
-// 對話的記憶在後端，這裡只記 conversationId（存在 localStorage）和畫面上的訊息。
-// 重新整理之後，用 conversationId 向後端讀回那段對話的文字接著聊；按「清空」只是丟掉這個 id，下一句由後端發新的 id、從頭開始。
-// 後端那段不刪：清空是「這台瀏覽器不再接那段」，不是銷毀紀錄；沒人接的舊對話由後端每天的清理排程處理（30 天）。
-// 讀回來的舊訊息不帶卡片：卡片當時是加入還是取消，後端沒有記，顯示可能已過時的卡片不如不顯示。
+// 對話的記憶在後端，這裡只記 conversationId，重新整理後用這個 id 讀回對話的文字。
+// 「清空」只丟掉這個 id，後端那段不刪，留給後端的清理排程。
+// 讀回來的舊訊息不帶卡片：後端沒記卡片後來加入了還是取消了，顯示出來可能已經過時。
 //
-// 回不了的時候（#43，每一種怎麼說見 assistantFailure.ts）：
-// - 使用者那句留在對話裡、標成「沒送出」，底下的說明附「再試一次」：打的字不會不見，也不必重打
-// - 後端說要等幾秒（模型連不上 30 秒、忙碌 5 秒、問太快 60 秒），就倒數，倒數完之前送不出去；輸入框照樣可以先打字
-// - 等模型等很久時，「思考中」會說已經等了幾秒：模型最久可能想 2 分鐘，使用者要知道它還活著
-// - 還沒送出的字存在這個分頁（sessionStorage）：登入過期跳回登入頁、或重新整理，回來時還在
+// 回不了的時候（每一種顯示什麼見 assistantFailure.ts）：
+// - 使用者那句留在對話裡、標成「沒送出」，附「再試一次」，不必重打
+// - 後端給了要等幾秒就倒數，倒數完之前送不出去，輸入框照樣能打字
+// - 模型最久可能 2 分鐘才回應，等太久時「思考中」會顯示已經等了幾秒，讓使用者知道請求還在處理
+// - 還沒送出的字放 sessionStorage：登入過期跳回登入頁、或重新整理，回來時還在
 
 import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
 import { me } from '../auth'
@@ -32,12 +28,11 @@ export interface Proposal {
   status: ProposalStatus
 }
 
-/** 修改、刪除卡片的狀態：還沒決定、已經改（刪）好了、使用者按了取消 */
 export type ActionStatus = 'pending' | 'done' | 'dismissed'
 
 interface ActionCard {
   status: ActionStatus
-  // 送出失敗的原因（例如 409：卡片出現之後那筆被改過了），顯示在卡片下面
+  // 送出失敗的原因，例如 409：卡片出現之後那筆被改過
   error: string | null
 }
 
@@ -56,15 +51,15 @@ export interface ChatMessage {
   proposals: Proposal[]
   changes: ChangeCard[]
   removals: RemovalCard[]
-  // 加入行事曆失敗時的原因，顯示在卡片下面；草稿留著讓使用者再按一次
+  // 加入行事曆失敗的原因；草稿留著讓使用者再按一次
   error: string | null
-  // 使用者這句沒送成功（#43）：泡泡標成「沒送出」
+  // 使用者這句沒送成功
   failed?: boolean
-  // 助理回不了的說明（#43）：canRetry 是原封不動再送有沒有意義（400 沒有，要先改）
+  // 助理回不了的說明。canRetry：原封不動再送有沒有意義，400 沒有，要先改
   failure?: { kind: FailureKind; canRetry: boolean }
 }
 
-/** 「思考中」等超過這麼多秒，就改說已經等了多久。助理平常 p95 約 3 秒，等到 10 秒已經明顯不正常 */
+/** 「思考中」超過這麼多秒就改成顯示已經等了多久。助理平常 p95 約 3 秒，等到 10 秒已經明顯不正常 */
 export const SLOW_AFTER_SECONDS = 10
 
 // 三種能做的事各舉一個例子：新增、查詢、找空檔
@@ -72,13 +67,10 @@ export const SUGGESTIONS = ['明天下午3點和 Amy 開會', '明天有什麼�
 
 const GREETING = '嗨！我是你的行事曆助理。可以幫你新增、修改、刪除行程，查某天的安排，或找出空檔。不管哪一種，我都會整理成卡片讓你確認後才動行事曆。'
 
-// conversationId 存在這台瀏覽器：跟主題一樣是個人的東西，不必存到後端。
-// 私密視窗、被封鎖的網站資料都可能讓 localStorage 丟例外，一律吞掉 —— 最壞就是重新整理後開新對話
-// 每個人各存各的（key 帶著登入者的 id，#103）：換人登入不會接回上一個人的對話。
-// 真正擋住「讀別人的對話」的是後端的授權（#104），這裡只是前端不主動去要
+// 私密視窗、被封鎖的網站資料會讓 localStorage 丟例外，下面一律捕捉後忽略，最壞就是重新整理後開新對話。
+// key 帶登入者的 id，換人登入才不會讀回上一個人的對話。擋住讀別人對話的是後端的授權，這裡只是不主動去要
 const storageKey = () => `talkcal.calendar.assistant.conversation.${me.value?.id ?? 'anonymous'}`
-// 還沒送出的字：只存在這個分頁（sessionStorage），關掉分頁就沒了 —— 草稿不必跟著瀏覽器一輩子。
-// key 在建立助理時就決定，不每次現算：登入過期時 me 會先變成 null（401 的通知比例外早到），那時才算就存到別人的 key 去了
+// key 在建立助理時算一次就好：登入過期時 401 的通知比例外早到，me 已經是 null，那時才算會存到 anonymous 的 key
 const draftKey = (userId: string | undefined) => `talkcal.calendar.assistant.draft.${userId ?? 'anonymous'}`
 
 function loadDraft(key: string): string {
@@ -94,7 +86,7 @@ function saveDraft(key: string, text: string) {
     if (text) sessionStorage.setItem(key, text)
     else sessionStorage.removeItem(key)
   } catch {
-    // 存不了就算了：只是登入過期、重新整理後拿不回來
+    // 存不了只是登入過期、重新整理後拿不回草稿
   }
 }
 
@@ -111,7 +103,7 @@ function saveConversationId(id: string | undefined) {
     if (id) localStorage.setItem(storageKey(), id)
     else localStorage.removeItem(storageKey())
   } catch {
-    // 存不了就算了，這次的對話在記憶體裡照樣接得上
+    // 存不了只是重新整理後接不回這段對話
   }
 }
 
@@ -123,16 +115,15 @@ export function useAssistant(calendar: CalendarState) {
   const messages = ref<ChatMessage[]>([say('ai', GREETING)])
   const draft = draftKey(me.value?.id)
   const input = ref(loadDraft(draft))
-  // 送出去、還沒回成功的那一句：輸入框清掉了，但草稿裡留著它，送到一半重新整理、登入過期、關掉分頁，回來都還在
+  // 送出去、還沒回成功的那一句：輸入框清掉了，草稿裡還留著這句，送到一半重新整理或登入過期也拿得回來
   let unsent = ''
   const keepDraft = () => saveDraft(draft, input.value || unsent)
   watch(input, keepDraft)
   const typing = ref(false)
   const saving = ref(false)
 
-  // ── 時間：倒數「幾秒後可以再試」、「已經等了幾秒」都靠它。只在有在倒數或等待時每秒更新，平常不觸發重畫
+  // 倒數和「已經等了幾秒」都看 now。只在倒數或等回覆時每秒更新，平常不觸發重畫
   const now = ref(Date.now())
-  // 這個時間之前送不出去（後端說的 Retry-After）
   const retryAt = ref(0)
   let typingSince = 0
   const timer = setInterval(() => {
@@ -140,19 +131,16 @@ export function useAssistant(calendar: CalendarState) {
   }, 1000)
   onScopeDispose(() => clearInterval(timer))
 
-  /** 還要等幾秒才能再送；0 就是現在可以 */
   const waitSeconds = computed(() => Math.max(0, Math.ceil((retryAt.value - now.value) / 1000)))
-  // 在等回覆或還在倒數：這時送了一定失敗，送出、建議說法、再試都停用
+  // 在等回覆或還在倒數時送了一定失敗，送出、建議說法、再試都停用
   const blocked = computed(() => typing.value || waitSeconds.value > 0)
-  /** 這一句已經等了幾秒（沒在等就是 0） */
   const waitedSeconds = computed(() => (typing.value ? Math.max(0, Math.floor((now.value - typingSince) / 1000)) : 0))
 
-  // 每則訊息的「加入行事曆」各有自己的冪等鍵（#51）：A 訊息失敗、先去加 B，再回來重按 A，帶的還是 A 當時那把
+  // 每則訊息各有一把冪等鍵：A 失敗後先去加 B，再回來重按 A，帶的還是 A 那把
   const addKeys = new Map<number, RetryKey>()
-  // 後端那段對話的身分：第一句之後才有，之後每句都帶著；重新整理後從 localStorage 拿回來
   let conversationId = loadConversationId()
 
-  // 重新整理之後，把上次那段對話讀回來。讀的時候 typing 亮著，避免使用者在舊訊息回來前就開始打字、順序亂掉
+  // 讀回時 typing 亮著：舊訊息回來前就送出新的一句，順序會亂
   async function restore() {
     if (!conversationId) return
     typing.value = true
@@ -160,13 +148,13 @@ export function useAssistant(calendar: CalendarState) {
     try {
       const history = await assistantHistory(conversationId)
       if (history.messages.length === 0) {
-        // 後端已經沒有這段了（被清空、資料庫重建）：當成新對話
+        // 後端已經沒有這段（被清掉、資料庫重建），當成新對話
         conversationId = undefined
         saveConversationId(undefined)
         return
       }
       messages.value = [say('ai', GREETING), ...history.messages.map((m) => say(m.role === 'user' ? 'me' : 'ai', m.text))]
-      // 送到一半重新整理時，瀏覽器斷了請求，後端卻照樣做完、記進對話：讀回來已經有那句，草稿就不必再放著，免得又送一次
+      // 送到一半重新整理時，瀏覽器斷了請求，後端卻照樣做完、記進對話。讀回來已經有那句，就清掉草稿，免得又送一次
       const lastAsked = history.messages.filter((m) => m.role === 'user').at(-1)?.text
       if (lastAsked && lastAsked === input.value.trim()) input.value = ''
     } catch (e) {
@@ -175,30 +163,30 @@ export function useAssistant(calendar: CalendarState) {
       typing.value = false
     }
   }
-  // 不等它：讀回來之前畫面先顯示招呼語。錯誤在 restore() 裡自己接住了，不會變成沒人處理的 rejection
+  // 不等 restore() 完成，讀回來之前先顯示招呼語；錯誤在 restore() 裡處理
   void restore()
 
-  /** 清空：丟掉 conversationId，下一句不帶 id，後端就開一段新的。不用等後端，也就不會清空失敗。 */
+  /** 丟掉 conversationId，下一句後端就開一段新的。不呼叫後端，所以不會清空失敗 */
   function clear() {
     if (typing.value) return
     conversationId = undefined
     saveConversationId(undefined)
     messages.value = [say('ai', GREETING)]
-    // 沒送成功的那句也一起丟掉：清空就是不要了，重新整理後不該又出現
+    // 沒送成功的那句也丟掉，不然重新整理後又出現在輸入框
     unsent = ''
     input.value = ''
     keepDraft()
   }
 
-  /** 沒給 text 就是從輸入框送的（送出鈕、Enter）；按建議、按「再試一次」會給 text */
+  /** 沒給 text 是從輸入框送的；按建議、按「再試一次」會給 text */
   async function send(text?: string) {
     const fromInput = text === undefined
     const said = (text ?? input.value).trim()
     if (!said || blocked.value) return
-    // 從陣列拿回來的才是 reactive 的那一個：之後標「沒送出」要改它，畫面才會跟著變
+    // 從陣列拿回來的才是 reactive proxy，之後改 failed 畫面才會跟著變
     const mine = messages.value[messages.value.push(say('me', said)) - 1]
-    // 從輸入框送的才清掉輸入框；按建議、按「再試一次」送的，不動使用者正在打的字
     unsent = said
+    // 按建議、按「再試一次」送的不動輸入框：使用者可能正在打別的
     if (fromInput) input.value = ''
     typing.value = true
     typingSince = now.value = Date.now()
@@ -213,7 +201,7 @@ export function useAssistant(calendar: CalendarState) {
       unsent = ''
       keepDraft()
     } catch (e) {
-      // 登入過期：App 馬上換成登入頁、這段對話跟著被拆掉；那句還在草稿裡，登入回來時在輸入框裡
+      // 登入過期時 App 會換成登入頁、拆掉這段對話；那句還在草稿裡，登入回來時會在輸入框
       if (e instanceof UnauthorizedError) return
       const failure = describeAssistantFailure(e)
       mine.failed = true
@@ -224,30 +212,29 @@ export function useAssistant(calendar: CalendarState) {
         now.value = Date.now()
         retryAt.value = now.value + failure.waitSeconds * 1000
       }
-      // 原封不動再送沒用的（400）：放回輸入框讓使用者改。輸入框裡已經有新打的字就不蓋掉
+      // 原封不動再送沒用（400），放回輸入框讓使用者改；已經有新打的字就不蓋掉
       if (!failure.canRetry && !input.value) input.value = said
     } finally {
       typing.value = false
     }
   }
 
-  /** 「再試一次」：拿掉沒送出的那句和說明，原封不動再送。只有最後一則說明有這顆鈕，不會把舊的問題插到新對話中間 */
+  /** 拿掉沒送出的那句和說明，原封不動再送。只有最後一則說明能再試，舊的問題才不會插到新對話中間 */
   function retry(notice: ChatMessage) {
     if (!canRetry(notice) || blocked.value) return
-    // 說明一定緊跟在沒送出的那句後面（等回覆時送不出別的）
+    // 說明一定緊跟在沒送出的那句後面：等回覆時送不出別的
     const at = messages.value.length - 1
     const said = messages.value[at - 1].text
     messages.value.splice(at - 1, 2)
-    // send 自己接住所有錯誤（變成對話裡的說明），這裡不必等它
+    // send 會處理所有錯誤，不必等待
     void send(said)
   }
 
-  /** 這則說明的「再試一次」要不要出現：要可以重送，而且是最後一則 */
   const canRetry = (msg: ChatMessage) => !!msg.failure?.canRetry && messages.value[messages.value.length - 1] === msg
 
   /**
-   * 把這則訊息裡還沒處理的草稿一次存起來（後端是全部存或全部不存）。
-   * 防重複（#51）：送出中再按不會送第二次（oneAtATime）；失敗後再按帶同一把冪等鍵，上次其實存好了也不會多一份。
+   * 這則訊息裡還沒處理的草稿一次存起來，後端全部存或全部不存。
+   * 失敗後再按帶同一把冪等鍵，上次其實存好了也不會多一份。
    */
   const confirm = oneAtATime(saving, async (msg: ChatMessage) => {
     const pending = msg.proposals.filter((p) => p.status === 'pending')
@@ -257,10 +244,9 @@ export function useAssistant(calendar: CalendarState) {
     const keys = addKeys.get(msg.id) ?? retryKey()
     addKeys.set(msg.id, keys)
     try {
-      // 草稿裡帶著卡片的 proposalId，後端核對過才算採納
+      // 草稿帶著卡片的 proposalId，後端核對過才算採納
       await calendar.add(drafts, keys.for(drafts))
       for (const p of pending) p.status = 'added'
-      // 存好了：這則訊息不會再送同一批，鍵也不必留著
       addKeys.delete(msg.id)
     } catch (e) {
       msg.error = message(e)
@@ -279,25 +265,24 @@ export function useAssistant(calendar: CalendarState) {
     reportDismissed([proposal])
   }
 
-  // 拒絕了哪幾張告訴後端（產品指標的採納率）。不等它、失敗也不說：使用者按的是「取消」，不該因為指標送不出去看到錯誤
+  // 拒絕了哪幾張告訴後端，算採納率用。不等待、失敗也不顯示：使用者按的是取消，不該因為指標送不出去看到錯誤
   function reportDismissed(proposals: Proposal[]) {
     const ids = proposals.map((p) => p.draft.proposalId).filter((id): id is string => !!id)
     if (ids.length > 0) dismissProposals(ids).catch(() => {})
   }
 
-  /** 帶著這筆草稿打開新增表單；在表單裡存好了，這張卡片就算「已加入」。 */
+  /** 帶著草稿打開新增表單，在表單裡存好了這張卡片就算加入 */
   function edit(proposal: Proposal) {
-    // 草稿裡帶著卡片的 proposalId，表單存檔時會一起送出去，改過再存也算採納
+    // proposalId 跟著草稿進表單、存檔時一起送，改過再存也算採納
     calendar.openForm(proposal.draft, () => {
       proposal.status = 'added'
     })
   }
 
-  // ── 修改、刪除卡片（#259）──────────────────────────────
-  // 送出中再按不會送第二次（跟「加入行事曆」共用 saving：同一時間只做一件事，畫面上的按鈕一起停用）
+  // ── 修改、刪除卡片 ──────────────────────────────
+  // 跟加入行事曆共用 saving：同一時間只送一件事，畫面上的按鈕一起停用
 
-  // 照卡片做一件事：成功就標成 done；失敗把原因寫在卡片上、卡片留著。不自動重試：
-  // 修改失敗多半是卡片出現之後那筆被改過（409），重試等於拿舊的樣子再蓋一次
+  // 失敗不自動重試：修改失敗多半是卡片出現之後那筆被改過（409），重試等於拿舊的樣子再蓋一次
   async function act(card: ActionCard, action: () => Promise<unknown>) {
     if (card.status !== 'pending') return
     card.error = null
@@ -309,11 +294,10 @@ export function useAssistant(calendar: CalendarState) {
     }
   }
 
-  /** 照卡片改 */
   const confirmChange = oneAtATime(saving, (card: ChangeCard) =>
     act(card, () => calendar.update(card.change.eventId, card.change.before, card.change.after)))
 
-  /** 帶著「要改成的樣子」打開表單，使用者自己調；存好了這張卡片就算「已修改」 */
+  /** 帶著要改成的樣子打開表單讓使用者自己調，存好了這張卡片就算完成 */
   function editChange(card: ChangeCard) {
     if (card.status !== 'pending') return
     calendar.openEdit(card.change.eventId, card.change.before, card.change.after, () => {
@@ -321,7 +305,7 @@ export function useAssistant(calendar: CalendarState) {
     })
   }
 
-  /** 照卡片刪。已經不在了也算刪好了（calendar.remove 的規則） */
+  /** 已經不在的也算刪好（見 useCalendar.ts 的 remove） */
   const confirmRemoval = oneAtATime(saving, (card: RemovalCard) => act(card, () => calendar.remove(card.event.id)))
 
   function dismiss(card: ActionCard) {

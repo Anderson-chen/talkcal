@@ -1,7 +1,7 @@
 // 主題與分類顏色，數值照設計稿（行事曆 Prototype）。
 //
 // 主題是資料：元件裡一律寫 var(--accent)、var(--line) 這種 CSS 變數，
-// 換主題只是把根元素上的變數換掉（toCssVars），不必每個元件都知道現在是哪個主題。
+// 換主題只是把根元素上的變數換掉（toCssVars），元件不必判斷現在是哪個主題。
 // 分類顏色有深淺兩組：深色主題下，淺色底的分類標籤會刺眼，所以跟著 dark 換一組。
 
 import type { Category } from '../calendar'
@@ -81,7 +81,7 @@ const STORAGE_KEY = 'talkcal.calendar.theme'
 
 /**
  * 記住使用者選的主題。只是這台瀏覽器的個人偏好，所以放 localStorage 就好，不必存到後端。
- * 私密視窗、被封鎖的網站資料都可能讓 localStorage 丟例外，一律吞掉、退回預設主題：選不到主題不該讓整頁壞掉。
+ * 私密視窗、被封鎖的網站資料會讓 localStorage 丟例外，這時退回預設主題：讀不到主題不該讓整頁無法顯示。
  */
 export function loadThemeKey(): ThemeKey {
   try {
@@ -102,6 +102,6 @@ export function saveThemeKey(key: ThemeKey): void {
   try {
     localStorage.setItem(STORAGE_KEY, key)
   } catch {
-    // 存不了就算了，這次的選擇在記憶體裡仍然有效
+    // 存不了只是重新整理後回到預設主題，這次的選擇在記憶體裡仍然有效
   }
 }

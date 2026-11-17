@@ -1,4 +1,3 @@
-// 助理回不了時怎麼說、等多久、能不能再試（#43）。判斷只看 code 和 HTTP 狀態，契約是 #44 的 AssistantFailure。
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '../http'
 import { describeAssistantFailure } from './assistantFailure'

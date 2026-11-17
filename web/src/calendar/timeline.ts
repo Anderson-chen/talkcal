@@ -1,5 +1,4 @@
-// 週、日視圖的時間軸：哪些行程畫在這一天、畫在幾點到幾點、重疊時怎麼並排。
-// 純函式，不碰畫面；元件只把結果換成 top / height / left / width。
+// 週、日視圖的時間軸：每一天畫哪幾段、重疊時怎麼並排。元件只把結果換成 top / height / left / width。
 
 import type { SavedEvent } from '../calendar'
 import { addDays } from '../monthGrid'
@@ -57,7 +56,7 @@ export function segmentsOn(day: string, events: SavedEvent[]): Segment[] {
 /**
  * 重疊的行程並排（照設計稿的做法）：
  * 先把「接在一起有重疊」的行程分成一群；群裡每一筆放進第一個空出來的欄位；整群用同樣的欄數。
- * 這樣不重疊的行程佔滿整寬，只有真的撞在一起的才分欄。
+ * 這樣不重疊的行程占滿整寬，只有時間真的重疊的才分欄。
  */
 export function placeSegments(segments: Segment[]): Placed[] {
   const placed: Placed[] = []

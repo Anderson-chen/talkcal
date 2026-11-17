@@ -1,4 +1,3 @@
-// http.ts 的純函式：讀 cookie、哪些請求要帶 CSRF token。
 // send() 本身（真的帶上 header、401 回登入頁）在 Playwright 裡測：e2e/fakeApi.ts 會檢查 header，沒帶就回 403。
 import { describe, expect, it } from 'vitest'
 import { needsCsrf, readCookie, retryAfterOf } from './http'

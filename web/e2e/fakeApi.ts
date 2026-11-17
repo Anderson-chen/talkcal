@@ -1,20 +1,7 @@
-// 假的後端：用 page.route 把瀏覽器送往 /api 的請求攔下來，回假資料。
-// 請求不會真的送出去，所以不需要後端、資料庫、模型。
-//
-// 它記得存過哪些行程：存檔之後畫面會重新查一次，新的那筆要查得到，月曆上才會出現。
-// 帳號（#103）也照後端的規則演：
-//   - 沒登入時行事曆的 API 回 401
-//   - 會改東西的請求（POST、PUT、DELETE）要帶 X-XSRF-TOKEN header，而且要跟發出去的 XSRF-TOKEN cookie 一樣，不然 403
-//     —— 這樣才測得出前端真的有帶 token，而不是假後端照單全收
-// 測試可以：
-//   - 預先放幾筆行程（events）、決定一開始有沒有登入（loggedIn）、開了哪些 Google／GitHub 登入（providers）
-//   - 讓下一次存檔失敗（failNextSave）：模擬後端掛了
-//   - 讓登入在下一個請求失效（expireSession）：模擬 session 過期
-//   - 事後檢查前端送了什麼（saved）
-//   - 修改、刪除（#259）：照後端的規則演，改之前的樣子對不上就 409；事後檢查送了什麼（updated、deleted）
-//   - AI 助理（#223）：不打模型，每句話都回一張固定的提議卡片（帶著假後端發的 proposalId）；事後檢查按掉了哪幾張（dismissed）
-//   - 封存（#274）：預先放幾筆已經封存的行程（archived），月曆的 /events 讀不到它們，只有 /archive/events 查得到；
-//     讓下一次查封存失敗（failNextArchive，模擬物件儲存連不上）；事後檢查查了哪幾段（archiveQueries）
+// 假後端：page.route 把 /api 的請求攔下來回假資料，不需要後端、資料庫、模型。
+// 照後端的規則回應：存過的行程查得到、沒登入回 401、修改時 expected 對不上回 409、封存的行程只有 /archive/events 查得到。
+// 會改東西的請求要帶跟 XSRF-TOKEN cookie 一樣的 X-XSRF-TOKEN header，不然 403：照單全收的話，測不出前端有沒有帶 token。
+// AI 助理不呼叫模型，每句話都回一張固定的提議卡片。
 import type { Page, Route } from '@playwright/test'
 
 export interface FakeEvent {
@@ -35,7 +22,7 @@ interface Options {
   providers?: string[]
   // 已經用 Google、GitHub 登入的人：/me 回這個名字，沒有帳號名稱（跟後端一樣）
   externalName?: string
-  // 已經封存的行程（#274）：不在 events 裡，月曆上看不到
+  // 已經封存的行程：不在 events 裡，月曆上看不到
   archived?: FakeEvent[]
 }
 
@@ -55,19 +42,19 @@ export async function fakeApi(page: Page, options: Options = {}) {
     events: [...(options.events ?? [])],
     // 每次 POST /events 收到的 body.events（前端送了什麼）
     saved: [] as Omit<FakeEvent, 'id'>[][],
-    // 每次 POST /events 帶的 Idempotency-Key（#51），沒帶就是 null；跟 saved 一一對應
+    // 每次 POST /events 帶的 Idempotency-Key，沒帶就是 null；跟 saved 一一對應
     saveKeys: [] as (string | null)[],
     failNextSave: null as string | null,
     // 註冊過的帳號：名稱 → 密碼
     accounts: new Map<string, string>([['amy', 'correct-horse']]),
     me: (options.loggedIn ?? true) ? 'amy' : null as string | null,
-    // 被 403 擋下的請求（沒帶或帶錯 CSRF token）：測試可以檢查它是空的
+    // 被 403 擋下的請求（沒帶或帶錯 CSRF token）：測試可以檢查清單是空的
     csrfRejected: [] as string[],
     providers: [...(options.providers ?? [])],
     // 發過幾張助理卡片；每次 POST /assistant/dismissals 收到的 proposalIds
     cards: 0,
     dismissed: [] as string[][],
-    // 每次 PUT、DELETE /events/{id} 收到什麼（#259）
+    // 每次 PUT、DELETE /events/{id} 收到什麼
     updated: [] as { id: string; expected: Omit<FakeEvent, 'id'>; event: Omit<FakeEvent, 'id'> }[],
     deleted: [] as string[],
     // 每次 GET /archive/events 的 from、to；下一次查封存要不要失敗
@@ -140,14 +127,14 @@ export async function fakeApi(page: Page, options: Options = {}) {
       if (state.failNextSave) {
         const error = state.failNextSave
         state.failNextSave = null
-        // 跟後端出錯時一樣的格式：{ error }，前端會把它顯示給使用者
+        // 跟後端出錯時一樣的格式：{ error }，前端會把 error 顯示給使用者
         return json(route, 502, { error })
       }
       const created = body.events.map((e, i) => ({ ...e, id: `e${state.events.length + i + 1}` }))
       state.events.push(...created)
       return json(route, 201, { events: created })
     }
-    // 修改（#259）：照後端的規則，expected 要跟現在那筆的每個欄位都一樣才改，不一樣 409、沒有那筆 404
+    // 修改：照後端的規則，expected 要跟現在那筆的每個欄位都一樣才改，不一樣 409、沒有那筆 404
     const one = url.pathname.match(/^\/api\/calendar\/events\/([^/]+)$/)
     if (one && method === 'PUT') {
       const body = request.postDataJSON() as { expected: Omit<FakeEvent, 'id'>; event: Omit<FakeEvent, 'id'> }
@@ -166,7 +153,7 @@ export async function fakeApi(page: Page, options: Options = {}) {
       state.events.splice(at, 1)
       return route.fulfill({ status: 204 })
     }
-    // 封存（#274）：照後端的規則，from、to 都含，跟範圍有重疊的都算（剛好在 from 00:00 結束的不算）
+    // 封存：照後端的規則，from、to 都含，跟範圍有重疊的都算（剛好在 from 00:00 結束的不算）
     if (url.pathname === '/api/calendar/archive/events' && method === 'GET') {
       const from = url.searchParams.get('from')!
       const to = url.searchParams.get('to')!
