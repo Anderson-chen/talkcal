@@ -1,5 +1,5 @@
 # 單機設定：所有元件在同一個 process 裡執行，資料寫本機的 tempo-data volume，不接物件儲存。
-# 為什麼 trace 要另一個資料庫，見 ops/README.md 的「選型理由」。
+# 為什麼 trace 要另一個資料庫，見 docs/adr/0007-alloy-to-mimir-loki-tempo.md。
 
 server:
   http_listen_port: 3200

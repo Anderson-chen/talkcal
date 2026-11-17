@@ -2,7 +2,7 @@
 //   below：1 個 VU，基準線
 //   at：SLOTS 個 VU，剛好等於 llama-server 的 slot 數
 //   above：SLOTS×2 個 VU，多的請求只能排隊（requests_deferred 會離開 0）
-// 一路往上加的話各段的數字混在一起，比不出來；要每一階都量見 knee.js。
+// 一路往上加的話各段的數字混在一起，比不出來。
 //
 // SLOTS 預設 4，是 llama-server 沒帶 -np 時自己決定的 total_slots（GET http://localhost:8080/props 查得到）。
 // 改了 -np 就用環境變數對上：

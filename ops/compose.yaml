@@ -15,7 +15,7 @@ services:
       - "127.0.0.1:9009:9009"
     volumes:
       - ./mimir/mimir.yaml:/etc/mimir/mimir.yaml:ro
-      # SLO 的錄製規則，ruler 10 分鐘內會自己重讀
+      # SLO 的錄製規則，多久重讀一次見 mimir/mimir.yaml 的 ruler_storage
       - ./mimir/rules:/etc/mimir/rules:ro
       - mimir-data:/data
     restart: unless-stopped
@@ -70,7 +70,7 @@ services:
       - GF_SMTP_FROM_ADDRESS=${ALERT_SMTP_FROM:-grafana@talkcal.invalid}
       - GF_SMTP_FROM_NAME=talkcal Grafana
       # 收件人，grafana/provisioning/alerting/contact-points.yaml 讀。
-      # 沒填時給 .invalid：空字串的話 email contact point 驗證不過，Grafana 無法啟動
+      # 沒填時給 .invalid，理由見上面的 HEARTBEAT_URL
       - ALERT_EMAIL_TO=${ALERT_EMAIL_TO:-alerts@talkcal.invalid}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro

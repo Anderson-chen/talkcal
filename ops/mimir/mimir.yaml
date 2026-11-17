@@ -1,5 +1,5 @@
 # 單機設定：所有元件在同一個 process 裡執行（-target=all，預設值），資料寫本機的 mimir-data volume，不接物件儲存。
-# 指標由 Alloy 用 remote_write 推進來，Mimir 自己不抓。為什麼用 Mimir 不用 Prometheus，見 ops/README.md 的「選型理由」。
+# 指標由 Alloy 用 remote_write 推進來，Mimir 自己不抓。為什麼用 Mimir 不用 Prometheus，見 docs/adr/0007-alloy-to-mimir-loki-tempo.md。
 
 # 開著的話每個寫入、查詢都要帶 X-Scope-OrgID。關掉後所有資料歸在 anonymous 這個租戶，
 # rules/ 底下的資料夾就用這個名稱
@@ -25,7 +25,7 @@ compactor:
   data_dir: /data/compactor
 
 # 錄製規則從唯讀掛進來的 ops/mimir/rules 讀，規則跟著版控走。用 API 上傳的規則只存在容器的資料裡，換機器就沒了。
-# 底下一層資料夾是租戶名稱。ruler 每 10 分鐘（-ruler.poll-interval 預設）重讀，要馬上生效就 restart mimir
+# ruler 每 10 分鐘（-ruler.poll-interval 預設）重讀，要馬上生效就 restart mimir
 ruler_storage:
   backend: local
   local:

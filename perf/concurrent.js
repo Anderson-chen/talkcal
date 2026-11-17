@@ -1,5 +1,4 @@
 // concurrent：USERS 個人在 WINDOW_S 秒內陸續進來，每人跟助理說一句就走，量活動開始那種尖峰。
-// knee.js 量的是固定 N 個人一直說的穩定狀態。
 // 一個助理請求會呼叫模型、讀寫 PostgreSQL，兩邊一起壓到。預設 1000 人會留下 1000 段對話（見 lib/assistant.js）。
 //
 // constant-arrival-rate：k6 照固定節奏開始新的一輪，不等前面的回來，所以人數 = 輪數 = 請求數。
@@ -24,7 +23,7 @@ export const options = {
       rate: USERS,
       timeUnit: `${WINDOW_S}s`,
       duration: `${WINDOW_S}s`,
-      // 一個 VU 一次只送一個請求，最壞情況是所有人都還沒回來。VU 比人數少的話 k6 會跳過那幾輪
+      // 一個 VU 一次只送一個請求，最壞情況是所有人都還沒回來，所以 VU 要跟人數一樣多
       preAllocatedVUs: USERS,
       maxVUs: USERS,
       // 最後一個人在第 WINDOW_S 秒才進來，還要排隊和生成
