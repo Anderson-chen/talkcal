@@ -57,7 +57,7 @@ umask 077
 aws ssm get-parameter --name "$DOTENV_PARAM" --with-decryption \
   --region "$AWS_REGION" --query Parameter.Value --output text > "$REPO/deploy/.env"
 umask 022
-# .env 是空的、行尾帶 \r、少了 SMTP 收件人，在啟動任何容器之前就擋下並說出是哪一項。
+# .env 是空的、行尾帶 \r、少了 SMTP 收件人，在啟動任何容器之前就擋下，並印出是哪一項。
 # 不擋的話要等 app 無法啟動、--wait 判 unhealthy 才失敗，看不出原因
 bash "$REPO/infra/envs/1-ec2/smoke.sh" env "$REPO/deploy/.env"
 
@@ -93,7 +93,7 @@ done
 # postgres 只在第一次初始化時讀 POSTGRES_PASSWORD。Terraform 換了密碼的話，app 拿新的、資料庫還是舊的，app 就連不上，
 # 所以先只啟動 postgres，把密碼設成 .env 這一份，再啟動 app。密碼沒換時就是設成同一組
 docker compose "${compose_files[@]}" up -d --wait postgres
-# 走 local socket（官方映像檔設成 trust），不用知道舊密碼。密碼從 stdin 送：放在指令參數的話 ps 看得到。
+# 走 local socket（官方映像檔設成 trust），不用帶舊密碼。密碼從 stdin 送：放在指令參數的話 ps 看得到。
 # 密碼只有英數字（secrets.tf 的 special = false），直接放進 SQL 字串不用跳脫
 db_password="$(grep '^DB_PASSWORD=' deploy/.env | cut -d= -f2-)"
 printf "ALTER ROLE talkcal PASSWORD '%s';\n" "$db_password" \

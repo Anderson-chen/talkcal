@@ -68,7 +68,7 @@ resource "aws_iam_user_policy" "archive" {
     Version = "2012-10-17"
     Statement = [
       {
-        # 放一包、讀一包、刪一包（刪帳號）。沒有 PutBucket*、DeleteBucket：bucket 的設定只歸 Terraform 管
+        # 放一包、讀一包、刪一包（刪帳號）。沒有 PutBucket*、DeleteBucket：bucket 的設定只由 Terraform 修改
         Sid      = "ReadWriteObjects"
         Effect   = "Allow"
         Action   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]

@@ -1,5 +1,5 @@
 # model_backend = bedrock：機器上不執行模型，app 改呼叫 Bedrock。疊在 deploy/compose.yaml、compose.ec2.yaml 上面。
-# app 的程式不用改：llama-server 和 Bedrock 都講 OpenAI 的 Chat Completions，只換位址、key、模型名稱。
+# app 的程式不用改：llama-server 和 Bedrock 都支援 OpenAI 的 Chat Completions API，只換位址、key、模型名稱。
 # BEDROCK_* 的值見 secrets.tf，API key 來自 bedrock.tf。
 
 services:

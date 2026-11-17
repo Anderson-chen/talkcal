@@ -42,7 +42,7 @@ pause_heartbeat() {
 }
 
 # 開機後等 check 回到 up。暫停中的 check 要收到 heartbeat 才會恢復：Grafana 無法啟動的話 check 會一直停在 paused、
-# 不會寄信，正好漏掉這套要抓的「Grafana 停止運作」。所以開機這一步自己盯到恢復為止
+# 不會寄信，正好漏掉這套要抓的「Grafana 停止運作」。所以開機這一步持續檢查，直到 check 恢復為止
 wait_heartbeat() {
   local status=""
   # 15 秒一次、最多 10 分鐘：開機、容器啟動、Grafana 送出第一個 heartbeat 通常 2～3 分鐘

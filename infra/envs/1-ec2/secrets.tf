@@ -4,7 +4,7 @@
 # 代價：明碼會在 Terraform state 裡，所以 bootstrap 的 state bucket 要加密、不公開。
 locals {
   # sslip.io 把 IP 編進網域（talkcal.1-2-3-4.sslip.io → 1.2.3.4）：免費、免註冊，
-  # 而且是公開解析得到的真網域，Let's Encrypt 願意簽憑證，不必買網域也有 HTTPS。
+  # 而且是公開解析得到的真網域，Let's Encrypt 才會簽發憑證，不必買網域也有 HTTPS。
   # 代價是 IP 一換網址就換，所以配了 Elastic IP
   site_address = "${var.project}.${replace(aws_eip.main.public_ip, ".", "-")}.sslip.io"
 

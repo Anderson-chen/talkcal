@@ -17,7 +17,7 @@ set -euo pipefail
 PG_CONTAINER="${PG_CONTAINER:-talkcal-postgres}"
 PG_USER="${PG_USER:-talkcal}"
 PG_DB="${PG_DB:-talkcal}"
-# app 握著連線，資料庫改不了名，換上之前要先停。設成空字串就不停
+# app 占用著連線，資料庫改不了名，換上之前要先停。設成空字串就不停
 APP_CONTAINER="${APP_CONTAINER-talkcal-app}"
 
 log() { echo "[pg-restore] $*" >&2; }
@@ -86,7 +86,7 @@ fi
 start_app() { if [ "${restart_app:-}" = 1 ]; then log "起 $APP_CONTAINER"; docker start "$APP_CONTAINER" > /dev/null; fi; }
 # 資料庫名稱沒加引號會被轉成小寫，所以時間格式只用數字和底線，印出來的跟實際的名稱一樣
 old="${PG_DB}_before_$(date -u +%Y%m%d_%H%M%S)"
-# 先不讓新的連線進來、再踢掉剩下的（psql、postgres_exporter 之類），改名才不會遇到「有人在用」。
+# 先不讓新的連線進來、再中斷剩下的連線（psql、postgres_exporter 之類），改名才不會遇到「有人在用」。
 # 被換下來的那份維持不能連：免得哪個忘了改設定的程式繼續寫進一個已經不是線上的庫
 # 兩次改名包在同一個交易：要嘛都換了、要嘛都沒換，不會出現「線上庫不見了」的中間狀態
 if ! psql_admin > /dev/null <<SQL

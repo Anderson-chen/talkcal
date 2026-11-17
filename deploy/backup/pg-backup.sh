@@ -11,7 +11,7 @@ set -euo pipefail
 PG_CONTAINER="${PG_CONTAINER:-talkcal-postgres}"
 PG_USER="${PG_USER:-talkcal}"
 PG_DB="${PG_DB:-talkcal}"
-# 不放 repo 裡：刪 worktree、git clean 會把備份一起帶走。也不放 Docker volume：down -v 會跟資料庫一起清掉
+# 不放 repo 裡：刪 worktree、git clean 會把備份一起刪掉。也不放 Docker volume：down -v 會跟資料庫一起清掉
 BACKUP_DIR="${BACKUP_DIR:-$HOME/talkcal-backups}"
 # 超過 KEEP_DAYS 天的刪掉，但最新的 KEEP_MIN 份不管多舊都留。只看天數的話，
 # 機器關了一個月再開，第一次備份完就把之前的全刪光，偏偏那時最可能要回頭找

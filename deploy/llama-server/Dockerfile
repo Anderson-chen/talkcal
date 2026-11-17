@@ -32,7 +32,7 @@ RUN cmake -B build \
         -DCMAKE_BUILD_TYPE=Release \
         -DGGML_CUDA=ON \
         -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH} \
-        # 不針對編譯的這台 CPU 最佳化：用了這台才有的指令集，換到別台會 Illegal instruction 當掉
+        # 不針對編譯的這台 CPU 最佳化：用了這台才有的指令集，換到別台執行時會因 Illegal instruction 而終止
         -DGGML_NATIVE=OFF \
         # 函式庫都靜態連進 llama-server，runtime 段只要搬這一個檔案
         -DBUILD_SHARED_LIBS=OFF \

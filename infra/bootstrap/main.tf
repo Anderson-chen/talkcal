@@ -65,7 +65,7 @@ resource "aws_s3_bucket_public_access_block" "tfstate" {
 }
 
 # ── 花費保險絲：實際花費到 80%、預測會超標時各寄一封信 ───────────────────────────
-# 機器按小時計費，GPU 機忘了關一個月就是幾百美元。告警只寄信，不會幫你關機。
+# 機器按小時計費，GPU 機忘了關一個月就是幾百美元。告警只寄信，不會自動關機。
 resource "aws_budgets_budget" "monthly" {
   name         = "talkcal-monthly"
   budget_type  = "COST"

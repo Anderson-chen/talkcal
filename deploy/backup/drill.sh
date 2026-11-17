@@ -62,7 +62,7 @@ for f in $(ls "$migrations" | sort -V); do
 done
 # shellcheck disable=SC2012  # 同上
 echo "migration：$(ls "$migrations" | sort -V | paste -sd' ')"
-# 假 app：跟真的 app 一樣一直握著連線、斷了就重連。還原那一步要能停掉假 app、踢掉假 app 的連線。
+# 假 app：跟真的 app 一樣一直占用連線、斷了就重連。還原那一步要能停掉假 app、中斷假 app 的連線。
 # 收到 SIGTERM 馬上結束（真的 app 也會處理 SIGTERM，只是要等手上的請求做完）：不處理的話 docker stop 要白等 10 秒才 SIGKILL
 docker run -d --name "$app" --network "$net" -e PGPASSWORD=drill "$image" \
   sh -c 'trap "exit 0" TERM; while true; do psql -h talkcaldrill-postgres -U talkcal -d talkcal -c "SELECT pg_sleep(30)" >/dev/null 2>&1 & wait $!; sleep 1; done' > /dev/null
@@ -184,7 +184,7 @@ check "指紋還是 $final（線上資料沒變）" [ "$final" = "$before" ]
 
 step "退回（runbook「還原之後發現選錯備份」）：換回被換下來的那份"
 docker stop "$app" > /dev/null
-# 模擬 postgres-exporter：app 停了還有別的連線連著 talkcal。runbook 的 SQL 不先踢掉這條連線的話，改名會失敗
+# 模擬 postgres-exporter：app 停了還有別的連線連著 talkcal。runbook 的 SQL 不先中斷這條連線的話，改名會失敗
 docker exec -d "$pg" psql -U talkcal -d talkcal -c "SELECT pg_sleep(300)"
 sleep 1
 DB=postgres sql -q > /dev/null <<SQL
