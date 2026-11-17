@@ -81,7 +81,7 @@ const STORAGE_KEY = 'talkcal.calendar.theme'
 
 /**
  * 記住使用者選的主題。只是這台瀏覽器的個人偏好，所以放 localStorage 就好，不必存到後端。
- * 私密視窗、被封鎖的網站資料都可能讓 localStorage 丟例外，一律吞掉、退回預設主題：選不到主題不該讓整頁壞掉。
+ * 私密視窗、被封鎖的網站資料會讓 localStorage 丟例外，這時退回預設主題：讀不到主題不該讓整頁無法顯示。
  */
 export function loadThemeKey(): ThemeKey {
   try {
@@ -102,6 +102,6 @@ export function saveThemeKey(key: ThemeKey): void {
   try {
     localStorage.setItem(STORAGE_KEY, key)
   } catch {
-    // 存不了就算了，這次的選擇在記憶體裡仍然有效
+    // 存不了只是重新整理後回到預設主題，這次的選擇在記憶體裡仍然有效
   }
 }

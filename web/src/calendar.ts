@@ -51,7 +51,7 @@ export async function talkToAssistant(message: string, conversationId?: string):
   return {
     ...body,
     proposals: body.proposals.map(normalize),
-    // 前後端不一定同時部署，舊版後端沒有這兩個欄位
+    // 舊版後端沒有這兩個欄位（見 normalize）
     changes: (body.changes ?? []).map((c) => ({ ...c, before: normalize(c.before), after: normalize(c.after) })),
     removals: (body.removals ?? []).map(normalize),
   }
