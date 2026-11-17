@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-# 在 EC2 上跑：把指定版本部署起來。第一次由 user_data 呼叫，之後要更新就手動重跑：
+# 在 EC2 上把指定版本部署起來。第一次開機由 user_data 執行，之後要更新就連進機器手動重新執行：
 #
 #   aws ssm start-session --target <instance-id> ...
 #   sudo bash /opt/talkcal/repo/infra/envs/1-ec2/deploy.sh
 #   sudo GIT_REF=some-branch bash /opt/talkcal/repo/infra/envs/1-ec2/deploy.sh   # 部署別的分支
 #
-# 做的事跟本機一樣是兩組 compose，只多了幾步：拉指定版本、（gpu）從 S3 拉模型、從 SSM 拉 .env、
-# 換新版前備份資料庫、裝備份排程。
-# MODEL_BACKEND 決定多疊哪一份 compose：compose.bedrock.yaml（模型走 Bedrock）或 compose.gpu.yaml（自己跑）。
+# 跟本機一樣啟動 deploy/、ops/ 兩組 compose，多疊雲端的差異（compose.ec2.yaml、compose.<MODEL_BACKEND>.yaml），
+# 另外多做這幾件事：從 SSM 拉 .env、gpu 時從 S3 拉模型、換新版前備份資料庫、裝備份排程。
 set -euo pipefail
 
-# user_data 寫好的設定；環境變數有給的話優先（例如臨時部署別的分支）
+# 設定由 user_data 寫好；GIT_REF 有從環境變數給的話，以環境變數為準
 DEPLOY_ENV=/opt/talkcal/deploy.env
 if [ -f "$DEPLOY_ENV" ]; then
   override_ref="${GIT_REF:-}"
@@ -19,7 +18,7 @@ if [ -f "$DEPLOY_ENV" ]; then
   GIT_REF="${override_ref:-$GIT_REF}"
 fi
 : "${PROJECT:?}" "${AWS_REGION:?}" "${GIT_REF:?}" "${DOTENV_PARAM:?}"
-# 舊版 user_data 寫的 deploy.env 沒有 MODEL_BACKEND：那時只有 gpu
+# 只有 gpu 時建的機器，deploy.env 裡沒有 MODEL_BACKEND
 MODEL_BACKEND="${MODEL_BACKEND:-gpu}"
 
 ROOT="/opt/$PROJECT"
@@ -27,14 +26,12 @@ REPO="$ROOT/repo"
 MODELS_DIR="$ROOT/models"
 
 echo "── 1. 原始碼：$GIT_REF"
-# 正在跑的這支腳本也會被換掉：git 是刪掉舊檔、寫新檔，bash 手上拿的還是舊檔，不會讀到一半變內容。
-# 新版的腳本從下次部署開始生效。
-# --tags：連 release tag 一起拉，cd/version.sh 才認得出這個 commit 是不是某個 v<版本>（#25）。
-# 淺 clone 也沒關係：version.sh 只看「指著 HEAD 的 tag」，不需要歷史
+# checkout 會換掉正在執行的這支腳本，但 git 是刪舊檔、寫新檔，bash 讀的還是舊檔，不會執行到一半換內容；新版下次部署才生效。
+# --tags：連 release tag 一起拉，cd/version.sh 才判斷得出這個 commit 是不是某個 v<版本>。
+# 淺 clone 就夠：version.sh 只看指著 HEAD 的 tag
 git -C "$REPO" fetch --depth 1 --tags origin "$GIT_REF"
 git -C "$REPO" checkout --detach FETCH_HEAD
 git -C "$REPO" log -1 --oneline
-# 映像檔的 tag 和 label 都用這組，跟本機的 cd/apply.sh 同一支 version.sh
 APP_VERSION="$(bash "$REPO/cd/version.sh")"
 GIT_COMMIT="$(git -C "$REPO" rev-parse HEAD)"
 export APP_VERSION GIT_COMMIT
@@ -42,8 +39,7 @@ echo "版本：$APP_VERSION"
 
 if [ "$MODEL_BACKEND" = gpu ]; then
   echo "── 2. 模型檔：s3://$MODELS_BUCKET → $MODELS_DIR"
-  # sync 只傳有變的檔案，模型沒換時幾秒就結束。
-  # 接下來 model-seed 照本機的流程驗 SHA256（有上傳 SHA256SUMS 的話）、複製進 volume。
+  # SHA256 由之後的 model-seed 驗，這裡只同步
   : "${MODELS_BUCKET:?}"
   mkdir -p "$MODELS_DIR"
   aws s3 sync "s3://$MODELS_BUCKET/" "$MODELS_DIR/" --region "$AWS_REGION" --no-progress
@@ -56,39 +52,35 @@ else
 fi
 
 echo "── 3. .env：SSM $DOTENV_PARAM"
-# compose 讀 deploy/.env（compose 檔所在的資料夾）。只給 root 讀：裡面有 DB 密碼。
+# 裡面有 DB 密碼，只給 root 讀
 umask 077
 aws ssm get-parameter --name "$DOTENV_PARAM" --with-decryption \
   --region "$AWS_REGION" --query Parameter.Value --output text > "$REPO/deploy/.env"
 umask 022
-# 冒煙測試的前半（#225）：.env 是空的（snap 版的 aws，#74）、帶 \r（從 Windows apply）、缺必要的 key，
-# 都在啟動任何容器之前就擋下、說出是哪一項。不擋的話要等 app 起不來、--wait 判 unhealthy 才失敗，看不出原因
+# .env 是空的、行尾帶 \r、少了 SMTP 收件人，在啟動任何容器之前就擋下，並印出是哪一項。
+# 不擋的話要等 app 無法啟動、--wait 判 unhealthy 才失敗，看不出原因
 bash "$REPO/infra/envs/1-ec2/smoke.sh" env "$REPO/deploy/.env"
 
 cd "$REPO"
 
-# 後面的 -f 疊在前面上面：同名欄位以後面的為準，本機的 compose.yaml 一行都不用改
 compose_files=(
-  -f deploy/compose.yaml                            # 本機和雲端共用
-  -f infra/envs/1-ec2/compose.ec2.yaml              # 雲端共用：DB 密碼、記憶體上限、Caddy
-  -f "infra/envs/1-ec2/compose.$MODEL_BACKEND.yaml" # 模型從哪來
+  -f deploy/compose.yaml
+  -f infra/envs/1-ec2/compose.ec2.yaml
+  -f "infra/envs/1-ec2/compose.$MODEL_BACKEND.yaml"
 )
-# 必要的 key 交給 compose 自己查：compose 檔裡每個 ${X:?缺 X} 都會檢查到，不另外維護一份清單。
-# config 只解析、不啟動任何容器
+# 必要的 key 讓 compose 自己查（compose 檔裡的 ${X:?}），不另外維護清單。config 不啟動容器
 docker compose "${compose_files[@]}" config -q
 
 echo "── 4. 服務（deploy/ + compose.ec2.yaml + compose.$MODEL_BACKEND.yaml）"
-# 映像檔先準備好，這幾行只拉、只 build，不換掉任何在跑的容器（#291）。
-# 跟 CI vulns job 的 --pull 對齊（.github/workflows/ci.yml）：這裡不重拉、只用快取的話，CI 綠燈不代表線上也是這一版
+# 映像檔先準備好：這一段只拉、只 build，registry 連不到或 build 失敗時，運作中的容器都還沒被換掉。
+# 拉新的 digest、基底重拉，是為了跟 CI 的漏洞掃描（.github/workflows/ci.yml 的 --pull）掃到的一樣新
 docker compose "${compose_files[@]}" pull --quiet --ignore-buildable  # 第三方：同一個 tag 官方重新 build 過，就換成新的 digest
-# 觀測那組也在這裡先拉：registry 連不到時，在換掉任何容器之前就失敗
 docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml pull --quiet
-docker compose "${compose_files[@]}" build --pull                     # 自己 build 的：基底映像檔重拉
-# 這兩個 Dockerfile 會 apk upgrade，但那一層有快取：Dockerfile 和基底都沒變時，停在第一次 build 那天的套件。
-# 不用快取重 build 一次之後，下次一般的 build 會沿用這次的結果。
-# 不每次都不用快取：那樣映像檔每次都會變，postgres 每次部署都要重啟
+docker compose "${compose_files[@]}" build --pull
+# web、postgres 的 Dockerfile 有 apk upgrade，但那一層會被快取：Dockerfile 和基底都沒變時，套件停在第一次 build 那天。
+# 只在還有套件能升時不用快取重 build；每次都不用快取的話，映像檔每次都變，postgres 每次部署都要重啟
 for svc in web postgres; do
-  # config --images 會連依賴的服務一起列（web 會多出 app、postgres），照 talkcal/<服務>:<tag> 的命名挑出這一個
+  # config --images 會連依賴的服務一起列（web 會多出 app、postgres）
   image="$(docker compose "${compose_files[@]}" config --images "$svc" | grep "^talkcal/$svc:")" \
     || { echo "compose 裡找不到 talkcal/$svc:<tag> 的映像檔" >&2; exit 1; }
   pending="$(docker run --rm --entrypoint sh "$image" -c 'apk update -q >/dev/null && apk version -l "<"')"
@@ -98,36 +90,28 @@ for svc in web postgres; do
   fi
 done
 
-# 先只起 postgres，把資料庫裡的密碼同步成 .env 這一份，app 才起來（#14）。
-# 為什麼要這步：官方 postgres 映像檔只在「資料庫第一次初始化」時讀 POSTGRES_PASSWORD，之後就不管了。
-# 不同步的話，在 Terraform 換了密碼再部署，app 拿新密碼、資料庫還是舊的 —— app 連不上，整個服務掛掉。
-# 每次部署都跑：密碼沒換時就是設成同一組，沒有副作用。
+# postgres 只在第一次初始化時讀 POSTGRES_PASSWORD。Terraform 換了密碼的話，app 拿新的、資料庫還是舊的，app 就連不上，
+# 所以先只啟動 postgres，把密碼設成 .env 這一份，再啟動 app。密碼沒換時就是設成同一組
 docker compose "${compose_files[@]}" up -d --wait postgres
-# 走容器裡的 local socket（官方映像檔對它是 trust），不必知道舊密碼也改得了。
-# 密碼從 stdin 送進去，不放在指令參數裡：參數在 ps 看得到，stdin 看不到。
-# 只用英數字（secrets.tf 的 special = false），所以直接放進 SQL 字串不會有跳脫問題
+# 走 Unix socket（官方映像檔對這種連線設成 trust），不用帶舊密碼。密碼從 stdin 送：放在指令參數的話 ps 看得到。
+# 密碼只有英數字（secrets.tf 的 special = false），直接放進 SQL 字串不用跳脫
 db_password="$(grep '^DB_PASSWORD=' deploy/.env | cut -d= -f2-)"
 printf "ALTER ROLE talkcal PASSWORD '%s';\n" "$db_password" \
   | docker compose "${compose_files[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -q -U talkcal -d talkcal
 unset db_password
 
-# 換新版之前先備份（#45）：新版的 Flyway migration 把資料改壞時，回得去部署前那一刻。
-# 備份失敗就不部署 —— 沒有退路的時候不往前走
+# 新版的 Flyway migration 把資料改壞時，回得去部署前那一刻。備份失敗就停在這裡，不換新版
 bash infra/envs/1-ec2/backup-to-s3.sh pre-deploy
 
-# 映像檔上面 build 好了，這裡不帶 --build
 docker compose "${compose_files[@]}" up -d --remove-orphans
 
 echo "── 5. 觀測（ops/ + compose.ops.yaml）"
-# 要在 deploy/ 之後：Alloy 要加入的網路是 deploy/ 建的。
-# 設定跟本機同一份，compose.ops.yaml 只蓋掉雲端不一樣的值（trace 取樣比例、備份告警讀的資料夾）
-# --env-file：Grafana 寄告警信的 SMTP 設定（#121）和 heartbeat 網址（#40）都在同一份 deploy/.env。
-# compose 預設只讀第一個 compose 檔所在資料夾（ops/）的 .env，不帶的話 Grafana 拿不到、就不寄信也不送 heartbeat
+# 要在 deploy/ 之後：Alloy 要加入 deploy/ 建的網路。
+# --env-file：Grafana 的 SMTP 設定和 heartbeat 網址在 deploy/.env；compose 預設只讀 ops/ 底下的 .env
 docker compose --env-file deploy/.env -f ops/compose.yaml -f infra/envs/1-ec2/compose.ops.yaml up -d
 
 echo "── 6. 備份排程（#45）：每小時一次、關機前一次"
-# 寫在這裡、不寫在 user_data：user_data 只在第一次開機跑，已經在跑的機器重跑 deploy.sh 才裝得上。
-# 每次部署都覆寫一次：腳本路徑或排程改了，下次部署就生效
+# 裝在這裡不裝在 user_data：user_data 只在第一次開機執行，已經在運作的機器拿不到改過的排程。每次部署都覆寫
 cat > "/etc/systemd/system/$PROJECT-backup.service" <<UNIT
 [Unit]
 Description=$PROJECT: back up PostgreSQL to S3
@@ -150,8 +134,8 @@ Persistent=false
 [Install]
 WantedBy=timers.target
 UNIT
-# 關機時的備份：開機時「啟動」什麼都不做，關機時 systemd 停它，ExecStop 才是備份。
-# After=docker.service：關機的順序跟開機相反，所以它會在 Docker（和裡面的 postgres）停掉之前跑
+# 開機時 ExecStart 什麼都不做，關機時 systemd 停這個 service，執行的是 ExecStop。
+# 關機的順序跟開機相反，After=docker.service 讓備份在 Docker（和裡面的 postgres）停掉之前執行
 cat > "/etc/systemd/system/$PROJECT-backup-on-shutdown.service" <<UNIT
 [Unit]
 Description=$PROJECT: back up PostgreSQL to S3 before shutdown
@@ -174,13 +158,12 @@ systemctl list-timers "$PROJECT-backup.timer" --no-pager
 
 docker compose "${compose_files[@]}" ps
 
-# 根磁碟跟 PostgreSQL 共用：重拉、重 build 換下來的舊映像檔要清掉（#291）。
+# 根磁碟跟 PostgreSQL 共用，重拉、重 build 換下來的舊映像檔要清掉。
 # 不帶 -a：退版要用的映像檔不能清，見 cd/rollback.md「映像檔不在了」
 docker image prune -f
 
 echo "── 7. 冒煙測試：網站、觀測、Bedrock、告警寄信"
-# --wait 只證明容器的 healthcheck 過了；這裡從外面走一遍：https 的網站和 /api、Grafana 資料源、
-# Alloy 抓得到 app、（bedrock 時）問 Bedrock 一句、（有設 SMTP 時）寄一封測試信。沒過就讓部署失敗（#225）
+# --wait 只證明 healthcheck 過了；smoke.sh 從外面走一遍，沒過就讓部署失敗
 bash infra/envs/1-ec2/smoke.sh services deploy/.env
 
 echo "完成。網址：https://$(grep '^SITE_ADDRESS=' deploy/.env | cut -d= -f2)"

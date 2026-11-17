@@ -3,8 +3,8 @@
 {$SITE_ADDRESS} {
 	encode zstd gzip
 
-	# 全部交給 web（nginx）：靜態檔它送，/api 它再轉給 app，跟本機開 18080 看到的一樣。
-	# Caddy 的 reverse_proxy 預設不限制等回應的時間，一次叫模型最多 2 分鐘也不會被它切斷；
+	# 全部交給 web（nginx）：nginx 送靜態檔、把 /api 轉給 app，跟本機開 18080 看到的一樣。
+	# Caddy 的 reverse_proxy 預設不限制等回應的時間，呼叫一次模型最多 2 分鐘也不會被 Caddy 切斷；
 	# 真正的上限在 nginx 的 proxy_read_timeout（180 秒）和 app 的 spring.ai.openai.chat.timeout。
 	reverse_proxy web:80
 }

@@ -19,7 +19,7 @@ variable "budget_limit_usd" {
   default     = "50"
 }
 
-# 刻意不給預設值：repo 是公開的，信箱不寫進版控。
+# 不給預設值：repo 是公開的，信箱不寫進版控。
 # 放在 terraform.tfvars（已 gitignore），或 apply 時用 -var="alert_email=..." 給。
 variable "alert_email" {
   description = "花費告警收件信箱"

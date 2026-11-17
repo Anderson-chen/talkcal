@@ -114,11 +114,11 @@ variable "ssh_cidr" {
   default     = null
 }
 
-# ── Google、GitHub 登入（#127）────────────────────────────────────────────
+# ── Google、GitHub 登入 ────────────────────────────────────────────
 # 值不寫在這裡也不進 git：複製 oauth.auto.tfvars.example 成 oauth.auto.tfvars（*.tfvars 已 gitignore）再填，
 # 或用環境變數 TF_VAR_google_client_secret 這類名字給。apply 時寫進 SSM 的 .env，部署時交給 app。
-# 沒給就是空字串 → 那個登入方式不開，雲端只有帳密（跟本機沒設時一樣）。
-# sensitive：plan、apply 的輸出不印值；但 state 裡還是明碼（跟 DB 密碼一樣），所以 state bucket 要加密、不公開
+# 沒給就是空字串 → 那個登入方式不開，雲端只有帳密（本機沒設時也是這樣）。
+# sensitive：plan、apply 的輸出不印值；但 state 裡還是明碼（見 secrets.tf 開頭）
 variable "google_client_id" {
   description = "Google OAuth client ID（雲端用的回呼網址要先登記，見 terraform output oauth_callback_urls）"
   type        = string
@@ -143,8 +143,8 @@ variable "github_client_secret" {
   sensitive = true
 }
 
-# ── Grafana 告警寄信（#121）──────────────────────────────────────────────
-# 跟上面的 OAuth 一樣：值填在 alerting.auto.tfvars（範本 alerting.auto.tfvars.example），apply 時寫進 SSM 的 .env。
+# ── Grafana 告警寄信 ──────────────────────────────────────────────
+# 值填在 alerting.auto.tfvars（範本 alerting.auto.tfvars.example），apply 時寫進 SSM 的 .env。
 # alert_smtp_host 沒給 → 雲端不寄信，告警只在 Grafana 上看得到。
 variable "alert_smtp_host" {
   description = "寄告警信的 SMTP 伺服器 host:port，例如 smtp.gmail.com:587、email-smtp.ap-northeast-1.amazonaws.com:587"
@@ -181,10 +181,10 @@ variable "alert_email_to" {
   default     = ""
 }
 
-# ── 監控本身掛掉（#40）──────────────────────────────────────────────────
-# Healthchecks.io 那類外部服務的 ping 網址（https://hc-ping.com/<uuid>）。#40 做完之前不要給：Watchdog 先拿掉了（#243）。
-# 網址本身就是祕密：拿到就能假裝我們還活著。跟 OAuth 一樣用 *.auto.tfvars 或 TF_VAR_heartbeat_url 給，不進 git。
-# 沒給 → 雲端不送 heartbeat，Grafana 自己掛掉時沒有人知道（其他告警不受影響）。
+# ── 監控本身停止運作 ──────────────────────────────────────────────
+# Healthchecks.io 那類外部服務的 ping 網址（https://hc-ping.com/<uuid>）。現在不要給：Grafana 還沒有送 heartbeat 的 Watchdog 規則（為什麼見 ops/README.md）。
+# 網址本身就是祕密：拿到就能冒充我們送 heartbeat。用 *.auto.tfvars 或 TF_VAR_heartbeat_url 給，不進 git。
+# 沒給 → 雲端不送 heartbeat，Grafana 自己停止運作時沒有人知道（其他告警不受影響）。
 variable "heartbeat_url" {
   description = "外部 dead man's switch 的 ping 網址，例如 https://hc-ping.com/<uuid>"
   type        = string

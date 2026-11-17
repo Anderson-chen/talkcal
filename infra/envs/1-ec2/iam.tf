@@ -33,7 +33,7 @@ resource "aws_iam_role_policy" "deploy" {
         Effect   = "Allow"
         Action   = ["ssm:GetParameter"]
         Resource = aws_ssm_parameter.dotenv.arn
-        # SecureString 用的是 AWS 代管金鑰 aws/ssm，它的金鑰政策已經允許同帳號經由 SSM 解密，
+        # SecureString 用的是 AWS 代管金鑰 aws/ssm，這把金鑰的政策已經允許同帳號經由 SSM 解密，
         # 不必另外給 kms:Decrypt
         },
         # 備份：能放、能拿（還原時下載），但沒有 DeleteObject。

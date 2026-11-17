@@ -1,14 +1,14 @@
 # ── Bedrock：model_backend = bedrock 時，app 呼叫模型用的 API key ──────────────────
-# app 用 Spring AI 的 OpenAI client 打 bedrock-mantle 的 Chat Completions（OpenAI 相容），
+# app 用 Spring AI 的 OpenAI client 呼叫 bedrock-mantle 的 Chat Completions（OpenAI 相容），
 # 程式不用改，只換 base-url、key、模型名稱（見 secrets.tf 的 .env 和 compose.bedrock.yaml）。
 # OpenAI client 只會送 Bearer key，不會做 AWS 的 SigV4 簽章，所以要一把 Bedrock API key。
 #
 # 長期的 Bedrock API key 在 AWS 裡是「綁在 IAM user 上的服務專用憑證」：key 的權限 = 這個 user 的權限，
 # 而且只能用在 Bedrock。所以開一個專用 user，只給呼叫模型的權限：key 外流，最多就是被拿去叫模型、花 token 錢，
-# 碰不到這個帳號的其他東西。不掛在 EC2 的角色上：角色拿不到長期 key，也不該拿。
+# 碰不到這個帳號的其他東西。不綁在 EC2 的角色上：角色拿不到長期 key，也不該拿。
 #
-# 不用這把 key 的做法是 Spring AI 的 Bedrock Converse 模組（直接吃 EC2 角色）：程式要多一套供應商設定，
-# 先用 key 驗證模型合不合用，之後再換（#72 的決定）。
+# 不用這把 key 的做法是 Spring AI 的 Bedrock Converse 模組（直接使用 EC2 角色的憑證）：程式要多一套供應商設定，
+# 先用 key 驗證模型合不合用，之後再換。
 
 resource "aws_iam_user" "bedrock" {
   count = local.gpu ? 0 : 1
@@ -49,8 +49,8 @@ resource "aws_iam_user_policy" "bedrock" {
 }
 
 # Terraform 產生 key，連同其他設定寫進 SSM 的 .env（secrets.tf），機器部署時才拉下來。
-# key 的明碼會在 Terraform state 裡：跟 DB 密碼一樣，靠 bootstrap 的 state bucket 加密、不公開。
-# 到期前換新：terraform apply -replace='aws_iam_service_specific_credential.bedrock[0]'，再到機器上重跑 deploy.sh
+# key 的明碼會進 Terraform state（見 secrets.tf 開頭）。
+# 到期前換新：terraform apply -replace='aws_iam_service_specific_credential.bedrock[0]'，再到機器上重新執行 deploy.sh
 resource "aws_iam_service_specific_credential" "bedrock" {
   count               = local.gpu ? 0 : 1
   service_name        = "bedrock.amazonaws.com"
