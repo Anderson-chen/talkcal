@@ -38,8 +38,19 @@ jobs:
       # gradle-wrapper.jar 是會被執行的二進位檔，PR 裡換掉這個檔案，CI 就會執行被換掉的程式。先確認檔案跟 Gradle 官方發的一樣
       - uses: gradle/actions/wrapper-validation@v6
 
-      # 依賴快取沒有跨次保留（每次都是新機器），每次都重新下載。先求跟本機一致，嫌慢再加上 actions/cache
+      # Gradle 下載的 Java 函式庫存進 actions/cache：GitHub 每次都是新機器，不存的話每次從頭下載。
+      # key 由宣告依賴的檔案算出，檔案改了就存一份新的；restore-keys 先拿最近的那份，只下載多出來的。
+      # PR 存的快取只有同一個 PR 讀得到，不會覆寫 master 那份，其他 PR 也讀不到
+      - uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/ci-gradle
+          key: ci-gradle-${{ hashFiles('backend/build.gradle', 'backend/settings.gradle', 'backend/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: ci-gradle-
+
+      # CI_GRADLE_CACHE：把上面那個資料夾掛進容器（見 ci/run.sh）
       - run: ci/run.sh
+        env:
+          CI_GRADLE_CACHE: ${{ runner.temp }}/ci-gradle
 
       - name: 測試摘要貼到結果頁
         if: always()
@@ -114,7 +125,22 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+
+      # CodeQL 執行 ./gradlew 時下載的 Gradle 本體和 Java 函式庫，跟 `checks` job 一樣存進 actions/cache。
+      # 只存 GRADLE_USER_HOME 裡的 wrapper/、caches/。daemon/ 的 log 由容器裡的 root 寫入，只有 root 能讀。
+      # actions/cache 用一般使用者的權限打包，只要有一個檔案讀不到，整份快取都無法儲存
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ${{ runner.temp }}/sast-gradle/wrapper
+            ${{ runner.temp }}/sast-gradle/caches
+          key: sast-gradle-${{ hashFiles('backend/build.gradle', 'backend/settings.gradle', 'backend/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: sast-gradle-
+
+      # SAST_GRADLE_HOME：把上面那個資料夾掛進容器（見 ci/sast.sh）
       - run: ci/sast.sh
+        env:
+          SAST_GRADLE_HOME: ${{ runner.temp }}/sast-gradle
 
       - name: 分析結果貼到結果頁
         if: always()

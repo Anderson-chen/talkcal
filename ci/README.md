@@ -51,7 +51,7 @@ git push --no-verify                    # 確定要跳過檢查時
 
 | 代價 | 處理 |
 |---|---|
-| 每次全新環境，東西要重新下載 | 很少變的（JDK、Node、Gradle 本體）烤進映像檔；常變的（Java 函式庫、前端套件）放具名 volume，跨次保留；程式碼兩邊都不放 |
+| 每次全新環境，東西要重新下載 | 很少變的（JDK、Node、Gradle 本體）烤進映像檔。常變的 Java 函式庫、前端套件放具名 volume，跨次保留；GitHub 上 Java 函式庫存進 `actions/cache`。程式碼都不放 |
 | Windows 把資料夾掛進容器很慢（實測約 20 MB/s） | 不掛資料夾，用 `git archive` 複製 |
 | 整合測試要開 PostgreSQL（Testcontainers） | 把主機的 `docker.sock` 接進來，PostgreSQL 開在主機的 Docker 上、跟 CI 容器並排，不在容器裡再包一層 |
 | 模型測試要連 llama-server | 經 `host.docker.internal:8080` 連主機上的；要連別台就設 `SPRING_AI_OPENAI_CHAT_BASEURL` |
@@ -403,5 +403,5 @@ GitHub 上它是另一支 workflow（`.github/workflows/alerting.yml`），只�
 
 - GitHub 上跑 AI eval（`./gradlew eval`）：沒有模型。改到 prompt 或模型相關的檔案時，本機的 pre-push 才跑（`RUN_EVAL=1`）；GitHub 上只確定它編得過。見 [#8 的「AI 品質回歸（eval）」段落](https://github.com/Anderson-chen/talkcal/issues/8)。
 - k6 壓測：要真的模型，CI 量不出有意義的數字。見 [perf/README.md](../perf/README.md)。
-- GitHub 上的依賴快取：現在每次都是新機器、重新下載，比較慢。先求跟本機一致，嫌慢再把 `/cache` 接上 `actions/cache`。
+- GitHub 上的前端套件快取：GitHub 每次都用新機器，pnpm store（`/cache/pnpm-store`）每次都要重新下載。Java 函式庫已經存進 `actions/cache`，前端套件還沒有。
 - 自架 runner 讓 GitHub 也跑模型測試：公開 repo 接自架 runner，別人的 PR 會在這台電腦上執行程式碼。要做的話只能接自己的 push，還要另外做安全設定。目前這塊由本機的 pre-push 補。

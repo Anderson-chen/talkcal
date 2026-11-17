@@ -35,7 +35,9 @@ git archive "$commit" ci/sast/Dockerfile \
 trap 'docker rm --force "$container" >/dev/null 2>&1 || true' EXIT
 # talkcal-sast-gradle：CodeQL 執行 ./gradlew 時下載的 Gradle 本體和 jar，本機跨次保留。
 # 不跟 ci/run.sh 的 talkcal-ci-gradle 共用：那邊只掛 caches/、Gradle 本體在映像檔裡，路徑對不上
-docker create --name "$container" --volume talkcal-sast-gradle:/root/.gradle "$image" ci/sast/analyze.sh >/dev/null
+# SAST_GRADLE_HOME：給主機上的絕對路徑就改掛那個資料夾，用法同 run.sh 的 CI_GRADLE_CACHE（GitHub 上把這個資料夾存進 actions/cache）
+docker create --name "$container" --volume "${SAST_GRADLE_HOME:-talkcal-sast-gradle}:/root/.gradle" \
+    "$image" ci/sast/analyze.sh >/dev/null
 
 echo "── 複製 $(git rev-parse --short "$commit") 的程式碼進容器、跑 CodeQL ──"
 git archive "$commit" | docker cp - "$container:/work"
