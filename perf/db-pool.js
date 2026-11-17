@@ -12,7 +12,7 @@
 //   STAGES=20,100,300 HOLD_S=30 perf/run-to-grafana.sh perf/db-pool.js
 //
 // 最多到 300：Tomcat 預設最多 200 條執行緒，多的請求在 Tomcat 的佇列裡等、碰不到連線池，
-// pending 最多約 200 − 10，再加 VU 連線池的圖也不會變。
+// pending 最多約 200 − 10；VU 再加上去，連線池的圖也不會變。
 
 import './lib/docker-target.js';
 import http from 'k6/http';
@@ -22,7 +22,7 @@ import { BASE_URL, jsonParams, signIn, useSession } from './lib/assistant.js';
 const STAGES = (__ENV.STAGES || '5,50,150,300').split(',').map(Number);
 const HOLD_S = Number(__ENV.HOLD_S || 30);
 
-// 種的行程放在 2030 年，不會出現在 perf-user 平常會看的月份
+// 預先建立的測試行程放在 2030 年，不會出現在 perf-user 平常會看的月份
 const FROM = '2030-01-01';
 const TO = '2030-04-01';            // 90 天：API 一次最多查 100 天
 const SEED_EVENTS = 200;            // 查詢要讀到足夠的資料，連線才會被占住一段時間
@@ -50,7 +50,7 @@ export function setup() {
   // 登入一次，所有 VU 共用（理由見 lib/assistant.js 的登入那段）
   const session = signIn();
   useSession(session);
-  // 已經種過就不再種，不然每重新執行一次，查詢就重一點
+  // 已經建立過就不再建立，不然每執行一次，查詢要讀的資料就多一些
   const existing = http.get(eventsUrl()).json('events') || [];
   if (existing.length < SEED_EVENTS) {
     const events = [];

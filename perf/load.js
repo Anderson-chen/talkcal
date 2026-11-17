@@ -41,7 +41,7 @@ function plateau(vus, startS) {
 
 export const options = {
   scenarios: {
-    // 不設門檻，數字不算數
+    // 暖機這一段不設門檻，結果不算進各段的 p95
     warmup: {
       executor: 'shared-iterations',
       exec: 'talk',

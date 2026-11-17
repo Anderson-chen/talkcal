@@ -48,9 +48,9 @@ const FAULTS = {
     recover: () => setEnabled(true),
   },
   hang: {
-    // 不能用 Toxiproxy 的 timeout 毒，這種毒擋不住關連線：加在 downstream，模型回完就關；
+    // 不能用 Toxiproxy 的 timeout toxic，這種 toxic 擋不住連線被關閉：加在 downstream，模型回完就關；
     // 加在 upstream，請求到不了模型，llama-server 對閒置 5 秒的連線也會關。兩種都會把關閉傳回 app，
-    // app 幾秒就收到連線中斷，變成斷線。latency 毒把回應連同關閉一起延後，app 才是真的一直等
+    // app 幾秒就收到連線中斷，變成斷線。latency toxic 把回應連同關閉一起延後，app 才是真的一直等
     inject: () => addToxic('latency', { latency: HANG_MS }, 'downstream'),
     recover: removeToxic,
   },
@@ -137,7 +137,7 @@ export const options = {
 
 export function setup() {
   if (FAULT) {
-    // 上一次中途被中斷的話毒可能還留著，先把所有 proxy 接回、所有毒拿掉
+    // 上一次中途被中斷的話 toxic 可能還留著，先把所有 proxy 接回、所有 toxic 拿掉
     const res = http.post(`${TOXIPROXY_URL}/reset`);
     if (res.status !== 204) {
       throw new Error(`連不到 Toxiproxy（${TOXIPROXY_URL}）：${res.status}。deploy/ 要疊 compose.chaos.yaml 起`);
@@ -146,7 +146,7 @@ export function setup() {
   return signIn();
 }
 
-// 正常結束、Ctrl+C、中途出錯都會執行 teardown。毒留著的話，本機的 app 之後每個請求都會失敗
+// 正常結束、Ctrl+C、中途出錯都會執行 teardown。toxic 留著的話，本機的 app 之後每個請求都會失敗
 export function teardown() {
   if (FAULT) {
     http.post(`${TOXIPROXY_URL}/reset`);

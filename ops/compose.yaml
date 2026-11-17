@@ -56,7 +56,7 @@ services:
       # （見 ops/README.md 的「監控本身掛掉：誰來發現」），平常留空。
       # 沒設時給 .invalid，理由見下面的 ALERT_EMAIL_TO；Watchdog 用的 webhook contact point 也一樣
       - HEARTBEAT_URL=${HEARTBEAT_URL:-http://heartbeat-not-configured.invalid/}
-      # 只在 localhost 用，關掉登入，一開就是 Admin。要練權限管理時拿掉這三行，用預設的 admin / admin 登入
+      # 只在 localhost 使用，關掉登入，打開網頁就是 Admin。要練習權限管理時拿掉這三行，用預設的 admin / admin 登入
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_AUTH_DISABLE_LOGIN_FORM=true
@@ -87,7 +87,7 @@ services:
     command:
       - run
       - /etc/alloy/config.alloy
-      # Alloy 預設只聽 127.0.0.1，容器外連不到除錯頁；聽 0.0.0.0，由 ports 限制只開給本機
+      # Alloy 預設只監聽 127.0.0.1，容器外連不到除錯頁；改成監聽 0.0.0.0，由 ports 限制只開放給本機
       - --server.http.listen-addr=0.0.0.0:12345
       # 位置檔（每個容器的 log 讀到哪）放在 volume 裡，Alloy 重啟後接著讀，不重送也不漏
       - --storage.path=/var/lib/alloy/data

@@ -95,8 +95,9 @@ groups:
               refId: A
               instant: true
               # 左：近 5 分鐘熔斷擋下的請求數（也是信裡寫的人數）。右：這 5 分鐘一次都沒關回來。
-              # 不能只看 state="open"：application.properties 沒開 automatic-transition-from-open-to-half-open-enabled（預設關閉），打開之後要等下一個請求才換狀態，
-              # 沒人用時會一直停在 open，模型早好了還在響；模型一直沒好時又在 open、half_open 之間跳，響了又解除
+              # 不能只看 state="open"。application.properties 沒開 automatic-transition-from-open-to-half-open-enabled（預設關閉），
+              # 熔斷打開後要等到下一個請求才換狀態。沒人使用時會一直停在 open，模型已經恢復了，告警還在響；
+              # 模型一直沒恢復時，狀態會在 open、half_open 之間切換，告警響了又解除
               expr: >-
                 sum(increase(resilience4j_circuitbreaker_not_permitted_calls_total{job="talkcal-app", name="chat-model"}[5m]))
                 and on()
@@ -110,7 +111,7 @@ groups:
               conditions:
                 # 至少擋下一個人（不寫 > 0 的理由見第 2 條）
                 - evaluator: { type: gt, params: [0.5] }
-        # 查詢的「5 分鐘沒關回來」已經是等待：打開一次 30 秒就關回來的（模型重啟、Bedrock 一陣限流）不會響
+        # 查詢的「5 分鐘沒關回來」已經是等待：熔斷打開 30 秒內就關回來的（模型重啟、Bedrock 短暫限流）不會響
         for: 0s
         noDataState: OK
         execErrState: Error

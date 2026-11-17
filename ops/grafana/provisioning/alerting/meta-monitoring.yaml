@@ -69,7 +69,7 @@ groups:
             model:
               refId: A
               instant: true
-              # 只看查不查得到：Mimir 正常時一定回 1，連不上、逾時由 execErrState: Alerting 算成出事
+              # 只看查不查得到：Mimir 正常時一定回 1，連不上、逾時由 execErrState: Alerting 算成告警
               expr: vector(1)
           - refId: C
             datasourceUid: __expr__
