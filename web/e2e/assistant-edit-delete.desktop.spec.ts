@@ -1,4 +1,4 @@
-// 助理是假的，這裡直接決定助理回哪張卡片；測的是前端送出去的內容、畫面怎麼變、失敗時說得出原因。
+// 助理是假的，這裡直接決定助理回哪張卡片；測的是前端送出去的內容、畫面怎麼變、失敗時有沒有顯示原因。
 import { expect, test, type Page } from '@playwright/test'
 import { fakeApi, type FakeEvent } from './fakeApi'
 

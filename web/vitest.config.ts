@@ -1,6 +1,6 @@
 // mergeConfig 沿用 vite.config.ts 的 Vue 外掛，測試 import 到 .vue 時跟打包用同一種轉換。
 //
-// Vitest 只測純函式，在 Node 裡執行，不模擬瀏覽器。元件的行為由 Playwright 在真的瀏覽器裡測（e2e/）：
+// Vitest 只測純函式，在 Node 裡執行，不模擬瀏覽器。元件的行為由 e2e/ 的 Playwright 測試在真的瀏覽器裡測：
 // 邏輯先抽成純函式（例如 calendar/eventDraft.ts），元件只剩畫面和串接，要在真的瀏覽器裡看才準。
 import { defineConfig, mergeConfig } from 'vitest/config'
 import viteConfig from './vite.config.ts'

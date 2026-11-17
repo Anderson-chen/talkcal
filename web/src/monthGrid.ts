@@ -1,5 +1,5 @@
 // 日期一律用 'YYYY-MM-DD' 字串，跟後端 LocalDate 的格式一樣。
-// 要算下一天時才暫時建 Date，只用本地時間的建構子（new Date(y, m, d)）和 getter（getFullYear…），
+// 要算下一天時才暫時建 Date，只用本地時間的建構子和 getter，例如 new Date(y, m, d)、getFullYear()。
 // 不要用 toISOString()：會先換成 UTC，在台灣早上八點以前呼叫，日期就變成前一天。
 
 /** 固定 6 週 × 7 天：不管這個月幾天、從星期幾開始，格子數都一樣，版面才不會跳 */
