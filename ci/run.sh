@@ -32,7 +32,7 @@ fi
 echo "── 準備 CI 映像檔 ──"
 # build context 也從那個 commit 取，而且只給 ci/Dockerfile 會 COPY 的檔案：這幾個檔案沒變，整個映像檔都用快取
 git archive "$commit" ci/Dockerfile backend/gradlew backend/gradle/wrapper web/package.json \
-    | ci/build-image.sh "$image" ci/Dockerfile
+    | docker build --quiet --tag "$image" --file ci/Dockerfile - >/dev/null
 
 trap 'docker rm --force "$container" >/dev/null 2>&1 || true' EXIT
 

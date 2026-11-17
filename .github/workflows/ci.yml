@@ -47,14 +47,10 @@ jobs:
           key: ci-gradle-${{ hashFiles('backend/build.gradle', 'backend/settings.gradle', 'backend/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: ci-gradle-
 
-      # CI 映像檔每一層存進 GitHub Actions cache，下一台機器不用從頭準備（見 ci/build-image.sh）
-      - uses: ./.github/actions/buildx-cache
-
       # CI_GRADLE_CACHE：把上面那個資料夾掛進容器（見 ci/run.sh）
       - run: ci/run.sh
         env:
           CI_GRADLE_CACHE: ${{ runner.temp }}/ci-gradle
-          CI_IMAGE_CACHE: gha
 
       - name: 測試摘要貼到結果頁
         if: always()
@@ -141,14 +137,10 @@ jobs:
           key: sast-gradle-${{ hashFiles('backend/build.gradle', 'backend/settings.gradle', 'backend/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: sast-gradle-
 
-      # CodeQL 映像檔的快取，同 `checks` job
-      - uses: ./.github/actions/buildx-cache
-
       # SAST_GRADLE_HOME：把上面那個資料夾掛進容器（見 ci/sast.sh）
       - run: ci/sast.sh
         env:
           SAST_GRADLE_HOME: ${{ runner.temp }}/sast-gradle
-          CI_IMAGE_CACHE: gha
 
       - name: 分析結果貼到結果頁
         if: always()

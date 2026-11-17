@@ -30,7 +30,7 @@ fi
 echo "── 準備 CodeQL 映像檔 ──"
 # 第一次要下載約 700 MB；Dockerfile 沒變就整個用快取
 git archive "$commit" ci/sast/Dockerfile \
-    | ci/build-image.sh "$image" ci/sast/Dockerfile
+    | docker build --quiet --tag "$image" --file ci/sast/Dockerfile - >/dev/null
 
 trap 'docker rm --force "$container" >/dev/null 2>&1 || true' EXIT
 # talkcal-sast-gradle：CodeQL 執行 ./gradlew 時下載的 Gradle 本體和 jar，本機跨次保留。
