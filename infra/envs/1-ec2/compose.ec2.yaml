@@ -3,7 +3,7 @@
 #   docker compose -f deploy/compose.yaml -f infra/envs/1-ec2/compose.ec2.yaml \
 #                  -f infra/envs/1-ec2/compose.<bedrock|gpu>.yaml up -d
 #
-# 不另寫一份完整的雲端 compose：兩份會慢慢長得不一樣，本機驗過的就不等於雲端執行的。
+# 不另寫一份完整的雲端 compose：兩份會逐漸出現差異，本機驗過的就不等於雲端執行的。
 # 疊上去時同名的 key 以這份為準，volumes 依容器裡的路徑合併，environment 依變數名合併。
 # 注意：這份的相對路徑是從第一個檔案的資料夾（deploy/）算起，不是這個檔案的資料夾。
 # 變數都在 deploy/.env，內容見 secrets.tf。
@@ -24,7 +24,7 @@ services:
       TALKCAL_ARCHIVE_BUCKET: ${ARCHIVE_BUCKET:?缺 ARCHIVE_BUCKET}
       TALKCAL_ARCHIVE_REGION: ${ARCHIVE_REGION:?缺 ARCHIVE_REGION}
     # 沒有上限的話，JVM 的 MaxRAMPercentage=75 算的是整台機器：8 GB（gpu 是 16 GB）還要分給 PostgreSQL 和整組觀測，
-    # app 一用就是大半台。設了 2g，75% 就是約 1.5 GB heap
+    # app 會占掉大半台機器的記憶體。設成 2g 的話，75% 約是 1.5 GB heap
     mem_limit: 2g
 
   # 本機扮演 S3 的 RustFS 不啟動：放進一個不會被打開的 profile。

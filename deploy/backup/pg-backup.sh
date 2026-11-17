@@ -14,7 +14,7 @@ PG_DB="${PG_DB:-talkcal}"
 # 不放 repo 裡：刪 worktree、git clean 會把備份一起刪掉。也不放 Docker volume：down -v 會跟資料庫一起清掉
 BACKUP_DIR="${BACKUP_DIR:-$HOME/talkcal-backups}"
 # 超過 KEEP_DAYS 天的刪掉，但最新的 KEEP_MIN 份不管多舊都留。只看天數的話，
-# 機器關了一個月再開，第一次備份完就把之前的全刪光，偏偏那時最可能要回頭找
+# 機器關機一個月再開，第一次備份完就會刪掉之前所有的備份，而那時正是最可能需要舊備份的時候
 KEEP_DAYS="${KEEP_DAYS:-14}"
 KEEP_MIN="${KEEP_MIN:-7}"
 
