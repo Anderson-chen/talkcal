@@ -1,6 +1,6 @@
 // db-pool：把 app 的 HikariCP 連線池（預設 10 條）壓到不夠用，看 pending 從 0 往上升。
 //
-// 壓助理的話瓶頸在模型，連線只借幾毫秒，池子用不滿。所以這支腳本只壓碰資料庫、不呼叫模型的 GET /api/calendar/events。
+// 壓助理的話瓶頸在模型，連線只借幾毫秒，池子用不滿。所以這支腳本壓的是只讀資料庫、不呼叫模型的 GET /api/calendar/events。
 //
 // 看 Grafana 的 talkcal-app dashboard（http://localhost:3000/d/talkcal-app）「資料庫連線池」那一排：
 // active 貼到 max（10）、pending 離開 0、acquire 從微秒跳到毫秒。

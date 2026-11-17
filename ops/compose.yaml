@@ -54,7 +54,7 @@ services:
     environment:
       # 觀測環境本身停止時，Watchdog 要呼叫的外部網址。Watchdog 還沒啟用，現在沒有設定讀這個值
       # （見 ops/README.md 的「監控本身掛掉：誰來發現」），平常留空。
-      # 沒設時給 .invalid（保留的網域，永遠解析不到）：Watchdog 用的 webhook contact point 收到空字串會驗證不過，Grafana 無法啟動
+      # 沒設時給 .invalid，理由見下面的 ALERT_EMAIL_TO；Watchdog 用的 webhook contact point 也一樣
       - HEARTBEAT_URL=${HEARTBEAT_URL:-http://heartbeat-not-configured.invalid/}
       # 只在 localhost 用，關掉登入，一開就是 Admin。要練權限管理時拿掉這三行，用預設的 admin / admin 登入
       - GF_AUTH_ANONYMOUS_ENABLED=true
@@ -70,7 +70,7 @@ services:
       - GF_SMTP_FROM_ADDRESS=${ALERT_SMTP_FROM:-grafana@talkcal.invalid}
       - GF_SMTP_FROM_NAME=talkcal Grafana
       # 收件人，grafana/provisioning/alerting/contact-points.yaml 讀。
-      # 沒填時給 .invalid，理由見上面的 HEARTBEAT_URL
+      # 沒填時給 .invalid（保留的網域，永遠解析不到）：空字串的話 contact point 驗證不過，Grafana 無法啟動
       - ALERT_EMAIL_TO=${ALERT_EMAIL_TO:-alerts@talkcal.invalid}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro

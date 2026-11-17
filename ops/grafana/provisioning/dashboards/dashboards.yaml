@@ -8,7 +8,7 @@ providers:
     # JSON 檔拿掉，Grafana 裡的 dashboard 也跟著刪
     disableDeletion: false
     updateIntervalSeconds: 30
-    allowUiUpdates: false       # 以檔案為準：UI 上試好的改動要貼回 JSON，不然重新載入就被蓋掉
+    allowUiUpdates: false       # 以檔案為準：UI 上無法存檔，試好的改動要貼回 JSON
     options:
       path: /etc/grafana/provisioning/dashboards
       # 子資料夾會變成 Grafana 裡的資料夾

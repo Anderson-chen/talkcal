@@ -1,7 +1,7 @@
 // tokens：量 AI 助理一個請求平均用掉多少 token，docs/cost.md 的成本估算從這裡來。
 //
 // 1 個 VU，訊息池的每一句照順序說 ROUNDS 輪。不併發：併發只會讓 llama.cpp 排隊，一個請求的 token 數不變。
-// token 數由 app 記：Spring AI 每叫一次模型就把 usage 加進 gen_ai_client_token_usage_total。
+// token 數由 app 記：Spring AI 每呼叫一次模型就把 usage 加進 gen_ai_client_token_usage_total。
 // 開始前、結束後各讀一次 app 的 /actuator/prometheus，相減就是這次的用量，跟 Grafana 成本 dashboard 是同一個指標。
 //
 // 預設送到本機 bootRun 的 app（8090），要先啟動：
@@ -10,7 +10,7 @@
 // 換算費用的單價（USD / 每 1M token）可以覆蓋，預設是 Bedrock 東京 Qwen3 32B 的 Standard，來源見 docs/cost.md：
 //   $env:PRICE_IN="0.18"; $env:PRICE_OUT="0.73"; k6 run perf/tokens.js
 // 指標在 management 埠 8091，預設把 BASE_URL 結尾的 :8090 換成 :8091。
-// Docker 裡的 app 的 8091 沒有發佈到主機（deploy/compose.yaml），所以要送到本機 bootRun 的 app；別的位置就覆蓋 METRICS_URL。
+// Docker 裡那台 app 的 8091 沒有發佈到主機（deploy/compose.yaml），所以要送到本機 bootRun 的 app；別的位置就覆蓋 METRICS_URL。
 
 import http from 'k6/http';
 import { BASE_URL, MESSAGES, say, signIn, useSession } from './lib/assistant.js';

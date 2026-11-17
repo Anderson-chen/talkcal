@@ -15,7 +15,7 @@
 import './lib/docker-target.js';
 import { say, signIn, useSession } from './lib/assistant.js';
 
-// 每個請求都說同一句：各句的成本差很多（查行程叫兩次模型，提議行程還要多抽一次），
+// 每個請求都說同一句：各句的成本差很多（查行程呼叫兩次模型，提議行程還要多抽一次），
 // 隨機挑的話延遲取決於這一階抽到幾句貴的，人數的影響被蓋掉。預設是一句只走 list_events 的查詢。
 // 同一句會命中 llama.cpp 的 prompt 快取，但 prefill 只占十幾毫秒，可以忽略
 const MESSAGE = __ENV.MESSAGE || '明天有什麼行程？';
