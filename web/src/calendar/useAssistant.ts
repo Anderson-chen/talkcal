@@ -69,7 +69,7 @@ export interface ChatMessage {
 export const SLOW_AFTER_SECONDS = 10
 
 // 三種能做的事各舉一個例子：新增、查詢、找空檔。
-// 沒登入的示範（GuestDemo.vue）也送這幾句，後端的 GuestDemo 只認得一字不差的這幾句，改了要一起改
+// 沒登入的訪客也只能送這幾句，後端的 GuestDemo 只收一字不差的這幾句，改了要一起改
 export const SUGGESTIONS = ['明天下午3點和 Amy 開會', '明天有什麼行程？', '這週哪天下午有空？']
 
 const GREETING = '嗨！我是你的行事曆助理。可以幫你新增、修改、刪除行程，查某天的安排，或找出空檔。不管哪一種，我都會整理成卡片讓你確認後才動行事曆。'
@@ -206,7 +206,7 @@ export function useAssistant(calendar: CalendarState) {
     typingSince = now.value = Date.now()
     try {
       const answer = await talkToAssistant(said, conversationId)
-      // 登入過期時後端把這個請求當成訪客：固定問題拿到的是訪客的回答。照 401 處理，那句留在草稿裡
+      // 登入過期時後端把這個請求當成訪客：固定問題拿到的是訪客的回答。照 401 處理，使用者送出的那句留在草稿裡
       if (!guest && answer.guestRemaining !== undefined) {
         me.value = null
         requestLogin()

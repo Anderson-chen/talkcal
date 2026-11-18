@@ -6,7 +6,7 @@ import java.util.OptionalInt;
 /**
  * 訪客每天看了幾次示範回答。
  *
- * 實作要讓好幾個 app 副本看到同一份計數，而且加一和檢查上限是同一個動作：同一個來源同時送好幾個請求，
+ * 實作要讓好幾個 app 副本讀到同一份計數，而且加一和檢查上限是同一個動作：同一個來源同時送好幾個請求，
  * 也只有前 limit 個成功。
  */
 public interface GuestDemoUsagePort {

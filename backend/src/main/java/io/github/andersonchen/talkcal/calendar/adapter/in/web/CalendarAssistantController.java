@@ -54,8 +54,8 @@ import java.util.stream.IntStream;
  * 卡片的去向記成產品指標：回覆時每張卡片發一個 proposalId；按「加入行事曆」走 POST /events 時每筆帶著自己的 proposalId，
  * 按「取消」「移除」只改畫面，所以前端另外送 POST /dismissals。伺服器只算自己發過、屬於登入者、還沒表態過的卡片。
  *
- * 沒登入的訪客也能 POST（SecurityConfiguration 只開放這一個），但只收對話框的固定問題，回預先寫好的答案（ShowGuestDemoUseCase），
- * 不呼叫模型、不記對話、不發 proposalId，每個 IP 每天有次數上限。其他的話回 401，跟沒登入呼叫其他 API 一樣。
+ * 沒登入的訪客也能 POST，SecurityConfiguration 只開放這一個端點。訪客只能送對話框的固定問題，
+ * 回傳 ShowGuestDemoUseCase 預先寫好的答案：不呼叫模型、不記對話、不發 proposalId，每個 IP 每天有次數上限。其他的話回 401，跟沒登入呼叫其他 API 一樣。
  * IP 用 request.getRemoteAddr()，不自己讀 X-Forwarded-For：server.forward-headers-strategy=native 時，
  * Tomcat 只在請求來自內部網段（nginx、Caddy）時才照 X-Forwarded-For 改寫 remoteAddr，而且從右邊數回來，
  * 跳過內部網段，取第一個外部的位址，使用者自己在最左邊塞的假位址輪不到。

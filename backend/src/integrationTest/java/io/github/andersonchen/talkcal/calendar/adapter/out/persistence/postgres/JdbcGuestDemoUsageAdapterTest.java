@@ -20,8 +20,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
- * 做法見 JdbcCalendarEventAdapterTest。上限在同時送來的請求之間也要守得住，要對真的 PostgreSQL 才驗得準：
- * 每個執行緒從連線池拿自己的連線，跟好幾個 app 副本同時寫同一張表一樣。
+ * 做法見 JdbcCalendarEventAdapterTest。同時送來好幾個請求也不能超過上限，要對真的 PostgreSQL 測才驗得準：
+ * 每個執行緒各開一條連線（DriverManagerDataSource 每次都開新的），跟好幾個 app 副本同時寫同一張表一樣。
  */
 @DisplayName("JdbcGuestDemoUsageAdapter（真的 PostgreSQL）")
 class JdbcGuestDemoUsageAdapterTest {

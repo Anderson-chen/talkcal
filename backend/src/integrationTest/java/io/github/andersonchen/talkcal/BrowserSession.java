@@ -24,7 +24,7 @@ final class BrowserSession {
     private final HttpClient http;
     // 關掉就是模擬別的網站讓瀏覽器送出請求：cookie 照樣帶，但別的網站讀不到 XSRF-TOKEN
     private boolean sendCsrfHeader = true;
-    // 模擬經過 nginx 進來的某個 IP：測試從 127.0.0.1 連，Tomcat 把它當成內部的 proxy，照這個 header 還原來源
+    // 模擬經過 nginx 進來的某個 IP：測試從 127.0.0.1 連，Tomcat 把這個位址當成內部的 proxy，照這個 header 還原來源
     private String forwardedFor;
 
     BrowserSession(int port) {
