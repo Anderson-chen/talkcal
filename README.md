@@ -11,7 +11,7 @@
 | 類別 | 技術 |
 |---|---|
 | 後端 | Java 25、Spring Boot 4.1 |
-| 模型 | 本機：llama.cpp + Qwen3-8B；雲端：Bedrock 的 Qwen3-32B |
+| 模型 | 本機：llama.cpp + Qwen3-8B；雲端：Bedrock 的 Qwen3 32B |
 | 資料庫 | PostgreSQL 18 + Flyway |
 | 前端 | Vue 3 + TypeScript + Vite |
 | 監控 | Grafana Alloy → Mimir、Loki、Tempo → Grafana |
@@ -39,7 +39,7 @@
 | JDK | 25 |
 | Node.js | 22，「開發」和單獨執行前端測試才需要；「啟動服務」的前端在 Docker 裡 build |
 | Bash | Windows 用 Git Bash |
-| Docker | Docker Desktop（WSL 2 後端） |
+| Docker | Docker Desktop（使用 WSL 2 引擎） |
 | NVIDIA 顯卡 | 選用，在本機執行模型才需要。RTX 40 系列、驅動 580 以上可以直接用，其他見「本機模型」第 1 步 |
 | just | 選用，`just` 會列出部署、備份、CI 檢查這些常用腳本的指令。安裝：`winget install Casey.Just` |
 
@@ -75,9 +75,11 @@
 docker compose -f deploy/compose.yaml down
 ```
 
+之後要再啟動，重做第 2、3 步。不指定服務的 `docker compose up -d` 會連模型一起啟動，沒有模型檔時會失敗。
+
 ### 開發
 
-開發時後端和前端直接在主機上執行，各開一個終端機。先做完「啟動服務」的第 1、2 步：`bootRun` 從 `deploy/.env` 讀密碼，再連到第 2 步啟動的資料庫和 RustFS。要用對話助理的話，再做「本機模型」。
+開發時後端和前端直接在主機上執行，各開一個終端機。先做完「啟動服務」的第 1、2 步：`bootRun` 從 `deploy/.env` 讀密碼，再連到第 2 步啟動的資料庫和 RustFS。要用 AI 助理的話，再做「本機模型」。
 
 後端在 8090：
 
@@ -97,7 +99,7 @@ pnpm --dir web run dev
 
 ### 本機模型（選用）
 
-不啟動模型也能用行事曆，只有對話助理不能用。
+不啟動模型也能用行事曆，只有 AI 助理不能用。
 
 1. 查顯卡是哪一代（compute capability）和驅動版本：
 
@@ -107,7 +109,7 @@ pnpm --dir web run dev
 
    印出 `8.9`（RTX 40 系列）和 580 以上的驅動版本就跳過這一步，例如 `8.9, 581.29`。其他情況要改 `deploy/llama-server/Dockerfile`：
 
-   - 第一個數字不是 `8.9`：`CUDA_ARCH` 改成這個數字去掉小數點的值，例如 RTX 30 系列印出 `8.6`，就改成 `86`。
+   - 第一個數字不是 `8.9`：`CUDA_ARCH` 改成這個數字去掉小數點的值，例如 RTX 30 系列印出 `8.6`，就改成 `86`。低於 `7.5` 的顯卡（GTX 10 系列和更早的）CUDA 13 不支援，`CUDA_VERSION` 也要照下一條改。
    - 驅動低於 580：照 `CUDA_VERSION` 上面那行註解改。
 
 2. 下載模型（約 5 GB，來源 [Qwen/Qwen3-8B-GGUF](https://huggingface.co/Qwen/Qwen3-8B-GGUF)）。`<模型資料夾>` 換成要放模型檔的絕對路徑，例如 `C:/llm/models`：
@@ -130,7 +132,7 @@ pnpm --dir web run dev
    docker compose -f deploy/compose.yaml up -d llm-chat
    ```
 
-   `llm-chat` healthy 之後對話助理就能用，app 不用重新啟動。
+   `llm-chat` healthy 之後 AI 助理就能用，app 不用重新啟動。
 
    `llm-chat` 無法啟動時，確認容器裡偵測得到顯卡，要印出 `GPU 0: NVIDIA ...`：
 
@@ -140,7 +142,7 @@ pnpm --dir web run dev
 
 ## 測試
 
-執行前後端單元測試、後端整合測試、前端 E2E，跟 CI 同一個容器。需要 Docker；模型沒開時，要模型的那幾支會跳過：
+執行前後端單元測試、後端整合測試、前端 E2E，跟 CI 用同一個容器。需要 Docker；模型沒啟動時，需要模型的測試會跳過：
 
 ```bash
 ci/run.sh

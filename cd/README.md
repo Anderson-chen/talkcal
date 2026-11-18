@@ -47,7 +47,7 @@ WAIT_TIMEOUT=600 cd/apply.sh local app   # 拉長等待
 
 歸檔用的 `archive` 也要先起好，但它沒起的時候擋不住。app 啟動時刻意不連物件儲存（理由見 `ArchiveStorageConfiguration` 的 `archiveBucket`），照樣 healthy，`--wait` 也跟著成功；要等到畫面上的「查看封存」或還原對話回 502，或凌晨的歸檔排程真的有資料存不進去，才看得出來。2026-10-31 把它加進 compose 之後，本機就這樣漏了快兩個星期（[#286](https://github.com/Anderson-chen/talkcal/issues/286)）。
 
-第一次部署前先啟動資料庫和歸檔，`archive-init` 建好 bucket 就會結束：
+第一次部署前先啟動資料庫和歸檔用的 `archive`，`archive-init` 建好 bucket 就會結束：
 
 ```bash
 docker compose -f deploy/compose.yaml up -d postgres archive archive-init
@@ -85,7 +85,7 @@ cd C:/talkcal-deploy
 
 Windows 預設不讓 `.ps1` 執行，被擋的話改用 `powershell -ExecutionPolicy Bypass -File .\cd\triggers\install-local.ps1`。它只在登記時跑一次，之後每 5 分鐘被叫起來的是 `watch.sh`。
 
-事前要有三樣：`gh auth login`（watcher 用它查 CI、寫部署紀錄）、Docker Desktop 開著、`postgres` 和 `llm-chat` 已經起好（理由見[為什麼每個服務分開換](#為什麼每個服務分開換)）。
+事前要有三樣：`gh auth login`（watcher 用它查 CI、寫部署紀錄）、Docker Desktop 開著、`postgres` 和 `archive` 已經啟動，要用 AI 助理的話再加上 `llm-chat`（理由見[為什麼每個服務分開換](#為什麼每個服務分開換)）。
 
 ### 日常
 
