@@ -45,7 +45,9 @@
 
 下面的指令都在專案根目錄執行。
 
-### 啟動服務
+### 事前準備
+
+「部署到本機」和「本機開發」都要先做這兩步。
 
 1. 建 `deploy/.env`，開啟後填入 `DB_PASSWORD`、`ARCHIVE_ACCESS_KEY`、`ARCHIVE_SECRET_KEY`，最後一個至少 8 個字：
 
@@ -59,27 +61,23 @@
    docker compose -f deploy/compose.yaml up -d postgres archive archive-init
    ```
 
-3. 啟動後端（`app`）和前端（`web`）：先執行後端測試，再 build 映像檔、啟動容器，等到兩個都 healthy 才結束。第一次要下載依賴和基礎映像檔，會比較久：
+### 部署到本機
+
+後端和前端都 build 成映像檔，在 Docker 裡執行。
+
+1. 啟動後端（`app`）和前端（`web`）：先執行後端測試，再 build 映像檔、啟動容器，等到兩個都 healthy 才結束。第一次要下載依賴和基礎映像檔，會比較久：
 
    ```bash
    backend/gradlew -p backend deploy
    ```
 
-4. 開 <http://localhost:18080>，按「還沒有帳號？註冊」建立帳號。Swagger UI 在 <http://localhost:18090/swagger-ui.html>。
+2. 開 <http://localhost:18080>，按「還沒有帳號？註冊」建立帳號。Swagger UI 在 <http://localhost:18090/swagger-ui.html>。
 
    Google、GitHub 登入要另外設定，見 `deploy/.env.example`。
 
-停止全部服務（資料留在 volume，加 `-v` 才會清掉）：
+### 本機開發
 
-```bash
-docker compose -f deploy/compose.yaml down
-```
-
-之後要再啟動，重做第 2、3 步；啟動過模型的話，再做「本機模型」第 4 步。不指定服務的 `docker compose up -d` 會連模型一起啟動，沒有模型檔時會失敗。
-
-### 開發
-
-確保執行過「啟動服務」的第 1、2 步
+後端和前端直接在主機上執行，各開一個終端機。
 
 後端在 8090：
 
@@ -139,6 +137,16 @@ pnpm --dir web run dev
    ```bash
    docker compose -f deploy/compose.yaml run --rm --no-deps --entrypoint nvidia-smi llm-chat -L
    ```
+
+### 停止和再啟動
+
+停止 Docker 裡的全部服務（資料留在 volume，加 `-v` 才會清掉）：
+
+```bash
+docker compose -f deploy/compose.yaml down
+```
+
+之後要再啟動，重做「事前準備」第 2 步，再做「部署到本機」第 1 步或「本機開發」；啟動過模型的話，再做「本機模型」第 4 步。不指定服務的 `docker compose up -d` 會連模型一起啟動，沒有模型檔時會失敗。
 
 ## 測試
 
