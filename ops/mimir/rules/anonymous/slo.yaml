@@ -15,7 +15,7 @@
 # calendar-* 是一般 API：行程的增刪查、讀對話紀錄、拒絕卡片。assistant-* 是 POST /api/calendar/assistant，
 #   後面要呼叫模型好幾次，門檻分開定。不算沒登入的訪客，理由見 docs/slo.md「為什麼不算訪客」；
 #   標籤怎麼來的見 ObservationConfiguration.tagGuestRequests。寫成 guest!="true"、不寫 guest="false"：
-#   加標籤之前錄下的序列沒有 guest，寫 "false" 的話，28 天視窗裡那段舊資料會整個不見。
+#   加標籤之前錄下的序列沒有 guest，寫 "false" 的話，28 天視窗裡那段舊資料都不會算進 SLO。
 #
 # 沒有 5xx 時壞事件那一項是空的，空 / 數字 = 空，SLI 會變沒資料，所以補 or vector(0)。
 # 分母加 > 0：沒人用時 rate 是 0，0/0 會錄成 NaN；當成沒資料，不算好也不算壞。

@@ -26,8 +26,8 @@ dashboard 看得到數字，但數字要跟一條線比才知道該不該處理�
 
 沒登入的訪客也送 `POST /api/calendar/assistant`，但只能問固定問題，拿到的是預先寫好的回答，不呼叫模型：幾毫秒就回，401、429 也不是 5xx。
 算進來的話，訪客一多，模型變慢、502 變多都會被稀釋，告警晚發或不發。app 在每個 HTTP 請求的指標上都貼 `guest` 標籤
-（見 `ObservationConfiguration.tagGuestRequests`），`assistant-*` 只算 `guest!="true"`，為什麼不寫 `guest="false"` 見 `slo.yaml`。
-儀表板上跟助理有關的查詢也都要加 `guest!="true"`：漏加不會出錯，只會被訪客的請求稀釋。
+（見 `ObservationConfiguration.tagGuestRequests`）。`assistant-*` 只算 `guest!="true"`，不寫 `guest="false"` 的理由見 [`ops/mimir/rules/anonymous/slo.yaml`](../ops/mimir/rules/anonymous/slo.yaml)。
+儀表板上跟助理有關的查詢也都要加 `guest!="true"`：漏加的話查詢不會報錯，只是數字會被訪客的請求稀釋。
 
 ### 為什麼一般 API 和助理分開
 
