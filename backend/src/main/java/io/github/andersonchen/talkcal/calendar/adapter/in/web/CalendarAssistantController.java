@@ -133,7 +133,7 @@ public final class CalendarAssistantController {
 
     /**
      * 訪客照 IP 計數。IPv6 的使用者通常分到一整個 /64，裡面的位址可以隨意換（手機的 privacy extension 也會自己換），
-     * 照完整位址算的話，換一個就又有新的次數，所以 IPv6 只看前 64 位元。解析不了的原樣用
+     * 照完整位址算的話，換一個就又有新的次數，所以 IPv6 只看前 64 位元。無法解析的位址直接當成計數的 key
      */
     static String guestKey(String remoteAddr) {
         try {
@@ -229,7 +229,7 @@ public final class CalendarAssistantController {
             case CIRCUIT_OPEN -> "MODEL_UNAVAILABLE";
             case BUSY -> "MODEL_BUSY";
         };
-        log.warn("AI 助理沒有叫模型，回 503：code={} retryAfter={}s", code, e.retryAfter().toSeconds());
+        log.warn("AI 助理沒有呼叫模型，回 503：code={} retryAfter={}s", code, e.retryAfter().toSeconds());
         return retryLater(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage(), code, e.retryAfter());
     }
 

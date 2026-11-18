@@ -288,7 +288,7 @@ export function useAssistant(calendar: CalendarState) {
     reportDismissed([proposal])
   }
 
-  // 拒絕了哪幾張告訴後端，算採納率用。不等待、失敗也不顯示：使用者按的是取消，不該因為指標送不出去看到錯誤。
+  // 把拒絕的卡片送給後端，用來算採納率。不等待、失敗也不顯示：使用者按的是取消，不該因為指標送不出去看到錯誤。
   // 訪客的卡片沒有 proposalId，所以不會送
   function reportDismissed(proposals: Proposal[]) {
     const ids = proposals.map((p) => p.draft.proposalId).filter((id): id is string => !!id)

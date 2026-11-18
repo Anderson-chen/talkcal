@@ -108,7 +108,7 @@ class CalendarAssistantControllerTest {
                 .andExpect(jsonPath("$.conversationId").value(Matchers.matchesPattern(UUID_PATTERN)))
                 .andExpect(jsonPath("$.reply").value("早上還是晚上？"))
                 .andExpect(jsonPath("$.proposals").isEmpty())
-                // 前端看到這個欄位就當成登入過期（訪客的回答才有），登入者的回應不能帶，連 null 也不行
+                // 回應裡有這個欄位時，前端會當成登入過期（訪客的回答才有），登入者的回應不能帶，連 null 也不行
                 .andExpect(jsonPath("$.guestRemaining").doesNotExist());
     }
 

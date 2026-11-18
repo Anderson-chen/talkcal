@@ -59,7 +59,7 @@ export interface LoginPrompt {
 export const loginPrompt = ref<LoginPrompt | null>({ mode: 'login', reason: '' })
 
 /**
- * 按過「以訪客身分試用」：訪客被帶去登入頁時行事曆只藏起來、不拆掉，
+ * 按過「以訪客身分試用」：訪客被帶去登入頁時，行事曆只用 v-show 隱藏，元件不卸載，
  * 按「以訪客身分試用」回來時，對話和卡片都還在
  */
 export const guestStarted = ref(false)
@@ -75,7 +75,7 @@ export function requestLogin(reason = '', mode: LoginPrompt['mode'] = 'login') {
 
 /**
  * 登出、登入過期時清掉登入者，直接到登入頁、不退回訪客：
- * 登入著的人以為還登入著，在訪客畫面上按什麼都被擋，會看不懂
+ * 原本登入的人會以為自己還在登入狀態，在訪客畫面上不管按什麼都被擋，會不知道原因
  */
 export function signedOut() {
   me.value = null
