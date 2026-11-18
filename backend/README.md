@@ -51,7 +51,7 @@ io.github.andersonchen.talkcal
 
 ## 會員等級
 
-帳號分免費（`free`）、付費（`paid`）兩級，新帳號都是免費。還沒接金流，付費會員由維護者連上資料庫直接改 `account.tier`。改完下一個請求就生效，使用者不用重新登入。
+帳號分免費、付費兩級（`free`、`paid`），新帳號都是免費。還沒接金流，付費會員由維護者連上資料庫直接改 `account.tier`。改完下一個請求就生效，使用者不用重新登入。
 
 帳密註冊的帳號用帳號名稱指定：
 
@@ -62,10 +62,10 @@ UPDATE account SET tier = 'paid' WHERE username = 'amy';
 UPDATE account SET tier = 'free' WHERE username = 'amy';
 ```
 
-只用 Google、GitHub 登入的帳號沒有帳號名稱，先用 provider 給的使用者 ID 查出帳號 ID，再照上面改，`WHERE` 換成 `id = '<帳號 ID>'`：
+只用 Google、GitHub 登入的帳號沒有帳號名稱，要改用帳號 ID 指定。先用 provider 給的使用者 ID 查出帳號 ID，再執行上面的 SQL，把 `WHERE` 換成 `id = '<帳號 ID>'`：
 
 ```sql
 SELECT account_id FROM account_identity WHERE provider = 'google' AND subject = '<Google 的 sub>';
 ```
 
-已經登入的人，帳號 ID 就是 `GET /api/auth/me` 回傳的 `id`。`tier` 只收 `free`、`paid`，寫錯的值資料庫會拒絕，欄位的定義見 [V14](src/main/resources/db/migration/V14__account_membership_tier.sql)。
+已經登入的人，帳號 ID 就是 `GET /api/auth/me` 回傳的 `id`。`tier` 只收 `free`、`paid`，寫錯的值資料庫會拒絕。欄位的定義見 [V14](src/main/resources/db/migration/V14__account_membership_tier.sql)。

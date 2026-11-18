@@ -14,7 +14,7 @@ export interface Me {
   name: string
   // 只用 Google、GitHub 登入的帳號沒有帳號名稱
   username: string | null
-  // 會員等級的值，畫面上不拿它判斷
+  // 會員等級的值，畫面不依這個值判斷任何事
   tier: string
   // 畫面上顯示的會員等級，文字由後端決定
   tierLabel: string

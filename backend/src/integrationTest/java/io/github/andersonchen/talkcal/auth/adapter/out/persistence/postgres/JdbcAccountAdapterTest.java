@@ -152,7 +152,7 @@ class JdbcAccountAdapterTest {
     }
 
     @Test
-    @DisplayName("反例：V14 之前就有的帳號（帳密、Google 各一個），migration 之後都是免費會員")
+    @DisplayName("反例：V14 之前就有的帳號（有帳號名稱、沒有帳號名稱的各一個），migration 之後都是免費會員")
     void existingAccountsBecomeFree() {
         TestPostgres.Database old = TestPostgres.newDatabase();
         Flyway.configure().dataSource(old.url(), old.username(), old.password()).target("13").load().migrate();

@@ -59,7 +59,7 @@ public final class AuthController {
             @Schema(description = "帳號 ID：行程、對話的擁有者就是它") String id,
             @Schema(description = "給人看的名字：帳密登入的是帳號名稱，Google、GitHub 登入的是對方給的名字") String name,
             @Schema(description = "帳號名稱；只用 Google、GitHub 登入的帳號沒有，是 null", nullable = true) String username,
-            @Schema(description = "會員等級：free（免費）、paid（付費）", allowableValues = {"free", "paid"}) String tier,
+            @Schema(description = "會員等級：free 是免費，paid 是付費", allowableValues = {"free", "paid"}) String tier,
             @Schema(description = "畫面上顯示的會員等級", example = "付費會員") String tierLabel) {
     }
 

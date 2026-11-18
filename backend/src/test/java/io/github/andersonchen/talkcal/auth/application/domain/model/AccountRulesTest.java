@@ -90,7 +90,7 @@ class AccountRulesTest {
     }
 
     @Test
-    @DisplayName("會員等級照資料庫存的字對回來；反例：不認得的字（例如大寫的 PAID）丟 IllegalArgumentException")
+    @DisplayName("資料庫存的字轉換成對應的會員等級；反例：沒有對應的字（例如大寫的 PAID）丟 IllegalArgumentException")
     void tierIds() {
         assertEquals(MembershipTier.FREE, MembershipTier.of("free"));
         assertEquals(MembershipTier.PAID, MembershipTier.of("paid"));

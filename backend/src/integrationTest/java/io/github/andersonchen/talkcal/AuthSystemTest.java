@@ -83,7 +83,7 @@ class AuthSystemTest {
     }
 
     @Test
-    @DisplayName("新註冊的是免費會員；照 README 的 SQL 改成付費後，同一個 session 的下一個請求 /me 就是付費（不用重新登入）")
+    @DisplayName("新註冊的是免費會員；照 README 的 SQL 改成付費後，同一個 session 不用重新登入，下一次呼叫 /me 就回傳付費")
     void tierFollowsDatabase() throws Exception {
         BrowserSession amy = browser().signUpAndLogIn("amy", PASSWORD);
         BrowserSession bob = browser().signUpAndLogIn("bob", PASSWORD);

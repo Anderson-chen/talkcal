@@ -22,7 +22,7 @@ interface Options {
   providers?: string[]
   // 已經用 Google、GitHub 登入的人：/me 回這個名字，沒有帳號名稱（跟後端一樣）
   externalName?: string
-  // 登入的人的會員等級，預設免費（跟後端新註冊的帳號一樣）；顯示文字照後端的 AuthController
+  // 登入的人的會員等級，預設免費（跟後端新註冊的帳號一樣）；顯示文字照後端的 MembershipTier
   tier?: 'free' | 'paid'
   // 已經封存的行程：不在 events 裡，月曆上看不到
   archived?: FakeEvent[]
