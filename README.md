@@ -37,7 +37,7 @@
 | 環境需求 | 條件 |
 |---|---|
 | JDK | 25 |
-| Node.js | 22，「開發」和單獨執行前端測試才需要；「啟動服務」的前端在 Docker 裡 build |
+| Node.js | 22，照「開發」一節做、或單獨執行前端測試才需要；照「啟動服務」做的話，前端在 Docker 裡 build |
 | Bash | Windows 用 Git Bash |
 | Docker | Docker Desktop（使用 WSL 2 引擎） |
 | NVIDIA 顯卡 | 選用，在本機執行模型才需要。RTX 40 系列、驅動 580 以上可以直接用，其他見「本機模型」第 1 步 |
@@ -120,7 +120,7 @@ pnpm --dir web run dev
 
    再把 `deploy/.env` 的 `MODELS_DIR` 設成同一個路徑；用 `C:/llm/models` 的話不用設，那是預設值。
 
-3. 寫校驗檔，模型複製進容器時會照校驗檔驗內容（已經有這個檔案的話，改成手動加這一行，不然會整份蓋掉）：
+3. 寫 checksum 檔，模型複製進容器時會照這個檔案驗內容（已經有這個檔案的話，改成手動加這一行，不然會整份蓋掉）：
 
    ```bash
    echo "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785  Qwen3-8B-Q4_K_M.gguf" > <模型資料夾>/SHA256SUMS
