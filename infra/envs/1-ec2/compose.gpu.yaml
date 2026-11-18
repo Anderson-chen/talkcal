@@ -2,7 +2,8 @@
 
 services:
   # deploy.sh 會把模型檔從 S3 拉到 MODELS_DIR（見 secrets.tf），model-seed 改從這個資料夾把模型檔複製進 volume。
-  # 容器裡一樣掛載在 /seed，蓋掉 deploy/compose.yaml 那行，播種的腳本不用動
+  # 容器裡一樣掛載在 /seed，蓋掉 deploy/compose.yaml 那行，播種的腳本不用動。
+  # deploy/compose.yaml 那行沒有 MODELS_DIR 時用 Windows 的預設路徑；這裡寫成必填，雲端的 .env 少了這個值，compose 就報錯停下來
   model-seed:
     volumes:
       - ${MODELS_DIR:?缺 MODELS_DIR}:/seed:ro

@@ -112,7 +112,7 @@ docker compose build app    # 改了 app 的程式碼後，只重 build app
 
 ## 模型檔怎麼進容器
 
-`model-seed` 先把 `C:\llm\models` 的 `.gguf` 複製進具名 volume `models`，跑完就結束。模型服務等它成功才啟動，從 volume 唯讀讀取。已經複製過的（大小相同）會跳過，所以只有第一次慢；有列在 `SHA256SUMS` 裡的會驗證內容。
+`model-seed` 先把 `C:\llm\models` 的 `.gguf` 複製進具名 volume `models`，複製完就結束。模型服務等 `model-seed` 成功才啟動，從 volume 唯讀讀取。已經複製過的（大小相同）會跳過，所以只有第一次慢；有列在 `SHA256SUMS` 裡的會驗證內容。模型檔放在其他資料夾時，在 `deploy/.env` 設定 `MODELS_DIR`。
 
 不直接掛 `C:\llm\models`，是因為 Windows → WSL2 的檔案通道實測循序讀只有約 20 MB/s，llama.cpp 預設用 mmap 零碎讀更慢：Qwen 5 GB 載了 5 分鐘還卡在 275 MB。
 

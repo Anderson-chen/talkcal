@@ -31,8 +31,8 @@ x-version-args: &version-args
   - GIT_COMMIT
 
 services:
-  # ── 模型播種：把模型檔從 Windows 資料夾複製進 volume，複製完就結束 ────────────
-  # 模型服務直接掛載 C:/llm/models 的話，每次載入都要經過 Windows → WSL2 的檔案通道（約 20 MB/s），
+  # ── 模型播種：把模型檔從 MODELS_DIR（見 .env.example）複製進 volume，複製完就結束 ────────────
+  # 模型服務直接掛載 Windows 的資料夾的話，每次載入都要經過 Windows → WSL2 的檔案通道（約 20 MB/s），
   # llama.cpp 用 mmap 零碎讀又更慢，5 GB 的模型載 5 分鐘還讀不到 300 MB（見 deploy/README.md）。volume 在 WSL2 的檔案系統上，只有第一次複製走慢的通道。
   model-seed:
     <<: *llama-server               # 用模型服務的映像檔：裡面有 bash、sha256sum，不必多拉一個
@@ -44,6 +44,11 @@ services:
     command:
       - |
         set -euo pipefail
+        # 來源資料夾不存在時 Docker 會自己建立空的資料夾，少了這段只會看到 cp 找不到 /seed/*.gguf
+        if ! compgen -G '/seed/*.gguf' > /dev/null; then
+          echo "MODELS_DIR 指到的資料夾裡沒有 .gguf 模型檔（見 deploy/.env.example）" >&2
+          exit 1
+        fi
         for src in /seed/*.gguf; do
           name=$$(basename "$$src")
           dst=/models/$$name
@@ -63,7 +68,7 @@ services:
         chmod a+r /models/*.gguf
         ls -la /models
     volumes:
-      - C:/llm/models:/seed:ro
+      - ${MODELS_DIR:-C:/llm/models}:/seed:ro
       - models:/models
     restart: "no"
 
