@@ -119,6 +119,15 @@ class GuestDemoSystemTest {
     }
 
     @Test
+    @DisplayName("IPv6 同一個 /64 裡換位址還是同一份次數；反例：別的 /64 各自算 3 次")
+    void ipv6CountsPerSlash64() throws Exception {
+        useUp(guestFrom("2001:db8:0:1::1"));
+
+        assertEquals(429, ask(guestFrom("2001:db8:0:1::abcd"), SUGGESTIONS.getFirst()).statusCode());
+        assertEquals(200, ask(guestFrom("2001:db8:0:2::1"), SUGGESTIONS.getFirst()).statusCode());
+    }
+
+    @Test
     @DisplayName("反例：在 X-Forwarded-For 最左邊塞假的 IP 換不到新的次數，算的是 proxy 接在最右邊的那個")
     void forgedForwardedForDoesNotResetTheCount() throws Exception {
         useUp(guestFrom(GUEST_IP));

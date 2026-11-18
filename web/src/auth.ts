@@ -58,7 +58,14 @@ export interface LoginPrompt {
 
 export const loginPrompt = ref<LoginPrompt | null>({ mode: 'login', reason: '' })
 
+/**
+ * 按過「以訪客身分試用」：訪客被帶去登入頁時行事曆只藏起來、不拆掉，
+ * 按「以訪客身分試用」回來時，對話和卡片都還在
+ */
+export const guestStarted = ref(false)
+
 export function enterAsGuest() {
+  guestStarted.value = true
   loginPrompt.value = null
 }
 
@@ -72,6 +79,7 @@ export function requestLogin(reason = '', mode: LoginPrompt['mode'] = 'login') {
  */
 export function signedOut() {
   me.value = null
+  guestStarted.value = false
   requestLogin()
 }
 

@@ -35,8 +35,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.security.Principal;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -108,7 +112,7 @@ public final class CalendarAssistantController {
             content = @Content(schema = @Schema(implementation = AssistantFailure.class)))
     public AssistantResponse talk(Principal signedIn, HttpServletRequest http, @RequestBody AssistantRequest request) {
         if (signedIn == null) {
-            return asGuest(http.getRemoteAddr(), request.message());
+            return asGuest(guestKey(http.getRemoteAddr()), request.message());
         }
         String conversationId = conversationId(request.conversationId());
         OwnerId owner = SignedIn.owner(signedIn);
@@ -125,6 +129,22 @@ public final class CalendarAssistantController {
                 .toList();
         List<SavedEvent> removals = reply.removals().stream().map(SavedEvent::of).toList();
         return new AssistantResponse(conversationId, reply.text(), cards, changes, removals, null);
+    }
+
+    /**
+     * 訪客照 IP 計數。IPv6 的使用者通常分到一整個 /64，裡面的位址可以隨意換（手機的 privacy extension 也會自己換），
+     * 照完整位址算的話，換一個就又有新的次數，所以 IPv6 只看前 64 位元。解析不了的原樣用
+     */
+    static String guestKey(String remoteAddr) {
+        try {
+            if (InetAddress.ofLiteral(remoteAddr) instanceof Inet6Address v6) {
+                byte[] prefix = Arrays.copyOf(v6.getAddress(), 8);
+                return InetAddress.getByAddress(Arrays.copyOf(prefix, 16)).getHostAddress() + "/64";
+            }
+            return remoteAddr;
+        } catch (IllegalArgumentException | UnknownHostException e) {
+            return remoteAddr;
+        }
     }
 
     // 沒有對話可以接續，conversationId 是 null；卡片不發 proposalId，訪客不能存，不算進採納率

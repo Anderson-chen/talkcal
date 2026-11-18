@@ -206,14 +206,14 @@ export function useAssistant(calendar: CalendarState) {
     try {
       const answer = await talkToAssistant(said, conversationId)
       // 登入過期時後端把這個請求當成訪客：固定問題拿到的是訪客的回答。照 401 處理，使用者送出的那句留在草稿裡
-      if (!guest && answer.guestRemaining !== undefined) {
+      if (!guest && answer.guestRemaining != null) {
         signedOut()
         return
       }
       conversationId = answer.conversationId ?? undefined
       saveConversationId(conversationId)
       const reply = say('ai', answer.reply, answer.proposals.map((draft) => ({ draft, status: 'pending' })))
-      if (answer.guestRemaining !== undefined) reply.hint = `今天還能試 ${answer.guestRemaining} 次`
+      if (answer.guestRemaining != null) reply.hint = `今天還能試 ${answer.guestRemaining} 次`
       reply.changes = answer.changes.map((change) => ({ change, status: 'pending', error: null }))
       reply.removals = answer.removals.map((event) => ({ event, status: 'pending', error: null }))
       messages.value.push(reply)

@@ -33,7 +33,7 @@ test('沒登入按「以訪客身分試用」：看到原本的行事曆和助�
   expect(api.csrfRejected).toEqual([])
 })
 
-test('按卡片的「加入行事曆」：不存檔，換成登入頁並說明原因；「以訪客身分試用」回到行事曆', async ({ page }) => {
+test('按卡片的「加入行事曆」：不存檔，換成登入頁並說明原因；「以訪客身分試用」回到行事曆，剛才的對話和卡片還在', async ({ page }) => {
   const api = await fakeApi(page, { loggedIn: false })
   await enterAsGuest(page)
   await page.getByRole('button', { name: QUESTIONS[0] }).click()
@@ -41,11 +41,23 @@ test('按卡片的「加入行事曆」：不存檔，換成登入頁並說明�
   await page.getByRole('button', { name: '加入行事曆', exact: true }).click()
 
   await expect(page.getByRole('heading', { name: '登入', level: 1 })).toBeVisible()
-  await expect(page.getByRole('status')).toHaveText('登入後，助理的卡片就能直接加進行事曆')
+  await expect(page.getByRole('status')).toHaveText('登入後就能把行程加進行事曆')
   expect(api.saved).toEqual([])
 
   await page.getByRole('button', { name: '以訪客身分試用' }).click()
   await expect(page.getByRole('heading', { name: '2026年10月' })).toBeVisible()
+  await expect(page.getByText('幫你整理成卡片了，確認後就會加進行事曆。')).toBeVisible()
+  await expect(page.getByText('今天還能試 2 次')).toBeVisible()
+})
+
+test('按卡片的「修改」：說明是修改卡片，不是新增行程', async ({ page }) => {
+  await fakeApi(page, { loggedIn: false })
+  await enterAsGuest(page)
+  await page.getByRole('button', { name: QUESTIONS[0] }).click()
+
+  await page.getByRole('button', { name: '修改' }).click()
+
+  await expect(page.getByRole('status')).toHaveText('登入後就能修改卡片、加進行事曆')
 })
 
 test('按「新增行程」、側欄的「登入」：都換成登入頁', async ({ page }) => {

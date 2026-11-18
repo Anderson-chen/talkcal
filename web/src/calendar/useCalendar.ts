@@ -129,7 +129,7 @@ export function useCalendar(guest = false) {
   async function add(drafts: EventFields[], idempotencyKey?: string): Promise<SavedEvent[]> {
     // 訪客按了助理卡片的加入：帶去登入。丟例外讓卡片維持原狀，不顯示成已加入
     if (guest) {
-      const reason = '登入後，助理的卡片就能直接加進行事曆'
+      const reason = '登入後就能把行程加進行事曆'
       requestLogin(reason)
       throw new Error(reason)
     }
@@ -165,8 +165,9 @@ export function useCalendar(guest = false) {
   }
 
   function openForm(initial?: Partial<EventFields>, onSaved?: (saved: SavedEvent) => void) {
+    // 有 initial 是從助理卡片的「修改」來的
     if (guest) {
-      requestLogin('登入後就能新增行程')
+      requestLogin(initial ? '登入後就能修改卡片、加進行事曆' : '登入後就能新增行程')
       return
     }
     detailId.value = null
