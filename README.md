@@ -47,7 +47,7 @@
 
 ### 前置作業
 
-僅首次執行，「本機部署」和「本機開發」共用。
+「本機部署」和「本機開發」共用的步驟，僅首次需要執行。
 
 1. 建 `deploy/.env`，開啟後填入 `DB_PASSWORD`、`ARCHIVE_ACCESS_KEY`、`ARCHIVE_SECRET_KEY`，最後一個至少 8 個字：
 
@@ -63,7 +63,7 @@
 
 ### 本機部署
 
-1. 執行後端測試、build 映像檔，啟動 `app` 和 `web` 容器。首次執行時間長：
+1. 執行後端測試、build 映像檔，再啟動 `app` 和 `web` 容器。首次執行需要較長時間：
 
    ```bash
    backend/gradlew -p backend deploy
@@ -83,7 +83,7 @@
 backend/gradlew -p backend bootRun
 ```
 
-前端在 <http://localhost:5173>，`/api` 轉給 8090。第一次先裝依賴：
+前端在 <http://localhost:5173>，`/api` 轉給 8090。首次執行前先安裝依賴：
 
 ```bash
 corepack enable && pnpm --dir web install
