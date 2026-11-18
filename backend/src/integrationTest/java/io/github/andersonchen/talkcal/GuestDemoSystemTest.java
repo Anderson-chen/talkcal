@@ -1,10 +1,13 @@
 package io.github.andersonchen.talkcal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -179,20 +182,18 @@ class GuestDemoSystemTest {
     @Test
     @DisplayName("http.server.requests 帶 guest 標籤：訪客的助理請求是 true；反例：登入者的助理請求、訪客呼叫其他 API 都是 false，沒有缺標籤的")
     void guestRequestsAreTagged() throws Exception {
-        assertEquals(200, ask(guestFrom(GUEST_IP), SUGGESTIONS.getFirst()).statusCode());
-        assertEquals(401, guestFrom(GUEST_IP).get("/api/calendar/events?from=2030-01-01&to=2030-02-01").statusCode());
+        BrowserSession guest = guestFrom(GUEST_IP);
+        assertEquals(200, ask(guest, SUGGESTIONS.getFirst()).statusCode());
+        assertEquals(401, guest.get("/api/calendar/events?from=2030-01-01&to=2030-02-01").statusCode());
         jdbc.sql("DELETE FROM account").update();
         BrowserSession amy = new BrowserSession(port).signUpAndLogIn("tag-test", "tag-test-pass");
         assertEquals(502, ask(amy, "幫我把明天的行程全部刪掉").statusCode());
 
         // 觀測在回應送出之後才結束，指標可能比回應晚一點記上
-        long deadline = System.nanoTime() + 5_000_000_000L;
-        while (System.nanoTime() < deadline && requests(URL, "false") == 0) {
-            Thread.sleep(50);
-        }
+        await().atMost(Duration.ofSeconds(5)).until(() -> requests(URL, "false") > 0);
         assertTrue(requests(URL, "true") >= 1, "訪客的助理請求要帶 guest=true");
         assertTrue(requests(URL, "false") >= 1, "登入者的助理請求要帶 guest=false");
-        assertTrue(meters.find("http.server.requests").tag("status", "401").tag("guest", "false").timer() != null,
+        assertNotNull(meters.find("http.server.requests").tag("status", "401").tag("guest", "false").timer(),
                 "訪客呼叫其他 API（被擋下的 401）也是 guest=false");
         assertTrue(meters.find("http.server.requests").timers().stream().allMatch(t -> t.getId().getTag("guest") != null),
                 "每個 http.server.requests 都要帶 guest 標籤，Prometheus registry 才不會拒絕登記");
