@@ -31,6 +31,16 @@ interface Options {
 // 助理每句話都提議這一筆（明天下午三點開會），proposalId 依序是 card-1、card-2…
 const PROPOSAL = { title: '開會', start: '2026-10-07T15:00:00', end: '2026-10-07T16:00:00', category: 'WORK', location: null, note: null }
 
+// 訪客示範的回答，形狀照後端的 GuestDemoController；日期照 e2e 固定的 2026-10-06（週二）算
+const GUEST_ANSWERS: Record<string, { reply: string; proposals: unknown[] }> = {
+  '明天下午3點和 Amy 開會': {
+    reply: '幫你整理成卡片了，確認後就會加進行事曆。',
+    proposals: [{ title: '和 Amy 開會', start: '2026-10-07T15:00:00', end: '2026-10-07T16:00:00', category: 'WORK', location: null, note: null, proposalId: null }],
+  },
+  '明天有什麼行程？': { reply: '明天 10/7（週三）有 2 個行程。', proposals: [] },
+  '這週哪天下午有空？': { reply: '這週下午有空的時段：10/7（週三）、10/11（週日）', proposals: [] },
+}
+
 const CSRF_TOKEN = 'fake-csrf-token'
 
 // 跟後端 MembershipTier 的 label() 一樣
@@ -65,6 +75,9 @@ export async function fakeApi(page: Page, options: Options = {}) {
     // 每次 GET /archive/events 的 from、to；下一次查封存要不要失敗
     archiveQueries: [] as { from: string; to: string }[],
     failNextArchive: false,
+    // 訪客看了幾次示範；POST /api/calendar/assistant 收到幾次（模型被呼叫幾次）
+    guestAsked: 0,
+    assistantCalls: 0,
   }
 
   const tier = options.tier ?? 'free'
@@ -116,6 +129,19 @@ export async function fakeApi(page: Page, options: Options = {}) {
     if (url.pathname === '/api/auth/logout') {
       state.me = null
       return route.fulfill({ status: 204 })
+    }
+
+    // ── 訪客的示範：不用登入，照後端的規則只收固定問題、每天 3 次（假後端只有一個 IP，所以是整個測試共用 3 次）──
+    if (url.pathname === '/api/demo/assistant' && method === 'POST') {
+      const question = (request.postDataJSON() as { message: string }).message
+      const answer = GUEST_ANSWERS[question]
+      if (!answer) return json(route, 400, { error: '沒登入只能問這幾題', code: 'INVALID_REQUEST' })
+      if (state.guestAsked >= 3) {
+        return route.fulfill({ status: 429, headers: { 'Retry-After': '3600' },
+          json: { error: '今天的示範次數用完了，註冊後就能直接跟助理說話', code: 'GUEST_LIMIT' } })
+      }
+      state.guestAsked++
+      return json(route, 200, { ...answer, remaining: 3 - state.guestAsked })
     }
 
     // ── 行事曆：要登入 ──
@@ -179,6 +205,7 @@ export async function fakeApi(page: Page, options: Options = {}) {
       return json(route, 200, { events: overlapping })
     }
     if (url.pathname === '/api/calendar/assistant' && method === 'POST') {
+      state.assistantCalls++
       state.cards++
       return json(route, 200, {
         conversationId: '00000000-0000-4000-8000-000000000036',
@@ -203,6 +230,7 @@ export async function fakeApi(page: Page, options: Options = {}) {
     get deleted() { return state.deleted },
     get events() { return state.events },
     get archiveQueries() { return state.archiveQueries },
+    get assistantCalls() { return state.assistantCalls },
     set failNextSave(error: string | null) { state.failNextSave = error },
     set failNextArchive(fail: boolean) { state.failNextArchive = fail },
     /** 模擬 session 過期：之後的請求都當成沒登入 */

@@ -4,9 +4,12 @@
 //
 // Google、GitHub 登入只在後端有設定時才出現。這兩個按鈕是一般的連結，不是 fetch：要整頁轉到對方去同意，
 // 失敗時後端轉回 /?login_error=oauth。
-import { computed, onMounted, ref } from 'vue'
+//
+// 旁邊的 GuestDemo 讓沒登入的人先看助理怎麼回答；按了示範卡片的「加入行事曆」或看滿次數，就回到這個表單。
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { loadProviders, logIn, providerLoginUrl, signUp, type Provider } from './auth'
 import { savedThemeVars } from './calendar/theme'
+import GuestDemo from './GuestDemo.vue'
 
 const vars = savedThemeVars()
 
@@ -14,6 +17,9 @@ const mode = ref<'login' | 'register'>('login')
 const username = ref('')
 const password = ref('')
 const error = ref<string | null>(null)
+// 從示範過來時的說明，例如按了卡片的「加入行事曆」
+const notice = ref<string | null>(null)
+const usernameInput = ref<HTMLInputElement | null>(null)
 const busy = ref(false)
 
 const providers = ref<Provider[]>([])
@@ -40,6 +46,14 @@ function switchMode() {
   error.value = null
 }
 
+async function fromDemo(to: 'login' | 'register', text: string) {
+  mode.value = to
+  error.value = null
+  notice.value = text
+  await nextTick()
+  usernameInput.value?.focus()
+}
+
 async function submit() {
   if (busy.value) return
   busy.value = true
@@ -59,9 +73,10 @@ async function submit() {
   <div class="login" :style="vars">
     <form class="card" @submit.prevent="submit">
       <h1>{{ title }}</h1>
+      <p v-if="notice" role="status" class="notice">{{ notice }}</p>
       <div class="field">
         <label for="login-username">帳號名稱</label>
-        <input id="login-username" v-model="username" autocomplete="username" autocapitalize="none" spellcheck="false" />
+        <input id="login-username" ref="usernameInput" v-model="username" autocomplete="username" autocapitalize="none" spellcheck="false" />
       </div>
       <div class="field">
         <label for="login-password">密碼</label>
@@ -82,11 +97,13 @@ async function submit() {
         {{ mode === 'login' ? '還沒有帳號？註冊' : '已經有帳號？登入' }}
       </button>
     </form>
+    <GuestDemo @need-login="fromDemo('login', '登入後，助理的卡片就能直接加進行事曆')"
+               @sign-up="fromDemo('register', '註冊之後就能直接跟助理說話，不限這幾題')" />
   </div>
 </template>
 
 <style scoped>
-.login { height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
+.login { min-height: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 24px; padding: 16px; box-sizing: border-box;
   background: var(--panel); color: var(--ink); font-family: 'Noto Sans TC', Manrope, sans-serif; }
 .card { width: 100%; max-width: 360px; padding: 28px; border-radius: 16px; background: var(--card); border: 1px solid var(--line);
   display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; }
@@ -96,6 +113,7 @@ label { font-size: 13px; font-weight: 500; color: var(--muted); }
 input { height: 44px; border: 1px solid var(--field); border-radius: 10px; padding: 0 12px; font-size: 15px;
   background: var(--card); color: var(--ink); font-family: inherit; }
 input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.notice { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--seg); font-size: 14px; }
 .hint { margin: 0; font-size: 13px; color: var(--muted); }
 .error { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--dangerSoft); color: var(--danger); font-size: 14px; }
 .primary { height: 44px; border: 0; border-radius: 10px; background: var(--accent); color: var(--onAccent); font-size: 15px;

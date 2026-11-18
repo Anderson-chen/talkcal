@@ -32,7 +32,7 @@ import org.springframework.security.web.authentication.logout.HttpStatusReturnin
  * 瀏覽器和後端之間只有一個 HttpOnly 的 session cookie，前端不碰任何 token；Google 給的 token 也只留在後端的 session。
  * 前端和後端在同一個網域（nginx 把 /api 轉過來），不需要 CORS。
  *
- * - /api 底下除了註冊、登入都要登入；沒登入回 401 JSON，不轉址到登入頁，登入畫面由前端畫
+ * - /api 底下除了註冊、登入、訪客的示範回答都要登入；沒登入回 401 JSON，不轉址到登入頁，登入畫面由前端畫
  * - POST、PUT、DELETE 要帶 CSRF token：別的網站騙瀏覽器送請求時 cookie 會自動帶上，
  *   但別的網站讀不到這個網域的 XSRF-TOKEN cookie，送不出對的 header
  * - API 文件不擋：nginx 只轉 /api，外面連不到
@@ -73,6 +73,8 @@ class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
                         // 畫登入頁之前要先取得有哪些按鈕，這時還沒登入
                         .requestMatchers(HttpMethod.GET, "/api/auth/providers").permitAll()
+                        // 訪客的示範回答：不呼叫模型，次數由 GuestDemoController 依 IP 計數
+                        .requestMatchers(HttpMethod.POST, "/api/demo/assistant").permitAll()
                         // 出錯時 Spring Boot 會轉到 /error 產生回應；擋住的話，所有錯誤都變成 401
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(EndpointRequest.toAnyEndpoint()).permitAll()

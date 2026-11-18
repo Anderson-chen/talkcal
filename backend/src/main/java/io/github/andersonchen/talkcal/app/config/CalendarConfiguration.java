@@ -11,6 +11,7 @@ import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantProposalAdapter;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcCalendarEventAdapter;
+import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcGuestDemoUsageAdapter;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.AddEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ArchiveEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.CountActiveUsersService;
@@ -20,6 +21,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.service.ListAr
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ListEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ParseEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.RemoveEventService;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.ShowGuestDemoService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.FindEventService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.UpdateEventService;
 import io.github.andersonchen.talkcal.calendar.application.port.in.AddEventsUseCase;
@@ -32,6 +34,7 @@ import io.github.andersonchen.talkcal.calendar.application.port.in.ListArchivedE
 import io.github.andersonchen.talkcal.calendar.application.port.in.ListEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ParseEventsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.RemoveEventUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.ShowGuestDemoUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.FindEventUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.in.UpdateEventUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.out.DeleteArchivedEventsPort;
@@ -82,6 +85,19 @@ class CalendarConfiguration {
     JdbcAssistantMemoryRepository assistantMemory(JdbcClient jdbcClient, PlatformTransactionManager transactionManager,
                                                   @Value("${calendar.assistant.memory-turns}") int memoryTurns) {
         return new JdbcAssistantMemoryRepository(jdbcClient, new TransactionTemplate(transactionManager), memoryTurns);
+    }
+
+    // ── 訪客的示範回答（不呼叫模型）──────────────────────────────────────
+
+    // 回傳型別寫實作，理由見 calendarEventStore：清理排程要用 deleteBefore
+    @Bean
+    JdbcGuestDemoUsageAdapter guestDemoUsage(JdbcClient jdbcClient) {
+        return new JdbcGuestDemoUsageAdapter(jdbcClient);
+    }
+
+    @Bean
+    ShowGuestDemoUseCase showGuestDemo(JdbcGuestDemoUsageAdapter guestDemoUsage, @Value("${calendar.zone}") ZoneId zone) {
+        return new ShowGuestDemoService(guestDemoUsage, Clock.system(zone));
     }
 
     // ── 助理工具背後的 use case ────────────────────────────────────────────

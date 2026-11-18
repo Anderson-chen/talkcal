@@ -2,11 +2,13 @@ package io.github.andersonchen.talkcal.app.config;
 
 import io.github.andersonchen.talkcal.app.job.AssistantMemoryArchive;
 import io.github.andersonchen.talkcal.app.job.EventArchiveJob;
+import io.github.andersonchen.talkcal.app.job.GuestDemoUsageCleanup;
 import io.github.andersonchen.talkcal.app.job.IdempotencyKeyCleanup;
 import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.ArchiveBucket;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantProposalAdapter;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcCalendarEventAdapter;
+import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcGuestDemoUsageAdapter;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ArchiveEventsUseCase;
 
 import java.time.Clock;
@@ -36,6 +38,11 @@ class JobConfiguration {
     IdempotencyKeyCleanup idempotencyKeyCleanup(JdbcCalendarEventAdapter calendarEventStore,
                                                 @Value("${calendar.idempotency.retention}") Duration retention) {
         return new IdempotencyKeyCleanup(calendarEventStore, retention, Clock.systemUTC());
+    }
+
+    @Bean
+    GuestDemoUsageCleanup guestDemoUsageCleanup(JdbcGuestDemoUsageAdapter guestDemoUsage, @Value("${calendar.zone}") ZoneId zone) {
+        return new GuestDemoUsageCleanup(guestDemoUsage, Clock.system(zone));
     }
 
     @Bean

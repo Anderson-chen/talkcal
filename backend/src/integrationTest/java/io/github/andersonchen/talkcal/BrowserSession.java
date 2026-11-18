@@ -24,6 +24,8 @@ final class BrowserSession {
     private final HttpClient http;
     // 關掉就是模擬別的網站讓瀏覽器送出請求：cookie 照樣帶，但別的網站讀不到 XSRF-TOKEN
     private boolean sendCsrfHeader = true;
+    // 模擬經過 nginx 進來的某個 IP：測試從 127.0.0.1 連，Tomcat 把它當成內部的 proxy，照這個 header 還原來源
+    private String forwardedFor;
 
     BrowserSession(int port) {
         this.baseUrl = "http://localhost:" + port;
@@ -32,6 +34,11 @@ final class BrowserSession {
 
     BrowserSession withoutCsrfHeader() {
         sendCsrfHeader = false;
+        return this;
+    }
+
+    BrowserSession forwardedFor(String header) {
+        forwardedFor = header;
         return this;
     }
 
@@ -87,7 +94,11 @@ final class BrowserSession {
 
     private HttpRequest.Builder request(String path) {
         // 問助理會等模型，不能比 app 的 spring.ai.openai.chat.timeout 短，改設定時這裡一起改
-        return HttpRequest.newBuilder(URI.create(baseUrl + path)).timeout(Duration.ofMinutes(2));
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(baseUrl + path)).timeout(Duration.ofMinutes(2));
+        if (forwardedFor != null) {
+            builder.header("X-Forwarded-For", forwardedFor);
+        }
+        return builder;
     }
 
     private HttpResponse<String> send(HttpRequest.Builder request, boolean changesSomething) throws Exception {
