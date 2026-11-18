@@ -19,7 +19,7 @@ test('沒登入按「以訪客身分試用」：看到原本的行事曆和助�
   await enterAsGuest(page)
 
   await expect(page.getByRole('heading', { name: '2026年10月' })).toBeVisible()
-  await expect(page.getByPlaceholder('登入後就能直接打字問助理')).toBeDisabled()
+  await expect(page.getByPlaceholder('登入後開始使用')).toBeDisabled()
   for (const question of QUESTIONS) await expect(page.getByRole('button', { name: question })).toBeVisible()
 
   await page.getByRole('button', { name: QUESTIONS[0] }).click()

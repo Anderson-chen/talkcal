@@ -75,7 +75,7 @@ export const SUGGESTIONS = ['明天下午3點和 Amy 開會', '明天有什麼�
 const GREETING = '嗨！我是你的行事曆助理。可以幫你新增、修改、刪除行程，查某天的安排，或找出空檔。不管哪一種，我都會整理成卡片讓你確認後才動行事曆。'
 const GUEST_GREETING = '嗨！我是你的行事曆助理。還沒登入也能先點下面的問題，看我怎麼回答（每天 3 次）；登入後就能直接打字問我。'
 /** 訪客的輸入框停用，placeholder 說明怎麼才能打字 */
-export const GUEST_PLACEHOLDER = '登入後就能直接打字問助理'
+export const GUEST_PLACEHOLDER = '登入後開始使用'
 
 // 私密視窗、被封鎖的網站資料會讓 localStorage 丟例外，下面一律捕捉後忽略，最壞就是重新整理後開新對話。
 // key 帶登入者的 id，換人登入才不會讀回上一個人的對話。擋住讀別人對話的是後端的授權，這裡只是不主動去要
