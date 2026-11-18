@@ -63,7 +63,7 @@
 
 ### 本機部署
 
-1. 執行後端測試、build 映像檔，啟動 `app` 和 `web` 容器，等到兩個都 healthy。第一次會比較久：
+1. 執行後端測試、build 映像檔，啟動 `app` 和 `web` 容器。首次執行時間長：
 
    ```bash
    backend/gradlew -p backend deploy
