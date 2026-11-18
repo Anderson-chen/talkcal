@@ -80,7 +80,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    src[("C:\llm\models<br/>Windows 資料夾")] -->|"第一次複製<br/>SHA256 驗證"| seed["model-seed<br/>跑完就結束"]
+    src[("MODELS_DIR<br/>預設 C:\llm\models")] -->|"第一次複製<br/>SHA256 驗證"| seed["model-seed<br/>複製完就結束"]
     seed --> vol[("volume models<br/>在 WSL2 裡，讀得快")]
     vol -->|"唯讀掛載"| llm["llm-chat"]
 ```

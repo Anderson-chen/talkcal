@@ -39,7 +39,7 @@
 
 | 環境需求 | 條件 |
 |---|---|
-| Windows | 模型檔路徑寫死 `C:\llm\models`，改成可設定的路徑還沒做 |
+| Windows | 下面的步驟照 Windows 寫：Docker Desktop、Git Bash、`C:/` 開頭的路徑 |
 | NVIDIA 顯卡 | RTX 40 系列、驅動 580 以上；比 RTX 40 舊的顯卡要改 `deploy/llama-server/Dockerfile` 的 `CUDA_ARCH` |
 | Docker Desktop | WSL 2 後端 |
 | JDK | 25 |
@@ -52,6 +52,8 @@
    ```bash
    curl -L --create-dirs -o C:/llm/models/Qwen3-8B-Q4_K_M.gguf https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf
    ```
+
+   模型檔要放在其他資料夾的話，這個指令和下一個指令的 `C:/llm/models` 換成那個資料夾，步驟 3 再把 `deploy/.env` 的 `MODELS_DIR` 設成同一個路徑。
 
 2. 寫校驗檔，模型複製進容器時照它驗內容（已經有這個檔案的話，改成手動加這一行，不然會整份蓋掉）：
 
