@@ -203,7 +203,10 @@ const dotColor = (category: Category) => theme.colors.value[category].color
         <ThemePicker large />
         <!-- 登出放這個面板：手機版頁首放不下 -->
         <div v-if="me" class="account">
-          <span class="account-name">{{ me.name }}</span>
+          <span class="account-who">
+            <span class="account-name">{{ me.name }}</span>
+            <span class="tier">{{ me.tierLabel }}</span>
+          </span>
           <button type="button" class="logout" @click="logOut()">登出</button>
         </div>
       </div>
@@ -280,6 +283,8 @@ h1.small { font-size: 22px; line-height: 1.3; white-space: nowrap; }
 .theme-head h2 { margin: 0; font-size: 18px; font-weight: 700; }
 .done { height: 44px; padding: 0 8px; border: 0; background: transparent; color: var(--accent); font-size: 16px; font-weight: 600; }
 .account { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.account-who { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .account-name { font-size: 15px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tier { font-size: 13px; font-weight: 600; color: var(--accent); }
 .logout { height: 40px; padding: 0 16px; border: 1px solid var(--field); border-radius: 10px; background: transparent; color: var(--ink); font-size: 15px; }
 </style>

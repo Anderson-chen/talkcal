@@ -16,6 +16,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -79,6 +80,28 @@ class AuthSystemTest {
 
         assertEquals(204, amy.logout().statusCode());
         assertEquals(401, amy.get("/api/calendar/events?from=2030-01-01&to=2030-02-01").statusCode());
+    }
+
+    @Test
+    @DisplayName("新註冊的是免費會員；照 README 的 SQL 改成付費後，同一個 session 不用重新登入，下一次呼叫 /me 就回傳付費")
+    void tierFollowsDatabase() throws Exception {
+        BrowserSession amy = browser().signUpAndLogIn("amy", PASSWORD);
+        BrowserSession bob = browser().signUpAndLogIn("bob", PASSWORD);
+        assertTier("free", "免費會員", amy);
+
+        jdbc.sql("UPDATE account SET tier = 'paid' WHERE username = 'amy'").update();
+
+        assertTier("paid", "付費會員", amy);
+        assertTier("free", "免費會員", bob);
+
+        jdbc.sql("UPDATE account SET tier = 'free' WHERE username = 'amy'").update();
+        assertTier("free", "免費會員", amy);
+    }
+
+    private static void assertTier(String tier, String label, BrowserSession who) throws Exception {
+        JsonNode me = JSON.readTree(who.get("/api/auth/me").body());
+        assertEquals(tier, me.at("/tier").asString());
+        assertEquals(label, me.at("/tierLabel").asString());
     }
 
     @Test

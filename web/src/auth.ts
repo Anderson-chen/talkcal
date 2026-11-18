@@ -14,6 +14,8 @@ export interface Me {
   name: string
   // 只用 Google、GitHub 登入的帳號沒有帳號名稱
   username: string | null
+  // 畫面上顯示的會員等級，文字由後端決定
+  tierLabel: string
 }
 
 /** 帳密以外的登入方式，後端有設定 client id 的才會開 */

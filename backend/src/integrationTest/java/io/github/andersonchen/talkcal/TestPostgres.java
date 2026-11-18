@@ -72,6 +72,12 @@ public final class TestPostgres {
             return this;
         }
 
+        /** 只執行到 version 這一版為止，用來在新的 migration 執行前先寫入舊格式的資料。 */
+        public Database migratedTo(String version) {
+            Flyway.configure().dataSource(url, username, password).target(version).load().migrate();
+            return this;
+        }
+
         public DriverManagerDataSource dataSource() {
             return new DriverManagerDataSource(url, username, password);
         }

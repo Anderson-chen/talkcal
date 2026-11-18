@@ -70,7 +70,10 @@ const noEventsToday = computed(() => calendar.view.value === 'day' && calendar.e
         <ThemePicker />
       </div>
       <div v-if="me" class="account">
-        <span class="account-name">{{ me.name }}</span>
+        <span class="account-who">
+          <span class="account-name">{{ me.name }}</span>
+          <span class="tier">{{ me.tierLabel }}</span>
+        </span>
         <button type="button" class="logout" @click="logOut()">登出</button>
       </div>
     </aside>
@@ -212,6 +215,8 @@ h1 { margin: 0; font-size: 24px; font-weight: 700; flex: 1; min-width: 200px; }
   .assistant { position: absolute; top: 0; right: 0; bottom: 0; z-index: 4; box-shadow: -12px 0 32px rgba(0, 0, 0, 0.14); }
 }
 .account { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.account-who { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .account-name { font-size: 14px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tier { font-size: 12px; font-weight: 600; color: var(--accent); }
 .logout { height: 32px; padding: 0 12px; border: 1px solid var(--field); border-radius: 8px; background: transparent; color: var(--ink); font-size: 13px; }
 </style>
