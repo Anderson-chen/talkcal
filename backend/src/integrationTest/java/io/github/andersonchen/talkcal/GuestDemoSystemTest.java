@@ -32,6 +32,7 @@ import tools.jackson.databind.ObjectMapper;
  * 沒登入的訪客問助理，要整個 app 組在一起才測得出來的地方：SecurityConfiguration 只開放 POST /api/calendar/assistant、其他 API 沒有跟著開放、
  * Tomcat 照 server.forward-headers-strategy 還原的 IP、V15 的計數。
  *
+ * 訪客的次數照 IP 算，每一題用 BrowserSession.forwardedFor 扮成不同 IP 的訪客，「不同 IP 各自算」「偽造 header 換不到次數」才測得出來。
  * 模型指到連不上的位址：訪客的回答只要呼叫了模型就會 502，回得出 200 就是沒有呼叫。
  * 問題的文字照 web/src/calendar/useAssistant.ts 的 SUGGESTIONS 寫，不引用 GuestDemo 的常數：前端送的就是這幾個字。
  */
