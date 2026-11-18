@@ -97,32 +97,32 @@ pnpm --dir web run dev
 
 不啟動模型也能用行事曆，只有 AI 助理不能用。
 
-1. 查顯卡是哪一代（compute capability）和驅動版本：
+1. 查顯卡的 compute capability 和驅動版本：
 
    ```bash
    nvidia-smi --query-gpu=compute_cap,driver_version --format=csv,noheader
    ```
 
-   第一個數字是 `8.9`（RTX 40 系列）、第二個是 580 以上，例如 `8.9, 581.29`，就不用改，直接做第 2 步。其他情況要改 `deploy/llama-server/Dockerfile`：
+   印出 `8.9`（RTX 40 系列）和 580 以上的驅動，例如 `8.9, 581.29`，就直接做第 2 步。其他情況先改 `deploy/llama-server/Dockerfile`：
 
-   - 第一個數字不是 `8.9`：`CUDA_ARCH` 改成這個數字去掉小數點的值，例如 RTX 30 系列印出 `8.6`，就改成 `86`。第一個數字低於 `7.5` 時（GTX 10 系列和更早的顯卡），CUDA 13 不支援，`CUDA_VERSION` 也要照下一條改。
-   - 驅動低於 580：照 `CUDA_VERSION` 上面那行註解改，`deploy/compose.yaml` 裡 `llama-server` 映像檔 tag 的 CUDA 版本也跟著改。
+   - 第一個數字不是 `8.9`：`CUDA_ARCH` 改成去掉小數點的值，例如 RTX 30 系列的 `8.6` 改成 `86`。
+   - 驅動低於 580，或第一個數字低於 `7.5`（GTX 10 系列和更早的顯卡，CUDA 13 不支援）：照 `CUDA_VERSION` 上面的註解改，`deploy/compose.yaml` 裡 `llama-server` 映像檔 tag 的 CUDA 版本也跟著改。
 
-2. 下載模型（約 5 GB，來源 [Qwen/Qwen3-8B-GGUF](https://huggingface.co/Qwen/Qwen3-8B-GGUF)）。`<模型資料夾>` 換成要放模型檔的絕對路徑，例如 `C:/llm/models`：
+2. 下載模型（約 5 GB，來源 [Qwen/Qwen3-8B-GGUF](https://huggingface.co/Qwen/Qwen3-8B-GGUF)），`<模型資料夾>` 換成絕對路徑：
 
    ```bash
    curl -L --create-dirs -o <模型資料夾>/Qwen3-8B-Q4_K_M.gguf https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf
    ```
 
-   再把 `deploy/.env` 的 `MODELS_DIR` 設成同一個路徑；用 `C:/llm/models` 的話不用設，那是預設值。
+   路徑不是預設的 `C:/llm/models` 時，把 `deploy/.env` 的 `MODELS_DIR` 設成同一個路徑。
 
-3. 寫 checksum 檔，模型複製進容器時會照這個檔案驗內容（已經有這個檔案的話，改成手動加這一行，不然會整份蓋掉）：
+3. 寫 checksum 檔，模型複製進容器時用來驗證內容。已經有 `SHA256SUMS` 的話改成手動加這一行，這個指令會覆蓋整個檔案：
 
    ```bash
    echo "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785  Qwen3-8B-Q4_K_M.gguf" > <模型資料夾>/SHA256SUMS
    ```
 
-4. 啟動模型（第一次要 build 映像檔，約 10 分鐘）：
+4. 啟動模型，首次執行要 build 映像檔，約 10 分鐘：
 
    ```bash
    docker compose -f deploy/compose.yaml up -d llm-chat
@@ -130,7 +130,7 @@ pnpm --dir web run dev
 
    `llm-chat` healthy 之後 AI 助理就能用，app 不用重新啟動。
 
-   `llm-chat` 無法啟動時，確認容器裡偵測得到顯卡，要印出 `GPU 0: NVIDIA ...`：
+   無法啟動時，確認容器偵測得到顯卡，應印出 `GPU 0: NVIDIA ...`：
 
    ```bash
    docker compose -f deploy/compose.yaml run --rm --no-deps --entrypoint nvidia-smi llm-chat -L
