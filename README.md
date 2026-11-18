@@ -47,7 +47,7 @@
 
 ### 前置作業
 
-「本機部署」和「本機開發」都要先做。
+僅首次執行，「本機部署」和「本機開發」共用。
 
 1. 建 `deploy/.env`，開啟後填入 `DB_PASSWORD`、`ARCHIVE_ACCESS_KEY`、`ARCHIVE_SECRET_KEY`，最後一個至少 8 個字：
 
