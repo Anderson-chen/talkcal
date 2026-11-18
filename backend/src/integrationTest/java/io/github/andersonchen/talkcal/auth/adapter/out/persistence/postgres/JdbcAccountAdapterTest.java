@@ -10,9 +10,13 @@ import io.github.andersonchen.talkcal.auth.application.domain.model.Account;
 import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
 import io.github.andersonchen.talkcal.auth.application.domain.model.ExternalIdentity;
 import io.github.andersonchen.talkcal.auth.application.domain.model.ExternalIdentity.Provider;
+import io.github.andersonchen.talkcal.auth.application.domain.model.MembershipTier;
 import io.github.andersonchen.talkcal.auth.application.domain.model.Username;
 
+import java.util.List;
 import java.util.UUID;
+
+import org.flywaydb.core.Flyway;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -113,5 +117,53 @@ class JdbcAccountAdapterTest {
 
         assertTrue(adapter.load(AMY_GOOGLE).isEmpty());
         assertEquals(0, jdbc.sql("SELECT count(*) FROM account_identity").query(Integer.class).single());
+    }
+
+    @Test
+    @DisplayName("新帳號存成免費；照 README 的 SQL 改成付費後，讀回來是付費")
+    void tierIsStoredAndLoaded() {
+        Account amy = Account.withPassword(AccountId.newId(), new Username("amy"), "{bcrypt}hash");
+        adapter.saveIfUsernameFree(amy);
+        Account bob = Account.external(AccountId.newId(), "Bob", null);
+        adapter.saveIfIdentityFree(bob, AMY_GOOGLE);
+
+        assertEquals(MembershipTier.FREE, adapter.load(amy.id()).orElseThrow().tier());
+        assertEquals(MembershipTier.FREE, adapter.load(AMY_GOOGLE).orElseThrow().tier());
+
+        jdbc.sql("UPDATE account SET tier = 'paid' WHERE username = 'amy'").update();
+
+        assertEquals(MembershipTier.PAID, adapter.load(new Username("amy")).orElseThrow().tier());
+        assertEquals(MembershipTier.FREE, adapter.load(bob.id()).orElseThrow().tier(), "反例：沒改到的帳號還是免費");
+    }
+
+    @Test
+    @DisplayName("V14 的約束：寫入不存在的等級（gold、大寫的 PAID、NULL）資料庫拒絕，原本的等級不變")
+    void unknownTierIsRejected() {
+        Account amy = Account.withPassword(AccountId.newId(), new Username("amy"), "{bcrypt}hash");
+        adapter.saveIfUsernameFree(amy);
+
+        for (String tier : new String[] {"gold", "PAID", ""}) {
+            assertThrows(DataIntegrityViolationException.class, () -> jdbc.sql("UPDATE account SET tier = :tier")
+                    .param("tier", tier).update(), tier);
+        }
+        assertThrows(DataIntegrityViolationException.class, () -> jdbc.sql("UPDATE account SET tier = NULL").update());
+
+        assertEquals(MembershipTier.FREE, adapter.load(amy.id()).orElseThrow().tier());
+    }
+
+    @Test
+    @DisplayName("反例：V14 之前就有的帳號（帳密、Google 各一個），migration 之後都是免費會員")
+    void existingAccountsBecomeFree() {
+        TestPostgres.Database old = TestPostgres.newDatabase();
+        Flyway.configure().dataSource(old.url(), old.username(), old.password()).target("13").load().migrate();
+        JdbcClient oldJdbc = JdbcClient.create(old.dataSource());
+        oldJdbc.sql("INSERT INTO account (id, display_name, username, password_hash) VALUES (:id, 'amy', 'amy', 'x')")
+                .param("id", UUID.randomUUID()).update();
+        oldJdbc.sql("INSERT INTO account (id, display_name) VALUES (:id, 'Bob')")
+                .param("id", UUID.randomUUID()).update();
+
+        old.migrated();
+
+        assertEquals(List.of("free", "free"), oldJdbc.sql("SELECT tier FROM account").query(String.class).list());
     }
 }

@@ -82,6 +82,22 @@ class AuthSystemTest {
     }
 
     @Test
+    @DisplayName("新註冊的是免費會員；照 README 的 SQL 改成付費後，同一個 session 的下一個請求 /me 就是付費（不用重新登入）")
+    void tierFollowsDatabase() throws Exception {
+        BrowserSession amy = browser().signUpAndLogIn("amy", PASSWORD);
+        BrowserSession bob = browser().signUpAndLogIn("bob", PASSWORD);
+        assertEquals("free", JSON.readTree(amy.get("/api/auth/me").body()).at("/tier").asString());
+
+        jdbc.sql("UPDATE account SET tier = 'paid' WHERE username = 'amy'").update();
+
+        assertEquals("paid", JSON.readTree(amy.get("/api/auth/me").body()).at("/tier").asString());
+        assertEquals("free", JSON.readTree(bob.get("/api/auth/me").body()).at("/tier").asString(), "反例：沒改到的帳號還是免費");
+
+        jdbc.sql("UPDATE account SET tier = 'free' WHERE username = 'amy'").update();
+        assertEquals("free", JSON.readTree(amy.get("/api/auth/me").body()).at("/tier").asString(), "降級也是下一個請求就生效");
+    }
+
+    @Test
     @DisplayName("CSRF：已登入但沒帶 X-XSRF-TOKEN 的 POST 是 403；反例：同一個人帶了就 201")
     void csrfIsRequired() throws Exception {
         String event = """

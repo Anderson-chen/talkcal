@@ -22,6 +22,8 @@ interface Options {
   providers?: string[]
   // 已經用 Google、GitHub 登入的人：/me 回這個名字，沒有帳號名稱（跟後端一樣）
   externalName?: string
+  // 登入的人的會員等級，預設免費（跟後端新註冊的帳號一樣）
+  tier?: 'free' | 'paid'
   // 已經封存的行程：不在 events 裡，月曆上看不到
   archived?: FakeEvent[]
 }
@@ -62,6 +64,8 @@ export async function fakeApi(page: Page, options: Options = {}) {
     failNextArchive: false,
   }
 
+  const tier = options.tier ?? 'free'
+
   const json = (route: Route, status: number, body: unknown) => route.fulfill({ status, json: body })
 
   // 跟 Spring Security 一樣，回應時把 XSRF-TOKEN cookie 發給瀏覽器（JavaScript 讀得到）
@@ -80,10 +84,10 @@ export async function fakeApi(page: Page, options: Options = {}) {
     // ── 帳號 ──
     if (url.pathname === '/api/auth/me') {
       if (options.externalName && state.me) {
-        return route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: 'id-external', name: options.externalName, username: null } })
+        return route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: 'id-external', name: options.externalName, username: null, tier } })
       }
       return state.me
-        ? route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: `id-${state.me}`, name: state.me, username: state.me } })
+        ? route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: `id-${state.me}`, name: state.me, username: state.me, tier } })
         : route.fulfill({ status: 401, headers: withCsrfCookie, json: { error: '請先登入' } })
     }
     if (url.pathname === '/api/auth/providers') {

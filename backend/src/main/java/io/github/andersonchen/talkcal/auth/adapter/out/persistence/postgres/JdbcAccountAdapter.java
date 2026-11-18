@@ -3,6 +3,7 @@ package io.github.andersonchen.talkcal.auth.adapter.out.persistence.postgres;
 import io.github.andersonchen.talkcal.auth.application.domain.model.Account;
 import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
 import io.github.andersonchen.talkcal.auth.application.domain.model.ExternalIdentity;
+import io.github.andersonchen.talkcal.auth.application.domain.model.MembershipTier;
 import io.github.andersonchen.talkcal.auth.application.domain.model.Username;
 import io.github.andersonchen.talkcal.auth.application.port.out.LoadAccountPort;
 import io.github.andersonchen.talkcal.auth.application.port.out.SaveAccountPort;
@@ -17,10 +18,10 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** 表的定義在 db/migration/V9、V10。 */
+/** 表的定義在 db/migration/V9、V10、V14。 */
 public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPort {
 
-    private static final String COLUMNS = "account.id, account.display_name, account.username, account.password_hash";
+    private static final String COLUMNS = "account.id, account.display_name, account.username, account.password_hash, account.tier";
 
     private final JdbcClient jdbc;
     private final TransactionTemplate transaction;
@@ -37,14 +38,15 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
         try {
             // 撞名由資料庫的 UNIQUE 判斷，不先查再存：兩個人同時註冊同一個名字，只有一個會插入成功
             int inserted = jdbc.sql("""
-                            INSERT INTO account (id, display_name, username, password_hash)
-                            VALUES (:id, :displayName, :username, :hash)
+                            INSERT INTO account (id, display_name, username, password_hash, tier)
+                            VALUES (:id, :displayName, :username, :hash, :tier)
                             ON CONFLICT (username) DO NOTHING
                             """)
                     .param("id", account.id().value())
                     .param("displayName", account.displayName())
                     .param("username", login.username().value())
                     .param("hash", login.passwordHash())
+                    .param("tier", account.tier().id())
                     .update();
             return inserted == 1;
         } catch (DataAccessException e) {
@@ -57,9 +59,10 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
         try {
             // 同一個交易：identity 已經有人用了的話，剛插入的帳號也撤掉，不留下沒人登得進的帳號
             Boolean saved = transaction.execute(status -> {
-                jdbc.sql("INSERT INTO account (id, display_name) VALUES (:id, :displayName)")
+                jdbc.sql("INSERT INTO account (id, display_name, tier) VALUES (:id, :displayName, :tier)")
                         .param("id", account.id().value())
                         .param("displayName", account.displayName())
+                        .param("tier", account.tier().id())
                         .update();
                 // 另一個交易正在插同一個 identity 時，PostgreSQL 會等那個交易結束再決定：
                 // 那個交易 commit 了，這邊就是 0 列，兩邊不會都回報建立成功
@@ -128,6 +131,7 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
         Account.PasswordLogin login = username == null
                 ? null
                 : new Account.PasswordLogin(new Username(username), rs.getString("password_hash"));
-        return new Account(new AccountId(rs.getObject("id", UUID.class)), rs.getString("display_name"), login);
+        return new Account(new AccountId(rs.getObject("id", UUID.class)), rs.getString("display_name"), login,
+                MembershipTier.of(rs.getString("tier")));
     }
 }

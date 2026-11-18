@@ -10,8 +10,10 @@ import java.util.Optional;
  * - Google、GitHub：記在另一張表（ExternalIdentity 對到這個帳號）；只用這種方式登入的帳號 passwordLogin 是 null
  *
  * displayName 是給人看的名字，可能重複、可能改，不能當身分；身分是 id。
+ *
+ * 新帳號都是免費會員；改成付費要由維護者直接改資料庫（見 V14）。
  */
-public record Account(AccountId id, String displayName, PasswordLogin passwordLogin) {
+public record Account(AccountId id, String displayName, PasswordLogin passwordLogin, MembershipTier tier) {
 
     /**
      * 以 UTF-8 的 bytes 算：
@@ -38,6 +40,7 @@ public record Account(AccountId id, String displayName, PasswordLogin passwordLo
 
     public Account {
         Objects.requireNonNull(id, "帳號 ID 不可為 null");
+        Objects.requireNonNull(tier, "會員等級不可為 null");
         if (displayName == null || displayName.isBlank()) {
             throw new IllegalArgumentException("顯示名稱不可為空白");
         }
@@ -47,7 +50,7 @@ public record Account(AccountId id, String displayName, PasswordLogin passwordLo
     }
 
     public static Account withPassword(AccountId id, Username username, String passwordHash) {
-        return new Account(id, username.value(), new PasswordLogin(username, passwordHash));
+        return new Account(id, username.value(), new PasswordLogin(username, passwordHash), MembershipTier.FREE);
     }
 
     /**
@@ -65,7 +68,7 @@ public record Account(AccountId id, String displayName, PasswordLogin passwordLo
             // 用 code point 算：以 char 截的話，emoji 這類兩個 char 的字可能被切成一半
             cleaned = cleaned.substring(0, cleaned.offsetByCodePoints(0, MAX_DISPLAY_NAME_LENGTH));
         }
-        return new Account(id, cleaned, null);
+        return new Account(id, cleaned, null, MembershipTier.FREE);
     }
 
     public Optional<PasswordLogin> password() {

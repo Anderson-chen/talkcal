@@ -14,6 +14,8 @@ export interface Me {
   name: string
   // 只用 Google、GitHub 登入的帳號沒有帳號名稱
   username: string | null
+  // 沒登入的訪客拿不到 Me，所以只有這兩種
+  tier: 'free' | 'paid'
 }
 
 /** 帳密以外的登入方式，後端有設定 client id 的才會開 */
