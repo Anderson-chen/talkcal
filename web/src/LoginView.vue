@@ -5,10 +5,10 @@
 // Google、GitHub 登入只在後端有設定時才出現。這兩個按鈕是一般的連結，不是 fetch：要整頁轉到對方去同意，
 // 失敗時後端轉回 /?login_error=oauth。
 //
-// 訪客在行事曆上按了要帳號的功能才會來到這裡（auth.ts 的 loginPrompt），上面顯示為什麼要登入；
-// 「先不登入」回到訪客的行事曆。
+// 「以訪客身分試用」進到行事曆，功能鎖住。訪客在行事曆上按了要帳號的功能會回到這裡（auth.ts 的 loginPrompt），
+// 上面顯示為什麼要登入。
 import { computed, onMounted, ref } from 'vue'
-import { loadProviders, logIn, loginPrompt, providerLoginUrl, signUp, type Provider } from './auth'
+import { enterAsGuest, loadProviders, logIn, loginPrompt, providerLoginUrl, signUp, type Provider } from './auth'
 import { savedThemeVars } from './calendar/theme'
 
 const vars = savedThemeVars()
@@ -39,10 +39,6 @@ onMounted(async () => {
   }
   providers.value = await loadProviders()
 })
-
-function stayAsGuest() {
-  loginPrompt.value = null
-}
 
 function switchMode() {
   mode.value = mode.value === 'login' ? 'register' : 'login'
@@ -91,7 +87,7 @@ async function submit() {
       <button type="button" class="switch" @click="switchMode">
         {{ mode === 'login' ? '還沒有帳號？註冊' : '已經有帳號？登入' }}
       </button>
-      <button type="button" class="switch" @click="stayAsGuest">先不登入，回到行事曆</button>
+      <button type="button" class="switch" @click="enterAsGuest">以訪客身分試用</button>
     </form>
   </div>
 </template>

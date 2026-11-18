@@ -11,21 +11,30 @@ test.beforeEach(async ({ page }) => {
 const submit = (page: import('@playwright/test').Page, name: '登入' | '註冊') =>
   page.locator('form').getByRole('button', { name, exact: true })
 
-// 沒登入時先看到訪客的行事曆，按側欄的「登入」才到登入頁
 async function openLogin(page: import('@playwright/test').Page) {
   await page.goto('/')
-  await page.getByRole('button', { name: '登入', exact: true }).click()
   await expect(page.getByRole('heading', { name: '登入', level: 1 })).toBeVisible()
 }
 
-test('沒登入：先看到訪客的行事曆，側欄是「訪客」和「登入」，沒有去讀行程', async ({ page }) => {
+test('沒登入：先看到登入頁，行事曆不出現', async ({ page }) => {
+  await fakeApi(page, { loggedIn: false })
+  await openLogin(page)
+
+  await expect(page.getByRole('button', { name: '新增行程', exact: true })).toHaveCount(0)
+})
+
+test('按「以訪客身分試用」：看到行事曆，側欄是「訪客」和「登入」，沒有去讀行程；按「登入」回到登入頁', async ({ page }) => {
   const api = await fakeApi(page, { loggedIn: false })
-  await page.goto('/')
+  await openLogin(page)
+  await page.getByRole('button', { name: '以訪客身分試用' }).click()
 
   await expect(page.getByText('訪客', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '登入', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '登出' })).toHaveCount(0)
   expect(api.unauthorized).toEqual([])
+
+  await page.getByRole('button', { name: '登入', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '登入', level: 1 })).toBeVisible()
 })
 
 test('帳密錯：留在登入頁顯示「帳號或密碼錯誤」；反例：打對就進到行事曆', async ({ page }) => {
