@@ -17,7 +17,7 @@
 // 後端回預先寫好的答案、沒有 conversationId；卡片的加入、修改由 useCalendar 帶去登入；每天的次數用完時改成請訪客註冊。
 
 import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
-import { me, requestLogin } from '../auth'
+import { me, requestLogin, signedOut } from '../auth'
 import { assistantHistory, dismissProposals, talkToAssistant, type AssistantChange, type EventFields, type SavedEvent } from '../calendar'
 import { UnauthorizedError } from '../http'
 import { describeAssistantFailure, type FailureKind } from './assistantFailure'
@@ -60,9 +60,8 @@ export interface ChatMessage {
   failed?: boolean
   // 助理回不了的說明。canRetry：原封不動再送有沒有意義，400 沒有，要先改
   failure?: { kind: FailureKind; canRetry: boolean }
-  // 訪客看的示範：回答下面的小字（還能試幾次）；次數用完時顯示註冊按鈕
+  // 訪客看的回答下面的小字：還能試幾次
   hint?: string
-  signUp?: boolean
 }
 
 /** 「思考中」超過這麼多秒就改成顯示已經等了多久。助理平常 p95 約 3 秒，等到 10 秒已經明顯不正常 */
@@ -73,7 +72,7 @@ export const SLOW_AFTER_SECONDS = 10
 export const SUGGESTIONS = ['明天下午3點和 Amy 開會', '明天有什麼行程？', '這週哪天下午有空？']
 
 const GREETING = '嗨！我是你的行事曆助理。可以幫你新增、修改、刪除行程，查某天的安排，或找出空檔。不管哪一種，我都會整理成卡片讓你確認後才動行事曆。'
-const GUEST_GREETING = '嗨！我是你的行事曆助理。還沒登入也能先點下面的問題，看我怎麼回答（每天 3 次）；登入後就能直接打字問我。'
+const GUEST_GREETING = '嗨！我是你的行事曆助理。還沒登入也能先點下面的問題，看我怎麼回答；登入後就能直接打字問我。'
 /** 訪客的輸入框停用，placeholder 說明怎麼才能打字 */
 export const GUEST_PLACEHOLDER = '登入後開始使用'
 
@@ -133,8 +132,6 @@ export function useAssistant(calendar: CalendarState) {
   watch(input, keepDraft)
   const typing = ref(false)
   const saving = ref(false)
-  // 訪客今天的示範次數用完了
-  const guestLimit = ref(false)
 
   // 倒數和「已經等了幾秒」都看 now。只在倒數或等回覆時每秒更新，平常不觸發重畫
   const now = ref(Date.now())
@@ -147,6 +144,8 @@ export function useAssistant(calendar: CalendarState) {
 
   const waitSeconds = computed(() => Math.max(0, Math.ceil((retryAt.value - now.value) / 1000)))
   // 在等回覆或還在倒數時送了一定失敗，送出、建議說法、再試都停用
+  // 訪客今天的次數用完了：換日前再按也一樣被擋
+  const guestLimit = computed(() => messages.value.some((m) => m.failure?.kind === 'guest-limit'))
   const blocked = computed(() => typing.value || waitSeconds.value > 0 || guestLimit.value)
   const waitedSeconds = computed(() => (typing.value ? Math.max(0, Math.floor((now.value - typingSince) / 1000)) : 0))
 
@@ -208,8 +207,7 @@ export function useAssistant(calendar: CalendarState) {
       const answer = await talkToAssistant(said, conversationId)
       // 登入過期時後端把這個請求當成訪客：固定問題拿到的是訪客的回答。照 401 處理，使用者送出的那句留在草稿裡
       if (!guest && answer.guestRemaining !== undefined) {
-        me.value = null
-        requestLogin()
+        signedOut()
         return
       }
       conversationId = answer.conversationId ?? undefined
@@ -228,10 +226,6 @@ export function useAssistant(calendar: CalendarState) {
       mine.failed = true
       const notice = say('ai', failure.text)
       notice.failure = { kind: failure.kind, canRetry: failure.canRetry }
-      if (failure.kind === 'guest-limit') {
-        notice.signUp = true
-        guestLimit.value = true
-      }
       messages.value.push(notice)
       if (failure.waitSeconds > 0) {
         now.value = Date.now()
@@ -294,10 +288,11 @@ export function useAssistant(calendar: CalendarState) {
     reportDismissed([proposal])
   }
 
-  // 拒絕了哪幾張告訴後端，算採納率用。不等待、失敗也不顯示：使用者按的是取消，不該因為指標送不出去看到錯誤
+  // 拒絕了哪幾張告訴後端，算採納率用。不等待、失敗也不顯示：使用者按的是取消，不該因為指標送不出去看到錯誤。
+  // 訪客的卡片沒有 proposalId，所以不會送
   function reportDismissed(proposals: Proposal[]) {
     const ids = proposals.map((p) => p.draft.proposalId).filter((id): id is string => !!id)
-    if (ids.length > 0 && !guest) dismissProposals(ids).catch(() => {})
+    if (ids.length > 0) dismissProposals(ids).catch(() => {})
   }
 
   /** 帶著草稿打開新增表單，在表單裡存好了這張卡片就算加入 */

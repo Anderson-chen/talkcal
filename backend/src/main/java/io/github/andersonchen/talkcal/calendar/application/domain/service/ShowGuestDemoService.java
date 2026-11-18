@@ -29,17 +29,14 @@ public final class ShowGuestDemoService implements ShowGuestDemoUseCase {
         if (client == null || client.isBlank()) {
             throw new IllegalArgumentException("分不出是哪個訪客");
         }
-        // 先檢查問題再計數：送錯的請求不該用掉訪客的次數
-        if (!GuestDemo.isQuestion(question)) {
-            throw new SignInRequiredException();
-        }
         ZonedDateTime now = ZonedDateTime.now(clock);
         LocalDate today = now.toLocalDate();
+        // 先找答案再計數：送錯的請求不該用掉訪客的次數
+        GuestDemo.Answer answer = GuestDemo.answer(question, today).orElseThrow(SignInRequiredException::new);
         OptionalInt used = usage.use(client, today, DAILY_LIMIT);
         if (used.isEmpty()) {
             throw new GuestDemoLimitException(Duration.between(now, today.plusDays(1).atStartOfDay(now.getZone())));
         }
-        GuestDemo.Answer answer = GuestDemo.answer(question, today).orElseThrow();
         return new Shown(answer, DAILY_LIMIT - used.getAsInt());
     }
 }

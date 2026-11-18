@@ -4,7 +4,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.TextStyle;
-import java.util.ArrayList;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -12,7 +12,7 @@ import java.util.Optional;
 /**
  * 沒登入的訪客點固定問題時，助理預先寫好的回答。不呼叫模型，訪客看幾次都沒有成本。
  *
- * 問題要跟 web/src/calendar/useAssistant.ts 的 SUGGESTIONS 一字不差：前端送的是按鈕上的文字，對不上就是 400。
+ * 問題要跟 web/src/calendar/useAssistant.ts 的 SUGGESTIONS 一字不差：前端送的是按鈕上的文字，對不上就是 401（當成要登入才能說的話）。
  * 回答裡的日期都從 today 算，「明天」永遠是看的那天的隔天；查行程、找空檔的回答用的是寫死的示範行程，不是誰的行事曆。
  */
 public final class GuestDemo {
@@ -20,8 +20,6 @@ public final class GuestDemo {
     public static final String ADD_MEETING = "明天下午3點和 Amy 開會";
     public static final String TOMORROW = "明天有什麼行程？";
     public static final String FREE_AFTERNOONS = "這週哪天下午有空？";
-
-    public static final List<String> QUESTIONS = List.of(ADD_MEETING, TOMORROW, FREE_AFTERNOONS);
 
     private static final String SAMPLE_NOTE = "（這是示範用的行程。登入後，助理查的是你自己的行事曆。）";
 
@@ -34,10 +32,6 @@ public final class GuestDemo {
         public Answer {
             proposals = List.copyOf(proposals);
         }
-    }
-
-    public static boolean isQuestion(String question) {
-        return QUESTIONS.contains(question);
     }
 
     /** 不是固定的問題回 empty */
@@ -68,19 +62,17 @@ public final class GuestDemo {
         return new Answer(reply, List.of());
     }
 
-    // 「這週」是今天到週日。今天就是週日時只剩今天，就只講今天
+    // 「這週」是今天到週日：講明天和週日兩個時段，明天就是週日只講一個；今天就是週日時只剩今天
     private static Answer freeAfternoons(LocalDate today) {
-        List<LocalDate> rest = new ArrayList<>();
-        for (LocalDate day = today.plusDays(1); day.getDayOfWeek() != DayOfWeek.MONDAY; day = day.plusDays(1)) {
-            rest.add(day);
-        }
+        LocalDate tomorrow = today.plusDays(1);
+        LocalDate sunday = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
         StringBuilder reply = new StringBuilder("這週下午有空的時段：\n");
-        if (rest.isEmpty()) {
+        if (today.equals(sunday)) {
             reply.append(slot(today, LocalTime.of(15, 0)));
         } else {
-            reply.append(slot(rest.getFirst(), LocalTime.of(14, 0)));
-            if (rest.size() > 1) {
-                reply.append(slot(rest.getLast(), LocalTime.of(13, 0)));
+            reply.append(slot(tomorrow, LocalTime.of(14, 0)));
+            if (!tomorrow.equals(sunday)) {
+                reply.append(slot(sunday, LocalTime.of(13, 0)));
             }
         }
         return new Answer(reply.append(SAMPLE_NOTE).toString(), List.of());

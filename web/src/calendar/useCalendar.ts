@@ -2,7 +2,8 @@
 // 視窗跨過寬度分界、整個版面換掉時，選的日期、看的月份還在。
 //
 // guest：沒登入的訪客。版面照常，但不讀行程（沒有帳號就沒有行程，讀了也是 401），
-// 新增、修改、刪除都換成帶去登入。
+// 新增（表單、助理卡片的加入）換成帶去登入。訪客沒有行程、助理也不給修改和刪除卡片，改、刪的路走不到；
+// 真的走到了，後端回 401，一樣回到登入頁。
 
 import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
 import { addEvents, listEvents, NotFoundError, removeEvent, updateEvent, type Category, type EventFields, type SavedEvent } from '../calendar'
@@ -125,14 +126,13 @@ export function useCalendar(guest = false) {
 
   // ── 新增、修改、刪除 ─────────────────────────────────────────
   /** idempotencyKey 由呼叫端決定：只有呼叫端能判斷再按一次是不是同一次新增 */
-  // 訪客按到要存檔的功能就帶去登入；丟例外讓呼叫端（助理卡片）維持原狀，不顯示成已加入
-  function needLogin(reason: string): never {
-    requestLogin(reason)
-    throw new Error(reason)
-  }
-
   async function add(drafts: EventFields[], idempotencyKey?: string): Promise<SavedEvent[]> {
-    if (guest) needLogin('登入後，助理的卡片就能直接加進行事曆')
+    // 訪客按了助理卡片的加入：帶去登入。丟例外讓卡片維持原狀，不顯示成已加入
+    if (guest) {
+      const reason = '登入後，助理的卡片就能直接加進行事曆'
+      requestLogin(reason)
+      throw new Error(reason)
+    }
     const saved = await addEvents(drafts, idempotencyKey)
     showSaved(saved)
     return saved
@@ -148,7 +148,6 @@ export function useCalendar(guest = false) {
   }
 
   async function update(id: string, expected: EventFields, event: EventFields): Promise<SavedEvent> {
-    if (guest) needLogin('登入後就能修改行程')
     const saved = await updateEvent(id, expected, event)
     showSaved([saved])
     return saved
@@ -156,7 +155,6 @@ export function useCalendar(guest = false) {
 
   /** 已經不在（別的分頁先刪了）也算成功：使用者要的結果就是這筆不在 */
   async function remove(id: string) {
-    if (guest) needLogin('登入後就能刪除行程')
     try {
       await removeEvent(id)
     } catch (e) {
@@ -177,10 +175,6 @@ export function useCalendar(guest = false) {
 
   /** initial 不給就用這筆現在的樣子，助理的修改卡片會給要改成的樣子。expected 見 FormRequest */
   function openEdit(id: string, expected: EventFields, initial: EventFields = expected, onSaved?: (saved: SavedEvent) => void) {
-    if (guest) {
-      requestLogin('登入後就能修改行程')
-      return
-    }
     detailId.value = null
     form.value = { initial: { ...initial }, editing: { id, expected }, onSaved }
   }

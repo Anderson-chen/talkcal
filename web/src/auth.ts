@@ -66,12 +66,17 @@ export function requestLogin(reason = '', mode: LoginPrompt['mode'] = 'login') {
   loginPrompt.value = { mode, reason }
 }
 
-// 任何 API 回 401（登入過期、在別的分頁登出）都換回登入畫面。
-// 直接到登入頁、不退回訪客：登入著的人以為還登入著，在訪客畫面上按什麼都被擋，會看不懂
-onUnauthorized(() => {
+/**
+ * 登出、登入過期時清掉登入者，直接到登入頁、不退回訪客：
+ * 登入著的人以為還登入著，在訪客畫面上按什麼都被擋，會看不懂
+ */
+export function signedOut() {
   me.value = null
   requestLogin()
-})
+}
+
+// 任何 API 回 401（登入過期、在別的分頁登出）都換回登入畫面
+onUnauthorized(signedOut)
 
 /**
  * 打開頁面時查不到「我是誰」的原因，null 是沒有問題。只有 401 才算沒登入：伺服器重啟時重新整理，
@@ -117,6 +122,5 @@ export async function signUp(username: string, password: string): Promise<void> 
 
 export async function logOut(): Promise<void> {
   await send('/api/auth/logout', { method: 'POST' })
-  me.value = null
-  requestLogin()
+  signedOut()
 }

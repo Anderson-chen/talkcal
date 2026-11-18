@@ -36,6 +36,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.security.Principal;
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -197,25 +198,27 @@ public final class CalendarAssistantController {
     // 問滿是預期中的事，不記 log
     @ExceptionHandler(GuestDemoLimitException.class)
     public ResponseEntity<AssistantFailure> onGuestLimit(GuestDemoLimitException e) {
-        long seconds = Math.max(1, e.retryAfter().toSeconds());
-        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                .header(HttpHeaders.RETRY_AFTER, Long.toString(seconds))
-                .body(new AssistantFailure(e.getMessage(), "GUEST_LIMIT", seconds));
+        return retryLater(HttpStatus.TOO_MANY_REQUESTS, e.getMessage(), "GUEST_LIMIT", e.retryAfter());
     }
 
     // 比下面的 IllegalStateException 具體，Spring 會先選這個。
     // 只記一行 warn、不印 stack：斷路器打開時每個請求都會走到這裡，原因已經在斷路器狀態改變的那行 log 和指標上
     @ExceptionHandler(ModelUnavailableException.class)
     public ResponseEntity<AssistantFailure> onModelUnavailable(ModelUnavailableException e) {
-        long seconds = Math.max(1, e.retryAfter().toSeconds());
         String code = switch (e.reason()) {
             case CIRCUIT_OPEN -> "MODEL_UNAVAILABLE";
             case BUSY -> "MODEL_BUSY";
         };
-        log.warn("AI 助理沒有叫模型，回 503：code={} retryAfter={}s", code, seconds);
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+        log.warn("AI 助理沒有叫模型，回 503：code={} retryAfter={}s", code, e.retryAfter().toSeconds());
+        return retryLater(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage(), code, e.retryAfter());
+    }
+
+    // 至少 1 秒：0 的話前端不倒數，馬上又送一次
+    private static ResponseEntity<AssistantFailure> retryLater(HttpStatus status, String error, String code, Duration retryAfter) {
+        long seconds = Math.max(1, retryAfter.toSeconds());
+        return ResponseEntity.status(status)
                 .header(HttpHeaders.RETRY_AFTER, Long.toString(seconds))
-                .body(new AssistantFailure(e.getMessage(), code, seconds));
+                .body(new AssistantFailure(error, code, seconds));
     }
 
     // CalendarAssistant 把上游的各種例外都包成 IllegalStateException；只攔這個的理由見 CalendarController.onUpstreamFailure

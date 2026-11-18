@@ -88,7 +88,7 @@ const thinking = computed(() =>
             </div>
             <span v-if="m.error" role="alert" class="error">{{ m.error }}</span>
             <span v-if="m.hint" class="hint">{{ m.hint }}</span>
-            <button v-if="m.signUp" type="button" class="primary" @click="assistant.signUp()">註冊，直接跟助理說話</button>
+            <button v-if="m.failure?.kind === 'guest-limit'" type="button" class="primary" @click="assistant.signUp()">註冊，直接跟助理說話</button>
             <button v-if="assistant.canRetry(m)" type="button" class="retry" :disabled="assistant.blocked.value" @click="assistant.retry(m)">
               {{ assistant.waitSeconds.value > 0 ? `${assistant.waitSeconds.value} 秒後可以再試` : '再試一次' }}
             </button>

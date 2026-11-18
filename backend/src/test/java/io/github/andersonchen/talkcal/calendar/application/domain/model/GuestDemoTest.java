@@ -37,11 +37,14 @@ class GuestDemoTest {
     }
 
     @Test
-    @DisplayName("這週哪天下午有空：列出明天和週日；反例：今天是週日時只講今天，不會講到下週")
+    @DisplayName("這週哪天下午有空：列出明天和週日；反例：明天就是週日只講一次，今天是週日時只講今天，不會講到下週")
     void freeAfternoonsStayInThisWeek() {
         String midweek = GuestDemo.answer(GuestDemo.FREE_AFTERNOONS, WEDNESDAY).orElseThrow().reply();
         assertTrue(midweek.contains("11/19（週四）"), midweek);
         assertTrue(midweek.contains("11/22（週日）"), midweek);
+
+        String saturday = GuestDemo.answer(GuestDemo.FREE_AFTERNOONS, LocalDate.of(2026, 11, 21)).orElseThrow().reply();
+        assertEquals(1, saturday.split("11/22（週日）", -1).length - 1, saturday);
 
         String sunday = GuestDemo.answer(GuestDemo.FREE_AFTERNOONS, LocalDate.of(2026, 11, 22)).orElseThrow().reply();
         assertTrue(sunday.contains("11/22（週日）"), sunday);
