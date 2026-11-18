@@ -3,6 +3,7 @@ package io.github.andersonchen.talkcal.calendar.application.domain.service;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.GuestDemo;
 import io.github.andersonchen.talkcal.calendar.application.port.in.GuestDemoLimitException;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ShowGuestDemoUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.SignInRequiredException;
 import io.github.andersonchen.talkcal.calendar.application.port.out.GuestDemoUsagePort;
 
 import java.time.Clock;
@@ -30,7 +31,7 @@ public final class ShowGuestDemoService implements ShowGuestDemoUseCase {
         }
         // 先檢查問題再計數：送錯的請求不該用掉訪客的次數
         if (!GuestDemo.isQuestion(question)) {
-            throw new IllegalArgumentException("沒登入只能問這幾題：" + String.join("、", GuestDemo.QUESTIONS));
+            throw new SignInRequiredException();
         }
         ZonedDateTime now = ZonedDateTime.now(clock);
         LocalDate today = now.toLocalDate();

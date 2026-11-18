@@ -31,11 +31,11 @@ interface Options {
 // 助理每句話都提議這一筆（明天下午三點開會），proposalId 依序是 card-1、card-2…
 const PROPOSAL = { title: '開會', start: '2026-10-07T15:00:00', end: '2026-10-07T16:00:00', category: 'WORK', location: null, note: null }
 
-// 訪客示範的回答，形狀照後端的 GuestDemoController；日期照 e2e 固定的 2026-10-06（週二）算
+// 沒登入時固定問題的回答，形狀照後端的 CalendarAssistantController；日期照 e2e 固定的 2026-10-06（週二）算
 const GUEST_ANSWERS: Record<string, { reply: string; proposals: unknown[] }> = {
   '明天下午3點和 Amy 開會': {
     reply: '幫你整理成卡片了，確認後就會加進行事曆。',
-    proposals: [{ title: '和 Amy 開會', start: '2026-10-07T15:00:00', end: '2026-10-07T16:00:00', category: 'WORK', location: null, note: null, proposalId: null }],
+    proposals: [{ title: '和 Amy 開會', start: '2026-10-07T15:00:00', end: '2026-10-07T16:00:00', category: 'WORK', location: null, note: null }],
   },
   '明天有什麼行程？': { reply: '明天 10/7（週三）有 2 個行程。', proposals: [] },
   '這週哪天下午有空？': { reply: '這週下午有空的時段：10/7（週三）、10/11（週日）', proposals: [] },
@@ -75,8 +75,10 @@ export async function fakeApi(page: Page, options: Options = {}) {
     // 每次 GET /archive/events 的 from、to；下一次查封存要不要失敗
     archiveQueries: [] as { from: string; to: string }[],
     failNextArchive: false,
-    // 訪客看了幾次示範；POST /api/calendar/assistant 收到幾次（模型被呼叫幾次）
+    // 沒登入時問了幾次；登入後 POST /api/calendar/assistant 收到幾次（模型被呼叫幾次）
     guestAsked: 0,
+    // 沒登入時被 401 擋下的行事曆請求：訪客的畫面不該去讀行程
+    unauthorized: [] as string[],
     assistantCalls: 0,
   }
 
@@ -131,21 +133,24 @@ export async function fakeApi(page: Page, options: Options = {}) {
       return route.fulfill({ status: 204 })
     }
 
-    // ── 訪客的示範：不用登入，照後端的規則只收固定問題、每天 3 次（假後端只有一個 IP，所以是整個測試共用 3 次）──
-    if (url.pathname === '/api/demo/assistant' && method === 'POST') {
+    // ── 沒登入問助理：照後端的規則只收固定問題、每天 3 次（假後端只有一個 IP，所以是整個測試共用 3 次）──
+    if (!state.me && url.pathname === '/api/calendar/assistant' && method === 'POST') {
       const question = (request.postDataJSON() as { message: string }).message
       const answer = GUEST_ANSWERS[question]
-      if (!answer) return json(route, 400, { error: '沒登入只能問這幾題', code: 'INVALID_REQUEST' })
+      if (!answer) return json(route, 401, { error: '請先登入', code: 'SIGN_IN_REQUIRED' })
       if (state.guestAsked >= 3) {
         return route.fulfill({ status: 429, headers: { 'Retry-After': '3600' },
-          json: { error: '今天的示範次數用完了，註冊後就能直接跟助理說話', code: 'GUEST_LIMIT' } })
+          json: { error: '今天的示範次數用完了，註冊後就能直接跟助理說話', code: 'GUEST_LIMIT', retryAfterSeconds: 3600 } })
       }
       state.guestAsked++
-      return json(route, 200, { ...answer, remaining: 3 - state.guestAsked })
+      return json(route, 200, { conversationId: null, ...answer, changes: [], removals: [], guestRemaining: 3 - state.guestAsked })
     }
 
     // ── 行事曆：要登入 ──
-    if (!state.me) return json(route, 401, { error: '請先登入' })
+    if (!state.me) {
+      state.unauthorized.push(`${method} ${url.pathname}`)
+      return json(route, 401, { error: '請先登入' })
+    }
 
     if (url.pathname === '/api/calendar/events' && method === 'GET') {
       // 照後端的規則：from 含、to 不含，跟期間有重疊的都算
@@ -231,6 +236,8 @@ export async function fakeApi(page: Page, options: Options = {}) {
     get events() { return state.events },
     get archiveQueries() { return state.archiveQueries },
     get assistantCalls() { return state.assistantCalls },
+    get guestAsked() { return state.guestAsked },
+    get unauthorized() { return state.unauthorized },
     set failNextSave(error: string | null) { state.failNextSave = error },
     set failNextArchive(fail: boolean) { state.failNextArchive = fail },
     /** 模擬 session 過期：之後的請求都當成沒登入 */

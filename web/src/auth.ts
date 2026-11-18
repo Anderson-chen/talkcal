@@ -3,6 +3,9 @@
 // session 在後端，瀏覽器只拿到 HttpOnly cookie，目前登入的人由 GET /api/auth/me 回傳。
 // 登入、登出是 Spring Security 的端點：登入送表單格式，成功回 204。
 // Google、GitHub 登入是整頁轉址，不經過這裡的 fetch；轉回首頁時 session 已經登入，App 照常 loadMe()。
+//
+// 沒登入的人先以訪客身分看到行事曆（功能鎖住，見 useCalendar、useAssistant 的 guest），
+// 要做需要帳號的事時呼叫 requestLogin，App 才換成登入頁。
 
 import { ref } from 'vue'
 import { message, onUnauthorized, send, UnauthorizedError } from './http'
@@ -44,9 +47,26 @@ export function providerLoginUrl(provider: Provider): string {
  */
 export const me = ref<Me | null | undefined>(undefined)
 
-// 任何 API 回 401（登入過期、在別的分頁登出）都換回登入畫面
+/**
+ * 沒登入時要不要顯示登入頁：null 是以訪客身分看行事曆。
+ * reason 是為什麼要登入（例如按了卡片的加入），顯示在登入頁上；空字串是使用者自己要登入
+ */
+export interface LoginPrompt {
+  mode: 'login' | 'register'
+  reason: string
+}
+
+export const loginPrompt = ref<LoginPrompt | null>(null)
+
+export function requestLogin(reason = '', mode: LoginPrompt['mode'] = 'login') {
+  loginPrompt.value = { mode, reason }
+}
+
+// 任何 API 回 401（登入過期、在別的分頁登出）都換回登入畫面。
+// 直接到登入頁、不退回訪客：登入著的人以為還登入著，在訪客畫面上按什麼都被擋，會看不懂
 onUnauthorized(() => {
   me.value = null
+  requestLogin()
 })
 
 /**
@@ -60,6 +80,7 @@ export async function loadMe(): Promise<void> {
   try {
     const res = await send('/api/auth/me', { method: 'GET' }, { notifyUnauthorized: false })
     me.value = (await res.json()) as Me
+    loginPrompt.value = null
   } catch (e) {
     if (!(e instanceof UnauthorizedError)) throw e
     me.value = null
@@ -93,4 +114,5 @@ export async function signUp(username: string, password: string): Promise<void> 
 export async function logOut(): Promise<void> {
   await send('/api/auth/logout', { method: 'POST' })
   me.value = null
+  requestLogin()
 }

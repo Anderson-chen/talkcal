@@ -213,11 +213,11 @@ test('打開頁面時連不上伺服器：畫「連不上」，不是登入頁�
   await expect(chat(page)).toBeVisible()
 })
 
-test('反例：真的沒登入（401）還是登入頁，不是「連不上」', async ({ page }) => {
+test('反例：真的沒登入（401）是訪客的行事曆，不是「連不上」', async ({ page }) => {
   await fakeApi(page, { loggedIn: false })
   await page.goto('/')
 
-  await expect(page.getByRole('heading', { name: '登入' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '登入', exact: true })).toBeVisible()
   await expect(page.getByText('暫時連不上伺服器')).toHaveCount(0)
 })
 

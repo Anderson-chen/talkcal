@@ -37,11 +37,14 @@ export interface AssistantChange {
 }
 
 export interface AssistantReply {
-  conversationId: string
+  // 沒登入的訪客沒有對話可以接續，是 null
+  conversationId: string | null
   reply: string
   proposals: EventFields[]
   changes: AssistantChange[]
   removals: SavedEvent[]
+  // 沒登入時才有：這個 IP 今天還能問幾次
+  guestRemaining?: number
 }
 
 /** conversationId 不帶是新對話；之後每句帶著回應裡的那一個，後端才讀得到前面的對話 */

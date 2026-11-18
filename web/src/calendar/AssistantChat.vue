@@ -4,7 +4,7 @@ import { computed } from 'vue'
 import { addDays, dayLabel, timeOf } from '../monthGrid'
 import type { EventFields } from '../calendar'
 import Icon from './Icon.vue'
-import { SLOW_AFTER_SECONDS, SUGGESTIONS, useAssistantState, type ChatMessage } from './useAssistant'
+import { GUEST_PLACEHOLDER, SLOW_AFTER_SECONDS, SUGGESTIONS, useAssistantState, type ChatMessage } from './useAssistant'
 import { useThemeState } from './useTheme'
 
 defineProps<{ inputId: string; large?: boolean }>()
@@ -21,7 +21,7 @@ function when(draft: EventFields) {
 const pendingCount = (msg: ChatMessage) => msg.proposals.filter((p) => p.status === 'pending').length
 
 const placeholder = computed(() =>
-  assistant.waitSeconds.value > 0 ? `${assistant.waitSeconds.value} 秒後可以再問，可以先打字` : '例如：下週二早上10點面試')
+  assistant.guest ? GUEST_PLACEHOLDER : assistant.waitSeconds.value > 0 ? `${assistant.waitSeconds.value} 秒後可以再問，可以先打字` : '例如：下週二早上10點面試')
 const thinking = computed(() =>
   assistant.waitedSeconds.value >= SLOW_AFTER_SECONDS ? `還在想，這次比較久（已等 ${assistant.waitedSeconds.value} 秒）…` : '思考中…')
 </script>
@@ -87,6 +87,8 @@ const thinking = computed(() =>
               <span v-if="r.error" role="alert" class="error">{{ r.error }}</span>
             </div>
             <span v-if="m.error" role="alert" class="error">{{ m.error }}</span>
+            <span v-if="m.hint" class="hint">{{ m.hint }}</span>
+            <button v-if="m.signUp" type="button" class="primary" @click="assistant.signUp()">註冊，直接跟助理說話</button>
             <button v-if="assistant.canRetry(m)" type="button" class="retry" :disabled="assistant.blocked.value" @click="assistant.retry(m)">
               {{ assistant.waitSeconds.value > 0 ? `${assistant.waitSeconds.value} 秒後可以再試` : '再試一次' }}
             </button>
@@ -100,7 +102,7 @@ const thinking = computed(() =>
     </div>
     <form class="input" @submit.prevent="assistant.send()">
       <label :for="inputId" class="visually-hidden">輸入訊息</label>
-      <input :id="inputId" v-model="assistant.input.value" type="text" autocomplete="off" :placeholder="placeholder" />
+      <input :id="inputId" v-model="assistant.input.value" type="text" autocomplete="off" :placeholder="placeholder" :disabled="assistant.guest" />
       <button type="submit" aria-label="送出" :disabled="assistant.blocked.value || !assistant.input.value.trim()"><Icon name="send" :size="18" /></button>
     </form>
   </div>
@@ -145,6 +147,8 @@ const thinking = computed(() =>
 .suggestions { display: flex; gap: 6px; padding: 8px 16px 4px; overflow-x: auto; }
 .suggestions button { flex: none; height: 32px; padding: 0 10px; border: 1px solid var(--field); border-radius: 16px; background: transparent; color: var(--ink); font-size: 12px; white-space: nowrap; }
 .input { display: flex; gap: 8px; align-items: center; padding: 8px 16px 20px; }
+.hint { font-size: 12px; color: var(--muted); }
+.input input:disabled { opacity: 0.6; }
 .input input { flex: 1; min-width: 0; height: 44px; border: 1px solid var(--field); border-radius: 22px; padding: 0 16px; font-size: 14px; background: var(--bg); color: var(--ink); box-sizing: border-box; }
 .large .input input { height: 48px; border-radius: 24px; font-size: 16px; }
 .input button { width: 44px; height: 44px; flex: none; border: 0; border-radius: 22px; background: var(--accent); color: var(--onAccent); display: flex; align-items: center; justify-content: center; }

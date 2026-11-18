@@ -1,8 +1,12 @@
 // 行事曆的狀態與動作。桌面版和手機版共用 CalendarView 建的這一份：
 // 視窗跨過寬度分界、整個版面換掉時，選的日期、看的月份還在。
+//
+// guest：沒登入的訪客。版面照常，但不讀行程（沒有帳號就沒有行程，讀了也是 401），
+// 新增、修改、刪除都換成帶去登入。
 
 import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
 import { addEvents, listEvents, NotFoundError, removeEvent, updateEvent, type Category, type EventFields, type SavedEvent } from '../calendar'
+import { requestLogin } from '../auth'
 import { message } from '../http'
 import { addDays, daysCovered, gridRange, monthGrid, toIsoDate } from '../monthGrid'
 import { isArchivedMonth } from './archive'
@@ -20,7 +24,7 @@ export interface FormRequest {
   onSaved?: (saved: SavedEvent) => void
 }
 
-export function useCalendar() {
+export function useCalendar(guest = false) {
   // 瀏覽器的本地日期。在台灣跟後端的 calendar.zone 是同一天，在別的時區會差，是已知的限制
   const today = toIsoDate(new Date())
 
@@ -43,6 +47,7 @@ export function useCalendar() {
 
   watch([days, version], async () => {
     // 快速連按下個月時回應可能不照順序回來，不是最新那一號就丟掉
+    if (guest) return
     const ticket = ++latestLoad
     const { from, to } = gridRange(days.value)
     try {
@@ -120,7 +125,14 @@ export function useCalendar() {
 
   // ── 新增、修改、刪除 ─────────────────────────────────────────
   /** idempotencyKey 由呼叫端決定：只有呼叫端能判斷再按一次是不是同一次新增 */
+  // 訪客按到要存檔的功能就帶去登入；丟例外讓呼叫端（助理卡片）維持原狀，不顯示成已加入
+  function needLogin(reason: string): never {
+    requestLogin(reason)
+    throw new Error(reason)
+  }
+
   async function add(drafts: EventFields[], idempotencyKey?: string): Promise<SavedEvent[]> {
+    if (guest) needLogin('登入後，助理的卡片就能直接加進行事曆')
     const saved = await addEvents(drafts, idempotencyKey)
     showSaved(saved)
     return saved
@@ -136,6 +148,7 @@ export function useCalendar() {
   }
 
   async function update(id: string, expected: EventFields, event: EventFields): Promise<SavedEvent> {
+    if (guest) needLogin('登入後就能修改行程')
     const saved = await updateEvent(id, expected, event)
     showSaved([saved])
     return saved
@@ -143,6 +156,7 @@ export function useCalendar() {
 
   /** 已經不在（別的分頁先刪了）也算成功：使用者要的結果就是這筆不在 */
   async function remove(id: string) {
+    if (guest) needLogin('登入後就能刪除行程')
     try {
       await removeEvent(id)
     } catch (e) {
@@ -153,18 +167,26 @@ export function useCalendar() {
   }
 
   function openForm(initial?: Partial<EventFields>, onSaved?: (saved: SavedEvent) => void) {
+    if (guest) {
+      requestLogin('登入後就能新增行程')
+      return
+    }
     detailId.value = null
     form.value = { initial: { ...blankDraft(sel.value), ...initial }, onSaved }
   }
 
   /** initial 不給就用這筆現在的樣子，助理的修改卡片會給要改成的樣子。expected 見 FormRequest */
   function openEdit(id: string, expected: EventFields, initial: EventFields = expected, onSaved?: (saved: SavedEvent) => void) {
+    if (guest) {
+      requestLogin('登入後就能修改行程')
+      return
+    }
     detailId.value = null
     form.value = { initial: { ...initial }, editing: { id, expected }, onSaved }
   }
 
   return {
-    today, sel, view, shown, days, events, loadError, hidden, detailId, detail, form, monthCounts, archived,
+    guest, today, sel, view, shown, days, events, loadError, hidden, detailId, detail, form, monthCounts, archived,
     eventsOn, pickDate, shiftMonth, step, toggleCategory, add, update, remove, openForm, openEdit, reload,
   }
 }

@@ -8,6 +8,9 @@ import io.github.andersonchen.talkcal.calendar.adapter.shared.ModelUnavailableEx
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.ProposalId;
+import io.github.andersonchen.talkcal.calendar.application.port.in.GuestDemoLimitException;
+import io.github.andersonchen.talkcal.calendar.application.port.in.ShowGuestDemoUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.in.SignInRequiredException;
 import io.github.andersonchen.talkcal.calendar.application.port.in.TrackProposalsUseCase;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -17,6 +20,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -50,9 +54,18 @@ import java.util.stream.IntStream;
  * 卡片的去向記成產品指標：回覆時每張卡片發一個 proposalId；按「加入行事曆」走 POST /events 時每筆帶著自己的 proposalId，
  * 按「取消」「移除」只改畫面，所以前端另外送 POST /dismissals。伺服器只算自己發過、屬於登入者、還沒表態過的卡片。
  *
+ * 沒登入的訪客也能 POST（SecurityConfiguration 只開放這一個），但只收對話框的固定問題，回預先寫好的答案（ShowGuestDemoUseCase），
+ * 不呼叫模型、不記對話、不發 proposalId，每個 IP 每天有次數上限。其他的話回 401，跟沒登入呼叫其他 API 一樣。
+ * IP 用 request.getRemoteAddr()，不自己讀 X-Forwarded-For：server.forward-headers-strategy=native 時，
+ * Tomcat 只在請求來自內部網段（nginx、Caddy）時才照 X-Forwarded-For 改寫 remoteAddr，而且從右邊數回來，
+ * 跳過內部網段，取第一個外部的位址，使用者自己在最左邊塞的假位址輪不到。
+ * 自己讀這個 header 的話，取最左邊會被偽造，取最右邊在有 Caddy 時又會變成 Caddy 的位址。
+ *
  * 失敗一律回 AssistantFailure：error 給人看，code 給程式判斷要怎麼顯示、要不要讓使用者重試。
  * <pre>
  * 400  INVALID_REQUEST    訊息空白、conversationId 不是 UUID。改了請求才會好
+ * 401  SIGN_IN_REQUIRED   訪客送了固定問題以外的話
+ * 429  GUEST_LIMIT        訪客的 IP 今天問滿了。Retry-After 是離換日還有幾秒
  * 502  ASSISTANT_FAILED   這一次呼叫模型（或資料庫）失敗。可以馬上再試
  * 503  MODEL_UNAVAILABLE  斷路器打開：模型最近一直失敗，這次沒有呼叫。Retry-After 秒後再試
  * 503  MODEL_BUSY         同時在等模型的請求滿了，這次沒有呼叫。Retry-After 秒後再試
@@ -68,25 +81,34 @@ public final class CalendarAssistantController {
 
     private final CalendarAssistant assistant;
     private final TrackProposalsUseCase proposals;
+    private final ShowGuestDemoUseCase guestDemo;
 
-    public CalendarAssistantController(CalendarAssistant assistant, TrackProposalsUseCase proposals) {
+    public CalendarAssistantController(CalendarAssistant assistant, TrackProposalsUseCase proposals, ShowGuestDemoUseCase guestDemo) {
         this.assistant = Objects.requireNonNull(assistant, "assistant 不可為 null");
         this.proposals = Objects.requireNonNull(proposals, "proposals 不可為 null");
+        this.guestDemo = Objects.requireNonNull(guestDemo, "guestDemo 不可為 null");
     }
 
     @PostMapping
     @Operation(summary = "跟行事曆 AI 助理說一句話",
             description = "助理可能直接回答（查行程、找空檔）、反問（時間不確定時），或提議行程（proposals，使用者確認後送 POST /api/calendar/events 才存）。"
-                    + "不帶 conversationId 就開一段新對話。")
+                    + "不帶 conversationId 就開一段新對話。沒登入時只收對話框的固定問題，回預先寫好的答案（不呼叫模型），每個 IP 每天 3 次。")
     @ApiResponse(responseCode = "200", description = "助理的回覆，以及這一輪提議的行程（可能是空的）")
     @ApiResponse(responseCode = "400", description = "訊息是 null 或空白，或 conversationId 不是 UUID（code = INVALID_REQUEST）",
+            content = @Content(schema = @Schema(implementation = AssistantFailure.class)))
+    @ApiResponse(responseCode = "401", description = "沒登入、送的不是固定問題（code = SIGN_IN_REQUIRED）",
+            content = @Content(schema = @Schema(implementation = AssistantFailure.class)))
+    @ApiResponse(responseCode = "429", description = "沒登入、這個 IP 今天問滿了（code = GUEST_LIMIT）；Retry-After 是離換日還有幾秒",
             content = @Content(schema = @Schema(implementation = AssistantFailure.class)))
     @ApiResponse(responseCode = "502", description = "這一次叫模型或資料庫失敗；可以再試（code = ASSISTANT_FAILED）",
             content = @Content(schema = @Schema(implementation = AssistantFailure.class)))
     @ApiResponse(responseCode = "503", description = "模型暫時不能用，這次沒有叫它（code = MODEL_UNAVAILABLE 或 MODEL_BUSY）；"
             + "Retry-After 標頭和 retryAfterSeconds 是建議多久之後再試。行程 API 不受影響",
             content = @Content(schema = @Schema(implementation = AssistantFailure.class)))
-    public AssistantResponse talk(Principal signedIn, @RequestBody AssistantRequest request) {
+    public AssistantResponse talk(Principal signedIn, HttpServletRequest http, @RequestBody AssistantRequest request) {
+        if (signedIn == null) {
+            return asGuest(http.getRemoteAddr(), request.message());
+        }
         String conversationId = conversationId(request.conversationId());
         OwnerId owner = SignedIn.owner(signedIn);
         CalendarAssistant.Reply reply = assistant.reply(owner, conversationId, request.message());
@@ -101,7 +123,14 @@ public final class CalendarAssistantController {
                 .map(c -> new AssistantChange(c.before().id().toString(), EventFields.of(c.before().event()), EventFields.of(c.after())))
                 .toList();
         List<SavedEvent> removals = reply.removals().stream().map(SavedEvent::of).toList();
-        return new AssistantResponse(conversationId, reply.text(), cards, changes, removals);
+        return new AssistantResponse(conversationId, reply.text(), cards, changes, removals, null);
+    }
+
+    // 沒有對話可以接續，conversationId 是 null；卡片不發 proposalId，訪客不能存，不算進採納率
+    private AssistantResponse asGuest(String client, String message) {
+        ShowGuestDemoUseCase.Shown shown = guestDemo.show(client, message);
+        List<EventFields> cards = shown.answer().proposals().stream().map(EventFields::of).toList();
+        return new AssistantResponse(null, shown.answer().reply(), cards, List.of(), List.of(), shown.remaining());
     }
 
     @PostMapping("/dismissals")
@@ -160,6 +189,20 @@ public final class CalendarAssistantController {
         return ResponseEntity.badRequest().body(AssistantFailure.of(e.getMessage(), "INVALID_REQUEST"));
     }
 
+    @ExceptionHandler(SignInRequiredException.class)
+    public ResponseEntity<AssistantFailure> onSignInRequired(SignInRequiredException e) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(AssistantFailure.of(e.getMessage(), "SIGN_IN_REQUIRED"));
+    }
+
+    // 問滿是預期中的事，不記 log
+    @ExceptionHandler(GuestDemoLimitException.class)
+    public ResponseEntity<AssistantFailure> onGuestLimit(GuestDemoLimitException e) {
+        long seconds = Math.max(1, e.retryAfter().toSeconds());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(seconds))
+                .body(new AssistantFailure(e.getMessage(), "GUEST_LIMIT", seconds));
+    }
+
     // 比下面的 IllegalStateException 具體，Spring 會先選這個。
     // 只記一行 warn、不印 stack：斷路器打開時每個請求都會走到這裡，原因已經在斷路器狀態改變的那行 log 和指標上
     @ExceptionHandler(ModelUnavailableException.class)
@@ -193,7 +236,9 @@ public final class CalendarAssistantController {
             @Schema(description = "助理說的話") String reply,
             @Schema(description = "這一輪提議的行程，使用者確認後送 POST /api/calendar/events 才會存") List<EventFields> proposals,
             @Schema(description = "這一輪提議的修改，使用者確認後送 PUT /api/calendar/events/{eventId} 才會改") List<AssistantChange> changes,
-            @Schema(description = "這一輪提議刪除的行程，使用者確認後送 DELETE /api/calendar/events/{id} 才會刪") List<SavedEvent> removals) {
+            @Schema(description = "這一輪提議刪除的行程，使用者確認後送 DELETE /api/calendar/events/{id} 才會刪") List<SavedEvent> removals,
+            @JsonInclude(JsonInclude.Include.NON_NULL)
+            @Schema(description = "沒登入時才有：這個 IP 今天還能問幾次", nullable = true) Integer guestRemaining) {
     }
 
     public record AssistantChange(
@@ -220,8 +265,9 @@ public final class CalendarAssistantController {
     public record AssistantFailure(
             @Schema(description = "給人看的錯誤原因") String error,
             @Schema(description = "給程式判斷的錯誤碼",
-                    allowableValues = {"INVALID_REQUEST", "ASSISTANT_FAILED", "MODEL_UNAVAILABLE", "MODEL_BUSY"}) String code,
-            @Schema(description = "建議幾秒後再試；只有 503 才有，跟 Retry-After 標頭一樣", nullable = true) Long retryAfterSeconds) {
+                    allowableValues = {"INVALID_REQUEST", "SIGN_IN_REQUIRED", "GUEST_LIMIT", "ASSISTANT_FAILED", "MODEL_UNAVAILABLE", "MODEL_BUSY"})
+            String code,
+            @Schema(description = "建議幾秒後再試；只有 429、503 才有，跟 Retry-After 標頭一樣", nullable = true) Long retryAfterSeconds) {
 
         static AssistantFailure of(String error, String code) {
             return new AssistantFailure(error, code, null);

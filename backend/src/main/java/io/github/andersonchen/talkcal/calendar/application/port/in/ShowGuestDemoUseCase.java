@@ -12,7 +12,7 @@ public interface ShowGuestDemoUseCase {
 
     /**
      * client 是區分訪客的依據（目前是 IP），由呼叫端決定怎麼取。
-     * 失敗時：question 不是固定的問題、client 空白 → IllegalArgumentException，不算一次；
+     * 失敗時：question 不是固定的問題 → SignInRequiredException，不算一次；client 空白 → IllegalArgumentException；
      * 今天已經看滿 DAILY_LIMIT 次 → GuestDemoLimitException。
      */
     Shown show(String client, String question);

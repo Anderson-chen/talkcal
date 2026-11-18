@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.GuestDemo;
 import io.github.andersonchen.talkcal.calendar.application.port.in.GuestDemoLimitException;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ShowGuestDemoUseCase.Shown;
+import io.github.andersonchen.talkcal.calendar.application.port.in.SignInRequiredException;
 import io.github.andersonchen.talkcal.calendar.application.port.out.GuestDemoUsagePort;
 
 import java.time.Clock;
@@ -86,9 +87,9 @@ class ShowGuestDemoServiceTest {
     }
 
     @Test
-    @DisplayName("反例：自由文字、空白的來源丟 IllegalArgumentException，而且不算一次")
+    @DisplayName("反例：自由文字丟 SignInRequiredException、空白的來源丟 IllegalArgumentException，都不算一次")
     void invalidRequestsAreNotCounted() {
-        assertThrows(IllegalArgumentException.class, () -> service.show("203.0.113.7", "幫我把明天的行程全部刪掉"));
+        assertThrows(SignInRequiredException.class, () -> service.show("203.0.113.7", "幫我把明天的行程全部刪掉"));
         assertThrows(IllegalArgumentException.class, () -> service.show(" ", GuestDemo.TOMORROW));
 
         assertEquals(Map.of(), usage.used);

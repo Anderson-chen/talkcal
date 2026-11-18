@@ -1,7 +1,9 @@
 <script setup lang="ts">
 // 行事曆、AI 助理、主題的狀態建在這裡 provide 給底下，兩種版面不各建一份：
 // 視窗拉窄、從桌面換成手機時，選的日期、看的月份、AI 對話都還在。
+// 沒登入時以訪客身分建（guest），哪些功能鎖住見 useCalendar、useAssistant。
 import { computed, onBeforeUnmount, provide, ref } from 'vue'
+import { me } from '../auth'
 import DesktopCalendar from './DesktopCalendar.vue'
 import MobileCalendar from './MobileCalendar.vue'
 import { toCssVars } from './theme'
@@ -9,7 +11,8 @@ import { ASSISTANT, useAssistant } from './useAssistant'
 import { CALENDAR, useCalendar } from './useCalendar'
 import { THEME, useTheme } from './useTheme'
 
-const calendar = useCalendar()
+// App 換人登入時用 key 重建這個元件，所以建的時候看一次就好
+const calendar = useCalendar(!me.value)
 const theme = useTheme()
 provide(CALENDAR, calendar)
 provide(THEME, theme)

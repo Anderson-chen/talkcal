@@ -5,21 +5,20 @@
 // Google、GitHub 登入只在後端有設定時才出現。這兩個按鈕是一般的連結，不是 fetch：要整頁轉到對方去同意，
 // 失敗時後端轉回 /?login_error=oauth。
 //
-// 旁邊的 GuestDemo 讓沒登入的人先看助理怎麼回答；按了示範卡片的「加入行事曆」或看滿次數，就回到這個表單。
-import { computed, nextTick, onMounted, ref } from 'vue'
-import { loadProviders, logIn, providerLoginUrl, signUp, type Provider } from './auth'
+// 訪客在行事曆上按了要帳號的功能才會來到這裡（auth.ts 的 loginPrompt），上面顯示為什麼要登入；
+// 「先不登入」回到訪客的行事曆。
+import { computed, onMounted, ref } from 'vue'
+import { loadProviders, logIn, loginPrompt, providerLoginUrl, signUp, type Provider } from './auth'
 import { savedThemeVars } from './calendar/theme'
-import GuestDemo from './GuestDemo.vue'
 
 const vars = savedThemeVars()
 
-const mode = ref<'login' | 'register'>('login')
+const mode = ref<'login' | 'register'>(loginPrompt.value?.mode ?? 'login')
 const username = ref('')
 const password = ref('')
 const error = ref<string | null>(null)
-// 從示範過來時的說明，例如按了卡片的「加入行事曆」
-const notice = ref<string | null>(null)
-const usernameInput = ref<HTMLInputElement | null>(null)
+// 為什麼要登入，例如在行事曆上按了卡片的「加入行事曆」
+const notice = loginPrompt.value?.reason || null
 const busy = ref(false)
 
 const providers = ref<Provider[]>([])
@@ -41,17 +40,13 @@ onMounted(async () => {
   providers.value = await loadProviders()
 })
 
+function stayAsGuest() {
+  loginPrompt.value = null
+}
+
 function switchMode() {
   mode.value = mode.value === 'login' ? 'register' : 'login'
   error.value = null
-}
-
-async function fromDemo(to: 'login' | 'register', text: string) {
-  mode.value = to
-  error.value = null
-  notice.value = text
-  await nextTick()
-  usernameInput.value?.focus()
 }
 
 async function submit() {
@@ -76,7 +71,7 @@ async function submit() {
       <p v-if="notice" role="status" class="notice">{{ notice }}</p>
       <div class="field">
         <label for="login-username">帳號名稱</label>
-        <input id="login-username" ref="usernameInput" v-model="username" autocomplete="username" autocapitalize="none" spellcheck="false" />
+        <input id="login-username" v-model="username" autocomplete="username" autocapitalize="none" spellcheck="false" />
       </div>
       <div class="field">
         <label for="login-password">密碼</label>
@@ -96,14 +91,13 @@ async function submit() {
       <button type="button" class="switch" @click="switchMode">
         {{ mode === 'login' ? '還沒有帳號？註冊' : '已經有帳號？登入' }}
       </button>
+      <button type="button" class="switch" @click="stayAsGuest">先不登入，回到行事曆</button>
     </form>
-    <GuestDemo @need-login="fromDemo('login', '登入後，助理的卡片就能直接加進行事曆')"
-               @sign-up="fromDemo('register', '註冊之後就能直接跟助理說話，不限這幾題')" />
   </div>
 </template>
 
 <style scoped>
-.login { min-height: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 24px; padding: 16px; box-sizing: border-box;
+.login { height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
   background: var(--panel); color: var(--ink); font-family: 'Noto Sans TC', Manrope, sans-serif; }
 .card { width: 100%; max-width: 360px; padding: 28px; border-radius: 16px; background: var(--card); border: 1px solid var(--line);
   display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; }
