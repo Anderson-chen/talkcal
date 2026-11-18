@@ -65,7 +65,7 @@ export async function fakeApi(page: Page, options: Options = {}) {
   }
 
   const tier = options.tier ?? 'free'
-  const tierLabel = tier === 'paid' ? '付費會員' : null
+  const tierLabel = tier === 'paid' ? '付費會員' : '免費會員'
 
   const json = (route: Route, status: number, body: unknown) => route.fulfill({ status, json: body })
 

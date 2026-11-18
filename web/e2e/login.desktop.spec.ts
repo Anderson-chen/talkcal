@@ -108,17 +108,18 @@ test('用 Google 登入的人：側欄顯示 Google 給的名字（他沒有帳�
   await expect(page.getByText('Amy Chen', { exact: true })).toBeVisible()
 })
 
-test('付費會員：側欄名字下面顯示「付費會員」', async ({ page }) => {
+test('側欄名字下面顯示會員等級：付費會員', async ({ page }) => {
   await fakeApi(page, { tier: 'paid' })
   await page.goto('/')
 
   await expect(page.getByText('付費會員', { exact: true })).toBeVisible()
+  await expect(page.getByText('免費會員', { exact: true })).toHaveCount(0)
 })
 
-test('反例：免費會員只顯示名字，不顯示會員等級', async ({ page }) => {
+test('側欄名字下面顯示會員等級：免費會員', async ({ page }) => {
   await fakeApi(page, { tier: 'free' })
   await page.goto('/')
 
-  await expect(page.getByText('amy', { exact: true })).toBeVisible()
+  await expect(page.getByText('免費會員', { exact: true })).toBeVisible()
   await expect(page.getByText('付費會員', { exact: true })).toHaveCount(0)
 })

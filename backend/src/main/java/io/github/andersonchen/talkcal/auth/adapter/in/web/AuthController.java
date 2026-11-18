@@ -2,7 +2,6 @@ package io.github.andersonchen.talkcal.auth.adapter.in.web;
 
 import io.github.andersonchen.talkcal.auth.application.domain.model.Account;
 import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
-import io.github.andersonchen.talkcal.auth.application.domain.model.MembershipTier;
 import io.github.andersonchen.talkcal.auth.application.port.in.FindAccountUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.RegisterAccountUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.UsernameTakenException;
@@ -61,7 +60,7 @@ public final class AuthController {
             @Schema(description = "給人看的名字：帳密登入的是帳號名稱，Google、GitHub 登入的是對方給的名字") String name,
             @Schema(description = "帳號名稱；只用 Google、GitHub 登入的帳號沒有，是 null", nullable = true) String username,
             @Schema(description = "會員等級：free（免費）、paid（付費）", allowableValues = {"free", "paid"}) String tier,
-            @Schema(description = "畫面上顯示的會員等級；不用顯示時（免費會員）是 null", example = "付費會員", nullable = true) String tierLabel) {
+            @Schema(description = "畫面上顯示的會員等級", example = "付費會員") String tierLabel) {
     }
 
     public record Providers(
@@ -103,14 +102,7 @@ public final class AuthController {
 
     private static Me toMe(Account account) {
         String username = account.password().map(login -> login.username().value()).orElse(null);
-        return new Me(account.id().toString(), account.displayName(), username, account.tier().id(), tierLabel(account.tier()));
-    }
-
-    private static String tierLabel(MembershipTier tier) {
-        return switch (tier) {
-            case FREE -> null;
-            case PAID -> "付費會員";
-        };
+        return new Me(account.id().toString(), account.displayName(), username, account.tier().id(), account.tier().label());
     }
 
     @ExceptionHandler(UsernameTakenException.class)

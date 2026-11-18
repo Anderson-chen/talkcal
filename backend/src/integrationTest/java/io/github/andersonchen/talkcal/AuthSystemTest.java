@@ -87,26 +87,21 @@ class AuthSystemTest {
     void tierFollowsDatabase() throws Exception {
         BrowserSession amy = browser().signUpAndLogIn("amy", PASSWORD);
         BrowserSession bob = browser().signUpAndLogIn("bob", PASSWORD);
-        assertTier("free", null, amy);
+        assertTier("free", "免費會員", amy);
 
         jdbc.sql("UPDATE account SET tier = 'paid' WHERE username = 'amy'").update();
 
         assertTier("paid", "付費會員", amy);
-        assertTier("free", null, bob);
+        assertTier("free", "免費會員", bob);
 
         jdbc.sql("UPDATE account SET tier = 'free' WHERE username = 'amy'").update();
-        assertTier("free", null, amy);
+        assertTier("free", "免費會員", amy);
     }
 
-    /** 顯示文字由後端決定：免費會員是 null，畫面就不顯示等級。 */
     private static void assertTier(String tier, String label, BrowserSession who) throws Exception {
         JsonNode me = JSON.readTree(who.get("/api/auth/me").body());
         assertEquals(tier, me.at("/tier").asString());
-        if (label == null) {
-            assertTrue(me.at("/tierLabel").isNull(), me.toString());
-        } else {
-            assertEquals(label, me.at("/tierLabel").asString());
-        }
+        assertEquals(label, me.at("/tierLabel").asString());
     }
 
     @Test

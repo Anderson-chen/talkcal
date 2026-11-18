@@ -205,7 +205,7 @@ const dotColor = (category: Category) => theme.colors.value[category].color
         <div v-if="me" class="account">
           <span class="account-who">
             <span class="account-name">{{ me.name }}</span>
-            <span v-if="me.tierLabel" class="tier">{{ me.tierLabel }}</span>
+            <span class="tier">{{ me.tierLabel }}</span>
           </span>
           <button type="button" class="logout" @click="logOut()">登出</button>
         </div>
