@@ -177,7 +177,7 @@ class GuestDemoSystemTest {
     }
 
     @Test
-    @DisplayName("http.server.requests 帶 guest 標籤：訪客的助理請求是 true；反例：登入者的助理請求、訪客打其他 API 都是 false，沒有缺標籤的")
+    @DisplayName("http.server.requests 帶 guest 標籤：訪客的助理請求是 true；反例：登入者的助理請求、訪客呼叫其他 API 都是 false，沒有缺標籤的")
     void guestRequestsAreTagged() throws Exception {
         assertEquals(200, ask(guestFrom(GUEST_IP), SUGGESTIONS.getFirst()).statusCode());
         assertEquals(401, guestFrom(GUEST_IP).get("/api/calendar/events?from=2030-01-01&to=2030-02-01").statusCode());
@@ -193,9 +193,9 @@ class GuestDemoSystemTest {
         assertTrue(requests(URL, "true") >= 1, "訪客的助理請求要帶 guest=true");
         assertTrue(requests(URL, "false") >= 1, "登入者的助理請求要帶 guest=false");
         assertTrue(meters.find("http.server.requests").tag("status", "401").tag("guest", "false").timer() != null,
-                "訪客打其他 API（被擋下的 401）也是 guest=false");
+                "訪客呼叫其他 API（被擋下的 401）也是 guest=false");
         assertTrue(meters.find("http.server.requests").timers().stream().allMatch(t -> t.getId().getTag("guest") != null),
-                "每個 http.server.requests 都要帶 guest 標籤，Prometheus 才收得下");
+                "每個 http.server.requests 都要帶 guest 標籤，Prometheus registry 才不會拒絕登記");
     }
 
     private long requests(String uri, String guest) {

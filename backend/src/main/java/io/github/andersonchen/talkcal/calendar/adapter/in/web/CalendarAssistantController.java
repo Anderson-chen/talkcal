@@ -85,7 +85,7 @@ public final class CalendarAssistantController {
     private static final Logger log = LoggerFactory.getLogger(CalendarAssistantController.class);
 
     /**
-     * 走訪客分支的請求帶著這個 request attribute。觀測依它給 http.server.requests 貼 guest 標籤，
+     * 走訪客分支的請求帶著這個 request attribute。觀測依這個 attribute 給 http.server.requests 貼 guest 標籤，
      * SLO 才能只算呼叫模型的請求（見 ObservationConfiguration.tagGuestRequests）
      */
     public static final String GUEST_REQUEST = CalendarAssistantController.class.getName() + ".guest";

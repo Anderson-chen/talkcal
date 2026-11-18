@@ -28,12 +28,12 @@ class ObservationConfiguration {
                 : context;
     }
 
-    // 沒登入的訪客也送 POST /api/calendar/assistant，拿到的是預先寫好的回答（幾毫秒、不呼叫模型）。
-    // 不分開的話，訪客的請求會算進 assistant-* SLO 的好事件，模型變慢、502 變多都被稀釋（見 docs/slo.md）。
+    // 沒登入的訪客也送 POST /api/calendar/assistant，拿到的是預先寫好的回答，不算進 assistant-* SLO，
+    // 理由見 docs/slo.md「為什麼不算訪客」。
     //
     // 每個 HTTP 請求都貼，不只貼訪客的：Prometheus 同一個指標的每條序列要有同一組標籤名稱，
     // 有的有 guest、有的沒有的話，Micrometer 的 Prometheus registry 會拒絕登記標籤名稱不一樣的那些序列。
-    // 在結束時貼（ObservationFilter 在 stop 時套用）：controller 執行時才知道是不是訪客
+    // 在結束時貼（ObservationFilter 在 stop 時套用）：controller 執行後，request 才帶有訪客的 attribute。
     @Bean
     ObservationFilter tagGuestRequests() {
         KeyValue guest = KeyValue.of("guest", "true");
