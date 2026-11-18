@@ -84,6 +84,12 @@ public final class CalendarAssistantController {
 
     private static final Logger log = LoggerFactory.getLogger(CalendarAssistantController.class);
 
+    /**
+     * 走訪客分支的請求帶著這個 request attribute。觀測依它給 http.server.requests 貼 guest 標籤，
+     * SLO 才能只算呼叫模型的請求（見 ObservationConfiguration.tagGuestRequests）
+     */
+    public static final String GUEST_REQUEST = CalendarAssistantController.class.getName() + ".guest";
+
     private final CalendarAssistant assistant;
     private final TrackProposalsUseCase proposals;
     private final ShowGuestDemoUseCase guestDemo;
@@ -112,6 +118,7 @@ public final class CalendarAssistantController {
             content = @Content(schema = @Schema(implementation = AssistantFailure.class)))
     public AssistantResponse talk(Principal signedIn, HttpServletRequest http, @RequestBody AssistantRequest request) {
         if (signedIn == null) {
+            http.setAttribute(GUEST_REQUEST, Boolean.TRUE);
             return asGuest(guestKey(http.getRemoteAddr()), request.message());
         }
         String conversationId = conversationId(request.conversationId());

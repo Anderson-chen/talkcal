@@ -19,8 +19,14 @@ dashboard 看得到數字，但數字要跟一條線比才知道該不該處理�
 |-----|------|----------|------|------------------------|
 | `calendar-availability` | 一般 API：`/api/calendar/events…`、`GET /api/calendar/assistant/{id}`、`POST /api/calendar/assistant/dismissals` | 不是 5xx | 99.5% | 0.5% 的請求可以失敗 |
 | `calendar-latency` | 同上 | 300 ms 內回應 | 99% | 1% 的請求可以超過 300 ms |
-| `assistant-availability` | 跟助理說話：`POST /api/calendar/assistant` | 不是 5xx | 99% | 1% |
+| `assistant-availability` | 登入者跟助理說話：`POST /api/calendar/assistant`，不含沒登入的訪客（`guest="false"`） | 不是 5xx | 99% | 1% |
 | `assistant-latency` | 同上 | 8 秒內回應 | 95% | 5% 的請求可以超過 8 秒 |
+
+### 為什麼不算訪客
+
+沒登入的訪客也送 `POST /api/calendar/assistant`，但只能問固定問題，拿到的是預先寫好的回答，不呼叫模型：幾毫秒就回，401、429 也不是 5xx。
+算進來的話，訪客一多，模型變慢、502 變多都會被稀釋，告警晚發或不發。app 在每個 HTTP 請求的指標上都貼 `guest` 標籤
+（見 `ObservationConfiguration.tagGuestRequests`），`assistant-*` 只算 `guest="false"`。
 
 ### 為什麼一般 API 和助理分開
 

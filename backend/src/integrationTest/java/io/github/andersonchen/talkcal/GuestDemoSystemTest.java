@@ -10,6 +10,8 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -53,6 +55,9 @@ class GuestDemoSystemTest {
 
     @Autowired
     JdbcClient jdbc;
+
+    @Autowired
+    MeterRegistry meters;
 
     @BeforeEach
     void clean() {
@@ -169,6 +174,33 @@ class GuestDemoSystemTest {
         assertEquals(502, ask(amy, "幫我把明天的行程全部刪掉").statusCode());
         assertEquals(502, ask(amy, SUGGESTIONS.getFirst()).statusCode());
         assertEquals(0, jdbc.sql("SELECT count(*) FROM guest_demo_usage").query(Integer.class).single());
+    }
+
+    @Test
+    @DisplayName("http.server.requests 帶 guest 標籤：訪客的助理請求是 true；反例：登入者的助理請求、訪客打其他 API 都是 false，沒有缺標籤的")
+    void guestRequestsAreTagged() throws Exception {
+        assertEquals(200, ask(guestFrom(GUEST_IP), SUGGESTIONS.getFirst()).statusCode());
+        assertEquals(401, guestFrom(GUEST_IP).get("/api/calendar/events?from=2030-01-01&to=2030-02-01").statusCode());
+        jdbc.sql("DELETE FROM account").update();
+        BrowserSession amy = new BrowserSession(port).signUpAndLogIn("tag-test", "tag-test-pass");
+        assertEquals(502, ask(amy, "幫我把明天的行程全部刪掉").statusCode());
+
+        // 觀測在回應送出之後才結束，指標可能比回應晚一點記上
+        long deadline = System.nanoTime() + 5_000_000_000L;
+        while (System.nanoTime() < deadline && requests(URL, "false") == 0) {
+            Thread.sleep(50);
+        }
+        assertTrue(requests(URL, "true") >= 1, "訪客的助理請求要帶 guest=true");
+        assertTrue(requests(URL, "false") >= 1, "登入者的助理請求要帶 guest=false");
+        assertTrue(meters.find("http.server.requests").tag("status", "401").tag("guest", "false").timer() != null,
+                "訪客打其他 API（被擋下的 401）也是 guest=false");
+        assertTrue(meters.find("http.server.requests").timers().stream().allMatch(t -> t.getId().getTag("guest") != null),
+                "每個 http.server.requests 都要帶 guest 標籤，Prometheus 才收得下");
+    }
+
+    private long requests(String uri, String guest) {
+        return meters.find("http.server.requests").tag("uri", uri).tag("guest", guest).timers().stream()
+                .mapToLong(Timer::count).sum();
     }
 
     @Test

@@ -26,9 +26,9 @@ tests:
       - series: 'http_server_requests_seconds_count{job="talkcal-app",uri="/actuator/health",method="GET",status="500"}'
         values: '0+1000x300'
       # 助理：前 60 分鐘每分鐘 64 句、都在 8 秒內；之後沒人用（counter 停住，序列還在）
-      - series: 'http_server_requests_seconds_count{job="talkcal-app",uri="/api/calendar/assistant",method="POST",status="200"}'
+      - series: 'http_server_requests_seconds_count{job="talkcal-app",uri="/api/calendar/assistant",method="POST",guest="false",status="200"}'
         values: '0+64x60 3840x240'
-      - series: 'http_server_requests_seconds_bucket{job="talkcal-app",uri="/api/calendar/assistant",method="POST",status="200",le="8.0"}'
+      - series: 'http_server_requests_seconds_bucket{job="talkcal-app",uri="/api/calendar/assistant",method="POST",guest="false",status="200",le="8.0"}'
         values: '0+64x60 3840x240'
 
     promql_expr_test:
@@ -72,3 +72,35 @@ tests:
         exp_samples:
           - labels: 'slo:sli_error:ratio_rate28d{slo="assistant-availability"}'
             value: 0
+
+  # 沒登入的訪客：預先寫好的回答很快、不呼叫模型，不算進 assistant-*
+  - interval: 1m
+    input_series:
+      # 登入者：每分鐘 64 句，一半超過 8 秒（模型變慢）
+      - series: 'http_server_requests_seconds_count{job="talkcal-app",uri="/api/calendar/assistant",method="POST",guest="false",status="200"}'
+        values: '0+64x60'
+      - series: 'http_server_requests_seconds_bucket{job="talkcal-app",uri="/api/calendar/assistant",method="POST",guest="false",status="200",le="8.0"}'
+        values: '0+32x60'
+      # 訪客：同一段時間每分鐘 960 個，都在 8 秒內。算進來的話，延遲的壞事件比例會從 1/2 被稀釋成 32/1024
+      - series: 'http_server_requests_seconds_count{job="talkcal-app",uri="/api/calendar/assistant",method="POST",guest="true",status="200"}'
+        values: '0+960x60'
+      - series: 'http_server_requests_seconds_bucket{job="talkcal-app",uri="/api/calendar/assistant",method="POST",guest="true",status="200",le="8.0"}'
+        values: '0+960x60'
+    promql_expr_test:
+      - expr: round(slo:sli_error:ratio_rate5m{slo="assistant-latency"} * 1024)
+        eval_time: 30m
+        exp_samples:
+          - labels: '{slo="assistant-latency"}'
+            value: 512
+
+  # 反例：只有訪客、沒有登入者時，assistant-* 是沒資料，不是 100% 好
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{job="talkcal-app",uri="/api/calendar/assistant",method="POST",guest="true",status="200"}'
+        values: '0+960x60'
+      - series: 'http_server_requests_seconds_bucket{job="talkcal-app",uri="/api/calendar/assistant",method="POST",guest="true",status="200",le="8.0"}'
+        values: '0+960x60'
+    promql_expr_test:
+      - expr: slo:sli_error:ratio_rate5m{slo=~"assistant-.*"}
+        eval_time: 30m
+        exp_samples: []
