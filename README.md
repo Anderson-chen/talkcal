@@ -25,7 +25,7 @@
 | [backend](backend/README.md) | 後端程式碼、Gradle、Dockerfile |
 | [web](web/README.md) | 前端程式碼、pnpm、Dockerfile、nginx 設定 |
 | [deploy](deploy/README.md) | 前後端、模型、資料庫、舊資料歸檔（RustFS）的 Docker Compose 設定 |
-| [ops](ops/README.md) | 系統監控：收集、儲存指標、log 和 trace，提供 dashboard 和異常告警 |
+| [ops](ops/README.md) | 系統監控：收集並儲存指標、log、trace，提供 dashboard 和異常告警 |
 | [perf](perf/README.md) | k6 壓力測試腳本 |
 | [ci](ci/README.md) | CI 檢查腳本：測試、格式、授權條款、金鑰和密碼外洩、弱點掃描 |
 | [cd](cd/README.md) | CD 腳本：部署、退版、發版、計算版本號 |
@@ -38,7 +38,7 @@
 |---|---|
 | JDK | 25 |
 | Node.js | 22，「開發」和單獨執行前端測試才需要；「啟動服務」的前端在 Docker 裡 build |
-| bash | Windows 用 Git Bash |
+| Bash | Windows 用 Git Bash |
 | Docker | Docker Desktop（WSL 2 後端） |
 | NVIDIA 顯卡 | 選用，在本機執行模型才需要。RTX 40 系列、驅動 580 以上可以直接用，其他見「本機模型」第 1 步 |
 | just | 選用，`just` 會列出部署、備份、CI 檢查這些常用腳本的指令。安裝：`winget install Casey.Just` |
@@ -69,7 +69,7 @@
 
    Google、GitHub 登入要另外設定，見 `deploy/.env.example`。
 
-停止全部服務。資料留在 volume，加 `-v` 才會清掉：
+停止全部服務（資料留在 volume，加 `-v` 才會清掉）：
 
 ```bash
 docker compose -f deploy/compose.yaml down
@@ -77,7 +77,7 @@ docker compose -f deploy/compose.yaml down
 
 ### 開發
 
-開發時後端和前端直接在主機上執行，各開一個終端機。先做完「啟動服務」的第 1、2 步：`bootRun` 從 `deploy/.env` 讀密碼，連第 2 步啟動的資料庫和 RustFS。要用對話助理的話，再做「本機模型」。
+開發時後端和前端直接在主機上執行，各開一個終端機。先做完「啟動服務」的第 1、2 步：`bootRun` 從 `deploy/.env` 讀密碼，再連到第 2 步啟動的資料庫和 RustFS。要用對話助理的話，再做「本機模型」。
 
 後端在 8090：
 
@@ -97,7 +97,7 @@ pnpm --dir web run dev
 
 ### 本機模型（選用）
 
-不啟動模型也能用行事曆，僅無法使用對話助理功能。
+不啟動模型也能用行事曆，只有對話助理不能用。
 
 1. 查顯卡是哪一代（compute capability）和驅動版本：
 
@@ -118,7 +118,7 @@ pnpm --dir web run dev
 
    再把 `deploy/.env` 的 `MODELS_DIR` 設成同一個路徑；用 `C:/llm/models` 的話不用設，那是預設值。
 
-3. 寫校驗檔，模型複製進容器時照它驗內容（已經有這個檔案的話，改成手動加這一行，不然會整份蓋掉）：
+3. 寫校驗檔，模型複製進容器時會照校驗檔驗內容（已經有這個檔案的話，改成手動加這一行，不然會整份蓋掉）：
 
    ```bash
    echo "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785  Qwen3-8B-Q4_K_M.gguf" > <模型資料夾>/SHA256SUMS
@@ -132,7 +132,7 @@ pnpm --dir web run dev
 
    `llm-chat` healthy 之後對話助理就能用，app 不用重新啟動。
 
-   `llm-chat` 無法啟動時，確認容器拿得到顯卡，要印出 `GPU 0: NVIDIA ...`：
+   `llm-chat` 無法啟動時，確認容器裡偵測得到顯卡，要印出 `GPU 0: NVIDIA ...`：
 
    ```bash
    docker compose -f deploy/compose.yaml run --rm --no-deps --entrypoint nvidia-smi llm-chat -L
