@@ -55,6 +55,7 @@ function snapshot() {
     } else if (name === 'http_server_requests_seconds_count'
         && labels.includes('uri="/api/calendar/assistant"')
         && labels.includes('method="POST"')
+        && !labels.includes('guest="true"')
         && !/status="4/.test(labels)) {
       totals.requests += Number(value);
     }
