@@ -75,7 +75,7 @@
 docker compose -f deploy/compose.yaml down
 ```
 
-之後要再啟動，重做第 2、3 步。不指定服務的 `docker compose up -d` 會連模型一起啟動，沒有模型檔時會失敗。
+之後要再啟動，重做第 2、3 步；啟動過模型的話，再做「本機模型」第 4 步。不指定服務的 `docker compose up -d` 會連模型一起啟動，沒有模型檔時會失敗。
 
 ### 開發
 
@@ -107,10 +107,10 @@ pnpm --dir web run dev
    nvidia-smi --query-gpu=compute_cap,driver_version --format=csv,noheader
    ```
 
-   印出 `8.9`（RTX 40 系列）和 580 以上的驅動版本就跳過這一步，例如 `8.9, 581.29`。其他情況要改 `deploy/llama-server/Dockerfile`：
+   第一個數字是 `8.9`（RTX 40 系列）、第二個是 580 以上，例如 `8.9, 581.29`，就不用改，直接做第 2 步。其他情況要改 `deploy/llama-server/Dockerfile`：
 
-   - 第一個數字不是 `8.9`：`CUDA_ARCH` 改成這個數字去掉小數點的值，例如 RTX 30 系列印出 `8.6`，就改成 `86`。低於 `7.5` 的顯卡（GTX 10 系列和更早的）CUDA 13 不支援，`CUDA_VERSION` 也要照下一條改。
-   - 驅動低於 580：照 `CUDA_VERSION` 上面那行註解改。
+   - 第一個數字不是 `8.9`：`CUDA_ARCH` 改成這個數字去掉小數點的值，例如 RTX 30 系列印出 `8.6`，就改成 `86`。第一個數字低於 `7.5` 時（GTX 10 系列和更早的顯卡），CUDA 13 不支援，`CUDA_VERSION` 也要照下一條改。
+   - 驅動低於 580：照 `CUDA_VERSION` 上面那行註解改，`deploy/compose.yaml` 裡 `llama-server` 映像檔 tag 的 CUDA 版本也跟著改。
 
 2. 下載模型（約 5 GB，來源 [Qwen/Qwen3-8B-GGUF](https://huggingface.co/Qwen/Qwen3-8B-GGUF)）。`<模型資料夾>` 換成要放模型檔的絕對路徑，例如 `C:/llm/models`：
 
