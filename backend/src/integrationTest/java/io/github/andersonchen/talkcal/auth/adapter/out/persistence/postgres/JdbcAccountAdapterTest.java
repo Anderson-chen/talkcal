@@ -150,6 +150,22 @@ class JdbcAccountAdapterTest {
     }
 
     @Test
+    @DisplayName("資料庫裡有程式不支援的等級（CHECK 先放寬了）：讀取時丟 IllegalStateException，當成讀取失敗，不是使用者輸入錯誤")
+    void unsupportedTierIsReadFailure() {
+        Account amy = Account.withPassword(AccountId.newId(), new Username("amy"), "{bcrypt}hash");
+        adapter.saveIfUsernameFree(amy);
+        jdbc.sql("ALTER TABLE account DROP CONSTRAINT account_tier_known").update();
+        try {
+            jdbc.sql("UPDATE account SET tier = 'pro'").update();
+
+            assertThrows(IllegalStateException.class, () -> adapter.load(amy.id()));
+        } finally {
+            jdbc.sql("DELETE FROM account").update();
+            jdbc.sql("ALTER TABLE account ADD CONSTRAINT account_tier_known CHECK (tier IN ('free', 'paid'))").update();
+        }
+    }
+
+    @Test
     @DisplayName("反例：V14 之前就有的帳號（有帳號名稱、沒有帳號名稱的各一個），migration 之後都是免費會員")
     void existingAccountsBecomeFree() {
         TestPostgres.Database old = TestPostgres.newDatabase().migratedTo("13");

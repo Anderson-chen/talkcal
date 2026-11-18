@@ -125,13 +125,22 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
         }
     }
 
+    /**
+     * 資料庫裡的值不合 domain 的規則（例如 CHECK 先放寬、程式還沒支援的等級）時丟 IllegalStateException：
+     * 這是資料庫的資料問題，不是使用者輸入錯誤，所以不把 domain 的 IllegalArgumentException 直接往外丟。
+     */
     private static Account toAccount(ResultSet rs) throws SQLException {
-        String username = rs.getString("username");
-        // V10 的 CHECK 規定帳號名稱和密碼雜湊一起有、一起沒有
-        Account.PasswordLogin login = username == null
-                ? null
-                : new Account.PasswordLogin(new Username(username), rs.getString("password_hash"));
-        return new Account(new AccountId(rs.getObject("id", UUID.class)), rs.getString("display_name"), login,
-                MembershipTier.of(rs.getString("tier")));
+        String id = rs.getString("id");
+        try {
+            String username = rs.getString("username");
+            // V10 的 CHECK 規定帳號名稱和密碼雜湊一起有、一起沒有
+            Account.PasswordLogin login = username == null
+                    ? null
+                    : new Account.PasswordLogin(new Username(username), rs.getString("password_hash"));
+            return new Account(new AccountId(rs.getObject("id", UUID.class)), rs.getString("display_name"), login,
+                    MembershipTier.of(rs.getString("tier")));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("資料庫裡的帳號資料不合規則：" + id, e);
+        }
     }
 }
