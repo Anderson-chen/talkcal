@@ -16,6 +16,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -86,15 +87,26 @@ class AuthSystemTest {
     void tierFollowsDatabase() throws Exception {
         BrowserSession amy = browser().signUpAndLogIn("amy", PASSWORD);
         BrowserSession bob = browser().signUpAndLogIn("bob", PASSWORD);
-        assertEquals("free", JSON.readTree(amy.get("/api/auth/me").body()).at("/tier").asString());
+        assertTier("free", null, amy);
 
         jdbc.sql("UPDATE account SET tier = 'paid' WHERE username = 'amy'").update();
 
-        assertEquals("paid", JSON.readTree(amy.get("/api/auth/me").body()).at("/tier").asString());
-        assertEquals("free", JSON.readTree(bob.get("/api/auth/me").body()).at("/tier").asString(), "反例：沒改到的帳號還是免費");
+        assertTier("paid", "付費會員", amy);
+        assertTier("free", null, bob);
 
         jdbc.sql("UPDATE account SET tier = 'free' WHERE username = 'amy'").update();
-        assertEquals("free", JSON.readTree(amy.get("/api/auth/me").body()).at("/tier").asString(), "降級也是下一個請求就生效");
+        assertTier("free", null, amy);
+    }
+
+    /** 顯示文字由後端決定：免費會員是 null，畫面就不顯示等級。 */
+    private static void assertTier(String tier, String label, BrowserSession who) throws Exception {
+        JsonNode me = JSON.readTree(who.get("/api/auth/me").body());
+        assertEquals(tier, me.at("/tier").asString());
+        if (label == null) {
+            assertTrue(me.at("/tierLabel").isNull(), me.toString());
+        } else {
+            assertEquals(label, me.at("/tierLabel").asString());
+        }
     }
 
     @Test

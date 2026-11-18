@@ -14,8 +14,10 @@ export interface Me {
   name: string
   // 只用 Google、GitHub 登入的帳號沒有帳號名稱
   username: string | null
-  // 沒登入的訪客拿不到 Me，所以只有這兩種
-  tier: 'free' | 'paid'
+  // 會員等級的值，畫面上不拿它判斷：要顯示什麼看 tierLabel
+  tier: string
+  // 後端決定的顯示文字；null 是不顯示（免費會員）
+  tierLabel: string | null
 }
 
 /** 帳密以外的登入方式，後端有設定 client id 的才會開 */
