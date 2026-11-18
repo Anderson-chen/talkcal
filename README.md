@@ -37,10 +37,10 @@
 | 環境需求 | 條件 |
 |---|---|
 | JDK | 25 |
-| Node.js | 22，照「開發」一節做、或單獨執行前端測試才需要；照「啟動服務」做的話，前端在 Docker 裡 build |
+| Node.js | 22 |
 | Bash | Windows 用 Git Bash |
 | Docker | Docker Desktop（使用 WSL 2 引擎） |
-| NVIDIA 顯卡 | 選用，在本機執行模型才需要。RTX 40 系列、驅動 580 以上可以直接用，其他見「本機模型」第 1 步 |
+| NVIDIA 顯卡 | 選用，在本機執行模型才需要。RTX 40 系列、驅動 580 以上可以直接用 |
 | just | 選用，`just` 會列出部署、備份、CI 檢查這些常用腳本的指令。安裝：`winget install Casey.Just` |
 
 下面的指令都在專案根目錄執行。
@@ -59,7 +59,7 @@
    docker compose -f deploy/compose.yaml up -d postgres archive archive-init
    ```
 
-3. 執行後端測試、build 映像檔，把 Docker 裡的 `app` 和 `web` 容器換成這份程式碼的版本，等到兩個都 healthy。第一次要下載依賴和基礎映像檔，會比較久：
+3. 啟動後端（`app`）和前端（`web`）：先執行後端測試，再 build 映像檔、啟動容器，等到兩個都 healthy 才結束。第一次要下載依賴和基礎映像檔，會比較久：
 
    ```bash
    backend/gradlew -p backend deploy
@@ -79,7 +79,7 @@ docker compose -f deploy/compose.yaml down
 
 ### 開發
 
-開發時後端和前端直接在主機上執行，各開一個終端機。先做完「啟動服務」的第 1、2 步：`bootRun` 從 `deploy/.env` 讀密碼，再連到第 2 步啟動的資料庫和 RustFS。要用 AI 助理的話，再做「本機模型」。
+確保執行過「啟動服務」的第 1、2 步
 
 後端在 8090：
 
