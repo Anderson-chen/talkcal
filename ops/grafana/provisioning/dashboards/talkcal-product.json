@@ -117,7 +117,7 @@
             "type": "prometheus",
             "uid": "mimir"
           },
-          "expr": "sum(increase(http_server_requests_seconds_count{job=\"talkcal-app\",uri=\"/api/calendar/assistant\", guest=\"false\",method=\"POST\",status=\"200\"}[$__range]))",
+          "expr": "sum(increase(http_server_requests_seconds_count{job=\"talkcal-app\",uri=\"/api/calendar/assistant\", guest!=\"true\",method=\"POST\",status=\"200\"}[$__range]))",
           "legendFormat": "對話",
           "instant": true,
           "range": false
@@ -575,7 +575,7 @@
             "type": "prometheus",
             "uid": "mimir"
           },
-          "expr": "sum(increase(talkcal_assistant_proposals_shown_total{job=\"talkcal-app\"}[$__range])) / sum(increase(http_server_requests_seconds_count{job=\"talkcal-app\",uri=\"/api/calendar/assistant\", guest=\"false\",method=\"POST\",status=\"200\"}[$__range]))",
+          "expr": "sum(increase(talkcal_assistant_proposals_shown_total{job=\"talkcal-app\"}[$__range])) / sum(increase(http_server_requests_seconds_count{job=\"talkcal-app\",uri=\"/api/calendar/assistant\", guest!=\"true\",method=\"POST\",status=\"200\"}[$__range]))",
           "legendFormat": "每句提議",
           "instant": true,
           "range": false

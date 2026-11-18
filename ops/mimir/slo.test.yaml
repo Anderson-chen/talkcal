@@ -25,10 +25,11 @@ tests:
       # 反例：不在 SLO 範圍內的路徑一直 5xx，不該算進任何一個 SLO
       - series: 'http_server_requests_seconds_count{job="talkcal-app",uri="/actuator/health",method="GET",status="500"}'
         values: '0+1000x300'
-      # 助理：前 60 分鐘每分鐘 64 句、都在 8 秒內；之後沒人用（counter 停住，序列還在）
-      - series: 'http_server_requests_seconds_count{job="talkcal-app",uri="/api/calendar/assistant",method="POST",guest="false",status="200"}'
+      # 助理：前 60 分鐘每分鐘 64 句、都在 8 秒內；之後沒人用（counter 停住，序列還在）。
+      # 不帶 guest 標籤：加標籤之前錄下的序列長這樣，要照樣算進 assistant-*
+      - series: 'http_server_requests_seconds_count{job="talkcal-app",uri="/api/calendar/assistant",method="POST",status="200"}'
         values: '0+64x60 3840x240'
-      - series: 'http_server_requests_seconds_bucket{job="talkcal-app",uri="/api/calendar/assistant",method="POST",guest="false",status="200",le="8.0"}'
+      - series: 'http_server_requests_seconds_bucket{job="talkcal-app",uri="/api/calendar/assistant",method="POST",status="200",le="8.0"}'
         values: '0+64x60 3840x240'
 
     promql_expr_test:

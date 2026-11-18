@@ -13,8 +13,9 @@
 # 延遲：壞 = 全部 - 落在門檻 bucket 以內的。app 要有剛好在門檻上的 bucket
 #   （application.properties 的 management.metrics.distribution.slo.http.server.requests=300ms,8s），門檻要兩邊一起改。
 # calendar-* 是一般 API：行程的增刪查、讀對話紀錄、拒絕卡片。assistant-* 是 POST /api/calendar/assistant，
-#   後面要呼叫模型好幾次，門檻分開定。只算登入者的（guest="false"）：沒登入的訪客拿到的是預先寫好的回答，
-#   不呼叫模型，算進來會把模型變慢、502 變多稀釋掉（標籤怎麼來的見 ObservationConfiguration.tagGuestRequests）。
+#   後面要呼叫模型好幾次，門檻分開定。不算沒登入的訪客，理由見 docs/slo.md「為什麼不算訪客」；
+#   標籤怎麼來的見 ObservationConfiguration.tagGuestRequests。寫成 guest!="true"、不寫 guest="false"：
+#   加標籤之前錄下的序列沒有 guest，寫 "false" 的話，28 天視窗裡那段舊資料會整個不見。
 #
 # 沒有 5xx 時壞事件那一項是空的，空 / 數字 = 空，SLI 會變沒資料，所以補 or vector(0)。
 # 分母加 > 0：沒人用時 rate 是 0，0/0 會錄成 NaN；當成沒資料，不算好也不算壞。
@@ -53,16 +54,16 @@ groups:
         expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)"}[5m])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri=~"/api/calendar/(events.*|assistant/.+)", le="0.3"}[5m]))
       - record: slo:sli_events:rate5m
         labels: { slo: assistant-availability }
-        expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", guest="false"}[5m]))
+        expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", guest!="true"}[5m]))
       - record: slo:sli_bad_events:rate5m
         labels: { slo: assistant-availability }
-        expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", guest="false", status=~"5.."}[5m])) or vector(0)
+        expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", guest!="true", status=~"5.."}[5m])) or vector(0)
       - record: slo:sli_events:rate5m
         labels: { slo: assistant-latency }
-        expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", guest="false"}[5m]))
+        expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", guest!="true"}[5m]))
       - record: slo:sli_bad_events:rate5m
         labels: { slo: assistant-latency }
-        expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", guest="false"}[5m])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri="/api/calendar/assistant", method="POST", guest="false", le="8.0"}[5m]))
+        expr: sum(rate(http_server_requests_seconds_count{job="talkcal-app", uri="/api/calendar/assistant", method="POST", guest!="true"}[5m])) - sum(rate(http_server_requests_seconds_bucket{job="talkcal-app", uri="/api/calendar/assistant", method="POST", guest!="true", le="8.0"}[5m]))
 
       # 第二層。burn rate = 壞事件比例 / (1 - 目標)，1 = 剛好在 28 天內把 error budget 用完
       - record: slo:sli_error:ratio_rate5m
