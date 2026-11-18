@@ -47,7 +47,7 @@
 
 ### 前置作業
 
-「部署到本機」和「本機開發」都要先做。
+「本機部署」和「本機開發」都要先做。
 
 1. 建 `deploy/.env`，開啟後填入 `DB_PASSWORD`、`ARCHIVE_ACCESS_KEY`、`ARCHIVE_SECRET_KEY`，最後一個至少 8 個字：
 
@@ -61,7 +61,7 @@
    docker compose -f deploy/compose.yaml up -d postgres archive archive-init
    ```
 
-### 部署到本機
+### 本機部署
 
 1. 執行後端測試、build 映像檔，啟動 `app` 和 `web` 容器，等到兩個都 healthy。第一次會比較久：
 
@@ -144,7 +144,7 @@ pnpm --dir web run dev
 docker compose -f deploy/compose.yaml down
 ```
 
-之後要再啟動，重做「前置作業」第 2 步，再做「部署到本機」第 1 步或「本機開發」；啟動過模型的話，再做「本機模型」第 4 步。不指定服務的 `docker compose up -d` 會連模型一起啟動，沒有模型檔時會失敗。
+之後要再啟動，重做「前置作業」第 2 步，再做「本機部署」第 1 步或「本機開發」；啟動過模型的話，再做「本機模型」第 4 步。不指定服務的 `docker compose up -d` 會連模型一起啟動，沒有模型檔時會失敗。
 
 ## 測試
 
