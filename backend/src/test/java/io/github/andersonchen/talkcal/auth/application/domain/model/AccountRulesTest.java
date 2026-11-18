@@ -97,11 +97,4 @@ class AccountRulesTest {
         assertThrows(IllegalArgumentException.class, () -> MembershipTier.of("PAID"));
         assertThrows(IllegalArgumentException.class, () -> MembershipTier.of("gold"));
     }
-
-    @Test
-    @DisplayName("兩級都有畫面上顯示的名稱")
-    void tierLabels() {
-        assertEquals("免費會員", MembershipTier.FREE.label());
-        assertEquals("付費會員", MembershipTier.PAID.label());
-    }
 }

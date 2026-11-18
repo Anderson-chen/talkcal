@@ -16,8 +16,6 @@ import io.github.andersonchen.talkcal.auth.application.domain.model.Username;
 import java.util.List;
 import java.util.UUID;
 
-import org.flywaydb.core.Flyway;
-
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -154,8 +152,7 @@ class JdbcAccountAdapterTest {
     @Test
     @DisplayName("反例：V14 之前就有的帳號（有帳號名稱、沒有帳號名稱的各一個），migration 之後都是免費會員")
     void existingAccountsBecomeFree() {
-        TestPostgres.Database old = TestPostgres.newDatabase();
-        Flyway.configure().dataSource(old.url(), old.username(), old.password()).target("13").load().migrate();
+        TestPostgres.Database old = TestPostgres.newDatabase().migratedTo("13");
         JdbcClient oldJdbc = JdbcClient.create(old.dataSource());
         oldJdbc.sql("INSERT INTO account (id, display_name, username, password_hash) VALUES (:id, 'amy', 'amy', 'x')")
                 .param("id", UUID.randomUUID()).update();

@@ -33,6 +33,9 @@ const PROPOSAL = { title: '開會', start: '2026-10-07T15:00:00', end: '2026-10-
 
 const CSRF_TOKEN = 'fake-csrf-token'
 
+// 跟後端 MembershipTier 的 label() 一樣
+const TIER_LABELS = { free: '免費會員', paid: '付費會員' } as const
+
 // 時間比的是牆上時間本身：前端表單送的是 "2026-10-06T10:00"，讀回來的是 "2026-10-06T10:00:00"，後端（LocalDateTime）當成同一個時間
 const sameTime = (a: string, b: string) => a.padEnd(19, ':00').slice(0, 19) === b.padEnd(19, ':00').slice(0, 19)
 const sameEvent = (a: Omit<FakeEvent, 'id'>, b: Omit<FakeEvent, 'id'>) =>
@@ -65,7 +68,7 @@ export async function fakeApi(page: Page, options: Options = {}) {
   }
 
   const tier = options.tier ?? 'free'
-  const tierLabel = tier === 'paid' ? '付費會員' : '免費會員'
+  const tierLabel = TIER_LABELS[tier]
 
   const json = (route: Route, status: number, body: unknown) => route.fulfill({ status, json: body })
 
