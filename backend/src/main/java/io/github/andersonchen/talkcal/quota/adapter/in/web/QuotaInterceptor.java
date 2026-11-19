@@ -22,7 +22,8 @@ import java.util.function.Function;
  * 被 Spring Security 擋掉的請求（401、CSRF 的 403）也不會被算一次；Spring 也已經選好 controller 的方法，
  * 比對規則用它的路徑樣板，不用自己切路徑。
  *
- * 回應是 5xx 時退回這一次：模型出錯、資料庫出錯不是使用者的問題，不該用掉他的次數。
+ * 回應不是成功（4xx、5xx）時退回這一次：模型出錯、資料庫出錯不是使用者的問題；送錯的請求（400、409）什麼都沒做成，
+ * 也不該用掉次數。被每日次數擋下的那次在 ConsumeQuotaUseCase 裡就退回了。
  */
 public final class QuotaInterceptor implements HandlerInterceptor {
 
@@ -52,7 +53,7 @@ public final class QuotaInterceptor implements HandlerInterceptor {
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         if (request.getAttribute(CONSUMED) instanceof Consumed consumed
-                && (ex != null || response.getStatus() >= HttpStatus.INTERNAL_SERVER_ERROR.value())) {
+                && (ex != null || response.getStatus() >= HttpStatus.BAD_REQUEST.value())) {
             quota.refund(consumed);
         }
     }

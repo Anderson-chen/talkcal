@@ -79,7 +79,7 @@ SELECT account_id FROM account_identity WHERE provider = 'google' AND subject = 
 每個 API 每天能呼叫幾次，寫在資料庫的兩張表，計數放 Redis（表的定義和理由見 [V15](src/main/resources/db/migration/V15__guest_mode_and_daily_quota.sql)）：
 
 - `quota_bucket`：一份計數，照 IP、帳號或全站分開算，每天的上限、用完時給使用者看的話。
-- `quota_rule`：哪個等級呼叫哪個 API 算進哪一份。
+- `quota_rule`：哪個等級呼叫哪個 API 算進哪一份。同一個 API 可以算進好幾份（例如開訪客帳號同時算全站的名額和那個 IP 的上限），任何一份用完就擋下。
 
 要限制一個新的 API，加一列就好，app 最多 1 分鐘內重讀（`talkcal.quota.rules-refresh`），不用改程式、不用重啟：
 
@@ -91,4 +91,4 @@ INSERT INTO quota_rule (method, path_pattern, tier, bucket)
 VALUES ('POST', '/api/calendar/assistant', 'free', 'free-assistant');
 ```
 
-`path_pattern` 寫 controller 上的路徑樣板，跟 `@RequestMapping` 一字不差，例如 `/api/calendar/events/{id}`（變數名稱也要一樣）。超過上限回 429（`code = QUOTA_EXCEEDED`），`Retry-After` 指到 `calendar.zone` 的午夜；回應是 5xx（例如模型出錯）的那次不扣。Redis 無法連線時不限制次數，服務照常。
+`path_pattern` 寫 controller 上的路徑樣板，跟 `@RequestMapping` 一字不差，例如 `/api/calendar/events/{id}`（變數名稱也要一樣）。超過上限回 429（`code = QUOTA_EXCEEDED`），`Retry-After` 指到 `calendar.zone` 的午夜；回應不是成功的那次不扣（送錯的 4xx、模型出錯的 5xx）。Redis 無法連線時不限制次數，服務照常。

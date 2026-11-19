@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
-import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,12 +31,12 @@ class QuotaRuleTest {
     }
 
     @Test
-    @DisplayName("規則表找得到就回那份計數；反例：沒有規則對到是 empty（不限制）")
+    @DisplayName("規則表找得到就回那幾份計數；反例：沒有規則對到是空的（不限制）")
     void bucketLookup() {
         QuotaBucket writes = new QuotaBucket("writes", QuotaSubject.IP, 10, "用完了");
         QuotaRules rules = QuotaRules.of(List.of(UPDATE), List.of(writes));
-        assertEquals(Optional.of(writes), rules.bucketFor("PUT", "/api/calendar/events/{id}", "guest"));
-        assertEquals(Optional.empty(), rules.bucketFor("GET", "/api/calendar/events", "guest"));
+        assertEquals(List.of(writes), rules.bucketsFor("PUT", "/api/calendar/events/{id}", "guest"));
+        assertEquals(List.of(), rules.bucketsFor("GET", "/api/calendar/events", "guest"));
     }
 
     @Test

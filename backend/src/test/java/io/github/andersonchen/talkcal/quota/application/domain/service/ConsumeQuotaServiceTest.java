@@ -37,9 +37,11 @@ class ConsumeQuotaServiceTest {
     private static final QuotaRules RULES = QuotaRules.of(
             List.of(new QuotaRule("POST", "/api/calendar/assistant", "guest", "ask"),
                     new QuotaRule("POST", "/api/auth/guest", "none", "signup"),
+                    new QuotaRule("POST", "/api/auth/guest", "none", "signup-per-ip"),
                     new QuotaRule("POST", "/api/calendar/assistant", "free", "member-ask")),
             List.of(new QuotaBucket("ask", QuotaSubject.IP, 3, "今天問完了"),
                     new QuotaBucket("signup", QuotaSubject.GLOBAL, 2, "名額滿了"),
+                    new QuotaBucket("signup-per-ip", QuotaSubject.IP, 1, "這個網路開太多了"),
                     new QuotaBucket("member-ask", QuotaSubject.ACCOUNT, 20, "今天問完了")));
 
     /** 跟 RedisQuotaCounterAdapter 同一個約定：加一回傳加完的值；broken 時丟 IllegalStateException */
@@ -86,7 +88,7 @@ class ConsumeQuotaServiceTest {
     @DisplayName("Retry-After 到台北的午夜（不是 UTC 的）：23:00 用完是 1 小時；key 帶台北的日期")
     void resetsAtLocalMidnight() {
         Optional<Consumed> first = service.consume(guestAsks("203.0.113.7"));
-        assertEquals("quota:ask:203.0.113.7:2026-11-18", first.orElseThrow().counterKey());
+        assertEquals("quota:ask:203.0.113.7:2026-11-18", first.orElseThrow().counterKeys().getFirst());
         service.consume(guestAsks("203.0.113.7"));
         service.consume(guestAsks("203.0.113.7"));
         QuotaExceededException e = assertThrows(QuotaExceededException.class, () -> service.consume(guestAsks("203.0.113.7")));
@@ -102,12 +104,24 @@ class ConsumeQuotaServiceTest {
         assertTrue(service.consume(guestAsks("198.51.100.4")).isPresent());
 
         QuotaRequest amy = new QuotaRequest("POST", "/api/calendar/assistant", "free", "203.0.113.7", "amy");
-        assertEquals("quota:member-ask:amy:2026-11-18", service.consume(amy).orElseThrow().counterKey());
+        assertEquals("quota:member-ask:amy:2026-11-18", service.consume(amy).orElseThrow().counterKeys().getFirst());
 
         QuotaRequest signup = new QuotaRequest("POST", "/api/auth/guest", "none", "203.0.113.7", null);
         service.consume(signup);
         service.consume(new QuotaRequest("POST", "/api/auth/guest", "none", "198.51.100.4", null));
         assertThrows(QuotaExceededException.class, () -> service.consume(signup));
+    }
+
+    @Test
+    @DisplayName("一個端點算進好幾份計數：同一個 IP 第 2 次開帳號被 IP 的上限擋下，全站的名額退回、沒有被用掉")
+    void severalBucketsPerRequest() {
+        QuotaRequest fromAmy = new QuotaRequest("POST", "/api/auth/guest", "none", "203.0.113.7", null);
+        assertEquals(2, service.consume(fromAmy).orElseThrow().counterKeys().size());
+
+        QuotaExceededException e = assertThrows(QuotaExceededException.class, () -> service.consume(fromAmy));
+        assertEquals("這個網路開太多了", e.getMessage());
+        assertEquals(1L, counter.counts.get("quota:signup:all:2026-11-18"));
+        assertTrue(service.consume(new QuotaRequest("POST", "/api/auth/guest", "none", "198.51.100.4", null)).isPresent());
     }
 
     @Test

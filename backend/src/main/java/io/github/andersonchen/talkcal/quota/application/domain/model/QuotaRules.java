@@ -2,7 +2,6 @@ package io.github.andersonchen.talkcal.quota.application.domain.model;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -35,11 +34,13 @@ public record QuotaRules(List<QuotaRule> rules, Map<String, QuotaBucket> buckets
         return new QuotaRules(rules, buckets.stream().collect(Collectors.toMap(QuotaBucket::name, Function.identity())));
     }
 
-    /** 這個請求要算進哪一份計數；沒有規則對到就是 empty，不限制 */
-    public Optional<QuotaBucket> bucketFor(String method, String pathPattern, String tier) {
+    /**
+     * 這個請求要算進哪幾份計數，例如開訪客帳號同時算全站的名額和那個 IP 的上限；沒有規則對到就是空的，不限制
+     */
+    public List<QuotaBucket> bucketsFor(String method, String pathPattern, String tier) {
         return rules.stream()
                 .filter(rule -> rule.matches(method, pathPattern, tier))
-                .findFirst()
-                .map(rule -> buckets.get(rule.bucket()));
+                .map(rule -> buckets.get(rule.bucket()))
+                .toList();
     }
 }

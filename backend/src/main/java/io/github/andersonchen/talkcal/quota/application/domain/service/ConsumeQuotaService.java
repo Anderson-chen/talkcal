@@ -12,6 +12,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -46,36 +48,44 @@ public final class ConsumeQuotaService implements ConsumeQuotaUseCase {
     @Override
     public Optional<Consumed> consume(QuotaRequest request) {
         Objects.requireNonNull(request, "request 不可為 null");
-        Optional<QuotaBucket> found = currentRules().bucketFor(request.method(), request.pathPattern(), request.tier());
-        if (found.isEmpty()) {
+        List<QuotaBucket> buckets = currentRules().bucketsFor(request.method(), request.pathPattern(), request.tier());
+        if (buckets.isEmpty()) {
             return Optional.empty();
         }
-        QuotaBucket bucket = found.get();
         ZonedDateTime now = ZonedDateTime.now(clock);
         LocalDate today = now.toLocalDate();
         ZonedDateTime midnight = today.plusDays(1).atStartOfDay(now.getZone());
-        String key = "quota:" + bucket.name() + ":" + subjectOf(bucket, request) + ":" + today;
+        // key 已經帶日期，晚一點消失不影響計數；到期設在午夜後一小時，只是不要剛好在換日的那一刻被刪掉
+        Instant expiresAt = midnight.plusHours(1).toInstant();
 
-        long used;
+        List<String> counted = new ArrayList<>();
         try {
-            // key 已經帶日期，晚一點消失不影響計數；到期設在午夜後一小時，只是不要剛好在換日的那一刻被刪掉
-            used = counter.increment(key, midnight.plusHours(1).toInstant());
+            for (QuotaBucket bucket : buckets) {
+                String key = "quota:" + bucket.name() + ":" + subjectOf(bucket, request) + ":" + today;
+                long used = counter.increment(key, expiresAt);
+                counted.add(key);
+                if (used > bucket.dailyLimit()) {
+                    // 被擋下的這一次不算：已經加過的每一份都退回，不然擋下的請求也會用掉其他份的額度
+                    refund(new Consumed(counted));
+                    throw new QuotaExceededException(bucket.message(), Duration.between(now, midnight));
+                }
+            }
         } catch (IllegalStateException e) {
+            refund(new Consumed(counted));
             return Optional.empty();
         }
-        if (used > bucket.dailyLimit()) {
-            throw new QuotaExceededException(bucket.message(), Duration.between(now, midnight));
-        }
-        return Optional.of(new Consumed(key));
+        return Optional.of(new Consumed(counted));
     }
 
     @Override
     public void refund(Consumed consumed) {
         Objects.requireNonNull(consumed, "consumed 不可為 null");
-        try {
-            counter.decrement(consumed.counterKey());
-        } catch (IllegalStateException e) {
-            // 退不回去只是這個人當天少一次，不讓請求本身的結果被蓋掉
+        for (String key : consumed.counterKeys()) {
+            try {
+                counter.decrement(key);
+            } catch (IllegalStateException e) {
+                // 退不回去只是這個人當天少一次，不讓請求本身的結果被蓋掉
+            }
         }
     }
 
@@ -94,16 +104,30 @@ public final class ConsumeQuotaService implements ConsumeQuotaUseCase {
 
     private QuotaRules currentRules() {
         Instant now = clock.instant();
-        if (stale(now) && reloading.compareAndSet(false, true)) {
+        if (loadedAt.equals(Instant.MIN)) {
+            // 第一次還沒讀到之前，同時進來的請求一起等：拿空的規則放行的話，剛啟動時那幾個請求都不受限制
+            synchronized (this) {
+                if (loadedAt.equals(Instant.MIN)) {
+                    reload(now);
+                }
+            }
+        } else if (stale(now) && reloading.compareAndSet(false, true)) {
             try {
-                rules = rulesPort.load();
-            } catch (IllegalStateException e) {
-                // 沿用上一份，過了 refresh 再試
+                reload(now);
             } finally {
-                loadedAt = now;
                 reloading.set(false);
             }
         }
         return rules;
+    }
+
+    private void reload(Instant now) {
+        try {
+            rules = rulesPort.load();
+        } catch (IllegalStateException e) {
+            // 沿用上一份，過了 refresh 再試
+        } finally {
+            loadedAt = now;
+        }
     }
 }

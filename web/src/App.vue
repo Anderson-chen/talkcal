@@ -20,7 +20,10 @@ onUnmounted(() => clearTimeout(timer))
 const vars = savedThemeVars()
 
 const quotaMessage = ref<string | null>(null)
-onUnmounted(onQuotaExceeded((message) => (quotaMessage.value = message)))
+// 沒登入時（例如訪客名額滿了）錯誤顯示在登入頁上，不記下來：記著的話，之後一登入就跳出過時的視窗
+onUnmounted(onQuotaExceeded((message) => {
+  if (me.value) quotaMessage.value = message
+}))
 
 onMounted(connect)
 </script>
@@ -30,7 +33,6 @@ onMounted(connect)
   <div v-if="me !== undefined" class="view">
     <CalendarView v-if="me" v-show="!loginPrompt" :key="me.id" />
     <LoginView v-if="!me || loginPrompt" />
-    <!-- 沒登入時（例如訪客名額滿了）錯誤顯示在登入頁上，不另外跳視窗 -->
     <QuotaDialog v-if="me && quotaMessage" :message="quotaMessage" :style="vars" @close="quotaMessage = null" />
   </div>
   <div v-else-if="meUnreachable" class="view">

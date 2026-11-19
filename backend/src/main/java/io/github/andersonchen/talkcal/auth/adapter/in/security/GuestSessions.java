@@ -7,6 +7,8 @@ import io.github.andersonchen.talkcal.auth.application.port.in.MergeGuestUseCase
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.Authentication;
@@ -29,6 +31,8 @@ import java.util.Optional;
  * HttpOnly：JavaScript 讀不到，遇到 XSS 也拿不走；只送到 /api，前端的靜態檔請求不帶。
  */
 public final class GuestSessions {
+
+    private static final Logger log = LoggerFactory.getLogger(GuestSessions.class);
 
     public static final String COOKIE = "talkcal_guest";
 
@@ -75,8 +79,15 @@ public final class GuestSessions {
         if (guest.isEmpty()) {
             return;
         }
+        try {
+            mergeGuest.mergeInto(guest.get(), AccountId.of(authentication.getName()));
+        } catch (IllegalStateException e) {
+            // 登入本身已經成功，不因為搬資料失敗讓使用者看到登入失敗。訪客的標記和 cookie 留著：
+            // 下一次在這個瀏覽器登入時再搬一次（這次搬到一半的話，搬好的那些已經在新帳號名下，剩下的下次搬）
+            log.error("訪客的資料搬不過去，這次先不搬：guest={} target={}", guest.get(), authentication.getName(), e);
+            return;
+        }
         leaveGuest(request, response);
-        mergeGuest.mergeInto(guest.get(), AccountId.of(authentication.getName()));
     }
 
     /** 訪客升級成會員之後：不再是訪客，cookie 和 session 裡的標記都清掉 */

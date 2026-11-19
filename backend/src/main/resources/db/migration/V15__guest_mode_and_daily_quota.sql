@@ -42,22 +42,26 @@ CREATE TABLE quota_bucket (
 );
 
 -- path_pattern 寫 controller 上的路徑樣板，跟 @RequestMapping 一字不差，{id} 這類變數名稱也要一樣（見 QuotaRule）。
--- tier 是請求者的等級，none 是沒登入。同一個方法、路徑、等級只有一條規則
+-- tier 是請求者的等級，none 是沒登入。同一個方法、路徑、等級可以算進好幾份計數（例如開訪客帳號同時算全站和那個 IP），
+-- 任何一份用完就擋下
 CREATE TABLE quota_rule (
     method       TEXT NOT NULL CHECK (method IN ('GET', 'POST', 'PUT', 'PATCH', 'DELETE')),
     path_pattern TEXT NOT NULL CHECK (path_pattern ~ '^/api/'),
     tier         TEXT NOT NULL CHECK (tier IN ('none', 'guest', 'free', 'paid')),
     bucket       TEXT NOT NULL REFERENCES quota_bucket (name),
-    PRIMARY KEY (method, path_pattern, tier)
+    PRIMARY KEY (method, path_pattern, tier, bucket)
 );
 
 INSERT INTO quota_bucket (name, subject, daily_limit, message) VALUES
     ('guest-signup',          'global', 30, '今天的訪客名額已經滿了，請註冊帳號使用'),
+    -- 同一個 IP 開的訪客帳號：不讓一個人用腳本把全站的名額用完
+    ('guest-signup-per-ip',   'ip',      3, '這個網路今天已經開了很多訪客帳號，請註冊帳號使用'),
     ('guest-assistant',       'ip',      3, '今天訪客問助理的次數用完了，註冊後就能繼續使用'),
     ('guest-calendar-writes', 'ip',     10, '今天訪客新增、修改、刪除行程的次數用完了，註冊後就能繼續使用');
 
 INSERT INTO quota_rule (method, path_pattern, tier, bucket) VALUES
     ('POST',   '/api/auth/guest',             'none',  'guest-signup'),
+    ('POST',   '/api/auth/guest',             'none',  'guest-signup-per-ip'),
     ('POST',   '/api/calendar/assistant',     'guest', 'guest-assistant'),
     ('POST',   '/api/calendar/events',        'guest', 'guest-calendar-writes'),
     ('PUT',    '/api/calendar/events/{id}',   'guest', 'guest-calendar-writes'),

@@ -212,6 +212,29 @@ class GuestModeSystemTest {
     }
 
     @Test
+    @DisplayName("同一個 IP 每天最多開 3 個訪客帳號，第 4 個回 429；反例：別的 IP 照樣開得了")
+    void guestSignupPerIp() throws Exception {
+        for (int i = 0; i < 3; i++) {
+            startGuest(browserFrom(GUEST_IP));
+        }
+        assertQuotaExceeded(browserFrom(GUEST_IP).postJson("/api/auth/guest", "{}"));
+        startGuest(browserFrom(OTHER_IP));
+    }
+
+    @Test
+    @DisplayName("反例：送錯的請求（400）不扣增刪改的次數")
+    void rejectedRequestsAreNotCounted() throws Exception {
+        BrowserSession guest = browserFrom(GUEST_IP);
+        startGuest(guest);
+
+        HttpResponse<String> invalid = guest.postJson(EVENTS, """
+                {"events": [{"title": "反了", "start": "2030-01-15T11:00:00", "end": "2030-01-15T10:00:00"}]}""");
+        assertEquals(400, invalid.statusCode(), invalid.body());
+        // 退回在回應送出之後才執行，可能比回應晚一點
+        await().atMost(Duration.ofSeconds(5)).until(() -> counted("guest-calendar-writes", GUEST_IP) == 0);
+    }
+
+    @Test
     @DisplayName("同一個 IP 第 4 次問助理回 429，沒有呼叫模型")
     void fourthQuestionIs429() throws Exception {
         BrowserSession guest = browserFrom(GUEST_IP);
