@@ -47,7 +47,7 @@ WAIT_TIMEOUT=600 cd/apply.sh local app   # 拉長等待
 
 歸檔用的 `archive` 也要先起好，但它沒起的時候擋不住。app 啟動時刻意不連物件儲存（理由見 `ArchiveStorageConfiguration` 的 `archiveBucket`），照樣 healthy，`--wait` 也跟著成功；要等到畫面上的「查看封存」或還原對話回 502，或凌晨的歸檔排程真的有資料存不進去，才看得出來。2026-10-31 把它加進 compose 之後，本機就這樣漏了快兩個星期（[#286](https://github.com/Anderson-chen/talkcal/issues/286)）。
 
-每日次數用的 `redis` 也擋不住：Redis 無法連線時 app 不限制次數、服務照常（見 [backend/README.md](../backend/README.md#每日次數)），`--wait` 照樣成功，只有 log 會出現「每日次數的計數無法連線」。
+每日次數用的 `redis` 沒啟動，`--wait` 也一樣成功：Redis 無法連線時 app 不限制次數、服務照常（見 [backend/README.md](../backend/README.md#每日次數)），只有 log 會出現「每日次數的計數無法連線」。
 
 第一次部署前先啟動資料庫、每日次數用的 `redis` 和歸檔用的 `archive`，`archive-init` 建好 bucket 就會結束：
 
@@ -57,7 +57,7 @@ docker compose -f deploy/compose.yaml up -d postgres redis archive archive-init
 
 要用 AI 助理的話，另外啟動 `llm-chat`，步驟見根目錄 README 的[本機模型](../README.md#本機模型選用)。
 
-2026-10-31 之前就部署過的環境不會再走第一次的步驟，補跑一次 `docker compose -f deploy/compose.yaml up -d archive archive-init` 就好。加上 `redis` 之前就部署過的環境也一樣，補跑一次 `docker compose -f deploy/compose.yaml up -d redis`。
+2026-10-31 之前就部署過的環境不會再走第一次的步驟，再執行一次 `docker compose -f deploy/compose.yaml up -d archive archive-init` 就好。`deploy/compose.yaml` 加進 `redis` 之前就部署過的環境也一樣，再執行一次 `docker compose -f deploy/compose.yaml up -d redis`。
 
 模型不在預設裡：映像檔重 build 要十分鐘左右，換的期間所有請求都會失敗，改程式碼不該順便付這個代價。
 
