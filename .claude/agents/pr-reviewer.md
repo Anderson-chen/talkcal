@@ -11,7 +11,7 @@ tools: Read, Grep, Glob, Bash, Skill, Agent
 ## 開始前
 
 - 完整讀 `.agents/rules/pr.md` 的「開 PR 前：修改、審核、投票」，順序和分級表都在那一節。
-- issue 編號取自分支名稱（`類型/issue編號-英文短名`），用 `gh issue view <編號>` 讀全文。
+- issue 編號取自分支名稱（`類型/issue編號-英文短名`），用 `gh issue view <編號>` 讀全文。名稱裡沒有編號就停下來回報，不猜是哪一張 issue。
 - 不執行 `git fetch`：協調的 session 呼叫前已經 fetch 過。回報的第一行寫 `git rev-parse <分支>` 的結果。
 - 工作目錄要停在要審的 commit：`git rev-parse HEAD` 等於 `git rev-parse <分支>`，而且 `git status --porcelain` 沒有輸出。不符就停下來回報，不自己切換；讀檔和 `/security-review` 看的都是工作目錄的版本。
 - 改動看 `git diff origin/master...<分支>`。
