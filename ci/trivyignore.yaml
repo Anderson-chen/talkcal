@@ -126,7 +126,7 @@ vulnerabilities:
     expired_at: 2027-01-14
   - id: CVE-2026-97054
     paths: [usr/local/bin/gosu]
-    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭
+    statement: gosu 只在啟動時切換使用者，不處理外部輸入；上游問題，見檔案開頭（2026-11-19 評估：要有 HTTP/1 server 才會觸發，gosu 不開 server）
     expired_at: 2027-01-14
   # ── 第三方映像檔，說明見檔案開頭 ──
   - id: CVE-2026-111497
@@ -164,6 +164,10 @@ vulnerabilities:
   - id: CVE-2026-78661
     paths: [usr/bin/caddy, usr/bin/alloy, usr/share/grafana/bin/grafana, usr/bin/mimir, tempo, usr/bin/loki, bin/postgres_exporter]
     statement: x/net/html 解析惡意 HTML 的 DoS；設定裡沒有處理外部 HTML 的路（Caddyfile 只有 reverse_proxy）。等上游帶修補，見檔案開頭
+    expired_at: 2026-12-10
+  - id: CVE-2026-97054
+    paths: [usr/bin/caddy, usr/bin/alloy, usr/share/grafana/bin/grafana, usr/share/grafana/bin/grafana-cli, usr/share/grafana/bin/grafana-server, usr/bin/mimir, tempo, usr/bin/loki]
+    statement: HTTP/1 server 用 MaxBytesReader 限制 request body 大小時才會 crash。Caddy 只有 request_body 和 admin API 用到：Caddyfile 只有 reverse_proxy，admin 的 2019 埠沒有發佈。觀測堆疊外面連不到，見檔案開頭。2026-11-19 評估時 Caddy 2.11.9、Mimir 3.2.4、Alloy v1.21.3 都還沒帶修補
     expired_at: 2026-12-10
   - id: CVE-2026-109518
     statement: Alloy 映像檔裡的 apt；容器執行時不跑 apt。等上游換基底，見檔案開頭
@@ -240,6 +244,10 @@ vulnerabilities:
     paths: [bin/postgres_exporter]
     statement: postgres-exporter 已是最新版、上游沒有新版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
     expired_at: 2027-01-10
+  - id: CVE-2026-97054
+    paths: [bin/postgres_exporter]
+    statement: v0.21.1 已經修掉，2026-11-18 發布，12-02 滿 14 天後 Renovate 才會升版；不發佈埠，只有 Alloy 會來抓，見檔案開頭
+    expired_at: 2026-12-10
 
 # ── 設定檢查（trivy config）──────────────────────────────────────────────
 # 規則：Dockerfile 用 Trivy 內建的 DS-*，Terraform 用 AWS-*，compose 用 ci/config-checks/ 的 TALKCAL-COMPOSE-*。
