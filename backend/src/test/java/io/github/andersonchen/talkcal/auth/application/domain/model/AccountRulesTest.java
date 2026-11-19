@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-@DisplayName("帳號的規則：帳號名稱、密碼長度、顯示名稱")
+@DisplayName("帳號的規則：帳號名稱、密碼長度、顯示名稱、會員等級")
 class AccountRulesTest {
 
     @Test
@@ -80,5 +80,21 @@ class AccountRulesTest {
         assertEquals(new Username("amy"), local.password().orElseThrow().username());
 
         assertEquals(java.util.Optional.empty(), Account.external(AccountId.newId(), "Amy", null).password());
+    }
+
+    @Test
+    @DisplayName("新帳號是免費會員：帳密註冊、Google 或 GitHub 第一次登入都一樣")
+    void newAccountsAreFree() {
+        assertEquals(MembershipTier.FREE, Account.withPassword(AccountId.newId(), new Username("amy"), "{bcrypt}x").tier());
+        assertEquals(MembershipTier.FREE, Account.external(AccountId.newId(), "Amy Chen", null).tier());
+    }
+
+    @Test
+    @DisplayName("資料庫存的字轉換成對應的會員等級；反例：沒有對應的字（例如大寫的 PAID）丟 IllegalArgumentException")
+    void tierIds() {
+        assertEquals(MembershipTier.FREE, MembershipTier.of("free"));
+        assertEquals(MembershipTier.PAID, MembershipTier.of("paid"));
+        assertThrows(IllegalArgumentException.class, () -> MembershipTier.of("PAID"));
+        assertThrows(IllegalArgumentException.class, () -> MembershipTier.of("gold"));
     }
 }

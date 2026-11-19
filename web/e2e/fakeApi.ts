@@ -22,6 +22,8 @@ interface Options {
   providers?: string[]
   // 已經用 Google、GitHub 登入的人：/me 回這個名字，沒有帳號名稱（跟後端一樣）
   externalName?: string
+  // 登入的人的會員等級，預設免費（跟後端新註冊的帳號一樣）；顯示文字照後端的 MembershipTier
+  tier?: 'free' | 'paid'
   // 已經封存的行程：不在 events 裡，月曆上看不到
   archived?: FakeEvent[]
 }
@@ -30,6 +32,9 @@ interface Options {
 const PROPOSAL = { title: '開會', start: '2026-10-07T15:00:00', end: '2026-10-07T16:00:00', category: 'WORK', location: null, note: null }
 
 const CSRF_TOKEN = 'fake-csrf-token'
+
+// 跟後端 MembershipTier 的 label() 一樣
+const TIER_LABELS = { free: '免費會員', paid: '付費會員' } as const
 
 // 時間比的是牆上時間本身：前端表單送的是 "2026-10-06T10:00"，讀回來的是 "2026-10-06T10:00:00"，後端（LocalDateTime）當成同一個時間
 const sameTime = (a: string, b: string) => a.padEnd(19, ':00').slice(0, 19) === b.padEnd(19, ':00').slice(0, 19)
@@ -62,6 +67,9 @@ export async function fakeApi(page: Page, options: Options = {}) {
     failNextArchive: false,
   }
 
+  const tier = options.tier ?? 'free'
+  const tierLabel = TIER_LABELS[tier]
+
   const json = (route: Route, status: number, body: unknown) => route.fulfill({ status, json: body })
 
   // 跟 Spring Security 一樣，回應時把 XSRF-TOKEN cookie 發給瀏覽器（JavaScript 讀得到）
@@ -80,10 +88,10 @@ export async function fakeApi(page: Page, options: Options = {}) {
     // ── 帳號 ──
     if (url.pathname === '/api/auth/me') {
       if (options.externalName && state.me) {
-        return route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: 'id-external', name: options.externalName, username: null } })
+        return route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: 'id-external', name: options.externalName, username: null, tier, tierLabel } })
       }
       return state.me
-        ? route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: `id-${state.me}`, name: state.me, username: state.me } })
+        ? route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: `id-${state.me}`, name: state.me, username: state.me, tier, tierLabel } })
         : route.fulfill({ status: 401, headers: withCsrfCookie, json: { error: '請先登入' } })
     }
     if (url.pathname === '/api/auth/providers') {

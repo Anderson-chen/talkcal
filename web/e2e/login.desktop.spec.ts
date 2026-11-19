@@ -107,3 +107,18 @@ test('用 Google 登入的人：側欄顯示 Google 給的名字（他沒有帳�
 
   await expect(page.getByText('Amy Chen', { exact: true })).toBeVisible()
 })
+
+const tiers = [
+  { tier: 'paid', shown: '付費會員', hidden: '免費會員' },
+  { tier: 'free', shown: '免費會員', hidden: '付費會員' },
+] as const
+
+for (const { tier, shown, hidden } of tiers) {
+  test(`側欄名字下面顯示會員等級：${shown}`, async ({ page }) => {
+    await fakeApi(page, { tier })
+    await page.goto('/')
+
+    await expect(page.getByText(shown, { exact: true })).toBeVisible()
+    await expect(page.getByText(hidden, { exact: true })).toHaveCount(0)
+  })
+}
