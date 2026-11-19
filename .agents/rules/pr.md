@@ -35,6 +35,8 @@
   - 呼叫 agent 時只給 `description` 列的東西，不附自己的說明，也不另外指定模型：呼叫時指定的模型優先於定義檔的 `model`。
   - agent 的回報原樣存成檔案，一份回報一個檔案，放在 repo 外面的資料夾（scratchpad 這類）。轉交給下一個 agent 時給檔案路徑，不摘要、不改寫。
   - 在 checkout 這個分支的資料夾裡呼叫 agent，而且沒有還沒 commit 的改動：審核者、投票者讀的是工作目錄的檔案。
+  - 不在呼叫 agent 的資料夾切換分支。Claude Code 從工作目錄讀 `.claude/agents/` 的定義，切換分支後要過幾秒才換成新的版本，馬上呼叫會拿到上一個分支的定義，`model` 也會跟著錯。
+  - 分支改到規則檔或定義檔時，從新開的 session 呼叫 agent：`CLAUDE.md` 載入的規則是 session 開始時的版本，agent 會先照那一版做。
   - 呼叫審核者、投票者之前先執行 `git fetch origin`。agent 自己不 fetch：三個投票者同時 fetch 會搶同一個 ref 的 lock。
   - 第二輪起呼叫審核者時，給上一輪審核者的回報和修改者這一輪的回報。修改者這一輪是因為投票或測試沒過才開始的，也一起給三張票或測試的輸出。
   - 回報第一行的 commit 不等於 `git rev-parse <分支>`，或 agent 停下來回報工作目錄不對時，那份回報不算數：把工作目錄處理好，重新呼叫同一種 agent，不算一輪。
