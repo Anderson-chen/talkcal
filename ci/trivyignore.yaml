@@ -167,7 +167,7 @@ vulnerabilities:
     expired_at: 2026-12-10
   - id: CVE-2026-97054
     paths: [usr/bin/caddy, usr/bin/alloy, usr/share/grafana/bin/grafana, usr/share/grafana/bin/grafana-cli, usr/share/grafana/bin/grafana-server, usr/bin/mimir, tempo, usr/bin/loki]
-    statement: HTTP/1 server 用 MaxBytesReader 限制 request body 大小時才會 crash。Caddy 只有 request_body 和 admin API 用到：Caddyfile 只有 reverse_proxy，admin 的 2019 埠沒有發佈。觀測堆疊外面連不到，見檔案開頭。2026-11-19 評估時 Caddy 2.11.9、Mimir 3.2.4、Alloy v1.21.3 都還沒帶修補
+    statement: HTTP/1 server 用 MaxBytesReader 限制 request body 大小時才會 crash。Caddy 只有 request_body 和 admin API 用到：Caddyfile 只有 reverse_proxy，admin 的 2019 埠沒有發佈。從外面連不到觀測堆疊，見檔案開頭。2026-11-19 評估時 Caddy 2.11.9、Mimir 3.2.4、Alloy v1.21.3 都還沒帶修補
     expired_at: 2026-12-10
   - id: CVE-2026-109518
     statement: Alloy 映像檔裡的 apt；容器執行時不跑 apt。等上游換基底，見檔案開頭
