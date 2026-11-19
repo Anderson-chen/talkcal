@@ -19,7 +19,7 @@ import java.util.function.Function;
 /**
  * 每個 API 請求進 controller 之前先算一次每日次數，用完就直接回 429，不進 controller。
  *
- * 放在 Spring MVC 的 interceptor，不放 servlet filter：這時已經過了 Spring Security，知道是誰、什麼等級，
+ * 放在 Spring MVC 的 interceptor，不放 servlet filter：這時已經過了 Spring Security，請求的帳號和等級都已經確定，
  * 被 Spring Security 擋掉的請求（401、CSRF 的 403）也不會被算一次。
  *
  * 回應是 5xx 時退回這一次：模型出錯、資料庫出錯不是使用者的問題，不該用掉他的次數。

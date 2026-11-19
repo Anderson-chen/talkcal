@@ -35,7 +35,7 @@ public final class GuestSessions {
 
     public static final String COOKIE = "talkcal_guest";
 
-    // 這個 session 原本是哪個訪客：登入別的帳號時，靠它知道要把哪個訪客的資料搬過去。
+    // 這個 session 原本是哪個訪客：登入別的帳號時，從這個屬性取出要搬資料的訪客。
     // Spring Security 登入時換 session ID 會保留 session 的屬性，所以登入成功時還讀得到
     private static final String GUEST_ATTRIBUTE = GuestSessions.class.getName() + ".guest";
 

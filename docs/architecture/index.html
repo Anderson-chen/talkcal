@@ -294,7 +294,7 @@ const FP={
 "infra/envs/1-ec2/compose.gpu.yaml":"（gpu）模型來源換成從 S3 拉下來的資料夾。",
 "infra/envs/1-ec2/Caddyfile":"HTTPS 入口：網址、壓縮，全部轉給 web。",
 "infra/envs/1-ec2/compose.ops.yaml":"疊在 ops/compose.yaml 上的雲端差異：Alloy 的 trace 取樣比例（10%）和決定前等多久（125s）、備份寫的 .prom 掛給 Alloy。",
-"deploy/compose.yaml":"本機和雲端共用的服務定義：模型、postgres（＋postgres-exporter）、redis、歸檔（RustFS，雲端不起）、app、web。",
+"deploy/compose.yaml":"本機和雲端共用的服務定義：模型、postgres（＋postgres-exporter）、redis、歸檔（RustFS，雲端不啟動）、app、web。",
 "deploy/backup/pg-backup.sh":"本機和雲端共用的備份：pg_dump -Fc、驗目錄、寫雜湊、清過期的舊檔。",
 "deploy/backup/pg-restore.sh":"還原：雜湊 → 目錄 → 整份還原到暫存庫 → 停 app、兩次改名換上。前三步失敗線上不動。",
 "deploy/backup/pg-diff.sh":"比兩個資料庫差在哪：每張表依主鍵分成新增、刪除、改過，印筆數和前幾筆。只讀（runbook 情境 C）。",

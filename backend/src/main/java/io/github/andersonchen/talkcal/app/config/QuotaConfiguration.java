@@ -43,7 +43,7 @@ class QuotaConfiguration {
         return new ConsumeQuotaService(quotaRules, quotaCounter, Clock.system(zone), refresh);
     }
 
-    // quota 不 import auth：請求者的等級從 auth 的 filter 記在 request 上的屬性讀，在這裡接起來
+    // quota 不 import auth：請求者的等級從 auth 的 filter 記在 request 上的屬性讀，讀的方式在這裡設定
     @Bean
     WebMvcConfigurer quotaInterceptor(ConsumeQuotaUseCase consumeQuota) {
         QuotaInterceptor interceptor = new QuotaInterceptor(consumeQuota, AccountTierFilter::tierOf);

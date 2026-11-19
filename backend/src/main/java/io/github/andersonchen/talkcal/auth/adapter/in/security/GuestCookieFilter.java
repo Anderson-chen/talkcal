@@ -21,7 +21,7 @@ import java.util.Optional;
 
 /**
  * 沒登入、但帶著訪客 cookie 的請求：token 還有效就登入那個訪客帳號，這個請求和之後的請求都是登入狀態。
- * token 過期、不認得、帳號已經不是訪客，就把 cookie 清掉，請求照樣當成沒登入。
+ * token 過期、查不到、帳號已經不是訪客，就把 cookie 清掉，請求照樣當成沒登入。
  *
  * 放在 Spring Security 的 AnonymousAuthenticationFilter 前面：讀完 session 還是沒登入才輪到這裡，
  * 已經登入的請求不碰 cookie。

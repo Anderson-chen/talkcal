@@ -11,7 +11,7 @@ import java.time.Duration;
 import java.util.Objects;
 
 /**
- * 每天刪掉太久沒用的訪客帳號，連同它的行程和對話：訪客 cookie 已經過期，沒有人能再登入那個帳號，留著只是佔空間。
+ * 每天刪掉太久沒用的訪客帳號，連同帳號名下的行程和對話：訪客 cookie 已經過期，沒有人能再登入那個帳號，留著只是占空間。
  * 期限跟訪客 cookie 一樣（talkcal.guest.lifetime）。
  */
 public final class GuestAccountCleanup {

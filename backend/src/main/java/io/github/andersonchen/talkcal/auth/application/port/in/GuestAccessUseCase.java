@@ -16,7 +16,7 @@ public interface GuestAccessUseCase {
     GuestPass start();
 
     /**
-     * token 還有效就回訪客帳號，並把期限往後延（最後一次使用起算）；過期、不認得、帳號已經不是訪客都回 empty。
+     * token 還有效就回訪客帳號，並把期限往後延（最後一次使用起算）；過期、查不到、帳號已經不是訪客都回 empty。
      * 資料庫出錯丟 IllegalStateException。
      */
     Optional<GuestPass> resume(String token);

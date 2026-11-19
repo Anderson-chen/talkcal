@@ -20,7 +20,7 @@ public final class RedisQuotaCounterAdapter implements QuotaCounterPort {
 
     private static final Logger log = LoggerFactory.getLogger(RedisQuotaCounterAdapter.class);
 
-    // 加一和設到期放在同一段 script：Redis 一次只執行一段 script，不會有「加了一但還沒設到期」時 app 掛掉、key 永遠不消失
+    // 加一和設到期放在同一段 script：Redis 一次只執行一段 script，不會有「加了一但還沒設到期」時 app 停止、key 永遠不消失
     private static final RedisScript<Long> INCREMENT = RedisScript.of("""
             local n = redis.call('INCR', KEYS[1])
             if n == 1 then redis.call('EXPIREAT', KEYS[1], ARGV[1]) end

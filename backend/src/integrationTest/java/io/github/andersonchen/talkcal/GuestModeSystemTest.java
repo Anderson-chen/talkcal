@@ -200,7 +200,7 @@ class GuestModeSystemTest {
     // ── 每日次數 ──────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("全站當天第 31 個新訪客被擋（429）；反例：用訪客 cookie 回來的訪客不佔名額，照樣登入")
+    @DisplayName("全站當天第 31 個新訪客被擋（429）；反例：用訪客 cookie 回來的訪客不占名額，照樣登入")
     void dailyGuestCap() throws Exception {
         BrowserSession returning = browserFrom(OTHER_IP);
         startGuest(returning);

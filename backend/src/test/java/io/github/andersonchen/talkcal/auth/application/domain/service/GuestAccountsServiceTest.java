@@ -75,7 +75,7 @@ class GuestAccountsServiceTest {
     }
 
     @Test
-    @DisplayName("反例：過期的 token、不認得的 token、空白都回 empty")
+    @DisplayName("反例：過期的 token、查不到的 token、空白都回 empty")
     void resumeRejects() {
         GuestPass pass = at(NOW).start();
         assertEquals(Optional.empty(), at(NOW.plus(Duration.ofDays(8))).resume(pass.token()));

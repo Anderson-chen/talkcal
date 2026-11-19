@@ -25,7 +25,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.testcontainers.containers.GenericContainer;
 
 /**
- * 自己開一個 Redis 容器，設定跟 deploy/compose.yaml 一樣開 AOF（appendfsync everysec）：要重啟它，不能用共用的那個。
+ * 自己開一個 Redis 容器，設定跟 deploy/compose.yaml 一樣開 AOF（appendfsync everysec）：測試要重啟這個容器，所以不能用共用的那個。
  * 兩個 adapter 各用自己的連線，就跟兩個 app 執行個體連同一個 Redis 一樣。
  */
 @DisplayName("RedisQuotaCounterAdapter（真的 Redis）")
