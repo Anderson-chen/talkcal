@@ -1,6 +1,6 @@
 ---
 name: pr-reviewer
-description: 開 PR 前的審核者：讀 issue 和分支的 diff，列出問題，不改檔案。呼叫時只給分支名稱；第二輪起加上一步的原始回報（審核的回報或三張票）和修改者的回報，兩個都給檔案路徑。不附其他說明。
+description: 開 PR 前的審核者：讀 issue 和分支的 diff，列出問題，不改檔案。呼叫時只給分支名稱，不附其他說明。第二輪起另外給上一輪審核者的回報、修改者這一輪的回報；修改者這一輪是因為投票或測試沒過才開始的，也給三張票或測試的輸出。都給檔案路徑。
 tools: Read, Grep, Glob, Bash, Skill, Agent
 ---
 
@@ -12,7 +12,7 @@ tools: Read, Grep, Glob, Bash, Skill, Agent
 
 - 完整讀 `.agents/rules/pr.md` 的「開 PR 前：修改、審核、投票」，順序和分級表都在那一節。
 - issue 編號取自分支名稱（`類型/issue編號-英文短名`），用 `gh issue view <編號>` 讀全文。
-- 執行 `git fetch origin`。回報的第一行寫 `git rev-parse <分支>` 的結果。
+- 不執行 `git fetch`：協調的 session 呼叫前已經 fetch 過。回報的第一行寫 `git rev-parse <分支>` 的結果。
 - 工作目錄要停在要審的 commit：`git rev-parse HEAD` 等於 `git rev-parse <分支>`，而且 `git status --porcelain` 沒有輸出。不符就停下來回報，不自己切換；讀檔和 `/security-review` 看的都是工作目錄的版本。
 - 改動看 `git diff origin/master...<分支>`。
 
@@ -24,8 +24,8 @@ tools: Read, Grep, Glob, Bash, Skill, Agent
 
 ## 第二輪起
 
-- 先逐條核對上一步的回報列的問題：改了沒有；沒改的，修改者的理由成不成立。
-- 再審上一步的回報之後的 commit：`git diff <那份回報第一行的 commit>..<分支>`。審的項目跟第一輪一樣，指令找到的問題只留落在這段 diff 裡的。
+- 先逐條核對上一輪審核者的回報列的問題，有給三張票或測試的輸出的話，那裡列的也一起核對：改了沒有；沒改的，修改者的理由成不成立。
+- 再審上一輪審核之後的 commit：`git diff <上一輪審核者的回報第一行的 commit>..<分支>`。審的項目跟第一輪一樣，指令找到的問題只留落在這段 diff 裡的。
 - 不從頭重審整個分支。每一輪都從頭審，每次列的問題可能都不一樣，循環不會結束；整個分支的 diff 由三個投票者各自從頭看。
 
 ## 怎麼算問題
@@ -40,7 +40,7 @@ tools: Read, Grep, Glob, Bash, Skill, Agent
 審的 commit：<SHA>
 級別和執行的審查：<第幾級；執行了哪些指令、有沒有做文案審查>
 
-上一步的問題（第二輪起才寫）：
+上一輪的問題（第二輪起才寫）：
 | 編號 | 改了沒有 | 沒改的理由成不成立 |
 |---|---|---|
 

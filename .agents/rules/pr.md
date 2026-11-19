@@ -30,11 +30,14 @@
 
 - 五個 agent 都從新的對話開始，讀不到協調的 session 跟使用者的對話，也讀不到其他 agent 的推論。寫的人重看自己的 diff，會沿用寫的時候的假設；審的人先拿到寫的人的說明，還沒查就會接受那個結論。
 - 定義在 `.claude/agents/`：修改者 [pr-author.md](../../.claude/agents/pr-author.md)、審核者 [pr-reviewer.md](../../.claude/agents/pr-reviewer.md)，三個投票者 [pr-voter-fable.md](../../.claude/agents/pr-voter-fable.md)、[pr-voter-opus.md](../../.claude/agents/pr-voter-opus.md)、[pr-voter-sonnet.md](../../.claude/agents/pr-voter-sonnet.md)。呼叫時給什麼，寫在各自的 `description`。
-- 協調的 session 是跟使用者對話的那一個，只做這些：開 issue、問分支名稱、依序呼叫五個 agent、轉交回報、執行測試、開 PR。
+- 協調的 session 是跟使用者對話的那一個，只做這些：開 issue、問分支名稱、照下面的順序呼叫五個 agent、轉交回報、執行測試、開 PR。
   - 不改檔案。使用者在對話裡交代的事先寫進 issue，修改者才讀得到。
   - 呼叫 agent 時只給 `description` 列的東西，不附自己的說明，也不另外指定模型：呼叫時指定的模型優先於定義檔的 `model`。
   - agent 的回報原樣存成檔案，一份回報一個檔案，放在 repo 外面的資料夾（scratchpad 這類）。轉交給下一個 agent 時給檔案路徑，不摘要、不改寫。
   - 在 checkout 這個分支的資料夾裡呼叫 agent，而且沒有還沒 commit 的改動：審核者、投票者讀的是工作目錄的檔案。
+  - 呼叫審核者、投票者之前先執行 `git fetch origin`。agent 自己不 fetch：三個投票者同時 fetch 會搶同一個 ref 的 lock。
+  - 第二輪起呼叫審核者時，給上一輪審核者的回報和修改者這一輪的回報。修改者這一輪是因為投票或測試沒過才開始的，也一起給三張票或測試的輸出。
+  - 回報第一行的 commit 不等於 `git rev-parse <分支>`，或 agent 停下來回報工作目錄不對時，那份回報不算數：把工作目錄處理好，重新呼叫同一種 agent，不算一輪。
 - 順序：
   1. 修改者改、commit。
   2. 審核者審。有列問題就回到第 1 步；修改者改完，換新的審核者再審。

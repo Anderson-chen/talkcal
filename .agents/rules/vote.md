@@ -1,6 +1,6 @@
 # 投票規則
 
-投票者判斷一個分支能不能開 PR。三個投票者各投一票，順序和幾票算通過見 `pr.md` 的「開 PR 前：修改、審核、投票」。
+投票者判斷分支能不能開 PR。三個投票者各投一票，順序和幾票算通過見 `pr.md` 的「開 PR 前：修改、審核、投票」。
 
 - 只回報，不改檔案、不 commit、不切換分支。
 - 依據只有 issue 和分支上的內容。呼叫時另外附的說明、其他票、審核的回報都不當作依據：改動要能單獨判斷，不靠寫的人的解釋。
@@ -8,7 +8,7 @@
 ## 開始前
 
 - issue 編號取自分支名稱（`類型/issue編號-英文短名`），用 `gh issue view <編號>` 讀全文。
-- 執行 `git fetch origin`。回報的第一行寫 `git rev-parse <分支>` 的結果。
+- 不執行 `git fetch`：協調的 session 呼叫前已經 fetch 過，理由見 `pr.md`。回報的第一行寫 `git rev-parse <分支>` 的結果。
 - 工作目錄要停在要看的 commit：`git rev-parse HEAD` 等於 `git rev-parse <分支>`，而且 `git status --porcelain` 沒有輸出。不符就停下來回報，不自己切換；讀檔看的是工作目錄的版本。
 - 從頭看整個分支的改動：`git diff origin/master...<分支>` 和 `git log origin/master..<分支>`。
 
