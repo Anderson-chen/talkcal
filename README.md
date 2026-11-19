@@ -37,7 +37,7 @@
 | 環境需求 | 條件 |
 |---|---|
 | JDK | 25 |
-| Node.js | 22 |
+| Node.js | 22，「本機開發」才需要 |
 | Bash | Windows 用 Git Bash |
 | Docker | Docker Desktop（使用 WSL 2 引擎） |
 | NVIDIA 顯卡 | 選用，在本機執行模型才需要。RTX 40 系列、驅動 580 以上可以直接用 |
@@ -154,7 +154,7 @@ docker compose -f deploy/compose.yaml down
 ci/run.sh
 ```
 
-只有第一次：開啟 pre-push hook，之後每次 push 前先掃描金鑰和密碼、再執行 `ci/run.sh`：
+僅首次需要執行：開啟 pre-push hook，之後每次 push 前先掃描金鑰和密碼、再執行 `ci/run.sh`：
 
 ```bash
 git config core.hooksPath .githooks
