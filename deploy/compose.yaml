@@ -192,7 +192,7 @@ services:
   # app 不 depends_on 它：Redis 停了 app 照常服務，只是那段時間不限制次數（ConsumeQuotaUseCase 放行）
   redis:
     # 版本跟 backend 整合測試的 TestRedis.IMAGE 一起改
-    image: redis:8.2.2-alpine
+    image: redis:8.10.3-alpine
     container_name: talkcal-redis
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
     ports:

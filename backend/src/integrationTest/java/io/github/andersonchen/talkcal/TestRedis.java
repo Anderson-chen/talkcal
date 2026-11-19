@@ -13,7 +13,7 @@ import org.testcontainers.containers.GenericContainer;
  */
 public final class TestRedis {
 
-    public static final String IMAGE = "redis:8.2.2-alpine";
+    public static final String IMAGE = "redis:8.10.3-alpine";
 
     private static final AtomicInteger COUNT = new AtomicInteger();
 
