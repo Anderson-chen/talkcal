@@ -43,15 +43,17 @@ WAIT_TIMEOUT=600 cd/apply.sh local app   # 拉長等待
 
 不帶 `--no-deps` 的話，compose 會沿著 `depends_on` 走到 `model-seed`。它是跑完就結束的一次性容器，compose 每次都會重建它，依賴它的 `llm-chat` 也跟著重建，結果部署 app 等於重啟模型。這是 2026-10-08 改名後第一次部署時，從 compose 的輸出發現的，用 `docker compose up --dry-run app` 可以重現。web 也一樣：不帶的話 `--build` 會沿著 `depends_on` 把沒跑過測試的 app 一起重 build、換掉。
 
-代價是 `postgres` 和 `llm-chat` 要先起好。沒起的話 app 連不上資料庫，`--wait` 會等到逾時報錯，不會假裝成功。
+代價是 `postgres` 要先啟動。沒啟動的話 app 連不上資料庫，`--wait` 會等到逾時報錯，不會回報成功。`llm-chat` 沒啟動的話 app 照樣 healthy，只有 AI 助理不能用。
 
 歸檔用的 `archive` 也要先起好，但它沒起的時候擋不住。app 啟動時刻意不連物件儲存（理由見 `ArchiveStorageConfiguration` 的 `archiveBucket`），照樣 healthy，`--wait` 也跟著成功；要等到畫面上的「查看封存」或還原對話回 502，或凌晨的歸檔排程真的有資料存不進去，才看得出來。2026-10-31 把它加進 compose 之後，本機就這樣漏了快兩個星期（[#286](https://github.com/Anderson-chen/talkcal/issues/286)）。
 
-第一次部署前先把這三個起好，`archive-init` 建好 bucket 就會結束：
+第一次部署前先啟動資料庫和歸檔用的 `archive`，`archive-init` 建好 bucket 就會結束：
 
 ```bash
-docker compose -f deploy/compose.yaml up -d postgres llm-chat archive archive-init
+docker compose -f deploy/compose.yaml up -d postgres archive archive-init
 ```
+
+要用 AI 助理的話，另外啟動 `llm-chat`，步驟見根目錄 README 的[本機模型](../README.md#本機模型選用)。
 
 2026-10-31 之前就部署過的環境不會再走第一次的步驟，補跑一次 `docker compose -f deploy/compose.yaml up -d archive archive-init` 就好。
 
@@ -83,7 +85,7 @@ cd C:/talkcal-deploy
 
 Windows 預設不讓 `.ps1` 執行，被擋的話改用 `powershell -ExecutionPolicy Bypass -File .\cd\triggers\install-local.ps1`。它只在登記時跑一次，之後每 5 分鐘被叫起來的是 `watch.sh`。
 
-事前要有三樣：`gh auth login`（watcher 用它查 CI、寫部署紀錄）、Docker Desktop 開著、`postgres` 和 `llm-chat` 已經起好（理由見[為什麼每個服務分開換](#為什麼每個服務分開換)）。
+事前要有三樣：`gh auth login`（watcher 用 `gh` 查 CI、寫部署紀錄）、Docker Desktop 開著、`postgres` 和 `archive` 已經啟動。要用 AI 助理的話，另外啟動 `llm-chat`。服務要先啟動的理由見[為什麼每個服務分開換](#為什麼每個服務分開換)。
 
 ### 日常
 
