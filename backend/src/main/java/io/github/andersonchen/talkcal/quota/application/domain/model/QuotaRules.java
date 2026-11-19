@@ -7,7 +7,7 @@ import java.util.stream.Collectors;
 
 /**
  * 規則表的全部內容。規則表寫錯時建構就失敗，不等到有人呼叫那個 API 才發現：
- * 規則指到不存在的計數，或照帳號計數的套在沒登入（none）的等級上（沒登入沒有帳號可以分）。
+ * 規則指到不存在的計數，或照帳號計數的規則套在沒登入的等級（none）上：沒登入就沒有帳號可以分。
  */
 public record QuotaRules(List<QuotaRule> rules, Map<String, QuotaBucket> buckets) {
 

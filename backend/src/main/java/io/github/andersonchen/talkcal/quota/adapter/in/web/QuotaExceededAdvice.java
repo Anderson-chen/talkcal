@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * 每日次數用完（QuotaInterceptor 丟的）轉成 429，套用在每個 controller 上。
+ * 把 QuotaInterceptor 在每日次數用完時丟的 QuotaExceededException 轉成 429，套用在每個 controller 上。
  * 格式跟各 controller 的錯誤一樣（error、code、retryAfterSeconds），前端照 code 判斷要不要提示註冊。
  */
 @RestControllerAdvice

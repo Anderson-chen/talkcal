@@ -91,4 +91,4 @@ INSERT INTO quota_rule (method, path_pattern, tier, bucket)
 VALUES ('POST', '/api/calendar/assistant', 'free', 'free-assistant');
 ```
 
-`path_pattern` 寫 controller 上的路徑樣板，跟 `@RequestMapping` 一字不差，例如 `/api/calendar/events/{id}`（變數名稱也要一樣）。超過上限回 429（`code = QUOTA_EXCEEDED`），`Retry-After` 指到 `calendar.zone` 的午夜；回應不是成功的那次不扣（送錯的 4xx、模型出錯的 5xx）。Redis 無法連線時不限制次數，服務照常。
+`path_pattern` 寫 controller 上的路徑樣板，跟 `@RequestMapping` 一字不差，例如 `/api/calendar/events/{id}`（變數名稱也要一樣）。超過上限回 429（`code = QUOTA_EXCEEDED`），`Retry-After` 指到 `calendar.zone` 的午夜。回應不是成功的那次不扣（送錯的 4xx、模型出錯的 5xx）。Redis 無法連線時不限制次數，服務照常。
