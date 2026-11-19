@@ -63,7 +63,7 @@ Gradle 指令都在 `backend/` 裡跑。它們只是捷徑，部署步驟寫在 
 ./gradlew deployApp -PdeployWaitTimeout=600      # app 啟動比較慢、等不到 healthy 時，拉長等待（預設 300 秒）
 ```
 
-這只動 app，不碰模型、資料庫和歸檔，所以第一次部署前要在 repo 根目錄先執行 `docker compose -f deploy/compose.yaml up -d postgres archive archive-init`。要用 AI 助理再啟動 `llm-chat`，步驟見根目錄 README 的[本機模型](../README.md#本機模型選用)。漏了 `archive` 的話 app 不會報錯，見 [cd/README.md](../cd/README.md#為什麼每個服務分開換)。前端也一樣：app 沒啟動的話，nginx 找不到 `app` 這個 upstream，web 無法啟動、會報 unhealthy。
+這只動 app，不碰模型、資料庫和歸檔，所以第一次部署前要在 repo 根目錄先執行 `docker compose -f deploy/compose.yaml up -d postgres archive archive-init`。要用 AI 助理的話，另外啟動 `llm-chat`，步驟見根目錄 README 的[本機模型](../README.md#本機模型選用)。漏了 `archive` 的話 app 不會報錯，見 [cd/README.md](../cd/README.md#為什麼每個服務分開換)。前端也一樣：app 沒啟動的話，nginx 找不到 `app` 這個 upstream，web 無法啟動、會報 unhealthy。
 
 ## 兩種環境怎麼分
 

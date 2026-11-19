@@ -53,7 +53,7 @@ WAIT_TIMEOUT=600 cd/apply.sh local app   # 拉長等待
 docker compose -f deploy/compose.yaml up -d postgres archive archive-init
 ```
 
-要用 AI 助理再啟動 `llm-chat`，步驟見根目錄 README 的[本機模型](../README.md#本機模型選用)。
+要用 AI 助理的話，另外啟動 `llm-chat`，步驟見根目錄 README 的[本機模型](../README.md#本機模型選用)。
 
 2026-10-31 之前就部署過的環境不會再走第一次的步驟，補跑一次 `docker compose -f deploy/compose.yaml up -d archive archive-init` 就好。
 
@@ -85,7 +85,7 @@ cd C:/talkcal-deploy
 
 Windows 預設不讓 `.ps1` 執行，被擋的話改用 `powershell -ExecutionPolicy Bypass -File .\cd\triggers\install-local.ps1`。它只在登記時跑一次，之後每 5 分鐘被叫起來的是 `watch.sh`。
 
-事前要有三樣：`gh auth login`（watcher 用 `gh` 查 CI、寫部署紀錄）、Docker Desktop 開著、`postgres` 和 `archive` 已經啟動。要用 AI 助理的話再啟動 `llm-chat`。服務要先啟動的理由見[為什麼每個服務分開換](#為什麼每個服務分開換)。
+事前要有三樣：`gh auth login`（watcher 用 `gh` 查 CI、寫部署紀錄）、Docker Desktop 開著、`postgres` 和 `archive` 已經啟動。要用 AI 助理的話，另外啟動 `llm-chat`。服務要先啟動的理由見[為什麼每個服務分開換](#為什麼每個服務分開換)。
 
 ### 日常
 

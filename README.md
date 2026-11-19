@@ -154,7 +154,7 @@ docker compose -f deploy/compose.yaml down
 ci/run.sh
 ```
 
-僅首次需要執行：開啟 pre-push hook，之後每次 push 前先掃描金鑰和密碼、再執行 `ci/run.sh`：
+開啟 pre-push hook，僅首次需要執行。開啟後每次 push 前會先掃描金鑰和密碼，再執行 `ci/run.sh`：
 
 ```bash
 git config core.hooksPath .githooks
