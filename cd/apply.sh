@@ -33,7 +33,7 @@ export APP_VERSION GIT_COMMIT
 services=("$@")
 [ ${#services[@]} -gt 0 ] || services=(app web)
 
-# 等 healthy 的預設上限（秒）。app 要等模型連上；llm-chat 要重 build 映像檔再載入 5 GB 的模型
+# 等 healthy 的預設上限（秒）。app 要等 Spring 啟動、Flyway 執行完 migration；llm-chat 要重 build 映像檔再載入 5 GB 的模型
 default_timeout() {
   case "$1" in
     app) echo 300 ;;
