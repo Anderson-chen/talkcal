@@ -25,8 +25,9 @@ final class ClientAddress {
     static String key(String remoteAddr) {
         try {
             if (InetAddress.ofLiteral(remoteAddr) instanceof Inet6Address v6) {
-                byte[] prefix = Arrays.copyOf(v6.getAddress(), 8);
-                return InetAddress.getByAddress(Arrays.copyOf(prefix, 16)).getHostAddress() + "/64";
+                byte[] prefix = v6.getAddress();
+                Arrays.fill(prefix, 8, 16, (byte) 0);
+                return InetAddress.getByAddress(prefix).getHostAddress() + "/64";
             }
             return remoteAddr;
         } catch (IllegalArgumentException | UnknownHostException e) {

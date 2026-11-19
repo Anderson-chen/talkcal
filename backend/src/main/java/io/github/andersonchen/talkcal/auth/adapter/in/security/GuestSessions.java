@@ -9,9 +9,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.HttpHeaders;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
@@ -20,7 +18,6 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -59,14 +56,12 @@ public final class GuestSessions {
         if (request.getSession(false) != null) {
             request.changeSessionId();
         }
-        Authentication authentication = UsernamePasswordAuthenticationToken.authenticated(
-                pass.accountId().toString(), null, List.of(new SimpleGrantedAuthority(AccountPrincipals.AUTHORITY)));
+        Authentication authentication = AccountPrincipals.guest(pass.accountId());
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authentication);
         SecurityContextHolder.setContext(context);
         contexts.saveContext(context, request, response);
         request.getSession().setAttribute(GUEST_ATTRIBUTE, pass.accountId().toString());
-        AccountTierFilter.forget(request);
         csrfTokens.saveToken(null, request, response);
         writeCookie(response, pass.token(), Duration.between(Instant.now(), pass.expiresAt()));
     }
@@ -76,23 +71,24 @@ public final class GuestSessions {
      * 訪客 cookie 清掉。訪客註冊成會員再登入時是同一個帳號，MergeGuestUseCase 什麼都不做，只清 cookie。
      */
     public void afterSignIn(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
-        AccountTierFilter.forget(request);
         Optional<AccountId> guest = guestOf(request);
         if (guest.isEmpty()) {
             return;
         }
-        request.getSession().removeAttribute(GUEST_ATTRIBUTE);
-        clearCookie(response);
+        leaveGuest(request, response);
         mergeGuest.mergeInto(guest.get(), AccountId.of(authentication.getName()));
     }
 
-    /** 訪客升級成會員之後：不再是訪客，cookie 和 session 裡的標記都清掉，等級重新查 */
+    /** 訪客升級成會員之後：不再是訪客，cookie 和 session 裡的標記都清掉 */
     public void upgraded(HttpServletRequest request, HttpServletResponse response) {
+        leaveGuest(request, response);
+    }
+
+    private void leaveGuest(HttpServletRequest request, HttpServletResponse response) {
         HttpSession session = request.getSession(false);
         if (session != null) {
             session.removeAttribute(GUEST_ATTRIBUTE);
         }
-        AccountTierFilter.forget(request);
         clearCookie(response);
     }
 

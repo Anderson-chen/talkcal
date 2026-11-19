@@ -1,10 +1,8 @@
 package io.github.andersonchen.talkcal.auth.adapter.in.web;
 
-import io.github.andersonchen.talkcal.auth.adapter.in.security.AccountTierFilter;
 import io.github.andersonchen.talkcal.auth.adapter.in.security.GuestSessions;
 import io.github.andersonchen.talkcal.auth.application.domain.model.Account;
 import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
-import io.github.andersonchen.talkcal.auth.application.domain.model.MembershipTier;
 import io.github.andersonchen.talkcal.auth.application.port.in.FindAccountUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.GuestAccessUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.RegisterAccountUseCase;
@@ -88,11 +86,15 @@ public final class AuthController {
             description = "以訪客身分登入時註冊：在同一個帳號上補帳號名稱和密碼、改成免費會員，帳號 ID 不變，行程和對話都還在")
     public Me register(@RequestBody RegisterRequest request, HttpServletRequest http, HttpServletResponse response) {
         AccountId id;
-        if (MembershipTier.GUEST.id().equals(AccountTierFilter.tierOf(http))) {
-            id = registerAccount.upgradeGuest(AccountId.of(http.getUserPrincipal().getName()), request.username(), request.password());
-            guestSessions.upgraded(http, response);
-        } else {
+        if (http.getUserPrincipal() == null) {
             id = registerAccount.register(request.username(), request.password());
+        } else {
+            RegisterAccountUseCase.Registered registered = registerAccount.registerFrom(
+                    AccountId.of(http.getUserPrincipal().getName()), request.username(), request.password());
+            if (registered.upgradedGuest()) {
+                guestSessions.upgraded(http, response);
+            }
+            id = registered.id();
         }
         // 回傳資料庫裡存的名字（轉過小寫），不是使用者輸入的原樣
         return me(id).orElseThrow(() -> new IllegalStateException("剛註冊的帳號查不到：" + id));
@@ -103,7 +105,7 @@ public final class AuthController {
             description = "回應帶一個 7 天的訪客 cookie，同一個瀏覽器之後回來還是同一個訪客。全站每天的新訪客有上限，"
                     + "滿了回 429（code = QUOTA_EXCEEDED）。已經登入的話不另外開，直接回目前的帳號")
     public ResponseEntity<Me> guest(HttpServletRequest http, HttpServletResponse response) {
-        if (!AccountTierFilter.NONE.equals(AccountTierFilter.tierOf(http)) && http.getUserPrincipal() != null) {
+        if (http.getUserPrincipal() != null) {
             return me(AccountId.of(http.getUserPrincipal().getName()))
                     .map(ResponseEntity::ok)
                     .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());

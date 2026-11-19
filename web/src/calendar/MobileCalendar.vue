@@ -208,10 +208,10 @@ const dotColor = (category: Category) => theme.colors.value[category].color
             <span class="tier">{{ me.tierLabel }}</span>
           </span>
           <template v-if="me.tier === 'guest'">
-          <button type="button" class="logout" @click="requestLogin('register')">註冊</button>
-          <button type="button" class="logout" @click="requestLogin('login')">登入</button>
-        </template>
-        <button v-else type="button" class="logout" @click="logOut()">登出</button>
+            <button type="button" class="logout" @click="requestLogin('register')">註冊</button>
+            <button type="button" class="logout" @click="requestLogin('login')">登入</button>
+          </template>
+          <button v-else type="button" class="logout" @click="logOut()">登出</button>
         </div>
       </div>
     </div>

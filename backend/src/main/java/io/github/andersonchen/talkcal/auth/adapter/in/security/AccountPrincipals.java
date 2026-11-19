@@ -5,6 +5,10 @@ import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.security.authentication.AuthenticationTrustResolver;
+import org.springframework.security.authentication.AuthenticationTrustResolverImpl;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
@@ -21,7 +25,19 @@ public final class AccountPrincipals {
 
     private static final List<GrantedAuthority> AUTHORITIES = List.of(new SimpleGrantedAuthority(AUTHORITY));
 
+    private static final AuthenticationTrustResolver TRUST = new AuthenticationTrustResolverImpl();
+
     private AccountPrincipals() {
+    }
+
+    /** 真的登入了：不是 null、不是匿名（Spring Security 對沒登入的請求放的是匿名的 Authentication） */
+    static boolean signedIn(Authentication authentication) {
+        return TRUST.isAuthenticated(authentication);
+    }
+
+    /** 訪客用 cookie 或按「以訪客身分試用」登入時放進 session 的：沒有密碼可比，直接是登入狀態 */
+    static Authentication guest(AccountId accountId) {
+        return UsernamePasswordAuthenticationToken.authenticated(accountId.toString(), null, AUTHORITIES);
     }
 
     static OidcUser oidc(AccountId accountId, OidcUser user) {

@@ -35,6 +35,7 @@ interface Options {
 // 訪客 session 的標記：跟後端一樣，訪客是一個沒有帳號名稱的帳號
 const GUEST = '#guest'
 const GUEST_ID = 'id-guest-1'
+const GUEST_ME = { id: GUEST_ID, name: '訪客', username: null, tier: 'guest', tierLabel: '訪客' }
 // 跟後端 V15 的 quota_bucket 一樣
 const GUEST_LIMITS = { writes: 10, assistant: 3 }
 const QUOTA_MESSAGES = {
@@ -68,8 +69,8 @@ export async function fakeApi(page: Page, options: Options = {}) {
     // 註冊過的帳號：名稱 → 密碼
     accounts: new Map<string, string>([['amy', 'correct-horse']]),
     me: (options.loggedIn ?? true) ? 'amy' : null as string | null,
-    // 帳號名稱 → 帳號 ID；訪客註冊時沿用訪客的 ID（跟後端一樣在同一個帳號上升級）
-    ids: new Map<string, string>(),
+    // 訪客註冊時用的帳號名稱：跟後端一樣在同一個帳號上升級，之後用這個名稱登入的還是訪客原本的 ID
+    upgradedGuest: null as string | null,
     guestUsed: { writes: options.guestUsed?.writes ?? 0, assistant: options.guestUsed?.assistant ?? 0 },
     // 被 403 擋下的請求（沒帶或帶錯 CSRF token）：測試可以檢查清單是空的
     csrfRejected: [] as string[],
@@ -110,19 +111,19 @@ export async function fakeApi(page: Page, options: Options = {}) {
     // ── 帳號 ──
     if (url.pathname === '/api/auth/me') {
       if (state.me === GUEST) {
-        return route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: GUEST_ID, name: '訪客', username: null, tier: 'guest', tierLabel: '訪客' } })
+        return route.fulfill({ status: 200, headers: withCsrfCookie, json: GUEST_ME })
       }
       if (options.externalName && state.me) {
         return route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: 'id-external', name: options.externalName, username: null, tier, tierLabel } })
       }
       return state.me
-        ? route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: state.ids.get(state.me) ?? `id-${state.me}`, name: state.me, username: state.me, tier, tierLabel } })
+        ? route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: state.me === state.upgradedGuest ? GUEST_ID : `id-${state.me}`, name: state.me, username: state.me, tier, tierLabel } })
         : route.fulfill({ status: 401, headers: withCsrfCookie, json: { error: '請先登入' } })
     }
     if (url.pathname === '/api/auth/guest' && method === 'POST') {
       if (options.guestSlotsFull) return quotaExceeded(route, QUOTA_MESSAGES.signup)
       state.me = GUEST
-      return json(route, 201, { id: GUEST_ID, name: '訪客', username: null, tier: 'guest', tierLabel: '訪客' })
+      return json(route, 201, GUEST_ME)
     }
     if (url.pathname === '/api/auth/providers') {
       // 跟後端一樣：沒設定 Google、GitHub 時是空陣列
@@ -141,8 +142,8 @@ export async function fakeApi(page: Page, options: Options = {}) {
       const username = body.username.trim().toLowerCase()
       if (state.accounts.has(username)) return json(route, 409, { error: `帳號名稱「${username}」已經有人用了，換一個試試` })
       state.accounts.set(username, body.password)
-      if (state.me === GUEST) state.ids.set(username, GUEST_ID)
-      return json(route, 201, { id: state.ids.get(username) ?? `id-${username}`, name: username, username })
+      if (state.me === GUEST) state.upgradedGuest = username
+      return json(route, 201, { id: username === state.upgradedGuest ? GUEST_ID : `id-${username}`, name: username, username })
     }
     if (url.pathname === '/api/auth/logout') {
       state.me = null
@@ -246,6 +247,5 @@ export async function fakeApi(page: Page, options: Options = {}) {
     set failNextArchive(fail: boolean) { state.failNextArchive = fail },
     /** 模擬 session 過期：之後的請求都當成沒登入 */
     expireSession() { state.me = null },
-    get guestUsed() { return state.guestUsed },
   }
 }

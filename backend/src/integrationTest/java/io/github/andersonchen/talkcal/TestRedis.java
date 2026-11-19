@@ -23,14 +23,13 @@ public final class TestRedis {
     private TestRedis() {
     }
 
-    /** 把這個 class 的 spring.data.redis.* 指到共用容器裡的一個 database，回傳它的編號 */
-    public static int register(DynamicPropertyRegistry registry) {
+    /** 把這個 class 的 spring.data.redis.* 指到共用容器裡的一個 database */
+    public static void register(DynamicPropertyRegistry registry) {
         GenericContainer<?> redis = server();
         int database = COUNT.getAndIncrement() % 16;
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
         registry.add("spring.data.redis.database", () -> database);
-        return database;
     }
 
     private static synchronized GenericContainer<?> server() {

@@ -15,10 +15,6 @@ public enum QuotaSubject {
         this.id = id;
     }
 
-    public String id() {
-        return id;
-    }
-
     public static QuotaSubject of(String id) {
         for (QuotaSubject subject : values()) {
             if (subject.id.equals(id)) {

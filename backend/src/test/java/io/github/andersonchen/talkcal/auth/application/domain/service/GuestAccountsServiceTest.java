@@ -10,6 +10,7 @@ import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
 import io.github.andersonchen.talkcal.auth.application.domain.model.MembershipTier;
 import io.github.andersonchen.talkcal.auth.application.domain.model.Username;
 import io.github.andersonchen.talkcal.auth.application.port.in.GuestAccessUseCase.GuestPass;
+import io.github.andersonchen.talkcal.auth.application.port.in.RegisterAccountUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.UsernameTakenException;
 import io.github.andersonchen.talkcal.auth.application.port.out.OwnedDataPort;
 
@@ -129,10 +130,11 @@ class GuestAccountsServiceTest {
         register.register("bob", "correct-horse");
         GuestPass pass = at(NOW).start();
 
-        assertThrows(UsernameTakenException.class, () -> register.upgradeGuest(pass.accountId(), "bob", "correct-horse"));
+        assertThrows(UsernameTakenException.class, () -> register.registerFrom(pass.accountId(), "bob", "correct-horse"));
         assertEquals(MembershipTier.GUEST, accounts.load(pass.accountId()).orElseThrow().tier());
 
-        assertEquals(pass.accountId(), register.upgradeGuest(pass.accountId(), "amy", "correct-horse"));
+        assertEquals(new RegisterAccountUseCase.Registered(pass.accountId(), true),
+                register.registerFrom(pass.accountId(), "amy", "correct-horse"));
         Account upgraded = accounts.load(pass.accountId()).orElseThrow();
         assertEquals(MembershipTier.FREE, upgraded.tier());
         assertEquals("amy", upgraded.password().orElseThrow().username().value());
@@ -140,11 +142,14 @@ class GuestAccountsServiceTest {
     }
 
     @Test
-    @DisplayName("反例：不是訪客的帳號不能拿來升級")
-    void upgradeRejectsMembers() {
+    @DisplayName("反例：會員登入時註冊是另開一個新帳號，原本的帳號不變")
+    void membersGetANewAccount() {
         RegisterAccountService register = new RegisterAccountService(accounts, password -> "hashed:" + password);
         AccountId bob = register.register("bob", "correct-horse");
-        assertThrows(IllegalArgumentException.class, () -> register.upgradeGuest(bob, "bobby", "correct-horse"));
-        assertNotEquals("bobby", accounts.load(bob).orElseThrow().displayName());
+
+        RegisterAccountUseCase.Registered registered = register.registerFrom(bob, "bobby", "correct-horse");
+        assertNotEquals(bob, registered.id());
+        assertEquals(false, registered.upgradedGuest());
+        assertEquals("bob", accounts.load(bob).orElseThrow().displayName());
     }
 }

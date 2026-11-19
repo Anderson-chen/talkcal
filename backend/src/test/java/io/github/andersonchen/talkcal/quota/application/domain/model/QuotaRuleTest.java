@@ -17,19 +17,18 @@ class QuotaRuleTest {
     private static final QuotaRule UPDATE = new QuotaRule("put", "/api/calendar/events/{id}", "guest", "writes");
 
     @Test
-    @DisplayName("{id} 對到任意一段；方法不分大小寫")
-    void placeholderMatchesOneSegment() {
-        assertTrue(UPDATE.matches("PUT", "/api/calendar/events/42", "guest"));
+    @DisplayName("Spring 選好的路徑樣板一樣就算；方法不分大小寫")
+    void samePatternMatches() {
+        assertTrue(UPDATE.matches("PUT", "/api/calendar/events/{id}", "guest"));
     }
 
     @Test
-    @DisplayName("反例：等級不同、方法不同、段數不同、{id} 是空的都不算")
+    @DisplayName("反例：等級不同、方法不同、樣板不同（實際路徑、別的端點）都不算")
     void mismatches() {
-        assertFalse(UPDATE.matches("PUT", "/api/calendar/events/42", "free"));
-        assertFalse(UPDATE.matches("DELETE", "/api/calendar/events/42", "guest"));
+        assertFalse(UPDATE.matches("PUT", "/api/calendar/events/{id}", "free"));
+        assertFalse(UPDATE.matches("DELETE", "/api/calendar/events/{id}", "guest"));
+        assertFalse(UPDATE.matches("PUT", "/api/calendar/events/42", "guest"));
         assertFalse(UPDATE.matches("PUT", "/api/calendar/events", "guest"));
-        assertFalse(UPDATE.matches("PUT", "/api/calendar/events/42/extra", "guest"));
-        assertFalse(UPDATE.matches("PUT", "/api/calendar/events/", "guest"));
     }
 
     @Test
@@ -37,13 +36,16 @@ class QuotaRuleTest {
     void bucketLookup() {
         QuotaBucket writes = new QuotaBucket("writes", QuotaSubject.IP, 10, "用完了");
         QuotaRules rules = QuotaRules.of(List.of(UPDATE), List.of(writes));
-        assertEquals(Optional.of(writes), rules.bucketFor("PUT", "/api/calendar/events/42", "guest"));
+        assertEquals(Optional.of(writes), rules.bucketFor("PUT", "/api/calendar/events/{id}", "guest"));
         assertEquals(Optional.empty(), rules.bucketFor("GET", "/api/calendar/events", "guest"));
     }
 
     @Test
-    @DisplayName("反例：規則指到不存在的計數，讀規則表時就失敗")
-    void danglingBucketIsRejected() {
+    @DisplayName("反例：規則表寫錯，讀的時候就失敗：規則指到不存在的計數、照帳號計數的套在沒登入上")
+    void badTablesAreRejected() {
         assertThrows(IllegalArgumentException.class, () -> QuotaRules.of(List.of(UPDATE), List.of()));
+        assertThrows(IllegalArgumentException.class, () -> QuotaRules.of(
+                List.of(new QuotaRule("POST", "/api/auth/guest", "none", "per-account")),
+                List.of(new QuotaBucket("per-account", QuotaSubject.ACCOUNT, 1, "用完了"))));
     }
 }

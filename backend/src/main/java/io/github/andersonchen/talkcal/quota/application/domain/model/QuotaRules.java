@@ -6,17 +6,27 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** 規則表的全部內容。規則指到不存在的計數名稱時，建構就失敗：那是規則表寫錯，不該等到有人呼叫那個 API 才發現 */
+/**
+ * 規則表的全部內容。規則表寫錯時建構就失敗，不等到有人呼叫那個 API 才發現：
+ * 規則指到不存在的計數，或照帳號計數的套在沒登入（none）的等級上（沒登入沒有帳號可以分）。
+ */
 public record QuotaRules(List<QuotaRule> rules, Map<String, QuotaBucket> buckets) {
 
     public static final QuotaRules NONE = new QuotaRules(List.of(), Map.of());
+
+    /** 沒登入的等級，跟規則表 quota_rule.tier 的值一樣 */
+    public static final String NOT_SIGNED_IN = "none";
 
     public QuotaRules {
         rules = List.copyOf(rules);
         buckets = Map.copyOf(buckets);
         for (QuotaRule rule : rules) {
-            if (!buckets.containsKey(rule.bucket())) {
+            QuotaBucket bucket = buckets.get(rule.bucket());
+            if (bucket == null) {
                 throw new IllegalArgumentException("規則指到不存在的計數：" + rule);
+            }
+            if (bucket.subject() == QuotaSubject.ACCOUNT && NOT_SIGNED_IN.equals(rule.tier())) {
+                throw new IllegalArgumentException("沒登入的請求沒有帳號，不能照帳號計數：" + rule);
             }
         }
     }
@@ -26,9 +36,9 @@ public record QuotaRules(List<QuotaRule> rules, Map<String, QuotaBucket> buckets
     }
 
     /** 這個請求要算進哪一份計數；沒有規則對到就是 empty，不限制 */
-    public Optional<QuotaBucket> bucketFor(String method, String path, String tier) {
+    public Optional<QuotaBucket> bucketFor(String method, String pathPattern, String tier) {
         return rules.stream()
-                .filter(rule -> rule.matches(method, path, tier))
+                .filter(rule -> rule.matches(method, pathPattern, tier))
                 .findFirst()
                 .map(rule -> buckets.get(rule.bucket()));
     }

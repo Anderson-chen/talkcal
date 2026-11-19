@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.DisplayName;
@@ -142,17 +143,13 @@ class ConsumeQuotaServiceTest {
         table.set(RULES);
         assertTrue(service.consume(guestAsks("203.0.113.7")).isPresent());
 
-        ConsumeQuotaService failing = new ConsumeQuotaService(new java.util.function.Supplier<QuotaRules>() {
-            private int calls;
-
-            @Override
-            public QuotaRules get() {
-                if (calls++ > 0) {
-                    throw new IllegalStateException("資料庫無法連線");
-                }
-                return RULES;
+        AtomicInteger loads = new AtomicInteger();
+        ConsumeQuotaService failing = new ConsumeQuotaService(() -> {
+            if (loads.getAndIncrement() > 0) {
+                throw new IllegalStateException("資料庫無法連線");
             }
-        }::get, counter, Clock.fixed(LATE_EVENING, TAIPEI), Duration.ZERO);
+            return RULES;
+        }, counter, Clock.fixed(LATE_EVENING, TAIPEI), Duration.ZERO);
         assertTrue(failing.consume(guestAsks("192.0.2.1")).isPresent());
         assertTrue(failing.consume(guestAsks("192.0.2.1")).isPresent());
     }

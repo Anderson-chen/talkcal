@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -105,7 +106,7 @@ class GuestModeSystemTest {
     }
 
     private static HttpResponse<String> ask(BrowserSession who, String message) throws Exception {
-        return who.postJson("/api/calendar/assistant", JSON.writeValueAsString(java.util.Map.of("message", message)));
+        return who.postJson("/api/calendar/assistant", JSON.writeValueAsString(Map.of("message", message)));
     }
 
     private static int eventsIn(BrowserSession who) throws Exception {

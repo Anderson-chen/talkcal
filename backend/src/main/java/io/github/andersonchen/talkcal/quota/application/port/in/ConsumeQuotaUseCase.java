@@ -14,8 +14,11 @@ public interface ConsumeQuotaUseCase {
 
     void refund(Consumed consumed);
 
-    /** tier 是請求者的等級，沒登入是 none；client 是用來分 IP 的 key；account 是帳號 ID，沒登入是 null */
-    record QuotaRequest(String method, String path, String tier, String client, String account) {
+    /**
+     * pathPattern 是 controller 上的路徑樣板（見 QuotaRule）；tier 是請求者的等級，沒登入是 none；
+     * client 是用來分 IP 的 key；account 是帳號 ID，沒登入是 null
+     */
+    record QuotaRequest(String method, String pathPattern, String tier, String client, String account) {
     }
 
     /** 這一次算在哪一份計數上，退回時要用 */

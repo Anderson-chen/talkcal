@@ -45,7 +45,8 @@ public final class RedisQuotaCounterAdapter implements QuotaCounterPort {
             Long used = redis.execute(INCREMENT, List.of(key), Long.toString(expiresAt.getEpochSecond()));
             return Objects.requireNonNull(used, "INCR 沒有回傳值");
         } catch (DataAccessException e) {
-            log.warn("每日次數的計數暫時無法使用，這個請求不限制：key={}", key, e);
+            // 不印 stack：Redis 停止回應時每個受限的請求都會走到這裡，原因看第一行就夠了
+            log.warn("每日次數的計數無法連線：key={} {}", key, e.toString());
             throw new IllegalStateException("每日次數的計數暫時無法使用", e);
         }
     }
@@ -55,7 +56,7 @@ public final class RedisQuotaCounterAdapter implements QuotaCounterPort {
         try {
             redis.execute(DECREMENT, List.of(key));
         } catch (DataAccessException e) {
-            log.warn("每日次數退不回去：key={}", key, e);
+            log.warn("每日次數的計數無法連線，退不回去：key={} {}", key, e.toString());
             throw new IllegalStateException("每日次數退不回去", e);
         }
     }

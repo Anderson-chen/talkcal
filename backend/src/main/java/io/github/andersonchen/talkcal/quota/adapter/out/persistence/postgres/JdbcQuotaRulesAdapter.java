@@ -38,8 +38,8 @@ public final class JdbcQuotaRulesAdapter implements LoadQuotaRulesPort {
                     .list();
             return QuotaRules.of(rules, buckets);
         } catch (DataAccessException | IllegalArgumentException e) {
-            // 讀不到、或表裡的資料不合規則：服務沿用上一份規則，這裡留 log 讓人發現規則表出問題
-            log.warn("讀不到每日次數的規則表，沿用上一份", e);
+            // 讀不到、或表裡的資料不合規則（例如規則指到不存在的計數）：留 log 讓人發現規則表出問題
+            log.warn("讀不到每日次數的規則表", e);
             throw new IllegalStateException("讀不到每日次數的規則表", e);
         }
     }

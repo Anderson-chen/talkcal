@@ -41,7 +41,7 @@ CREATE TABLE quota_bucket (
     message     TEXT    NOT NULL CHECK (btrim(message) <> '')
 );
 
--- path_pattern 一段一段比對，{id} 或 * 對到任意一段（見 QuotaRule.matches）。
+-- path_pattern 寫 controller 上的路徑樣板，跟 @RequestMapping 一字不差，{id} 這類變數名稱也要一樣（見 QuotaRule）。
 -- tier 是請求者的等級，none 是沒登入。同一個方法、路徑、等級只有一條規則
 CREATE TABLE quota_rule (
     method       TEXT NOT NULL CHECK (method IN ('GET', 'POST', 'PUT', 'PATCH', 'DELETE')),

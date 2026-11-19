@@ -9,13 +9,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.security.authentication.AnonymousAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.WebUtils;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -56,18 +54,12 @@ public final class GuestCookieFilter extends OncePerRequestFilter {
     }
 
     private static boolean signedIn() {
-        Authentication current = SecurityContextHolder.getContext().getAuthentication();
-        return current != null && current.isAuthenticated() && !(current instanceof AnonymousAuthenticationToken);
+        return AccountPrincipals.signedIn(SecurityContextHolder.getContext().getAuthentication());
     }
 
     private static Optional<String> guestToken(HttpServletRequest request) {
-        Cookie[] cookies = request.getCookies();
-        if (cookies == null) {
-            return Optional.empty();
-        }
-        return Arrays.stream(cookies)
-                .filter(c -> GuestSessions.COOKIE.equals(c.getName()) && !c.getValue().isBlank())
+        return Optional.ofNullable(WebUtils.getCookie(request, GuestSessions.COOKIE))
                 .map(Cookie::getValue)
-                .findFirst();
+                .filter(value -> !value.isBlank());
     }
 }
