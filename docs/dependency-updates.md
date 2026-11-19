@@ -17,6 +17,7 @@
 | `ci/secrets.sh`、`ci/vulns.sh` 裡的 gitleaks、Trivy（版本＋digest） | 自訂 regex |
 | llama.cpp 的 build 號（Dockerfile 的 `ARG` 和 compose 的 tag 一起改） | 自訂 regex |
 | `docs/architecture/index.html` 抄的映像檔版本 | 自訂 regex，跟 compose 在同一個 PR 改 |
+| 整合測試的 Redis 映像檔（`TestRedis.IMAGE`） | 自訂 regex，跟 compose 在同一個 PR 改 |
 
 刻意不升的：CUDA（跟主機的 GPU 驅動綁在一起）、nginx 的 mainline（奇數小版本）、TypeScript 6 以上（vue-tsc 還接不上，見 [web/README.md](../web/README.md)）。
 
