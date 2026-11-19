@@ -3,10 +3,13 @@ package io.github.andersonchen.talkcal.auth.application.domain.service;
 import io.github.andersonchen.talkcal.auth.application.domain.model.Account;
 import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
 import io.github.andersonchen.talkcal.auth.application.domain.model.ExternalIdentity;
+import io.github.andersonchen.talkcal.auth.application.domain.model.MembershipTier;
 import io.github.andersonchen.talkcal.auth.application.domain.model.Username;
+import io.github.andersonchen.talkcal.auth.application.port.out.GuestStorePort;
 import io.github.andersonchen.talkcal.auth.application.port.out.LoadAccountPort;
 import io.github.andersonchen.talkcal.auth.application.port.out.SaveAccountPort;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -15,8 +18,15 @@ import java.util.Optional;
 
 /**
  * 照 port 的約定，帳號名稱、identity 重複就回 false，不丟例外。
+ * 訪客的 token 照 GuestStorePort 的約定：沒過期、帳號還是訪客才算數，用一次就延期。
  */
-final class InMemoryAccounts implements SaveAccountPort, LoadAccountPort {
+final class InMemoryAccounts implements SaveAccountPort, LoadAccountPort, GuestStorePort {
+
+    record Token(AccountId account, Instant expiresAt) {
+    }
+
+    final Map<String, Token> tokens = new HashMap<>();
+    final Map<AccountId, Instant> lastActive = new HashMap<>();
 
     final List<Account> saved = new ArrayList<>();
     final Map<ExternalIdentity, AccountId> identities = new HashMap<>();
@@ -46,6 +56,56 @@ final class InMemoryAccounts implements SaveAccountPort, LoadAccountPort {
         saved.add(account);
         identities.put(identity, account.id());
         return true;
+    }
+
+    @Override
+    public UpgradeResult upgradeGuest(AccountId guest, Account.PasswordLogin login) {
+        Optional<Account> current = load(guest).filter(Account::isGuest);
+        if (current.isEmpty()) {
+            return UpgradeResult.NOT_A_GUEST;
+        }
+        if (load(login.username()).isPresent()) {
+            return UpgradeResult.USERNAME_TAKEN;
+        }
+        saved.remove(current.get());
+        saved.add(new Account(guest, login.username().value(), login, MembershipTier.FREE));
+        tokens.values().removeIf(token -> token.account().equals(guest));
+        lastActive.remove(guest);
+        return UpgradeResult.UPGRADED;
+    }
+
+    @Override
+    public void saveGuest(Account guest, String tokenHash, Instant now, Instant expiresAt) {
+        saved.add(guest);
+        tokens.put(tokenHash, new Token(guest.id(), expiresAt));
+        lastActive.put(guest.id(), now);
+    }
+
+    @Override
+    public Optional<AccountId> touch(String tokenHash, Instant now, Instant newExpiresAt) {
+        Token token = tokens.get(tokenHash);
+        if (token == null || !token.expiresAt().isAfter(now) || load(token.account()).filter(Account::isGuest).isEmpty()) {
+            return Optional.empty();
+        }
+        tokens.put(tokenHash, new Token(token.account(), newExpiresAt));
+        lastActive.put(token.account(), now);
+        return Optional.of(token.account());
+    }
+
+    @Override
+    public List<AccountId> guestsInactiveSince(Instant cutoff) {
+        return lastActive.entrySet().stream()
+                .filter(entry -> entry.getValue().isBefore(cutoff))
+                .map(Map.Entry::getKey)
+                .filter(id -> load(id).filter(Account::isGuest).isPresent())
+                .toList();
+    }
+
+    @Override
+    public void delete(AccountId account) {
+        saved.removeIf(saved -> saved.id().equals(account) && saved.isGuest());
+        tokens.values().removeIf(token -> token.account().equals(account));
+        lastActive.remove(account);
     }
 
     @Override

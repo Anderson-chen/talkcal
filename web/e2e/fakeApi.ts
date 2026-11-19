@@ -26,6 +26,21 @@ interface Options {
   tier?: 'free' | 'paid'
   // 已經封存的行程：不在 events 裡，月曆上看不到
   archived?: FakeEvent[]
+  // 今天的訪客名額滿了：按「以訪客身分試用」回 429
+  guestSlotsFull?: boolean
+  // 訪客今天已經用掉的次數（後端每個 IP 每天：增刪改合計 10 次、問助理 3 次）
+  guestUsed?: { writes?: number; assistant?: number }
+}
+
+// 訪客 session 的標記：跟後端一樣，訪客是一個沒有帳號名稱的帳號
+const GUEST = '#guest'
+const GUEST_ID = 'id-guest-1'
+// 跟後端 V15 的 quota_bucket 一樣
+const GUEST_LIMITS = { writes: 10, assistant: 3 }
+const QUOTA_MESSAGES = {
+  writes: '今天訪客新增、修改、刪除行程的次數用完了，註冊後就能繼續使用',
+  assistant: '今天訪客問助理的次數用完了，註冊後就能繼續使用',
+  signup: '今天的訪客名額已經滿了，請註冊帳號使用',
 }
 
 // 助理每句話都提議這一筆（明天下午三點開會），proposalId 依序是 card-1、card-2…
@@ -53,6 +68,9 @@ export async function fakeApi(page: Page, options: Options = {}) {
     // 註冊過的帳號：名稱 → 密碼
     accounts: new Map<string, string>([['amy', 'correct-horse']]),
     me: (options.loggedIn ?? true) ? 'amy' : null as string | null,
+    // 帳號名稱 → 帳號 ID；訪客註冊時沿用訪客的 ID（跟後端一樣在同一個帳號上升級）
+    ids: new Map<string, string>(),
+    guestUsed: { writes: options.guestUsed?.writes ?? 0, assistant: options.guestUsed?.assistant ?? 0 },
     // 被 403 擋下的請求（沒帶或帶錯 CSRF token）：測試可以檢查清單是空的
     csrfRejected: [] as string[],
     providers: [...(options.providers ?? [])],
@@ -71,6 +89,10 @@ export async function fakeApi(page: Page, options: Options = {}) {
   const tierLabel = TIER_LABELS[tier]
 
   const json = (route: Route, status: number, body: unknown) => route.fulfill({ status, json: body })
+  // 跟後端 QuotaInterceptor 一樣的格式
+  const quotaExceeded = (route: Route, error: string) => route.fulfill({
+    status: 429, headers: { 'Retry-After': '3600' }, json: { error, code: 'QUOTA_EXCEEDED', retryAfterSeconds: 3600 },
+  })
 
   // 跟 Spring Security 一樣，回應時把 XSRF-TOKEN cookie 發給瀏覽器（JavaScript 讀得到）
   const withCsrfCookie = { 'Set-Cookie': `XSRF-TOKEN=${CSRF_TOKEN}; Path=/` }
@@ -87,12 +109,20 @@ export async function fakeApi(page: Page, options: Options = {}) {
 
     // ── 帳號 ──
     if (url.pathname === '/api/auth/me') {
+      if (state.me === GUEST) {
+        return route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: GUEST_ID, name: '訪客', username: null, tier: 'guest', tierLabel: '訪客' } })
+      }
       if (options.externalName && state.me) {
         return route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: 'id-external', name: options.externalName, username: null, tier, tierLabel } })
       }
       return state.me
-        ? route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: `id-${state.me}`, name: state.me, username: state.me, tier, tierLabel } })
+        ? route.fulfill({ status: 200, headers: withCsrfCookie, json: { id: state.ids.get(state.me) ?? `id-${state.me}`, name: state.me, username: state.me, tier, tierLabel } })
         : route.fulfill({ status: 401, headers: withCsrfCookie, json: { error: '請先登入' } })
+    }
+    if (url.pathname === '/api/auth/guest' && method === 'POST') {
+      if (options.guestSlotsFull) return quotaExceeded(route, QUOTA_MESSAGES.signup)
+      state.me = GUEST
+      return json(route, 201, { id: GUEST_ID, name: '訪客', username: null, tier: 'guest', tierLabel: '訪客' })
     }
     if (url.pathname === '/api/auth/providers') {
       // 跟後端一樣：沒設定 Google、GitHub 時是空陣列
@@ -111,7 +141,8 @@ export async function fakeApi(page: Page, options: Options = {}) {
       const username = body.username.trim().toLowerCase()
       if (state.accounts.has(username)) return json(route, 409, { error: `帳號名稱「${username}」已經有人用了，換一個試試` })
       state.accounts.set(username, body.password)
-      return json(route, 201, { id: `id-${username}`, name: username, username })
+      if (state.me === GUEST) state.ids.set(username, GUEST_ID)
+      return json(route, 201, { id: state.ids.get(username) ?? `id-${username}`, name: username, username })
     }
     if (url.pathname === '/api/auth/logout') {
       state.me = null
@@ -120,6 +151,14 @@ export async function fakeApi(page: Page, options: Options = {}) {
 
     // ── 行事曆：要登入 ──
     if (!state.me) return json(route, 401, { error: '請先登入' })
+
+    // ── 訪客的每日次數（後端在 controller 前面擋，這裡也在處理請求之前擋）──
+    if (state.me === GUEST) {
+      const writes = url.pathname.startsWith('/api/calendar/events') && ['POST', 'PUT', 'DELETE'].includes(method)
+      const asks = url.pathname === '/api/calendar/assistant' && method === 'POST'
+      if (writes && ++state.guestUsed.writes > GUEST_LIMITS.writes) return quotaExceeded(route, QUOTA_MESSAGES.writes)
+      if (asks && ++state.guestUsed.assistant > GUEST_LIMITS.assistant) return quotaExceeded(route, QUOTA_MESSAGES.assistant)
+    }
 
     if (url.pathname === '/api/calendar/events' && method === 'GET') {
       // 照後端的規則：from 含、to 不含，跟期間有重疊的都算
@@ -207,5 +246,6 @@ export async function fakeApi(page: Page, options: Options = {}) {
     set failNextArchive(fail: boolean) { state.failNextArchive = fail },
     /** 模擬 session 過期：之後的請求都當成沒登入 */
     expireSession() { state.me = null },
+    get guestUsed() { return state.guestUsed },
   }
 }

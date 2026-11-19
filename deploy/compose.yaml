@@ -6,6 +6,7 @@
 #   18090       容器裡的 app。不用 8090：那是本機 bootRun 的，兩個要能同時開著比對。
 #   18080       容器裡的前端，/api 由 nginx 轉給 app。
 #   9100 / 9101 歸檔的 RustFS（S3 API / 管理頁面）。不用 9000：很多工具預設占用 9000。
+#   6379        Redis（每日次數的計數）。給本機 bootRun 的 app 連。
 
 name: talkcal-deploy
 
@@ -184,6 +185,27 @@ services:
   # ── 舊資料的歸檔：S3 相容的物件儲存 ──────────────────────────────
   # app 把舊行程、舊對話壓成 JSON Lines + gzip 放進來，存好才從 PostgreSQL 刪。雲端換成 S3（infra/envs/1-ec2/archive.tf），
   # app 只差 endpoint。用 RustFS：MinIO 不發社群版的映像檔了；整合測試（RustFsContainer）也用這個映像檔
+  # ── 每日次數的計數：Redis ─────────────────────────────────────────
+  # 規則在 PostgreSQL（V15 的 quota_rule），每個受限的請求加一放這裡（見 RedisQuotaCounterAdapter）。
+  # AOF、每秒寫一次磁碟：重啟後最多少掉約 1 秒的計數。計數只跟「今天」有關，volume 不另外備份，
+  # 整個不見的代價是當天的次數重新算。
+  # app 不 depends_on 它：Redis 停了 app 照常服務，只是那段時間不限制次數（ConsumeQuotaUseCase 放行）
+  redis:
+    # 版本跟 backend 整合測試的 TestRedis.IMAGE 一起改
+    image: redis:8.2.2-alpine
+    container_name: talkcal-redis
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   archive:
     image: rustfs/rustfs:1.0.3
     container_name: talkcal-archive
@@ -302,3 +324,4 @@ volumes:
   models:
   postgres-data:
   archive-data:
+  redis-data:

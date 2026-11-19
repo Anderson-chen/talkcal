@@ -1,13 +1,19 @@
 package io.github.andersonchen.talkcal.auth.adapter.in.web;
 
+import io.github.andersonchen.talkcal.auth.adapter.in.security.AccountTierFilter;
+import io.github.andersonchen.talkcal.auth.adapter.in.security.GuestSessions;
 import io.github.andersonchen.talkcal.auth.application.domain.model.Account;
 import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
+import io.github.andersonchen.talkcal.auth.application.domain.model.MembershipTier;
 import io.github.andersonchen.talkcal.auth.application.port.in.FindAccountUseCase;
+import io.github.andersonchen.talkcal.auth.application.port.in.GuestAccessUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.RegisterAccountUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.UsernameTakenException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 import java.util.List;
 import java.util.Objects;
@@ -27,7 +33,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 註冊、看目前是誰、有哪些登入方式。
+ * 註冊、以訪客身分試用、看目前是誰、有哪些登入方式。
  *
  * 登入、登出交給 Spring Security 的 filter（設定在 app.config 的 SecurityConfiguration）：
  * session、CSRF token 換新、防 session fixation 這些細節，自己寫 controller 很容易漏掉。
@@ -42,12 +48,16 @@ public final class AuthController {
     private final RegisterAccountUseCase registerAccount;
     private final FindAccountUseCase findAccount;
     private final LoginProviders loginProviders;
+    private final GuestAccessUseCase guestAccess;
+    private final GuestSessions guestSessions;
 
     public AuthController(RegisterAccountUseCase registerAccount, FindAccountUseCase findAccount,
-                          LoginProviders loginProviders) {
+                          LoginProviders loginProviders, GuestAccessUseCase guestAccess, GuestSessions guestSessions) {
         this.registerAccount = Objects.requireNonNull(registerAccount, "registerAccount 不可為 null");
         this.findAccount = Objects.requireNonNull(findAccount, "findAccount 不可為 null");
         this.loginProviders = Objects.requireNonNull(loginProviders, "loginProviders 不可為 null");
+        this.guestAccess = Objects.requireNonNull(guestAccess, "guestAccess 不可為 null");
+        this.guestSessions = Objects.requireNonNull(guestSessions, "guestSessions 不可為 null");
     }
 
     public record RegisterRequest(
@@ -59,7 +69,7 @@ public final class AuthController {
             @Schema(description = "帳號 ID：行程、對話的擁有者就是它") String id,
             @Schema(description = "給人看的名字：帳密登入的是帳號名稱，Google、GitHub 登入的是對方給的名字") String name,
             @Schema(description = "帳號名稱；只用 Google、GitHub 登入的帳號沒有，是 null", nullable = true) String username,
-            @Schema(description = "會員等級：free 是免費，paid 是付費", allowableValues = {"free", "paid"}) String tier,
+            @Schema(description = "會員等級：guest 是訪客，free 是免費，paid 是付費", allowableValues = {"guest", "free", "paid"}) String tier,
             @Schema(description = "畫面上顯示的會員等級", example = "付費會員") String tierLabel) {
     }
 
@@ -74,11 +84,34 @@ public final class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "註冊帳號（不會自動登入，註冊完要再呼叫 /api/auth/login）")
-    public Me register(@RequestBody RegisterRequest request) {
-        AccountId id = registerAccount.register(request.username(), request.password());
+    @Operation(summary = "註冊帳號（不會自動登入，註冊完要再呼叫 /api/auth/login）",
+            description = "以訪客身分登入時註冊：在同一個帳號上補帳號名稱和密碼、改成免費會員，帳號 ID 不變，行程和對話都還在")
+    public Me register(@RequestBody RegisterRequest request, HttpServletRequest http, HttpServletResponse response) {
+        AccountId id;
+        if (MembershipTier.GUEST.id().equals(AccountTierFilter.tierOf(http))) {
+            id = registerAccount.upgradeGuest(AccountId.of(http.getUserPrincipal().getName()), request.username(), request.password());
+            guestSessions.upgraded(http, response);
+        } else {
+            id = registerAccount.register(request.username(), request.password());
+        }
         // 回傳資料庫裡存的名字（轉過小寫），不是使用者輸入的原樣
         return me(id).orElseThrow(() -> new IllegalStateException("剛註冊的帳號查不到：" + id));
+    }
+
+    @PostMapping("/guest")
+    @Operation(summary = "以訪客身分試用：開一個訪客帳號並登入（沒登入也能呼叫）",
+            description = "回應帶一個 7 天的訪客 cookie，同一個瀏覽器之後回來還是同一個訪客。全站每天的新訪客有上限，"
+                    + "滿了回 429（code = QUOTA_EXCEEDED）。已經登入的話不另外開，直接回目前的帳號")
+    public ResponseEntity<Me> guest(HttpServletRequest http, HttpServletResponse response) {
+        if (!AccountTierFilter.NONE.equals(AccountTierFilter.tierOf(http)) && http.getUserPrincipal() != null) {
+            return me(AccountId.of(http.getUserPrincipal().getName()))
+                    .map(ResponseEntity::ok)
+                    .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+        }
+        GuestAccessUseCase.GuestPass pass = guestAccess.start();
+        guestSessions.signIn(http, response, pass);
+        Me me = me(pass.accountId()).orElseThrow(() -> new IllegalStateException("剛開的訪客帳號查不到：" + pass.accountId()));
+        return ResponseEntity.status(HttpStatus.CREATED).body(me);
     }
 
     @GetMapping("/providers")

@@ -117,8 +117,8 @@
             "type": "prometheus",
             "uid": "mimir"
           },
-          "expr": "sum(increase(http_server_requests_seconds_count{job=\"talkcal-app\",uri=\"/api/calendar/assistant\",method=\"POST\",status=\"200\"}[$__range]))",
-          "legendFormat": "對話",
+          "expr": "sum by (tier) (increase(http_server_requests_seconds_count{job=\"talkcal-app\",uri=\"/api/calendar/assistant\",method=\"POST\",status=\"200\"}[$__range]))",
+          "legendFormat": "{{tier}}",
           "instant": true,
           "range": false
         }

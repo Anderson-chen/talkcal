@@ -57,6 +57,13 @@ export function needsCsrf(method: string | undefined): boolean {
 }
 
 const unauthorizedListeners = new Set<() => void>()
+const quotaListeners = new Set<(message: string) => void>()
+
+/** 每日次數用完（429、code = QUOTA_EXCEEDED）：App 跳出提示註冊的視窗。呼叫端照樣收到 ApiError，各自顯示錯誤 */
+export function onQuotaExceeded(listener: (message: string) => void): () => void {
+  quotaListeners.add(listener)
+  return () => quotaListeners.delete(listener)
+}
 
 export function onUnauthorized(listener: () => void): () => void {
   unauthorizedListeners.add(listener)
@@ -101,6 +108,7 @@ export async function send(url: string, init: RequestInit, options: SendOptions 
       code: failure?.code ?? null,
       retryAfterSeconds: failure?.retryAfterSeconds ?? retryAfterOf(res.headers.get('Retry-After')),
     }
+    if (res.status === 429 && detail.code === 'QUOTA_EXCEEDED') quotaListeners.forEach((listener) => listener(message))
     if (res.status === 401) {
       if (options.notifyUnauthorized !== false) unauthorizedListeners.forEach((listener) => listener())
       throw new UnauthorizedError(message, detail)

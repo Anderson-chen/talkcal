@@ -1,6 +1,7 @@
 package io.github.andersonchen.talkcal.auth.application.port.out;
 
 import io.github.andersonchen.talkcal.auth.application.domain.model.Account;
+import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
 import io.github.andersonchen.talkcal.auth.application.domain.model.ExternalIdentity;
 
 /**
@@ -16,4 +17,12 @@ public interface SaveAccountPort {
      * identity 已經對到別的帳號（兩個分頁同時第一次登入，另一邊先存好）就回 false，帳號也不留下。
      */
     boolean saveIfIdentityFree(Account account, ExternalIdentity identity);
+
+    /**
+     * 帳號還是訪客，就補上帳號名稱和密碼、改成免費會員、刪掉它的訪客 token。
+     * 回傳 USERNAME_TAKEN、NOT_A_GUEST 不丟例外，理由同上：撞名由資料庫的唯一約束判斷。
+     */
+    UpgradeResult upgradeGuest(AccountId guest, Account.PasswordLogin login);
+
+    enum UpgradeResult { UPGRADED, USERNAME_TAKEN, NOT_A_GUEST }
 }

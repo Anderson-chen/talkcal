@@ -51,7 +51,11 @@ io.github.andersonchen.talkcal
 
 ## 會員等級
 
-帳號分免費、付費兩級（`free`、`paid`），新帳號都是免費。還沒串接金流，付費會員由維護者連上資料庫直接改 `account.tier`。改完下一個請求就生效，使用者不用重新登入。
+帳號分訪客、免費、付費三級（`guest`、`free`、`paid`）。
+
+- 訪客：登入頁按「以訪客身分試用」時開的帳號，沒有帳號名稱和密碼。訪客註冊時在同一個帳號上升級成免費；超過 7 天沒用的訪客帳號連同行程、對話由每天的排程刪掉。
+- 免費：註冊的帳號都是免費。
+- 付費：還沒串接金流，由維護者連上資料庫直接改 `account.tier`。改完最多 1 分鐘生效（等級會在 session 裡記 1 分鐘），使用者不用重新登入。
 
 帳密註冊的帳號用帳號名稱指定：
 
@@ -68,4 +72,23 @@ UPDATE account SET tier = 'free' WHERE username = 'amy';
 SELECT account_id FROM account_identity WHERE provider = 'google' AND subject = '<Google 的 sub>';
 ```
 
-已經登入的人，帳號 ID 就是 `GET /api/auth/me` 回傳的 `id`。`tier` 只收 `free`、`paid`，寫錯的值資料庫會拒絕。欄位的定義見 [V14](src/main/resources/db/migration/V14__account_membership_tier.sql)。
+已經登入的人，帳號 ID 就是 `GET /api/auth/me` 回傳的 `id`。`tier` 只收 `guest`、`free`、`paid`，寫錯的值資料庫會拒絕。欄位的定義見 [V14](src/main/resources/db/migration/V14__account_membership_tier.sql)、[V15](src/main/resources/db/migration/V15__guest_mode_and_daily_quota.sql)。
+
+## 每日次數
+
+每個 API 每天能呼叫幾次，寫在資料庫的兩張表，計數放 Redis（表的定義和理由見 [V15](src/main/resources/db/migration/V15__guest_mode_and_daily_quota.sql)）：
+
+- `quota_bucket`：一份計數，照 IP、帳號或全站分開算，每天的上限、用完時給使用者看的話。
+- `quota_rule`：哪個等級呼叫哪個 API 算進哪一份。
+
+要限制一個新的 API，加一列就好，app 最多 1 分鐘內重讀（`talkcal.quota.rules-refresh`），不用改程式、不用重啟：
+
+```sql
+-- 免費會員每天問助理 20 次，照帳號算
+INSERT INTO quota_bucket (name, subject, daily_limit, message)
+VALUES ('free-assistant', 'account', 20, '今天問助理的次數用完了，明天 00:00 重新計算');
+INSERT INTO quota_rule (method, path_pattern, tier, bucket)
+VALUES ('POST', '/api/calendar/assistant', 'free', 'free-assistant');
+```
+
+`path_pattern` 一段一段比對，`{id}` 或 `*` 對到任意一段。超過上限回 429（`code = QUOTA_EXCEEDED`），`Retry-After` 指到 `calendar.zone` 的午夜；回應是 5xx（例如模型出錯）的那次不扣。Redis 無法連線時不限制次數，服務照常。

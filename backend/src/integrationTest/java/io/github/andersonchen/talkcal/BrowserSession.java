@@ -90,8 +90,22 @@ final class BrowserSession {
     }
 
     Optional<String> cookie(String name) {
-        return cookies.getCookieStore().get(URI.create(baseUrl)).stream()
+        return cookie(name, "/");
+    }
+
+    /** path 設在某個路徑底下的 cookie（例如訪客 cookie 只送到 /api），要用那個路徑查才查得到 */
+    Optional<String> cookie(String name, String path) {
+        return cookies.getCookieStore().get(URI.create(baseUrl + path)).stream()
                 .filter(c -> c.getName().equals(name)).map(HttpCookie::getValue).findFirst();
+    }
+
+    /** 模擬瀏覽器關掉再開：session cookie 沒了，只剩這個留得比較久的 cookie */
+    BrowserSession withCookie(String name, String value, String path) {
+        HttpCookie cookie = new HttpCookie(name, value);
+        cookie.setPath(path);
+        cookie.setVersion(0);
+        cookies.getCookieStore().add(URI.create(baseUrl + path), cookie);
+        return this;
     }
 
     private HttpRequest.Builder request(String path) {

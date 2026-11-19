@@ -3,6 +3,9 @@
 // session 在後端，瀏覽器只拿到 HttpOnly cookie，目前登入的人由 GET /api/auth/me 回傳。
 // 登入、登出是 Spring Security 的端點：登入送表單格式，成功回 204。
 // Google、GitHub 登入是整頁轉址，不經過這裡的 fetch；轉回首頁時 session 已經登入，App 照常 loadMe()。
+//
+// 訪客也是登入狀態（後端開的訪客帳號，tier 是 guest），功能跟會員一樣，只是每天有次數上限。
+// 瀏覽器關掉再開時，後端用訪客 cookie 自動登入回同一個訪客，這裡不用另外處理。
 
 import { ref } from 'vue'
 import { message, onUnauthorized, send, UnauthorizedError } from './http'
@@ -14,6 +17,7 @@ export interface Me {
   name: string
   // 只用 Google、GitHub 登入的帳號沒有帳號名稱
   username: string | null
+  tier: 'guest' | 'free' | 'paid'
   // 畫面上顯示的會員等級，文字由後端決定
   tierLabel: string
 }
@@ -55,11 +59,33 @@ onUnauthorized(() => {
  */
 export const meUnreachable = ref<string | null>(null)
 
+/**
+ * 訪客要登入或註冊時顯示登入頁：null 是照常顯示行事曆。reason 是為什麼要登入（例如次數用完），顯示在登入頁上。
+ * 沒登入的人一律看到登入頁，用不到這個
+ */
+export interface LoginPrompt {
+  mode: 'login' | 'register'
+  reason: string
+}
+
+export const loginPrompt = ref<LoginPrompt | null>(null)
+
+export function requestLogin(mode: LoginPrompt['mode'] = 'login', reason = '') {
+  loginPrompt.value = { mode, reason }
+}
+
+/** 以訪客身分試用：後端開一個訪客帳號並登入。今天的訪客名額滿了丟 ApiError（429），訊息直接給使用者看 */
+export async function startGuest(): Promise<void> {
+  await send('/api/auth/guest', { method: 'POST' }, { notifyUnauthorized: false })
+  await loadMe()
+}
+
 /** 401 記成沒登入，其他錯誤丟出去 */
 export async function loadMe(): Promise<void> {
   try {
     const res = await send('/api/auth/me', { method: 'GET' }, { notifyUnauthorized: false })
     me.value = (await res.json()) as Me
+    loginPrompt.value = null
   } catch (e) {
     if (!(e instanceof UnauthorizedError)) throw e
     me.value = null

@@ -32,4 +32,17 @@ public final class RegisterAccountService implements RegisterAccountUseCase {
         }
         return account.id();
     }
+
+    @Override
+    public AccountId upgradeGuest(AccountId guest, String username, String password) {
+        Objects.requireNonNull(guest, "guest 不可為 null");
+        Username name = Username.of(username);
+        Account.checkNewPassword(password);
+
+        return switch (saveAccountPort.upgradeGuest(guest, new Account.PasswordLogin(name, hashPasswordPort.hash(password)))) {
+            case UPGRADED -> guest;
+            case USERNAME_TAKEN -> throw new UsernameTakenException(name);
+            case NOT_A_GUEST -> throw new IllegalArgumentException("這個帳號已經註冊過了，請重新整理頁面");
+        };
+    }
 }
