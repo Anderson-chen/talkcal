@@ -47,7 +47,7 @@
 
 ### 前置作業
 
-「本機部署」和「本機開發」共用的步驟，僅首次需要執行。
+「本機部署」和「本機開發」共用的步驟，僅首次需要執行。執行過 `docker compose down` 之後，第 2 步要再做一次。
 
 1. 建 `deploy/.env`，開啟後填入 `DB_PASSWORD`、`ARCHIVE_ACCESS_KEY`、`ARCHIVE_SECRET_KEY`，最後一個至少 8 個字：
 
