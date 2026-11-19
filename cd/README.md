@@ -47,7 +47,7 @@ WAIT_TIMEOUT=600 cd/apply.sh local app   # 拉長等待
 
 歸檔用的 `archive` 也要先起好，但它沒起的時候擋不住。app 啟動時刻意不連物件儲存（理由見 `ArchiveStorageConfiguration` 的 `archiveBucket`），照樣 healthy，`--wait` 也跟著成功；要等到畫面上的「查看封存」或還原對話回 502，或凌晨的歸檔排程真的有資料存不進去，才看得出來。2026-10-31 把它加進 compose 之後，本機就這樣漏了快兩個星期（[#286](https://github.com/Anderson-chen/talkcal/issues/286)）。
 
-每日次數用的 `redis` 沒啟動，`--wait` 也一樣成功：Redis 無法連線時 app 不限制次數、服務照常（見 [backend/README.md](../backend/README.md#每日次數)），只有 log 會出現「每日次數的計數無法連線」。
+每日次數用的 `redis` 沒啟動，`--wait` 也一樣成功：Redis 無法連線時 app 不限制次數、服務照常（見 [backend/README.md](../backend/README.md#每日次數)）。要確認的話，執行 `docker compose -f deploy/compose.yaml ps redis`，看 `redis` 有沒有在執行、狀態是不是 `(healthy)`。log 的「每日次數的計數無法連線」要等有請求用到每日次數才會出現，剛部署完看不出來。
 
 第一次部署前先啟動資料庫、每日次數用的 `redis` 和歸檔用的 `archive`，`archive-init` 建好 bucket 就會結束：
 
