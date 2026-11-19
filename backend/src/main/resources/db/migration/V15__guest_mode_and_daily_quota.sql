@@ -9,10 +9,11 @@ SET LOCAL statement_timeout = '5s';
 
 -- ── 訪客帳號 ─────────────────────────────────────────────────────────
 
--- V14 的 CHECK 只有 free、paid。先 NOT VALID 加上去不用掃整張表，再 VALIDATE 確認既有的列都合規
+-- V14 的 CHECK 只有 free、paid。換成多一個 guest 的，用 NOT VALID 加：不用掃整張表、不鎖讀取，之後寫入的列照樣檢查。
+-- 不另外 VALIDATE：既有的列都通過 V14 那個更嚴的條件（free、paid），一定也符合這個；
+-- 在同一個交易裡 VALIDATE 的話，驗證期間整張 account 的讀取都會被擋（squawk 的 constraint-missing-not-valid）
 ALTER TABLE account DROP CONSTRAINT account_tier_known;
 ALTER TABLE account ADD CONSTRAINT account_tier_known CHECK (tier IN ('guest', 'free', 'paid')) NOT VALID;
-ALTER TABLE account VALIDATE CONSTRAINT account_tier_known;
 
 -- 訪客最後一次使用的時間。超過期限沒用的訪客帳號由 GuestAccountCleanup 刪掉（連同行程和對話）；會員是 NULL
 ALTER TABLE account ADD COLUMN last_active_at TIMESTAMPTZ;
