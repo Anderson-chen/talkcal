@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 版面照設計稿的「桌面 Web」畫板。
 import { computed, ref } from 'vue'
-import { logOut, me, requestLogin } from '../auth'
+import { logOut, me } from '../auth'
 import { CATEGORIES } from '../calendar'
 import { monthDayLabel, weekdayName, weekOf } from '../monthGrid'
 import ArchiveNotice from './ArchiveNotice.vue'
@@ -75,10 +75,6 @@ const noEventsToday = computed(() => calendar.view.value === 'day' && calendar.e
           <span class="tier">{{ me.tierLabel }}</span>
         </span>
         <button type="button" class="logout" @click="logOut()">登出</button>
-      </div>
-      <div v-else class="account">
-        <span class="account-who"><span class="account-name">訪客</span></span>
-        <button type="button" class="logout" @click="requestLogin()">登入</button>
       </div>
     </aside>
 

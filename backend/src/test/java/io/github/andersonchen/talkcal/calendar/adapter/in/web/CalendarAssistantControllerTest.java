@@ -18,8 +18,6 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.EventId;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.EventOrigin;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.InMemoryProposals;
-import io.github.andersonchen.talkcal.calendar.application.domain.service.ShowGuestDemoService;
-import io.github.andersonchen.talkcal.calendar.application.port.in.ShowGuestDemoUseCase;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.TrackProposalsService;
 import io.github.andersonchen.talkcal.calendar.application.port.in.TrackProposalsUseCase;
 import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsagePort;
@@ -27,9 +25,7 @@ import io.github.andersonchen.talkcal.calendar.application.port.out.RecordUsageP
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -107,9 +103,7 @@ class CalendarAssistantControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.conversationId").value(Matchers.matchesPattern(UUID_PATTERN)))
                 .andExpect(jsonPath("$.reply").value("早上還是晚上？"))
-                .andExpect(jsonPath("$.proposals").isEmpty())
-                // 回應裡有這個欄位時，前端會當成登入過期（訪客的回答才有），登入者的回應不能帶，連 null 也不行
-                .andExpect(jsonPath("$.guestRemaining").doesNotExist());
+                .andExpect(jsonPath("$.proposals").isEmpty());
     }
 
     @Test
@@ -345,12 +339,6 @@ class CalendarAssistantControllerTest {
         TrackProposalsService trackProposals(RecordedUsage usage) {
             InMemoryProposals proposals = new InMemoryProposals();
             return new TrackProposalsService(proposals, usage);
-        }
-
-        // 這裡的請求都登入了，不會走到訪客的路；訪客在 GuestDemoSystemTest 測，那裡才有 SecurityConfiguration 和真的 IP
-        @Bean
-        ShowGuestDemoUseCase showGuestDemo() {
-            return new ShowGuestDemoService((client, day, limit) -> OptionalInt.of(1), Clock.system(ZoneId.of("Asia/Taipei")));
         }
 
         // 使用者講「開會」就呼叫 propose_events，其他都回「早上還是晚上？」；設了 failure 就丟那個例外

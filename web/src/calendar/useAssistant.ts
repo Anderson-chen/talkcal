@@ -12,12 +12,9 @@
 // - 後端給了要等幾秒就倒數，倒數完之前送不出去，輸入框照樣能打字
 // - 模型最久可能 2 分鐘才回應，等太久時「思考中」會顯示已經等了幾秒，讓使用者知道請求還在處理
 // - 還沒送出的字放 sessionStorage：登入過期跳回登入頁、或重新整理，回來時還在
-//
-// 沒登入的訪客（calendar.guest）走同一條路，只是鎖住：輸入框停用，只能按 SUGGESTIONS，
-// 後端回預先寫好的答案、沒有 conversationId；卡片的加入、修改由 useCalendar 帶去登入；每天的次數用完時改成請訪客註冊。
 
 import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
-import { me, requestLogin, signedOut } from '../auth'
+import { me } from '../auth'
 import { assistantHistory, dismissProposals, talkToAssistant, type AssistantChange, type EventFields, type SavedEvent } from '../calendar'
 import { UnauthorizedError } from '../http'
 import { describeAssistantFailure, type FailureKind } from './assistantFailure'
@@ -60,21 +57,15 @@ export interface ChatMessage {
   failed?: boolean
   // 助理回不了的說明。canRetry：原封不動再送有沒有意義，400 沒有，要先改
   failure?: { kind: FailureKind; canRetry: boolean }
-  // 訪客看的回答下面的小字：還能試幾次
-  hint?: string
 }
 
 /** 「思考中」超過這麼多秒就改成顯示已經等了多久。助理平常 p95 約 3 秒，等到 10 秒已經明顯不正常 */
 export const SLOW_AFTER_SECONDS = 10
 
-// 三種能做的事各舉一個例子：新增、查詢、找空檔。
-// 沒登入的訪客也只能送這幾句，後端的 GuestDemo 只收一字不差的這幾句，改了要一起改
+// 三種能做的事各舉一個例子：新增、查詢、找空檔
 export const SUGGESTIONS = ['明天下午3點和 Amy 開會', '明天有什麼行程？', '這週哪天下午有空？']
 
 const GREETING = '嗨！我是你的行事曆助理。可以幫你新增、修改、刪除行程，查某天的安排，或找出空檔。不管哪一種，我都會整理成卡片讓你確認後才動行事曆。'
-const GUEST_GREETING = '嗨！我是你的行事曆助理。還沒登入也能先點下面的問題，看我怎麼回答；登入後就能直接打字問我。'
-/** 訪客的輸入框停用，placeholder 說明怎麼才能打字 */
-export const GUEST_PLACEHOLDER = '登入後開始使用'
 
 // 私密視窗、被封鎖的網站資料會讓 localStorage 丟例外，下面一律捕捉後忽略，最壞就是重新整理後開新對話。
 // key 帶登入者的 id，換人登入才不會讀回上一個人的對話。擋住讀別人對話的是後端的授權，這裡只是不主動去要
@@ -117,13 +108,11 @@ function saveConversationId(id: string | undefined) {
 }
 
 export function useAssistant(calendar: CalendarState) {
-  const guest = calendar.guest
-  const greeting = guest ? GUEST_GREETING : GREETING
   let nextId = 1
   const say = (role: ChatMessage['role'], text: string, proposals: Proposal[] = []): ChatMessage =>
     ({ id: nextId++, role, text, proposals, changes: [], removals: [], error: null })
 
-  const messages = ref<ChatMessage[]>([say('ai', greeting)])
+  const messages = ref<ChatMessage[]>([say('ai', GREETING)])
   const draft = draftKey(me.value?.id)
   const input = ref(loadDraft(draft))
   // 送出去、還沒回成功的那一句：輸入框清掉了，草稿裡還留著這句，送到一半重新整理或登入過期也拿得回來
@@ -144,9 +133,7 @@ export function useAssistant(calendar: CalendarState) {
 
   const waitSeconds = computed(() => Math.max(0, Math.ceil((retryAt.value - now.value) / 1000)))
   // 在等回覆或還在倒數時送了一定失敗，送出、建議說法、再試都停用
-  // 訪客今天的次數用完了：換日前再按也一樣被擋
-  const guestLimit = computed(() => messages.value.some((m) => m.failure?.kind === 'guest-limit'))
-  const blocked = computed(() => typing.value || waitSeconds.value > 0 || guestLimit.value)
+  const blocked = computed(() => typing.value || waitSeconds.value > 0)
   const waitedSeconds = computed(() => (typing.value ? Math.max(0, Math.floor((now.value - typingSince) / 1000)) : 0))
 
   // 每則訊息各有一把冪等鍵：A 失敗後先去加 B，再回來重按 A，帶的還是 A 那把
@@ -155,7 +142,7 @@ export function useAssistant(calendar: CalendarState) {
 
   // 讀回時 typing 亮著：舊訊息回來前就送出新的一句，順序會亂
   async function restore() {
-    if (!conversationId || guest) return
+    if (!conversationId) return
     typing.value = true
     typingSince = now.value = Date.now()
     try {
@@ -166,7 +153,7 @@ export function useAssistant(calendar: CalendarState) {
         saveConversationId(undefined)
         return
       }
-      messages.value = [say('ai', greeting), ...history.messages.map((m) => say(m.role === 'user' ? 'me' : 'ai', m.text))]
+      messages.value = [say('ai', GREETING), ...history.messages.map((m) => say(m.role === 'user' ? 'me' : 'ai', m.text))]
       // 送到一半重新整理時，瀏覽器斷了請求，後端卻照樣做完、記進對話。讀回來已經有那句，就清掉草稿，免得又送一次
       const lastAsked = history.messages.filter((m) => m.role === 'user').at(-1)?.text
       if (lastAsked && lastAsked === input.value.trim()) input.value = ''
@@ -184,7 +171,7 @@ export function useAssistant(calendar: CalendarState) {
     if (typing.value) return
     conversationId = undefined
     saveConversationId(undefined)
-    messages.value = [say('ai', greeting)]
+    messages.value = [say('ai', GREETING)]
     // 沒送成功的那句也丟掉，不然重新整理後又出現在輸入框
     unsent = ''
     input.value = ''
@@ -195,7 +182,7 @@ export function useAssistant(calendar: CalendarState) {
   async function send(text?: string) {
     const fromInput = text === undefined
     const said = (text ?? input.value).trim()
-    if (!said || blocked.value || (guest && fromInput)) return
+    if (!said || blocked.value) return
     // 從陣列拿回來的才是 reactive proxy，之後改 failed 畫面才會跟著變
     const mine = messages.value[messages.value.push(say('me', said)) - 1]
     unsent = said
@@ -205,15 +192,9 @@ export function useAssistant(calendar: CalendarState) {
     typingSince = now.value = Date.now()
     try {
       const answer = await talkToAssistant(said, conversationId)
-      // 登入過期時後端把這個請求當成訪客：固定問題拿到的是訪客的回答。照 401 處理，使用者送出的那句留在草稿裡
-      if (!guest && answer.guestRemaining != null) {
-        signedOut()
-        return
-      }
-      conversationId = answer.conversationId ?? undefined
+      conversationId = answer.conversationId
       saveConversationId(conversationId)
       const reply = say('ai', answer.reply, answer.proposals.map((draft) => ({ draft, status: 'pending' })))
-      if (answer.guestRemaining != null) reply.hint = `今天還能試 ${answer.guestRemaining} 次`
       reply.changes = answer.changes.map((change) => ({ change, status: 'pending', error: null }))
       reply.removals = answer.removals.map((event) => ({ event, status: 'pending', error: null }))
       messages.value.push(reply)
@@ -236,10 +217,6 @@ export function useAssistant(calendar: CalendarState) {
     } finally {
       typing.value = false
     }
-  }
-
-  function signUp() {
-    requestLogin('註冊之後就能直接跟助理說話，不限這幾題', 'register')
   }
 
   /** 拿掉沒送出的那句和說明，原封不動再送。只有最後一則說明能再試，舊的問題才不會插到新對話中間 */
@@ -288,8 +265,7 @@ export function useAssistant(calendar: CalendarState) {
     reportDismissed([proposal])
   }
 
-  // 把拒絕的卡片送給後端，用來算採納率。不等待、失敗也不顯示：使用者按的是取消，不該因為指標送不出去看到錯誤。
-  // 訪客的卡片沒有 proposalId，所以不會送
+  // 拒絕了哪幾張告訴後端，算採納率用。不等待、失敗也不顯示：使用者按的是取消，不該因為指標送不出去看到錯誤
   function reportDismissed(proposals: Proposal[]) {
     const ids = proposals.map((p) => p.draft.proposalId).filter((id): id is string => !!id)
     if (ids.length > 0) dismissProposals(ids).catch(() => {})
@@ -337,7 +313,7 @@ export function useAssistant(calendar: CalendarState) {
   }
 
   return {
-    guest, messages, input, typing, saving, waitSeconds, blocked, waitedSeconds, send, retry, canRetry, confirm, cancel, drop, edit, clear, signUp,
+    messages, input, typing, saving, waitSeconds, blocked, waitedSeconds, send, retry, canRetry, confirm, cancel, drop, edit, clear,
     confirmChange, editChange, confirmRemoval, dismiss,
   }
 }

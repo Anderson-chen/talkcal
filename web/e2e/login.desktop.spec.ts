@@ -9,37 +9,19 @@ test.beforeEach(async ({ page }) => {
 
 // 登入、註冊兩種模式的按鈕都用 exact：登入模式下切換按鈕叫「還沒有帳號？註冊」，用「註冊」去找會同時找到切換按鈕
 const submit = (page: import('@playwright/test').Page, name: '登入' | '註冊') =>
-  page.locator('form').getByRole('button', { name, exact: true })
+  page.getByRole('button', { name, exact: true })
 
-async function openLogin(page: import('@playwright/test').Page) {
-  await page.goto('/')
-  await expect(page.getByRole('heading', { name: '登入', level: 1 })).toBeVisible()
-}
-
-test('沒登入：先看到登入頁，行事曆不出現', async ({ page }) => {
+test('沒登入：只看得到登入頁，行事曆整個不出現', async ({ page }) => {
   await fakeApi(page, { loggedIn: false })
-  await openLogin(page)
+  await page.goto('/')
 
+  await expect(page.getByRole('heading', { name: '登入' })).toBeVisible()
   await expect(page.getByRole('button', { name: '新增行程', exact: true })).toHaveCount(0)
-})
-
-test('按「以訪客身分試用」：看到行事曆，側欄是「訪客」和「登入」，沒有去讀行程；按「登入」回到登入頁', async ({ page }) => {
-  const api = await fakeApi(page, { loggedIn: false })
-  await openLogin(page)
-  await page.getByRole('button', { name: '以訪客身分試用' }).click()
-
-  await expect(page.getByText('訪客', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: '登入', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: '登出' })).toHaveCount(0)
-  expect(api.unauthorized).toEqual([])
-
-  await page.getByRole('button', { name: '登入', exact: true }).click()
-  await expect(page.getByRole('heading', { name: '登入', level: 1 })).toBeVisible()
 })
 
 test('帳密錯：留在登入頁顯示「帳號或密碼錯誤」；反例：打對就進到行事曆', async ({ page }) => {
   const api = await fakeApi(page, { loggedIn: false })
-  await openLogin(page)
+  await page.goto('/')
 
   await page.getByLabel('帳號名稱').fill('amy')
   await page.getByLabel('密碼').fill('wrong-password')
@@ -57,7 +39,7 @@ test('帳密錯：留在登入頁顯示「帳號或密碼錯誤」；反例：�
 
 test('註冊：撞名顯示後端的訊息；換一個名字就註冊並直接登入', async ({ page }) => {
   const api = await fakeApi(page, { loggedIn: false })
-  await openLogin(page)
+  await page.goto('/')
   await page.getByRole('button', { name: '還沒有帳號？註冊' }).click()
 
   await page.getByLabel('帳號名稱').fill('Amy')
@@ -98,7 +80,7 @@ test('登入過期：之後任何一個請求回 401，就回到登入頁（不�
 
 test('後端開了 Google、GitHub：登入頁多兩個連結，連到後端的 /api/auth/oauth2/authorization/*；反例：沒開就不出現', async ({ page }) => {
   await fakeApi(page, { loggedIn: false, providers: ['google', 'github'] })
-  await openLogin(page)
+  await page.goto('/')
 
   await expect(page.getByRole('link', { name: '用 Google 登入' })).toHaveAttribute('href', '/api/auth/oauth2/authorization/google')
   await expect(page.getByRole('link', { name: '用 GitHub 登入' })).toHaveAttribute('href', '/api/auth/oauth2/authorization/github')
@@ -106,7 +88,8 @@ test('後端開了 Google、GitHub：登入頁多兩個連結，連到後端的 
   const other = await page.context().newPage()
   await other.clock.setFixedTime(new Date('2026-10-06T11:30:00+08:00'))
   await fakeApi(other, { loggedIn: false })
-  await openLogin(other)
+  await other.goto('/')
+  await expect(other.getByRole('heading', { name: '登入' })).toBeVisible()
   await expect(other.getByRole('link', { name: /登入$/ })).toHaveCount(0)
 })
 

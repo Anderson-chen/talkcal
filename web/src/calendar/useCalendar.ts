@@ -1,13 +1,8 @@
 // 行事曆的狀態與動作。桌面版和手機版共用 CalendarView 建的這一份：
 // 視窗跨過寬度分界、整個版面換掉時，選的日期、看的月份還在。
-//
-// guest：沒登入的訪客。版面照常，但不讀行程（沒有帳號就沒有行程，讀了也是 401），
-// 新增（表單、助理卡片的加入）換成帶去登入。訪客沒有行程，助理也不回傳修改和刪除的卡片，所以正常操作不會走到修改、刪除；
-// 真的走到了，後端回 401，一樣回到登入頁。
 
 import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
 import { addEvents, listEvents, NotFoundError, removeEvent, updateEvent, type Category, type EventFields, type SavedEvent } from '../calendar'
-import { requestLogin } from '../auth'
 import { message } from '../http'
 import { addDays, daysCovered, gridRange, monthGrid, toIsoDate } from '../monthGrid'
 import { isArchivedMonth } from './archive'
@@ -25,7 +20,7 @@ export interface FormRequest {
   onSaved?: (saved: SavedEvent) => void
 }
 
-export function useCalendar(guest = false) {
+export function useCalendar() {
   // 瀏覽器的本地日期。在台灣跟後端的 calendar.zone 是同一天，在別的時區會差，是已知的限制
   const today = toIsoDate(new Date())
 
@@ -48,7 +43,6 @@ export function useCalendar(guest = false) {
 
   watch([days, version], async () => {
     // 快速連按下個月時回應可能不照順序回來，不是最新那一號就丟掉
-    if (guest) return
     const ticket = ++latestLoad
     const { from, to } = gridRange(days.value)
     try {
@@ -127,12 +121,6 @@ export function useCalendar(guest = false) {
   // ── 新增、修改、刪除 ─────────────────────────────────────────
   /** idempotencyKey 由呼叫端決定：只有呼叫端能判斷再按一次是不是同一次新增 */
   async function add(drafts: EventFields[], idempotencyKey?: string): Promise<SavedEvent[]> {
-    // 訪客按了助理卡片的加入：帶去登入。丟例外讓卡片維持原狀，不顯示成已加入
-    if (guest) {
-      const reason = '登入後就能把行程加進行事曆'
-      requestLogin(reason)
-      throw new Error(reason)
-    }
     const saved = await addEvents(drafts, idempotencyKey)
     showSaved(saved)
     return saved
@@ -165,11 +153,6 @@ export function useCalendar(guest = false) {
   }
 
   function openForm(initial?: Partial<EventFields>, onSaved?: (saved: SavedEvent) => void) {
-    // 有 initial 是從助理卡片的「修改」來的
-    if (guest) {
-      requestLogin(initial ? '登入後就能修改卡片、加進行事曆' : '登入後就能新增行程')
-      return
-    }
     detailId.value = null
     form.value = { initial: { ...blankDraft(sel.value), ...initial }, onSaved }
   }
@@ -181,7 +164,7 @@ export function useCalendar(guest = false) {
   }
 
   return {
-    guest, today, sel, view, shown, days, events, loadError, hidden, detailId, detail, form, monthCounts, archived,
+    today, sel, view, shown, days, events, loadError, hidden, detailId, detail, form, monthCounts, archived,
     eventsOn, pickDate, shiftMonth, step, toggleCategory, add, update, remove, openForm, openEdit, reload,
   }
 }

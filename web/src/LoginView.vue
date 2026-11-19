@@ -4,21 +4,16 @@
 //
 // Google、GitHub 登入只在後端有設定時才出現。這兩個按鈕是一般的連結，不是 fetch：要整頁轉到對方去同意，
 // 失敗時後端轉回 /?login_error=oauth。
-//
-// 「以訪客身分試用」進到行事曆，功能鎖住。訪客在行事曆上按了要帳號的功能會回到這裡（auth.ts 的 loginPrompt），
-// 上面顯示為什麼要登入。
 import { computed, onMounted, ref } from 'vue'
-import { enterAsGuest, loadProviders, logIn, loginPrompt, providerLoginUrl, signUp, type Provider } from './auth'
+import { loadProviders, logIn, providerLoginUrl, signUp, type Provider } from './auth'
 import { savedThemeVars } from './calendar/theme'
 
 const vars = savedThemeVars()
 
-const mode = ref<'login' | 'register'>(loginPrompt.value?.mode ?? 'login')
+const mode = ref<'login' | 'register'>('login')
 const username = ref('')
 const password = ref('')
 const error = ref<string | null>(null)
-// 為什麼要登入，例如在行事曆上按了卡片的「加入行事曆」
-const notice = loginPrompt.value?.reason || null
 const busy = ref(false)
 
 const providers = ref<Provider[]>([])
@@ -64,7 +59,6 @@ async function submit() {
   <div class="login" :style="vars">
     <form class="card" @submit.prevent="submit">
       <h1>{{ title }}</h1>
-      <p v-if="notice" role="status" class="notice">{{ notice }}</p>
       <div class="field">
         <label for="login-username">帳號名稱</label>
         <input id="login-username" v-model="username" autocomplete="username" autocapitalize="none" spellcheck="false" />
@@ -87,7 +81,6 @@ async function submit() {
       <button type="button" class="switch" @click="switchMode">
         {{ mode === 'login' ? '還沒有帳號？註冊' : '已經有帳號？登入' }}
       </button>
-      <button type="button" class="switch" @click="enterAsGuest">以訪客身分試用</button>
     </form>
   </div>
 </template>
@@ -103,7 +96,6 @@ label { font-size: 13px; font-weight: 500; color: var(--muted); }
 input { height: 44px; border: 1px solid var(--field); border-radius: 10px; padding: 0 12px; font-size: 15px;
   background: var(--card); color: var(--ink); font-family: inherit; }
 input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.notice { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--seg); font-size: 14px; }
 .hint { margin: 0; font-size: 13px; color: var(--muted); }
 .error { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--dangerSoft); color: var(--danger); font-size: 14px; }
 .primary { height: 44px; border: 0; border-radius: 10px; background: var(--accent); color: var(--onAccent); font-size: 15px;
