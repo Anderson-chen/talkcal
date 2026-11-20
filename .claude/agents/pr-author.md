@@ -19,7 +19,7 @@ skills:
 
 ## 第一輪
 
-- 改程式碼、寫註解照 `.claude/rules/comments.md`；改到基礎設施另見 `CLAUDE.md` 的「改基礎設施」。動手前從磁碟重讀這些檔案：`CLAUDE.md` 和 `.claude/rules/` 載入的是 session 開始時的版本。
+- 改程式碼、寫註解照 `.claude/rules/comments.md`；改到基礎設施另見 `.claude/rules/infra.md`。動手前從磁碟重讀這些檔案：`CLAUDE.md` 和 `.claude/rules/` 載入的是 session 開始時的版本。
 - 做法跟 issue 寫的不同時，照你判斷比較好的做，在回報寫實際的做法和理由。
 - 驗收條件裡要執行才知道結果的，自己執行，輸出寫進回報。
 - 照 `commit` skill commit。commit 之後，執行 `open-pr` 分級表列給修改者的指令。指令的指示要開 subagent 時照開；指令改到的檔案另外 commit。
