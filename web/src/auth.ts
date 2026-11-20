@@ -7,7 +7,7 @@
 // 訪客也是登入狀態（後端開的訪客帳號，tier 是 guest），功能跟會員一樣，只是每天有次數上限。
 // 瀏覽器關掉再開時，後端用訪客 cookie 自動登入回同一個訪客，這裡不用另外處理。
 
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { message, onUnauthorized, send, UnauthorizedError } from './http'
 
 /** id 是行程、對話的擁有者；name 給人看 */
@@ -48,6 +48,8 @@ export function providerLoginUrl(provider: Provider): string {
  */
 export const me = ref<Me | null | undefined>(undefined)
 
+export const isGuest = computed(() => me.value?.tier === 'guest')
+
 // 任何 API 回 401（登入過期、在別的分頁登出）都換回登入畫面
 onUnauthorized(() => {
   me.value = null
@@ -60,17 +62,17 @@ onUnauthorized(() => {
 export const meUnreachable = ref<string | null>(null)
 
 /**
- * 訪客要登入或註冊時顯示登入頁：null 是照常顯示行事曆。reason 是為什麼要登入（例如次數用完），顯示在登入頁上。
+ * 訪客要登入或註冊時顯示登入頁：null 是照常顯示行事曆。reason 是為什麼要登入（例如次數用完），有的話顯示在登入頁上。
  * 沒登入的人一律看到登入頁，用不到這個
  */
 export interface LoginPrompt {
   mode: 'login' | 'register'
-  reason: string
+  reason?: string
 }
 
 export const loginPrompt = ref<LoginPrompt | null>(null)
 
-export function requestLogin(mode: LoginPrompt['mode'] = 'login', reason = '') {
+export function requestLogin(mode: LoginPrompt['mode'] = 'login', reason?: string) {
   loginPrompt.value = { mode, reason }
 }
 

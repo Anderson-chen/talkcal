@@ -23,7 +23,6 @@ import java.net.InetSocketAddress;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Map;
@@ -113,10 +112,7 @@ class GuestModeSystemTest {
                 "calendar_add_request", "guest_token", "account"}) {
             jdbc.sql("DELETE FROM " + table).update();
         }
-        redis.execute(connection -> {
-            connection.serverCommands().flushDb();
-            return null;
-        }, true);
+        TestRedis.flush(redis);
         MODEL.reply(FakeModel.Mode.ANSWER);
         // 模型失敗的那幾題會讓斷路器打開，不重設的話，後面的題目會因為順序不同拿到 503
         breakers.circuitBreaker(CHAT_MODEL).reset();
@@ -501,7 +497,7 @@ class GuestModeSystemTest {
         jdbc.sql("UPDATE account SET last_active_at = now() - interval '8 days' WHERE id = :id")
                 .param("id", UUID.fromString(oldId)).update();
 
-        assertEquals(1, expireGuests.expireInactiveSince(Instant.now().minus(Duration.ofDays(7))));
+        assertEquals(1, expireGuests.expireInactive());
         for (String table : new String[] {"calendar_event", "calendar_assistant_message"}) {
             assertEquals(0, jdbc.sql("SELECT count(*) FROM " + table + " WHERE owner_id = :id")
                     .param("id", UUID.fromString(oldId)).query(Integer.class).single(), table);

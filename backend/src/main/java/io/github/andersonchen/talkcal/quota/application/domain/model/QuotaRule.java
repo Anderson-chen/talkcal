@@ -26,6 +26,6 @@ public record QuotaRule(String method, String pathPattern, String tier, String b
     }
 
     public boolean matches(String requestMethod, String requestPattern, String requestTier) {
-        return method.equalsIgnoreCase(requestMethod) && pathPattern.equals(requestPattern) && tier.equals(requestTier);
+        return method.equals(requestMethod) && pathPattern.equals(requestPattern) && tier.equals(requestTier);
     }
 }

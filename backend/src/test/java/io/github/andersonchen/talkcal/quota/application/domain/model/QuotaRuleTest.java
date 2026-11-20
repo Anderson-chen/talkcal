@@ -16,7 +16,7 @@ class QuotaRuleTest {
     private static final QuotaRule UPDATE = new QuotaRule("put", "/api/calendar/events/{id}", "guest", "writes");
 
     @Test
-    @DisplayName("Spring 選好的路徑樣板一樣就算；方法不分大小寫")
+    @DisplayName("Spring 選好的路徑樣板一樣就算；規則表的方法不分大小寫（建構時轉成大寫）")
     void samePatternMatches() {
         assertTrue(UPDATE.matches("PUT", "/api/calendar/events/{id}", "guest"));
     }

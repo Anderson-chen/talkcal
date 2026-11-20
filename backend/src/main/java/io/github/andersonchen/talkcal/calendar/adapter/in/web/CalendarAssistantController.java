@@ -1,6 +1,5 @@
 package io.github.andersonchen.talkcal.calendar.adapter.in.web;
 
-import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.AssistantGaveUpException;
 import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.CalendarAssistant;
 import io.github.andersonchen.talkcal.calendar.adapter.in.web.CalendarController.EventFields;
 import io.github.andersonchen.talkcal.calendar.adapter.in.web.CalendarController.SavedEvent;
@@ -18,7 +17,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -67,8 +65,6 @@ import java.util.stream.IntStream;
 public final class CalendarAssistantController {
 
     private static final Logger log = LoggerFactory.getLogger(CalendarAssistantController.class);
-
-    private static final String GAVE_UP_AFTER_MODEL_REPLIED = CalendarAssistantController.class.getName() + ".gaveUpAfterModelReplied";
 
     private final CalendarAssistant assistant;
     private final TrackProposalsUseCase proposals;
@@ -179,23 +175,11 @@ public final class CalendarAssistantController {
                 .body(new AssistantFailure(e.getMessage(), code, seconds));
     }
 
-    // 比下面的 IllegalStateException 具體，Spring 會先選這個。回應跟一般的 502 一樣，只多在 request 上記一筆
-    @ExceptionHandler(AssistantGaveUpException.class)
-    public ResponseEntity<AssistantFailure> onGaveUp(AssistantGaveUpException e, HttpServletRequest request) {
-        request.setAttribute(GAVE_UP_AFTER_MODEL_REPLIED, true);
-        return onUpstreamFailure(e);
-    }
-
     // CalendarAssistant 把上游的各種例外都包成 IllegalStateException；只攔這個的理由見 CalendarController.onUpstreamFailure
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<AssistantFailure> onUpstreamFailure(IllegalStateException e) {
         log.error("AI 助理失敗，回 502", e);
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(AssistantFailure.of(e.getMessage(), "ASSISTANT_FAILED"));
-    }
-
-    /** 這個請求的 502 是不是模型有回話、助理才放棄的那種（AssistantGaveUpException） */
-    public static boolean gaveUpAfterModelReplied(HttpServletRequest request) {
-        return Boolean.TRUE.equals(request.getAttribute(GAVE_UP_AFTER_MODEL_REPLIED));
     }
 
     // 名字帶著 Assistant：springdoc 用類別的簡單名稱當 schema 名稱，叫 Request／Response 遲早撞名

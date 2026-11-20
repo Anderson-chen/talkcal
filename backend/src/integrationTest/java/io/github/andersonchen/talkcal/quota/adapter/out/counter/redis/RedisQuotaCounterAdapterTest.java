@@ -77,10 +77,7 @@ class RedisQuotaCounterAdapterTest {
 
     @BeforeEach
     void clean() {
-        redis.execute(connection -> {
-            connection.serverCommands().flushDb();
-            return null;
-        }, true);
+        TestRedis.flush(redis);
     }
 
     @Test

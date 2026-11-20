@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 每日次數用完時跳出來（http.ts 的 onQuotaExceeded）。訊息是後端規則表寫的那句。
 // 訪客多一個「註冊」：註冊之後在同一個帳號上升級，行程和對話都還在。
-import { me, requestLogin } from './auth'
+import { isGuest, requestLogin } from './auth'
 
 defineProps<{ message: string }>()
 const emit = defineEmits<{ close: [] }>()
@@ -18,7 +18,7 @@ function register() {
       <h2 id="quota-title">今天的次數用完了</h2>
       <p>{{ message }}</p>
       <div class="actions">
-        <button v-if="me?.tier === 'guest'" type="button" class="primary" @click="register">註冊</button>
+        <button v-if="isGuest" type="button" class="primary" @click="register">註冊</button>
         <button type="button" class="secondary" @click="emit('close')">知道了</button>
       </div>
     </div>

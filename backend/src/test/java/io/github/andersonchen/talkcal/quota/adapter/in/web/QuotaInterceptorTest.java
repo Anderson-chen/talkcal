@@ -14,6 +14,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.web.servlet.DispatcherServlet;
 import org.springframework.web.servlet.HandlerMapping;
 
 /**
@@ -22,7 +23,9 @@ import org.springframework.web.servlet.HandlerMapping;
 @DisplayName("QuotaInterceptor")
 class QuotaInterceptorTest {
 
-    private static final String KEPT = "kept-on-failure";
+    /** 照扣的失敗；其他例外照常退 */
+    private static final class SpentAnyway extends IllegalStateException {
+    }
 
     private final List<ConsumeQuotaUseCase.QuotaRequest> asked = new ArrayList<>();
     private final List<ConsumeQuotaUseCase.Consumed> refunded = new ArrayList<>();
@@ -40,8 +43,7 @@ class QuotaInterceptorTest {
         }
     };
 
-    private final QuotaInterceptor interceptor = new QuotaInterceptor(quota, request -> "guest",
-            request -> request.getAttribute(KEPT) != null);
+    private final QuotaInterceptor interceptor = new QuotaInterceptor(quota, request -> "guest", SpentAnyway.class::isInstance);
 
     private static MockHttpServletRequest request() {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/calendar/assistant");
@@ -85,12 +87,24 @@ class QuotaInterceptorTest {
     }
 
     @Test
-    @DisplayName("keptOnFailure 判斷成照扣的請求：502 也不退")
+    @DisplayName("@ExceptionHandler 處理掉、keptOnFailure 判斷成照扣的例外：502 也不退；反例：其他例外處理掉的 502 照退")
     void keptOnFailureIsNotRefunded() {
-        MockHttpServletRequest request = request();
-        request.setAttribute(KEPT, true);
+        // DispatcherServlet 用 @ExceptionHandler 回應之後，例外放在這個屬性，afterCompletion 拿到的 ex 是 null
+        MockHttpServletRequest kept = request();
+        kept.setAttribute(DispatcherServlet.EXCEPTION_ATTRIBUTE, new SpentAnyway());
+        handle(kept, 502, null);
+        assertEquals(List.of(), refunded);
 
-        handle(request, 502, null);
+        MockHttpServletRequest other = request();
+        other.setAttribute(DispatcherServlet.EXCEPTION_ATTRIBUTE, new IllegalStateException("模型出錯"));
+        handle(other, 502, null);
+        assertEquals(1, refunded.size());
+    }
+
+    @Test
+    @DisplayName("沒人處理、keptOnFailure 判斷成照扣的例外：也不退")
+    void unhandledKeptFailureIsNotRefunded() {
+        handle(request(), 200, new SpentAnyway());
 
         assertEquals(List.of(), refunded);
     }

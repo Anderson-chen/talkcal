@@ -1,7 +1,7 @@
 package io.github.andersonchen.talkcal.app.config;
 
 import io.github.andersonchen.talkcal.auth.adapter.in.security.AccountTierFilter;
-import io.github.andersonchen.talkcal.calendar.adapter.in.web.CalendarAssistantController;
+import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.AssistantGaveUpException;
 import io.github.andersonchen.talkcal.quota.adapter.in.web.QuotaInterceptor;
 import io.github.andersonchen.talkcal.quota.adapter.out.counter.redis.RedisQuotaCounterAdapter;
 import io.github.andersonchen.talkcal.quota.adapter.out.persistence.postgres.JdbcQuotaRulesAdapter;
@@ -44,12 +44,12 @@ class QuotaConfiguration {
         return new ConsumeQuotaService(quotaRules, quotaCounter, Clock.system(zone), refresh);
     }
 
-    // quota 不 import auth、calendar，從別的模組記在 request 上的屬性讀，讀的方式在這裡設定：
-    // 請求者的等級由 auth 的 filter 記；失敗也照扣的是助理在模型回話之後才放棄的那次（理由見 AssistantGaveUpException）
+    // quota 不 import auth、calendar，在這裡設定：請求者的等級從 auth 的 filter 記在 request 上的屬性讀；
+    // 失敗也照扣的是助理在模型回話之後才放棄的那次（理由見 AssistantGaveUpException）
     @Bean
     WebMvcConfigurer quotaInterceptor(ConsumeQuotaUseCase consumeQuota) {
         QuotaInterceptor interceptor = new QuotaInterceptor(consumeQuota, AccountTierFilter::tierOf,
-                CalendarAssistantController::gaveUpAfterModelReplied);
+                AssistantGaveUpException.class::isInstance);
         return new WebMvcConfigurer() {
             @Override
             public void addInterceptors(InterceptorRegistry registry) {

@@ -10,7 +10,6 @@ import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
 import io.github.andersonchen.talkcal.auth.application.domain.model.MembershipTier;
 import io.github.andersonchen.talkcal.auth.application.domain.model.Username;
 import io.github.andersonchen.talkcal.auth.application.port.in.GuestAccessUseCase.GuestPass;
-import io.github.andersonchen.talkcal.auth.application.port.in.RegisterAccountUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.UsernameTakenException;
 import io.github.andersonchen.talkcal.auth.application.port.out.OwnedDataPort;
 
@@ -116,7 +115,8 @@ class GuestAccountsServiceTest {
         GuestPass recent = at(NOW).start();
         at(NOW.plus(Duration.ofDays(5))).resume(recent.token());
 
-        int deleted = at(NOW.plus(Duration.ofDays(10))).expireInactiveSince(NOW.plus(Duration.ofDays(3)));
+        // 一週沒用就刪：第 10 天時，最後一次使用在第 3 天之前的才算
+        int deleted = at(NOW.plus(Duration.ofDays(10))).expireInactive();
 
         assertEquals(1, deleted);
         assertEquals(List.of("delete " + old.accountId()), data.calls);
@@ -133,8 +133,7 @@ class GuestAccountsServiceTest {
         assertThrows(UsernameTakenException.class, () -> register.registerFrom(pass.accountId(), "bob", "correct-horse"));
         assertEquals(MembershipTier.GUEST, accounts.load(pass.accountId()).orElseThrow().tier());
 
-        assertEquals(new RegisterAccountUseCase.Registered(pass.accountId(), true),
-                register.registerFrom(pass.accountId(), "amy", "correct-horse"));
+        assertEquals(pass.accountId(), register.registerFrom(pass.accountId(), "amy", "correct-horse"));
         Account upgraded = accounts.load(pass.accountId()).orElseThrow();
         assertEquals(MembershipTier.FREE, upgraded.tier());
         assertEquals("amy", upgraded.password().orElseThrow().username().value());
@@ -147,9 +146,7 @@ class GuestAccountsServiceTest {
         RegisterAccountService register = new RegisterAccountService(accounts, password -> "hashed:" + password);
         AccountId bob = register.register("bob", "correct-horse");
 
-        RegisterAccountUseCase.Registered registered = register.registerFrom(bob, "bobby", "correct-horse");
-        assertNotEquals(bob, registered.id());
-        assertEquals(false, registered.upgradedGuest());
+        assertNotEquals(bob, register.registerFrom(bob, "bobby", "correct-horse"));
         assertEquals("bob", accounts.load(bob).orElseThrow().displayName());
     }
 }

@@ -17,11 +17,7 @@ public interface RegisterAccountUseCase {
     /**
      * 已經登入的人註冊：登入的是訪客，就在同一個帳號上補帳號名稱和密碼、改成免費會員，帳號 ID 不變，
      * 名下的行程和對話不用搬；不是訪客（會員、或另一個分頁已經先註冊好了）就跟 register 一樣開一個新帳號。
-     * 失敗跟 register 一樣。
+     * 回傳註冊好的帳號 ID：等於 signedIn 就是訪客升級的。失敗跟 register 一樣。
      */
-    Registered registerFrom(AccountId signedIn, String username, String password);
-
-    /** upgradedGuest：是訪客升級的（帳號 ID 就是原本登入的那個），不是新開的帳號 */
-    record Registered(AccountId id, boolean upgradedGuest) {
-    }
+    AccountId registerFrom(AccountId signedIn, String username, String password);
 }

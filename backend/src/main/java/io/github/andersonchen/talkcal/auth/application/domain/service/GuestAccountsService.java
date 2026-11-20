@@ -86,9 +86,8 @@ public final class GuestAccountsService implements GuestAccessUseCase, MergeGues
     }
 
     @Override
-    public int expireInactiveSince(Instant cutoff) {
-        Objects.requireNonNull(cutoff, "cutoff 不可為 null");
-        List<AccountId> expired = guests.guestsInactiveSince(cutoff);
+    public int expireInactive() {
+        List<AccountId> expired = guests.guestsInactiveSince(clock.instant().minus(lifetime));
         for (AccountId guest : expired) {
             // 先刪資料再刪帳號：中途失敗的話帳號還在，下一次排程會再刪一次
             ownedData.deleteAll(guest);

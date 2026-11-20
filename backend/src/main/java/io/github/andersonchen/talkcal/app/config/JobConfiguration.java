@@ -41,9 +41,8 @@ class JobConfiguration {
     }
 
     @Bean
-    GuestAccountCleanup guestAccountCleanup(ExpireGuestsUseCase expireGuests,
-                                            @Value("${talkcal.guest.lifetime}") Duration lifetime) {
-        return new GuestAccountCleanup(expireGuests, lifetime, Clock.systemUTC());
+    GuestAccountCleanup guestAccountCleanup(ExpireGuestsUseCase expireGuests) {
+        return new GuestAccountCleanup(expireGuests);
     }
 
     @Bean

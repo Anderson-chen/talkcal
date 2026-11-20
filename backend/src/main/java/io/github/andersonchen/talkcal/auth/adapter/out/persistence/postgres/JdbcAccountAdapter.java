@@ -21,13 +21,17 @@ import java.util.UUID;
 
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /** 表的定義在 db/migration/V9、V10、V14、V15。 */
 public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPort, GuestStorePort {
 
     private static final String COLUMNS = "account.id, account.display_name, account.username, account.password_hash, account.tier";
+
+    private static final RowMapper<AccountId> ACCOUNT_ID = (rs, n) -> new AccountId(rs.getObject("id", UUID.class));
 
     private final JdbcClient jdbc;
     private final TransactionTemplate transaction;
@@ -70,21 +74,7 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
                         .param("displayName", account.displayName())
                         .param("tier", account.tier().id())
                         .update();
-                // 另一個交易正在插同一個 identity 時，PostgreSQL 會等那個交易結束再決定：
-                // 那個交易 commit 了，這邊就是 0 列，兩邊不會都回報建立成功
-                int linked = jdbc.sql("""
-                                INSERT INTO account_identity (provider, subject, account_id)
-                                VALUES (:provider, :subject, :accountId)
-                                ON CONFLICT (provider, subject) DO NOTHING
-                                """)
-                        .param("provider", identity.provider().id())
-                        .param("subject", identity.subject())
-                        .param("accountId", account.id().value())
-                        .update();
-                if (linked == 0) {
-                    status.setRollbackOnly();
-                }
-                return linked == 1;
+                return linkIdentity(status, account.id(), identity);
             });
             return Boolean.TRUE.equals(saved);
         } catch (DataAccessException e) {
@@ -110,8 +100,7 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
                 if (updated == 0) {
                     return UpgradeResult.NOT_A_GUEST;
                 }
-                // 不是訪客了，訪客 token 不能再拿來登入這個帳號
-                jdbc.sql("DELETE FROM guest_token WHERE account_id = :id").param("id", guest.value()).update();
+                deleteGuestTokens(guest);
                 return UpgradeResult.UPGRADED;
             });
             return Objects.requireNonNull(result);
@@ -139,27 +128,43 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
                 if (updated == 0) {
                     return false;
                 }
-                // 同時插同一個 identity 的處理見 saveIfIdentityFree；對到別的帳號就把剛才的升級也撤掉
-                int linked = jdbc.sql("""
-                                INSERT INTO account_identity (provider, subject, account_id)
-                                VALUES (:provider, :subject, :accountId)
-                                ON CONFLICT (provider, subject) DO NOTHING
-                                """)
-                        .param("provider", identity.provider().id())
-                        .param("subject", identity.subject())
-                        .param("accountId", upgraded.id().value())
-                        .update();
-                if (linked == 0) {
-                    status.setRollbackOnly();
+                // identity 已經對到別的帳號時，剛才的升級跟著撤掉
+                if (!linkIdentity(status, upgraded.id(), identity)) {
                     return false;
                 }
-                jdbc.sql("DELETE FROM guest_token WHERE account_id = :id").param("id", upgraded.id().value()).update();
+                deleteGuestTokens(upgraded.id());
                 return true;
             });
             return Boolean.TRUE.equals(saved);
         } catch (DataAccessException e) {
             throw new IllegalStateException("訪客升級成會員失敗：" + identity, e);
         }
+    }
+
+    /**
+     * 記下 identity 對到 account；identity 已經對到別的帳號時回 false，並把整個交易標成 rollback。
+     * 另一個交易正在插同一個 identity 時，PostgreSQL 會等那個交易結束再決定：
+     * 那個交易 commit 了，這邊就是 0 列，兩邊不會都回報成功
+     */
+    private boolean linkIdentity(TransactionStatus status, AccountId account, ExternalIdentity identity) {
+        int linked = jdbc.sql("""
+                        INSERT INTO account_identity (provider, subject, account_id)
+                        VALUES (:provider, :subject, :accountId)
+                        ON CONFLICT (provider, subject) DO NOTHING
+                        """)
+                .param("provider", identity.provider().id())
+                .param("subject", identity.subject())
+                .param("accountId", account.value())
+                .update();
+        if (linked == 0) {
+            status.setRollbackOnly();
+        }
+        return linked == 1;
+    }
+
+    // 不是訪客了，訪客 token 不能再拿來登入這個帳號
+    private void deleteGuestTokens(AccountId account) {
+        jdbc.sql("DELETE FROM guest_token WHERE account_id = :id").param("id", account.value()).update();
     }
 
     @Override
@@ -208,7 +213,7 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
                     .param("hash", tokenHash)
                     .param("now", utc(now))
                     .param("newExpiresAt", utc(newExpiresAt))
-                    .query((rs, n) -> new AccountId(rs.getObject("id", UUID.class)))
+                    .query(ACCOUNT_ID)
                     .optional();
         } catch (DataAccessException e) {
             throw new IllegalStateException("讀取訪客 token 失敗", e);
@@ -220,7 +225,7 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
         try {
             return jdbc.sql("SELECT id FROM account WHERE tier = 'guest' AND last_active_at < :cutoff")
                     .param("cutoff", utc(cutoff))
-                    .query((rs, n) -> new AccountId(rs.getObject("id", UUID.class)))
+                    .query(ACCOUNT_ID)
                     .list();
         } catch (DataAccessException e) {
             throw new IllegalStateException("讀取太久沒用的訪客帳號失敗", e);

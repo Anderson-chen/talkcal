@@ -29,7 +29,7 @@ public final class RegisterAccountService implements RegisterAccountUseCase {
     }
 
     @Override
-    public Registered registerFrom(AccountId signedIn, String username, String password) {
+    public AccountId registerFrom(AccountId signedIn, String username, String password) {
         Objects.requireNonNull(signedIn, "signedIn 不可為 null");
         Username name = Username.of(username);
         Account.checkNewPassword(password);
@@ -37,9 +37,9 @@ public final class RegisterAccountService implements RegisterAccountUseCase {
         Account.PasswordLogin login = new Account.PasswordLogin(name, hashPasswordPort.hash(password));
         // 先試著升級：是不是訪客由資料庫在同一句 UPDATE 判斷，不先查再改（另一個分頁可能同時在註冊）
         return switch (saveAccountPort.upgradeGuest(signedIn, login)) {
-            case UPGRADED -> new Registered(signedIn, true);
+            case UPGRADED -> signedIn;
             case USERNAME_TAKEN -> throw new UsernameTakenException(name);
-            case NOT_A_GUEST -> new Registered(saveNew(login), false);
+            case NOT_A_GUEST -> saveNew(login);
         };
     }
 

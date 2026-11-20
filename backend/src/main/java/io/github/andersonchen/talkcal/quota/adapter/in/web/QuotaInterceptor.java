@@ -7,6 +7,7 @@ import io.github.andersonchen.talkcal.quota.application.port.in.ConsumeQuotaUseC
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.servlet.DispatcherServlet;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.HandlerMapping;
 
@@ -24,7 +25,7 @@ import java.util.function.Predicate;
  * 規則比對的路徑樣板見 QuotaRule。
  *
  * 回應是 4xx、5xx 時退回這一次：模型出錯、資料庫出錯不是使用者的問題；送錯的請求（400、409）什麼都沒做成，
- * 也不該用掉次數。例外是 keptOnFailure 判斷成照扣的請求：失敗之前已經用掉了要限制的資源。
+ * 也不該用掉次數。例外是 keptOnFailure 判斷成照扣的失敗：失敗之前已經用掉了要限制的資源。
  * 被每日次數擋下的那次在 ConsumeQuotaUseCase 裡就退回了。
  */
 public final class QuotaInterceptor implements HandlerInterceptor {
@@ -33,14 +34,14 @@ public final class QuotaInterceptor implements HandlerInterceptor {
 
     private final ConsumeQuotaUseCase quota;
     private final Function<HttpServletRequest, String> tierOf;
-    private final Predicate<HttpServletRequest> keptOnFailure;
+    private final Predicate<Throwable> keptOnFailure;
 
     /**
-     * tierOf：請求者的等級（guest、free、paid，沒登入是 none）；keptOnFailure：回應是 4xx、5xx 也照扣的請求。
-     * 兩個都由組裝的地方決定從哪裡取
+     * tierOf：請求者的等級（guest、free、paid，沒登入是 none），由組裝的地方決定從哪裡取；
+     * keptOnFailure：controller 丟出這種例外時，回應是 4xx、5xx 也照扣
      */
     public QuotaInterceptor(ConsumeQuotaUseCase quota, Function<HttpServletRequest, String> tierOf,
-                            Predicate<HttpServletRequest> keptOnFailure) {
+                            Predicate<Throwable> keptOnFailure) {
         this.quota = Objects.requireNonNull(quota, "quota 不可為 null");
         this.tierOf = Objects.requireNonNull(tierOf, "tierOf 不可為 null");
         this.keptOnFailure = Objects.requireNonNull(keptOnFailure, "keptOnFailure 不可為 null");
@@ -62,8 +63,14 @@ public final class QuotaInterceptor implements HandlerInterceptor {
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         if (request.getAttribute(CONSUMED) instanceof Consumed consumed
                 && (ex != null || response.getStatus() >= HttpStatus.BAD_REQUEST.value())
-                && !keptOnFailure.test(request)) {
+                && !kept(request, ex)) {
             quota.refund(consumed);
         }
+    }
+
+    // @ExceptionHandler 處理掉的例外不會傳進 afterCompletion（ex 是 null），DispatcherServlet 另外放在 EXCEPTION_ATTRIBUTE
+    private boolean kept(HttpServletRequest request, Exception ex) {
+        Object thrown = ex != null ? ex : request.getAttribute(DispatcherServlet.EXCEPTION_ATTRIBUTE);
+        return thrown instanceof Throwable failure && keptOnFailure.test(failure);
     }
 }

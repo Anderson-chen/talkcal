@@ -8,15 +8,16 @@
 // 「以訪客身分試用」開一個訪客帳號，直接進行事曆。訪客按了註冊、登入（auth.ts 的 loginPrompt）也來這裡：
 // 訪客註冊時後端在同一個帳號上升級，登入別的帳號時後端把訪客的行程、對話併過去，這裡照常送出就好。
 import { computed, onMounted, ref } from 'vue'
-import { loadProviders, logIn, loginPrompt, me, providerLoginUrl, signUp, startGuest, type Provider } from './auth'
+import { isGuest, loadProviders, logIn, loginPrompt, providerLoginUrl, signUp, startGuest, type Provider } from './auth'
+import { oneAtATime } from './calendar/submitOnce'
 import { savedThemeVars } from './calendar/theme'
+import { message } from './http'
 
 const vars = savedThemeVars()
 
 const mode = ref<'login' | 'register'>(loginPrompt.value?.mode ?? 'login')
 // 為什麼要登入，例如訪客的次數用完了
-const notice = loginPrompt.value?.reason || null
-const isGuest = computed(() => me.value?.tier === 'guest')
+const notice = loginPrompt.value?.reason
 const username = ref('')
 const password = ref('')
 const error = ref<string | null>(null)
@@ -41,19 +42,15 @@ onMounted(async () => {
   providers.value = await loadProviders()
 })
 
-async function tryAsGuest() {
-  if (busy.value) return
-  busy.value = true
+const tryAsGuest = oneAtATime(busy, async () => {
   error.value = null
   try {
     await startGuest()
   } catch (e) {
     // 今天的訪客名額滿了（429）時，後端的訊息會請使用者註冊
-    error.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    busy.value = false
+    error.value = message(e)
   }
-}
+})
 
 function backToCalendar() {
   loginPrompt.value = null

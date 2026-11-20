@@ -2,6 +2,7 @@ package io.github.andersonchen.talkcal;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.testcontainers.containers.GenericContainer;
 
@@ -30,6 +31,14 @@ public final class TestRedis {
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
         registry.add("spring.data.redis.database", () -> database);
+    }
+
+    /** 清空 redis 連到的那個 database（每個測試開始前把計數歸零） */
+    public static void flush(StringRedisTemplate redis) {
+        redis.execute(connection -> {
+            connection.serverCommands().flushDb();
+            return null;
+        }, true);
     }
 
     private static synchronized GenericContainer<?> server() {

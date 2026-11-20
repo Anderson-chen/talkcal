@@ -22,7 +22,7 @@ import java.util.Objects;
  */
 public final class AccountTierFilter extends OncePerRequestFilter {
 
-    public static final String NONE = "none";
+    private static final String NONE = "none";
 
     private static final String TIER = AccountTierFilter.class.getName() + ".tier";
 

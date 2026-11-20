@@ -5,6 +5,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -12,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.AssistantGaveUpException;
 import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.CalendarAssistant;
 import io.github.andersonchen.talkcal.calendar.adapter.shared.ModelUnavailableException;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
@@ -231,19 +233,19 @@ class CalendarAssistantControllerTest {
     }
 
     @Test
-    @DisplayName("模型回了空白、呼叫工具超過上限還沒回話：502，request 上記成「模型有回話、助理才放棄」")
+    @DisplayName("模型回了空白、呼叫工具超過上限還沒回話：502，例外是 AssistantGaveUpException（每日次數照扣）")
     void gaveUpAfterModelReplied() throws Exception {
         for (String message : List.of("回空白", "一直繞圈")) {
             MvcResult result = talk(message);
 
             assertEquals(502, result.getResponse().getStatus(), message);
             assertEquals("ASSISTANT_FAILED", JsonPath.read(result.getResponse().getContentAsString(), "$.code"), message);
-            assertTrue(CalendarAssistantController.gaveUpAfterModelReplied(result.getRequest()), message);
+            assertInstanceOf(AssistantGaveUpException.class, result.getResolvedException(), message);
         }
     }
 
     @Test
-    @DisplayName("反例：模型出錯、逾時、斷路器打開、滿載，或拿到回覆之後存對話失敗：都不記")
+    @DisplayName("反例：模型出錯、逾時、斷路器打開、滿載，或拿到回覆之後存對話失敗：都不是 AssistantGaveUpException")
     void otherFailuresAreNotGaveUp() throws Exception {
         Map<String, Runnable> failures = Map.of(
                 "模型出錯", () -> failure.set(new IllegalStateException("模型掛了")),
@@ -258,7 +260,7 @@ class CalendarAssistantControllerTest {
             MvcResult result = talk("嗨");
 
             assertTrue(result.getResponse().getStatus() >= 500, broken.getKey() + "：" + result.getResponse().getStatus());
-            assertFalse(CalendarAssistantController.gaveUpAfterModelReplied(result.getRequest()), broken.getKey());
+            assertFalse(result.getResolvedException() instanceof AssistantGaveUpException, broken.getKey());
         }
     }
 

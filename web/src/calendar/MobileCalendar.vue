@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 版面照設計稿的「手機 App」畫板。
 import { computed, ref } from 'vue'
-import { logOut, me, requestLogin } from '../auth'
+import { isGuest, logOut, me, requestLogin } from '../auth'
 import type { Category, SavedEvent } from '../calendar'
 import { dayLabel, monthDayLabel, timeOf, weekdayName, weekOf } from '../monthGrid'
 import ArchiveNotice from './ArchiveNotice.vue'
@@ -207,7 +207,7 @@ const dotColor = (category: Category) => theme.colors.value[category].color
             <span class="account-name">{{ me.name }}</span>
             <span class="tier">{{ me.tierLabel }}</span>
           </span>
-          <template v-if="me.tier === 'guest'">
+          <template v-if="isGuest">
             <button type="button" class="logout" @click="requestLogin('register')">註冊</button>
             <button type="button" class="logout" @click="requestLogin('login')">登入</button>
           </template>
