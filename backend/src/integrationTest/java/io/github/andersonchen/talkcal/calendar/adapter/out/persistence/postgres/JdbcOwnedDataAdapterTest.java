@@ -1,6 +1,8 @@
 package io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.andersonchen.talkcal.TestPostgres;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
@@ -9,6 +11,13 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import javax.sql.DataSource;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +34,7 @@ class JdbcOwnedDataAdapterTest {
     static final TestPostgres.Database DATABASE = TestPostgres.newDatabase().migrated();
 
     static JdbcClient jdbc;
+    static TransactionTemplate transaction;
     static JdbcOwnedDataAdapter adapter;
 
     private static final OwnerId GUEST = new OwnerId(UUID.fromString("3f1c8a2e-0000-4000-8000-000000000001"));
@@ -37,8 +47,12 @@ class JdbcOwnedDataAdapterTest {
 
     @BeforeAll
     static void connect() {
-        jdbc = JdbcClient.create(DATABASE.dataSource());
-        adapter = new JdbcOwnedDataAdapter(jdbc, new TransactionTemplate(new DataSourceTransactionManager(DATABASE.dataSource())));
+        // 同一個 DataSource：dataSource() 每次回新的物件，分開給的話 JdbcClient 加入不了交易，每一句各自 commit，
+        // 交易結束才釋放的 advisory lock 也是那一句結束就放掉
+        DataSource dataSource = DATABASE.dataSource();
+        jdbc = JdbcClient.create(dataSource);
+        transaction = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
+        adapter = new JdbcOwnedDataAdapter(jdbc, transaction);
     }
 
     @BeforeEach
@@ -137,6 +151,44 @@ class JdbcOwnedDataAdapterTest {
         assertEquals(List.of("明天有什麼行程？", "明天沒有行程。", "後天呢？", "後天也沒有。"), conversation(AMY, shared));
         assertEquals(List.of("下週呢？"), conversation(AMY, guestOnly));
         assertEquals(0, owned("calendar_assistant_message", GUEST));
+    }
+
+    @Test
+    @DisplayName("Amy 正在同一段對話接上新一輪、還沒 commit：搬移等那邊 commit 之後，訪客的接在那一輪後面，不違反主鍵的唯一性")
+    void transferWaitsForTheConversationLock() throws Exception {
+        UUID shared = UUID.randomUUID();
+        said(AMY, shared, 0, "USER", "明天有什麼行程？");
+        said(GUEST, shared, 0, "USER", "後天呢？");
+        CountDownLatch inserted = new CountDownLatch(1);
+        CountDownLatch commit = new CountDownLatch(1);
+
+        try (ExecutorService background = Executors.newFixedThreadPool(2)) {
+            // 模擬 JdbcAssistantMemoryRepository 接上新一輪：先取得那段對話的鎖，再插入下一個 position
+            Future<?> amyReplies = background.submit(() -> transaction.executeWithoutResult(status -> {
+                JdbcAssistantMemoryRepository.lock(jdbc, AMY.value(), shared);
+                said(AMY, shared, 1, "ASSISTANT", "明天沒有行程。");
+                inserted.countDown();
+                try {
+                    commit.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }));
+            // 失敗時也要放行 Amy 那邊，不然關掉 executor 時會一直等那個交易
+            try {
+                assertTrue(inserted.await(10, TimeUnit.SECONDS));
+                Future<?> moving = background.submit(() -> adapter.transfer(GUEST, AMY));
+                assertThrows(TimeoutException.class, () -> moving.get(500, TimeUnit.MILLISECONDS), "Amy 那邊還沒 commit，搬移在等");
+
+                commit.countDown();
+                amyReplies.get(10, TimeUnit.SECONDS);
+                moving.get(10, TimeUnit.SECONDS);
+            } finally {
+                commit.countDown();
+            }
+        }
+
+        assertEquals(List.of("明天有什麼行程？", "明天沒有行程。", "後天呢？"), conversation(AMY, shared));
     }
 
     @Test

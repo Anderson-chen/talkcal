@@ -22,7 +22,7 @@ public final class GuestMergeFollowUp {
         this.finishGuestMerges = Objects.requireNonNull(finishGuestMerges, "finishGuestMerges 不可為 null");
     }
 
-    // 多台同時執行也沒關係：同一筆合併搬兩次，第二次只是搬 0 筆；其中一台失敗的話紀錄留著，下一次再搬
+    // 多台同時執行也沒關係：同一筆合併搬兩次，後搬的那台只是搬 0 筆（歸檔那一段見 ArchiveBucket.moveAll）
     @Scheduled(cron = "0 */5 * * * *")
     void run() {
         int finished = finishGuestMerges.finishDue();

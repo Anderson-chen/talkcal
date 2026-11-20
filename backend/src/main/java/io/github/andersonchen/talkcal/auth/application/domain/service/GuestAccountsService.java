@@ -131,7 +131,7 @@ public final class GuestAccountsService
         }
         if (!failures.isEmpty()) {
             IllegalStateException failed = new IllegalStateException(
-                    "訪客合併之後再搬一次：" + failures.size() + " 筆失敗，紀錄留著下一次再搬；" + finished + " 筆搬完");
+                    "訪客合併之後再搬一次：" + failures.size() + " 筆失敗，下一次再試；" + finished + " 筆搬完");
             failures.forEach(failed::addSuppressed);
             throw failed;
         }
