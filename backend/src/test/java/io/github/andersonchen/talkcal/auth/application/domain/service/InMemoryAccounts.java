@@ -107,6 +107,18 @@ final class InMemoryAccounts implements SaveAccountPort, LoadAccountPort, GuestS
     }
 
     @Override
+    public boolean keepActive(AccountId guest, Instant now, Instant newExpiresAt) {
+        if (load(guest).filter(Account::isGuest).isEmpty()) {
+            return false;
+        }
+        tokens.replaceAll((hash, token) -> token.account().equals(guest) && token.expiresAt().isAfter(now)
+                ? new Token(guest, newExpiresAt)
+                : token);
+        lastActive.put(guest, now);
+        return true;
+    }
+
+    @Override
     public List<AccountId> guestsInactiveSince(Instant cutoff) {
         return lastActive.entrySet().stream()
                 .filter(entry -> entry.getValue().isBefore(cutoff))

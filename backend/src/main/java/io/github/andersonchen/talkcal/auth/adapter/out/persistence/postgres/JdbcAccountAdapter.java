@@ -221,6 +221,30 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
     }
 
     @Override
+    public boolean keepActive(AccountId guest, Instant now, Instant newExpiresAt) {
+        try {
+            return jdbc.sql("""
+                            WITH guest AS (
+                                UPDATE account SET last_active_at = :now
+                                WHERE id = :id AND tier = 'guest'
+                                RETURNING id
+                            ), extended AS (
+                                UPDATE guest_token SET expires_at = :newExpiresAt
+                                WHERE account_id IN (SELECT id FROM guest) AND expires_at > :now
+                            )
+                            SELECT count(*) FROM guest
+                            """)
+                    .param("id", guest.value())
+                    .param("now", utc(now))
+                    .param("newExpiresAt", utc(newExpiresAt))
+                    .query(Integer.class)
+                    .single() == 1;
+        } catch (DataAccessException e) {
+            throw new IllegalStateException("記錄訪客的使用時間失敗：" + guest, e);
+        }
+    }
+
+    @Override
     public List<AccountId> guestsInactiveSince(Instant cutoff) {
         try {
             return jdbc.sql("SELECT id FROM account WHERE tier = 'guest' AND last_active_at < :cutoff")

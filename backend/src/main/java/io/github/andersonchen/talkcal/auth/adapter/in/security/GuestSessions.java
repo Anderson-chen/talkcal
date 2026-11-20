@@ -4,6 +4,7 @@ import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
 import io.github.andersonchen.talkcal.auth.application.port.in.GuestAccessUseCase.GuestPass;
 import io.github.andersonchen.talkcal.auth.application.port.in.MergeGuestUseCase;
 
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -17,6 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.web.util.WebUtils;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -39,17 +41,31 @@ public final class GuestSessions {
     // 這個 session 原本是哪個訪客：登入別的帳號時，從這個屬性取出要搬資料的訪客。
     // Spring Security 登入時換 session ID 會保留 session 的屬性，所以登入成功時還讀得到
     private static final String GUEST_ATTRIBUTE = GuestSessions.class.getName() + ".guest";
+    // 這個 session 上一次記下訪客在使用的時間（epoch 毫秒）
+    private static final String ACTIVE_AT_ATTRIBUTE = GuestSessions.class.getName() + ".activeAt";
 
     private final MergeGuestUseCase mergeGuest;
     private final boolean secureCookie;
+    private final Duration keepActiveEvery;
     private final SecurityContextRepository contexts = new HttpSessionSecurityContextRepository();
     // 跟 csrf.spa() 用同一個 cookie 名稱（XSRF-TOKEN），只拿來清掉舊的 token
     private final CookieCsrfTokenRepository csrfTokens = CookieCsrfTokenRepository.withHttpOnlyFalse();
 
-    /** secureCookie：只在 HTTPS 送（雲端），跟 session cookie 的 server.servlet.session.cookie.secure 一樣 */
-    public GuestSessions(MergeGuestUseCase mergeGuest, boolean secureCookie) {
+    /**
+     * secureCookie：只在 HTTPS 送（雲端），跟 session cookie 的 server.servlet.session.cookie.secure 一樣；
+     * keepActiveEvery：session 還在的訪客，隔多久記一次還在使用（見 dueToKeepActive）
+     */
+    public GuestSessions(MergeGuestUseCase mergeGuest, boolean secureCookie, Duration keepActiveEvery) {
         this.mergeGuest = Objects.requireNonNull(mergeGuest, "mergeGuest 不可為 null");
         this.secureCookie = secureCookie;
+        this.keepActiveEvery = Objects.requireNonNull(keepActiveEvery, "keepActiveEvery 不可為 null");
+    }
+
+    /** 請求帶的訪客 cookie 裡的 token */
+    static Optional<String> tokenOf(HttpServletRequest request) {
+        return Optional.ofNullable(WebUtils.getCookie(request, COOKIE))
+                .map(Cookie::getValue)
+                .filter(value -> !value.isBlank());
     }
 
     /**
@@ -65,9 +81,42 @@ public final class GuestSessions {
         context.setAuthentication(authentication);
         SecurityContextHolder.setContext(context);
         contexts.saveContext(context, request, response);
-        request.getSession().setAttribute(GUEST_ATTRIBUTE, pass.accountId().toString());
+        HttpSession session = request.getSession();
+        session.setAttribute(GUEST_ATTRIBUTE, pass.accountId().toString());
+        session.setAttribute(ACTIVE_AT_ATTRIBUTE, Instant.now().toEpochMilli());
         csrfTokens.saveToken(null, request, response);
         writeCookie(response, pass.token(), Duration.between(Instant.now(), pass.expiresAt()));
+    }
+
+    /**
+     * 這個 session 是訪客，而且離上一次記下使用時間已經過了 keepActiveEvery，就回那個訪客，否則 empty。
+     * 拿到訪客的呼叫端記下這次使用（GuestAccessUseCase.keepActive），再把結果交給 keptActive。
+     *
+     * session 還在的請求不經過 token，不記的話訪客帳號的最後使用時間停在登入那一刻，連續用超過期限（talkcal.guest.lifetime）
+     * 會被清理刪掉，訪客 cookie 也會在用到一半時過期。不是每個請求都記：每次都要寫資料庫，跟期限比，晚 keepActiveEvery 記沒有差別
+     */
+    public Optional<AccountId> dueToKeepActive(HttpServletRequest request) {
+        Optional<AccountId> guest = guestOf(request);
+        if (guest.isEmpty()) {
+            return Optional.empty();
+        }
+        Object activeAt = request.getSession().getAttribute(ACTIVE_AT_ATTRIBUTE);
+        boolean due = !(activeAt instanceof Long millis)
+                || !Instant.ofEpochMilli(millis).plus(keepActiveEvery).isAfter(Instant.now());
+        return due ? guest : Optional.empty();
+    }
+
+    /**
+     * expiresAt 是 GuestAccessUseCase.keepActive 回的新期限：訪客 cookie 照新期限重寫；
+     * empty 表示帳號已經不是訪客，cookie 和 session 裡的標記都清掉。
+     */
+    public void keptActive(HttpServletRequest request, HttpServletResponse response, Optional<Instant> expiresAt) {
+        if (expiresAt.isEmpty()) {
+            leaveGuest(request, response);
+            return;
+        }
+        request.getSession().setAttribute(ACTIVE_AT_ATTRIBUTE, Instant.now().toEpochMilli());
+        tokenOf(request).ifPresent(token -> writeCookie(response, token, Duration.between(Instant.now(), expiresAt.get())));
     }
 
     /**
@@ -100,6 +149,7 @@ public final class GuestSessions {
         HttpSession session = request.getSession(false);
         if (session != null) {
             session.removeAttribute(GUEST_ATTRIBUTE);
+            session.removeAttribute(ACTIVE_AT_ATTRIBUTE);
         }
         clearCookie(response);
     }

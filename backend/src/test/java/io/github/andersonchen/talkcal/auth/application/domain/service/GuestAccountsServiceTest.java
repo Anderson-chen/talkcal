@@ -84,6 +84,33 @@ class GuestAccountsServiceTest {
     }
 
     @Test
+    @DisplayName("session 還在的訪客記下使用：token 從這次往後延 7 天，清理不會刪掉；反例：已經不是訪客回 empty")
+    void keepActiveExtendsWithoutToken() {
+        GuestPass pass = at(NOW).start();
+        Instant later = NOW.plus(Duration.ofDays(6));
+
+        assertEquals(Optional.of(later.plus(WEEK)), at(later).keepActive(pass.accountId()));
+
+        // 從開帳號算已經超過一週，從上一次使用算還沒有
+        Instant past = NOW.plus(Duration.ofDays(10));
+        assertEquals(0, at(past).expireInactive());
+        assertEquals(pass.accountId(), at(past).resume(pass.token()).orElseThrow().accountId());
+
+        Account member = Account.withPassword(AccountId.newId(), Username.of("amy"), "hash");
+        accounts.saveIfUsernameFree(member);
+        assertEquals(Optional.empty(), at(NOW).keepActive(member.id()));
+    }
+
+    @Test
+    @DisplayName("反例：session 裡記的訪客已經被刪掉（清理、合併）回 empty")
+    void keepActiveRejectsDeletedGuest() {
+        GuestPass pass = at(NOW).start();
+        accounts.delete(pass.accountId());
+
+        assertEquals(Optional.empty(), at(NOW).keepActive(pass.accountId()));
+    }
+
+    @Test
     @DisplayName("訪客登入別的帳號：資料搬過去、訪客帳號刪掉；反例：同一個帳號（註冊升級）什麼都不做")
     void mergeMovesAndDeletes() {
         GuestPass pass = at(NOW).start();

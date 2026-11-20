@@ -29,6 +29,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,10 +55,11 @@ import tools.jackson.databind.ObjectMapper;
  * 模型換成 JDK 內建 HttpServer 做的假 OpenAI server（FakeModel），每一題設定它怎麼回：
  * 好好回話、回空白、一直呼叫工具、直接關掉連線、回得比逾時還慢。逾時設成 2 秒，回得慢的那題才不用等 2 分鐘。
  * 要測第 4 次被擋、次數用完時，直接把 Redis 的計數設好。
- * 規則表每次請求都重讀（rules-refresh=0s），「加一列就生效」不用等。
+ * 規則表每次請求都重讀（rules-refresh=0s），「加一列就生效」不用等；session 還在的訪客每個請求都記下使用
+ * （keep-active-every=0s），不用等一小時。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {"spring.ai.openai.chat.timeout=2s", "talkcal.quota.rules-refresh=0s"})
+        properties = {"spring.ai.openai.chat.timeout=2s", "talkcal.quota.rules-refresh=0s", "talkcal.guest.keep-active-every=0s"})
 @DisplayName("系統測試：訪客模式和每日次數")
 class GuestModeSystemTest {
 
@@ -504,6 +507,43 @@ class GuestModeSystemTest {
         }
         assertEquals(200, recent.get("/api/auth/me").statusCode());
         assertEquals(1, eventsIn(member));
+    }
+
+    @Test
+    @DisplayName("session 一直還在的訪客（沒有用 cookie 回來）：用一次就延長 token、記下使用時間，清理不會刪掉")
+    void guestUsingTheSessionIsKeptActive() throws Exception {
+        BrowserSession guest = browserFrom(GUEST_IP);
+        UUID id = UUID.fromString(startGuest(guest).at("/id").asString());
+        addEvent(guest, "牙醫");
+        // 當成這個 session 已經連續用了一週：開帳號時記的時間和 token 都快到期了
+        jdbc.sql("UPDATE account SET last_active_at = now() - interval '8 days' WHERE id = :id").param("id", id).update();
+        jdbc.sql("UPDATE guest_token SET expires_at = now() + interval '1 minute'").update();
+
+        HttpResponse<String> listed = guest.get(JANUARY);
+        assertEquals(200, listed.statusCode(), listed.body());
+
+        String cookie = listed.headers().allValues("Set-Cookie").stream()
+                .filter(header -> header.startsWith("talkcal_guest=")).findFirst().orElseThrow();
+        Matcher maxAge = Pattern.compile("Max-Age=(\\d+)").matcher(cookie);
+        assertTrue(maxAge.find() && Long.parseLong(maxAge.group(1)) > Duration.ofDays(6).toSeconds(), "訪客 cookie 從這次往後延：" + cookie);
+        assertTrue(jdbc.sql("SELECT expires_at > now() + interval '6 days' FROM guest_token").query(Boolean.class).single(),
+                "token 從這次往後延");
+        assertEquals(0, expireGuests.expireInactive());
+        assertEquals(1, eventsIn(reopened(guest, GUEST_IP)), "關掉瀏覽器再開，用 cookie 回來還是同一個訪客");
+    }
+
+    @Test
+    @DisplayName("session 還在、訪客帳號已經被刪掉：/me 回 401，按「以訪客身分試用」開新的訪客，不會一直回 401")
+    void deletedGuestCanStartAgain() throws Exception {
+        BrowserSession guest = browserFrom(GUEST_IP);
+        String oldId = startGuest(guest).at("/id").asString();
+        jdbc.sql("DELETE FROM account WHERE id = :id").param("id", UUID.fromString(oldId)).update();
+
+        assertEquals(401, guest.get("/api/auth/me").statusCode());
+
+        String newId = startGuest(guest).at("/id").asString();
+        assertNotEquals(oldId, newId);
+        assertEquals(newId, JSON.readTree(guest.get("/api/auth/me").body()).at("/id").asString());
     }
 
     // ── 觀測 ─────────────────────────────────────────────────────────

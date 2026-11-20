@@ -15,6 +15,8 @@ import io.github.andersonchen.talkcal.auth.application.domain.model.Username;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -220,6 +222,46 @@ class JdbcAccountAdapterTest {
         assertEquals(guest, adapter.load(guest.id()).orElseThrow());
         assertEquals(other.id(), adapter.load(AMY_GOOGLE).orElseThrow().id());
         assertEquals(1, guestTokens());
+    }
+
+    // ── session 還在的訪客記下使用 ───────────────────────────────────────
+
+    private static Instant expiresAt(String tokenHash) {
+        return jdbc.sql("SELECT expires_at FROM guest_token WHERE token_hash = :hash").param("hash", tokenHash)
+                .query(OffsetDateTime.class).single().toInstant();
+    }
+
+    @Test
+    @DisplayName("訪客記下使用：最後使用時間改成這次，還沒過期的 token 延期；反例：已經過期的 token 不延")
+    void keepActiveExtendsGuest() {
+        Account guest = Account.guest(AccountId.newId());
+        Instant started = Instant.parse("2026-11-01T00:00:00Z");
+        String valid = "a".repeat(64);
+        String expired = "b".repeat(64);
+        adapter.saveGuest(guest, valid, started, started.plus(Duration.ofDays(7)));
+        jdbc.sql("INSERT INTO guest_token (token_hash, account_id, expires_at) VALUES (:hash, :id, :at)")
+                .param("hash", expired).param("id", guest.id().value())
+                .param("at", OffsetDateTime.ofInstant(started.minusSeconds(1), ZoneOffset.UTC)).update();
+        Instant now = started.plus(Duration.ofDays(6));
+
+        assertTrue(adapter.keepActive(guest.id(), now, now.plus(Duration.ofDays(7))));
+
+        assertEquals(now.plus(Duration.ofDays(7)), expiresAt(valid));
+        assertEquals(started.minusSeconds(1), expiresAt(expired));
+        assertTrue(adapter.guestsInactiveSince(now).isEmpty());
+        assertEquals(List.of(guest.id()), adapter.guestsInactiveSince(now.plusSeconds(1)));
+    }
+
+    @Test
+    @DisplayName("反例：會員、不存在的帳號回 false，什麼都不改")
+    void keepActiveIgnoresMembers() {
+        Account amy = Account.withPassword(AccountId.newId(), new Username("amy"), "{bcrypt}hash");
+        adapter.saveIfUsernameFree(amy);
+        Instant now = Instant.now();
+
+        assertFalse(adapter.keepActive(amy.id(), now, now.plus(Duration.ofDays(7))));
+        assertFalse(adapter.keepActive(AccountId.newId(), now, now.plus(Duration.ofDays(7))));
+        assertEquals(0, jdbc.sql("SELECT count(*) FROM account WHERE last_active_at IS NOT NULL").query(Integer.class).single());
     }
 
     @Test

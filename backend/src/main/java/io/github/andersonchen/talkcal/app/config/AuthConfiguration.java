@@ -79,7 +79,8 @@ class AuthConfiguration {
     // 訪客 cookie 只在 HTTPS 送：跟 session cookie 用同一個設定，雲端（compose.ec2.yaml）一起打開
     @Bean
     GuestSessions guestSessions(GuestAccountsService guestAccounts,
-                                @Value("${server.servlet.session.cookie.secure:false}") boolean secureCookie) {
-        return new GuestSessions(guestAccounts, secureCookie);
+                                @Value("${server.servlet.session.cookie.secure:false}") boolean secureCookie,
+                                @Value("${talkcal.guest.keep-active-every}") Duration keepActiveEvery) {
+        return new GuestSessions(guestAccounts, secureCookie, keepActiveEvery);
     }
 }

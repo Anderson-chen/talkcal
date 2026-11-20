@@ -19,6 +19,9 @@ public interface GuestStorePort {
      */
     Optional<AccountId> touch(String tokenHash, Instant now, Instant newExpiresAt);
 
+    /** 帳號還是訪客，就記下最後一次使用的時間、把還沒過期的 token 期限改成 newExpiresAt，回 true；否則 false */
+    boolean keepActive(AccountId guest, Instant now, Instant newExpiresAt);
+
     /** 最後一次使用在 cutoff 之前的訪客帳號 */
     List<AccountId> guestsInactiveSince(Instant cutoff);
 

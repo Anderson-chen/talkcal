@@ -106,8 +106,10 @@ public final class AuthController {
             description = "回應帶一個 7 天的訪客 cookie，同一個瀏覽器之後回來還是同一個訪客。全站每天的新訪客有上限，"
                     + "滿了回 429（code = QUOTA_EXCEEDED）。已經登入的話不另外開，直接回目前的帳號")
     public ResponseEntity<Me> guest(Authentication signedIn, HttpServletRequest http, HttpServletResponse response) {
-        if (signedIn != null) {
-            return me(signedIn);
+        // session 還在、帳號卻已經不在（例如訪客被清理刪掉）時，跟 /me 一樣當成沒登入，照常開新的訪客
+        Optional<Me> current = signedIn == null ? Optional.empty() : me(AccountId.of(signedIn.getName()));
+        if (current.isPresent()) {
+            return ResponseEntity.ok(current.get());
         }
         GuestAccessUseCase.GuestPass pass = guestAccess.start();
         guestSessions.signIn(http, response, pass);

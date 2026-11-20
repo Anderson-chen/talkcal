@@ -21,6 +21,12 @@ public interface GuestAccessUseCase {
      */
     Optional<GuestPass> resume(String token);
 
+    /**
+     * session 還在、不必用 token 回來的訪客也算在使用：記下最後一次使用的時間，token 的期限跟 resume 一樣往後延，
+     * 回傳新的期限；帳號已經不是訪客時回 empty。資料庫出錯丟 IllegalStateException。
+     */
+    Optional<Instant> keepActive(AccountId guest);
+
     record GuestPass(AccountId accountId, String token, Instant expiresAt) {
     }
 }

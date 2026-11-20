@@ -71,6 +71,14 @@ public final class GuestAccountsService implements GuestAccessUseCase, MergeGues
     }
 
     @Override
+    public Optional<Instant> keepActive(AccountId guest) {
+        Objects.requireNonNull(guest, "guest 不可為 null");
+        Instant now = clock.instant();
+        Instant expiresAt = now.plus(lifetime);
+        return guests.keepActive(guest, now, expiresAt) ? Optional.of(expiresAt) : Optional.empty();
+    }
+
+    @Override
     public void mergeInto(AccountId guest, AccountId target) {
         Objects.requireNonNull(guest, "guest 不可為 null");
         Objects.requireNonNull(target, "target 不可為 null");
