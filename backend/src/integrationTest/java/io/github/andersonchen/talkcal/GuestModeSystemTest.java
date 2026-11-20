@@ -487,6 +487,29 @@ class GuestModeSystemTest {
     }
 
     @Test
+    @DisplayName("停在登入頁的期間 session 不見了（部署新版、閒置過期），只剩訪客 cookie：送出登入照樣併進那個帳號")
+    void loginAfterSessionLostStillMerges() throws Exception {
+        BrowserSession member = browserFrom(OTHER_IP).signUpAndLogIn("amy", "correct-horse");
+        addEvent(member, "原本的會議");
+        BrowserSession guest = browserFrom(GUEST_IP);
+        String guestId = startGuest(guest).at("/id").asString();
+        addEvent(guest, "訪客時加的牙醫");
+
+        // 瀏覽器還留著訪客 cookie 和 XSRF-TOKEN，登入是 session 不見之後的第一個請求
+        BrowserSession sessionLost = reopened(guest, GUEST_IP)
+                .withCookie("XSRF-TOKEN", guest.cookie("XSRF-TOKEN").orElseThrow(), "/");
+        HttpResponse<String> loggedIn = sessionLost.login("amy", "correct-horse");
+        assertEquals(204, loggedIn.statusCode(), loggedIn.body());
+
+        assertEquals(2, eventsIn(sessionLost));
+        assertEquals(0, jdbc.sql("SELECT count(*) FROM account WHERE id = :id").param("id", UUID.fromString(guestId))
+                .query(Integer.class).single());
+        String lastGuestCookie = loggedIn.headers().allValues("Set-Cookie").stream()
+                .filter(header -> header.startsWith("talkcal_guest=")).reduce((first, second) -> second).orElseThrow();
+        assertTrue(lastGuestCookie.contains("Max-Age=0"), "訪客 cookie 清掉了：" + lastGuestCookie);
+    }
+
+    @Test
     @DisplayName("超過期限沒用的訪客帳號連同行程和對話一起刪掉；反例：最近用過的訪客、會員都還在")
     void inactiveGuestsAreDeleted() throws Exception {
         BrowserSession old = browserFrom(GUEST_IP);

@@ -30,6 +30,7 @@ import org.springframework.security.oauth2.client.web.HttpSessionOAuth2Authorize
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
+import org.springframework.security.web.authentication.logout.LogoutFilter;
 
 /**
  * 帳密登入，加上有設定 client id 的 Google、GitHub 登入。
@@ -75,10 +76,12 @@ class SecurityConfiguration {
                                             SignInExternallyUseCase signInExternally, FindAccountUseCase findAccount,
                                             GuestAccessUseCase guestAccess, GuestSessions guestSessions) throws Exception {
         http
-                // 訪客 cookie 要在 AnonymousAuthenticationFilter 前面：讀完 session 還沒登入，才拿 cookie 登入訪客。
-                // 等級要在它後面：這時才確定是誰（包括剛用 cookie 登入的訪客），而且還在 AuthorizationFilter 之前，
-                // 被擋下的 401 也記得到等級（none）
-                .addFilterBefore(new GuestCookieFilter(guestAccess, guestSessions), AnonymousAuthenticationFilter.class)
+                // 訪客 cookie 要在登出、帳密登入、Google／GitHub 登入的 filter 前面：session 不見了（部署新版、閒置過期）
+                // 才送出的登入，也要先用 cookie 登入回訪客，登入成功時才併得到訪客的資料（GuestSessions.afterSignIn），
+                // 第一次用 Google、GitHub 登入時也才升級得到這個訪客（ExternalSignIn.signedInBefore）。
+                // 等級要在 AnonymousAuthenticationFilter 後面：這時才確定是誰（包括剛用 cookie 登入的訪客），
+                // 而且還在 AuthorizationFilter 之前，被擋下的 401 也記得到等級（none）
+                .addFilterBefore(new GuestCookieFilter(guestAccess, guestSessions), LogoutFilter.class)
                 .addFilterAfter(new AccountTierFilter(findAccount), AnonymousAuthenticationFilter.class)
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()

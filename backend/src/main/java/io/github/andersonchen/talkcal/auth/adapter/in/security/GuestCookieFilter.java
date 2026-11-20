@@ -20,7 +20,7 @@ import java.util.Objects;
  *
  * session 還在的訪客，隔一段時間記一次還在使用（見 GuestSessions.dueToKeepActive）。
  *
- * 放在 Spring Security 的 AnonymousAuthenticationFilter 前面：讀完 session 還是沒登入才輪到這裡。
+ * 要排在 Spring Security 讀完 session 之後：讀完還是沒登入才用 cookie。排在哪幾個 filter 前面見 SecurityConfiguration。
  */
 public final class GuestCookieFilter extends OncePerRequestFilter {
 
