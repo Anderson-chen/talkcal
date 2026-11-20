@@ -8,7 +8,7 @@
 // 「以訪客身分試用」開一個訪客帳號，直接進行事曆。訪客按了註冊、登入（auth.ts 的 loginPrompt）也來這裡：
 // 訪客註冊時後端在同一個帳號上升級，登入別的帳號時後端把訪客的行程、對話併過去，這裡照常送出就好。
 import { computed, onMounted, ref } from 'vue'
-import { isGuest, loadProviders, logIn, loginPrompt, providerLoginUrl, signUp, startGuest, type Provider } from './auth'
+import { isGuest, loadProviders, logIn, loginPrompt, providerLoginUrl, rememberGuestBeforeSignIn, signUp, startGuest, type Provider } from './auth'
 import { oneAtATime } from './calendar/submitOnce'
 import { savedThemeVars } from './calendar/theme'
 import { message } from './http'
@@ -96,7 +96,8 @@ async function submit() {
       <button type="submit" class="primary" :disabled="busy">{{ busy ? '請稍候…' : title }}</button>
       <template v-if="providers.length">
         <div class="divider"><span>或</span></div>
-        <a v-for="provider in providers" :key="provider" class="provider" :href="providerLoginUrl(provider)">
+        <a v-for="provider in providers" :key="provider" class="provider" :href="providerLoginUrl(provider)"
+           @click="rememberGuestBeforeSignIn">
           用 {{ PROVIDER_LABELS[provider] }} 登入
         </a>
       </template>

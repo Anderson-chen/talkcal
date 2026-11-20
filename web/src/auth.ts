@@ -76,6 +76,37 @@ export function requestLogin(mode: LoginPrompt['mode'] = 'login', reason?: strin
   loginPrompt.value = { mode, reason }
 }
 
+// 訪客登入已有的帳號時，後端把訪客的對話搬到那個帳號，前端記的對話 id 也要跟著換到那個帳號（useAssistant 註冊的 listener）。
+// 從哪個訪客登入的記在 sessionStorage：Google、GitHub 登入是整頁轉址，同一個分頁轉回來還讀得到
+const SIGNING_IN_FROM_GUEST = 'talkcal.auth.signingInFromGuest'
+const guestSignInListeners = new Set<(guestId: string, accountId: string) => void>()
+
+/** 登入完成、換成另一個帳號時通知：guestId 是登入前的訪客，accountId 是登入的帳號 */
+export function onSignedInFromGuest(listener: (guestId: string, accountId: string) => void): () => void {
+  guestSignInListeners.add(listener)
+  return () => guestSignInListeners.delete(listener)
+}
+
+/** 送出登入、轉去 Google／GitHub 之前呼叫：記下現在是哪個訪客，不是訪客就清掉舊的紀錄 */
+export function rememberGuestBeforeSignIn() {
+  try {
+    if (isGuest.value && me.value) sessionStorage.setItem(SIGNING_IN_FROM_GUEST, me.value.id)
+    else sessionStorage.removeItem(SIGNING_IN_FROM_GUEST)
+  } catch {
+    // 私密視窗等存不了：登入之後畫面接不回訪客時的對話，對話本身還在後端
+  }
+}
+
+function takeGuestBeforeSignIn(): string | null {
+  try {
+    const id = sessionStorage.getItem(SIGNING_IN_FROM_GUEST)
+    sessionStorage.removeItem(SIGNING_IN_FROM_GUEST)
+    return id
+  } catch {
+    return null
+  }
+}
+
 /** 以訪客身分試用：後端開一個訪客帳號並登入。今天的訪客名額滿了丟 ApiError（429），訊息直接給使用者看 */
 export async function startGuest(): Promise<void> {
   await send('/api/auth/guest', { method: 'POST' }, { notifyUnauthorized: false })
@@ -86,10 +117,15 @@ export async function startGuest(): Promise<void> {
 export async function loadMe(): Promise<void> {
   try {
     const res = await send('/api/auth/me', { method: 'GET' }, { notifyUnauthorized: false })
-    me.value = (await res.json()) as Me
+    const loaded = (await res.json()) as Me
+    // 在換掉 me 之前通知：新帳號的行事曆一建立就讀得到搬過去的對話 id
+    const guest = takeGuestBeforeSignIn()
+    if (guest && guest !== loaded.id) guestSignInListeners.forEach((listener) => listener(guest, loaded.id))
+    me.value = loaded
     loginPrompt.value = null
   } catch (e) {
     if (!(e instanceof UnauthorizedError)) throw e
+    takeGuestBeforeSignIn()
     me.value = null
   }
 }
@@ -106,6 +142,7 @@ export async function connect(): Promise<void> {
 
 /** 帳密錯丟 UnauthorizedError 但不通知 App，留在登入頁顯示 */
 export async function logIn(username: string, password: string): Promise<void> {
+  rememberGuestBeforeSignIn()
   await send('/api/auth/login', { method: 'POST', body: new URLSearchParams({ username, password }) },
     { contentType: 'application/x-www-form-urlencoded', notifyUnauthorized: false })
   await loadMe()

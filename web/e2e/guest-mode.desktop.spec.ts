@@ -90,6 +90,29 @@ test('增刪改的次數用完：助理照常提議卡片，按「加入行事�
   expect(api.events).toEqual([])
 })
 
+test('訪客登入已有的帳號：換成那個帳號之後，接得回訪客時的對話', async ({ page }) => {
+  await fakeApi(page, { loggedIn: false })
+  // 後端登入時已經把訪客的對話搬到 amy 名下，amy 讀得到同一段
+  await page.route('**/api/calendar/assistant/00000000-0000-4000-8000-000000000036', (route) => route.fulfill({
+    status: 200,
+    json: { conversationId: '00000000-0000-4000-8000-000000000036', messages: [
+      { role: 'user', text: '明天下午三點開會' }, { role: 'assistant', text: '請確認卡片。' },
+    ] },
+  }))
+  await enterAsGuest(page)
+  await ask(page, '明天下午三點開會')
+  await expect(page.getByText('請確認卡片。')).toBeVisible()
+
+  await page.getByRole('button', { name: '登入', exact: true }).click()
+  await page.getByLabel('帳號名稱').fill('amy')
+  await page.getByLabel('密碼').fill('correct-horse')
+  await page.locator('form').getByRole('button', { name: '登入', exact: true }).click()
+
+  await expect(page.getByRole('button', { name: '登出' })).toBeVisible()
+  await expect(page.getByText('明天下午三點開會', { exact: true })).toBeVisible()
+  await expect(page.getByText('請確認卡片。')).toBeVisible()
+})
+
 test('訪客註冊：變成免費會員（側欄有「登出」），帳號 ID 不變', async ({ page }) => {
   await fakeApi(page, { loggedIn: false })
   await enterAsGuest(page)
