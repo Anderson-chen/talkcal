@@ -16,7 +16,7 @@ import java.io.IOException;
 import java.util.Objects;
 
 /**
- * 把請求者的會員等級記在 request 上，給每日次數和指標的 tier 標籤用：guest、free、paid；
+ * 把請求者的會員等級記在 request 上：guest、free、paid；
  * 沒登入、或 session 登入的帳號已經刪掉是 none；讀不到是 unknown。
  *
  * 在 Spring Security 的 filter 裡記：請求處理完、指標記錄的時候，Spring Security 已經清掉登入資訊，到那時才查會查不到。

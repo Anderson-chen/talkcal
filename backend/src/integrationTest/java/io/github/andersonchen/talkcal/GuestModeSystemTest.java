@@ -68,7 +68,7 @@ import tools.jackson.databind.ObjectMapper;
  *
  * 每一題用 BrowserSession.forwardedFor 模擬不同 IP 的訪客，「同 IP 共用、不同 IP 各自算」才測得出來。
  * 模型換成 JDK 內建 HttpServer 做的假 OpenAI server（FakeModel），每一題各自設定怎麼回：
- * 好好回話、回空白、一直呼叫工具、直接關掉連線、回得比逾時還慢、等測試放行才回話。
+ * 正常回一句話、回空白、一直呼叫工具、直接關掉連線、回得比逾時還慢、等測試放行才回話。
  * 逾時設成 5 秒：回得慢的那題不用等 2 分鐘，等放行的那題也來得及在逾時之前登入。
  * 要測第 4 次被擋、次數用完時，直接把 Redis 的計數設好；要測合併之後再搬一次時，把合併的時間改早。
  * 規則表每次請求都重讀（rules-refresh=0s），「加一列就生效」不用等。
@@ -603,7 +603,8 @@ class GuestModeSystemTest {
         assertEquals(200, answered.statusCode(), answered.body());
         assertEquals(2, ownedBy("calendar_assistant_message", guestId), "合併之後才存好的那一輪，存在已經刪掉的訪客名下");
         assertEquals(2, linesIn(guest, conversation), "還沒再搬：Amy 只看得到合併時搬過去的第一輪");
-        // 合併時還在處理中的新增行程，和歸檔的排程合併之前讀了訪客的行程、合併之後才存好的那一包
+        // 造兩筆合併之後才存進訪客名下的資料：一筆是合併時還在處理中的新增行程；
+        // 另一筆是歸檔，排程在合併之前讀了訪客的行程，合併之後才存好
         jdbc.sql("""
                         INSERT INTO calendar_event (id, owner_id, title, start_at, end_at)
                         VALUES (:id, :owner, '合併之後才存好的牙醫', '2030-01-20 10:00', '2030-01-20 11:00')
@@ -837,7 +838,7 @@ class GuestModeSystemTest {
         static final String ANSWER = "明天沒有行程。";
 
         enum Mode {
-            /** 好好回一句話 */
+            /** 正常回一句話 */
             ANSWER,
             /** 回一句空白的內容 */
             BLANK,
