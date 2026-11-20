@@ -1,6 +1,11 @@
-# 投票規則
+---
+name: vote
+description: 開 PR 前投票的規則，三個投票者（`pr-voter-fable`、`pr-voter-opus`、`pr-voter-sonnet`）用定義檔的 `skills:` 預先載入。只有投票者用，主 session 不執行；主 session 怎麼計票見 `open-pr`。
+---
 
-投票者判斷分支能不能開 PR。三個投票者各投一票，順序和幾票算通過見 `pr.md` 的「開 PR 前：修改、審核、投票」。
+# 投票
+
+投票者判斷分支能不能開 PR。三個投票者各投一票，順序和幾票算通過見 [open-pr skill](../open-pr/SKILL.md) 的「開 PR 前：修改、審核、投票」。三個投票者的定義只有 `name`、`description` 和 `model` 不同，怎麼投票只寫在這份。
 
 - 只回報，不改檔案、不 commit、不切換分支。
 - 依據只有 issue 和分支上的內容。呼叫時另外附的說明、其他票、審核的回報都不當作依據：改動要能單獨判斷，不靠寫的人的解釋。
@@ -8,7 +13,7 @@
 ## 開始前
 
 - issue 編號取自分支名稱（`類型/issue編號-英文短名`），用 `gh issue view <編號>` 讀全文。名稱裡沒有編號就停下來回報，不猜是哪一張 issue。
-- 不執行 `git fetch`：協調的 session 呼叫前已經 fetch 過，理由見 `pr.md`。回報的第一行寫 `git rev-parse <分支>` 的結果。
+- 不執行 `git fetch`：主 session 呼叫前已經 fetch 過，理由見 open-pr skill。回報的第一行寫 `git rev-parse <分支>` 的結果。
 - 工作目錄要停在要看的 commit：`git rev-parse HEAD` 等於 `git rev-parse <分支>`，而且 `git status --porcelain` 沒有輸出。不符就停下來回報，不自己切換；讀檔看的是工作目錄的版本。
 - 從頭看整個分支的改動：`git diff origin/master...<分支>` 和 `git log origin/master..<分支>`。
 
@@ -23,7 +28,7 @@
   | 分支上看不出來 | 證據要等開 PR 或部署之後才有，例如「PR 附上截圖」；寫明 PR 要附什麼 |
 
 - 執行 `git`、`grep` 這類讀取的指令就能確認的條件，自己執行，不歸到「分支上看不出來」。
-- `commands.md` 列的指令不執行，要靠那些指令確認的條件判斷成「分支上看不出來」，寫明 PR 要附哪個指令的輸出：協調的 session 在投票通過後才執行。三個投票者在同一個工作目錄同時執行 `backend/gradlew -p backend test` 的話，有的會因為刪不掉另一個投票者正在寫的 `backend/build/test-results` 而失敗，跟改動無關。
+- open-pr skill「照改到的地方驗證」列的指令不執行，要靠那些指令確認的條件判斷成「分支上看不出來」，寫明 PR 要附哪個指令的輸出：主 session 在投票通過後才執行。三個投票者在同一個工作目錄同時執行 `backend/gradlew -p backend test` 的話，有的會因為刪不掉另一個投票者正在寫的 `backend/build/test-results` 而失敗，跟改動無關。
 - 驗收條件寫的如果是投票之後才做的事，例如刪掉驗證用的分支、PR 附回報，就判斷成「分支上看不出來」：投票的時候還沒輪到這些事。
 - 再看改動有沒有不該開 PR 的問題：合併後執行會出錯、改壞原本的行為、帶進跟 issue 無關的改動。
 - 有一條「沒做到」，或有一個不該開 PR 的問題，就投不通過；其他情況投通過。
@@ -43,3 +48,7 @@
 PR 要附的證據：<「分支上看不出來」的各條要附什麼；沒有就寫「沒有」>
 其他意見：<不影響這一票的；沒有就寫「沒有」>
 ```
+
+## 下一步
+
+回報就是投票者的最後一步。主 session 收齊三張票後，照 open-pr skill 計票。

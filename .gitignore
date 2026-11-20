@@ -13,7 +13,7 @@ build/
 # Claude 桌面版的預覽設定，寫的是這台電腦的路徑（C:\llm\...）
 .claude/launch.json
 
-# 平行工作開的 worktree（見 .claude/rules/branch.md），每一個都是整份 repo 的另一個 checkout
+# 平行工作開的 worktree（見 .claude/skills/branch/SKILL.md），每一個都是整份 repo 的另一個 checkout
 .claude/worktrees/
 
 # Terraform 的 provider 快取、state、計畫檔、各自的變數值。

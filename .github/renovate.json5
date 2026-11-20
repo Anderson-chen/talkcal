@@ -24,7 +24,7 @@
   minimumReleaseAge: '14 days',
 
   // ── PR 長什麼樣 ──────────────────────────────────────────────────
-  // commit 標題照 .claude/rules/commit.md 的 `類型(範圍): …`，依賴升級是 chore(deps)
+  // commit 標題照 .claude/skills/commit/SKILL.md 的 `類型(範圍): …`，依賴升級是 chore(deps)
   semanticCommits: 'enabled',
   semanticCommitType: 'chore',
   semanticCommitScope: 'deps',
