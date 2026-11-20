@@ -673,6 +673,25 @@ class GuestModeSystemTest {
                 .filter(t -> t.getId().getTag("tier") == null).findFirst().orElse(null));
     }
 
+    @Test
+    @DisplayName("讀不到帳號的等級（account 表查詢失敗）：請求照常交給 controller 處理，等級記成 unknown，不會變成 Spring Boot 預設的 500")
+    void unreadableTierStillReachesController() throws Exception {
+        BrowserSession guest = browserFrom(GUEST_IP);
+        startGuest(guest);
+        // 只讓 account 表查不到：行程的表照常讀得到，看得出請求有沒有走到 controller
+        jdbc.sql("ALTER TABLE account RENAME TO account_unreadable").update();
+        HttpResponse<String> listed;
+        try {
+            listed = guest.get(JANUARY);
+        } finally {
+            jdbc.sql("ALTER TABLE account_unreadable RENAME TO account").update();
+        }
+
+        assertEquals(200, listed.statusCode(), listed.body());
+        await().atMost(Duration.ofSeconds(5)).until(() ->
+                meters.find("http.server.requests").tag("tier", "unknown").tag("uri", EVENTS).timer() != null);
+    }
+
     /**
      * 假的 OpenAI Chat Completions server：回寫死的 JSON，由真的 OpenAiChatModel 解析，
      * 工具呼叫也交給真的 ToolCallingManager 執行，經過的斷路器、bulkhead、逾時都跟線上一樣。

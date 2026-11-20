@@ -28,7 +28,7 @@ class ObservationConfiguration {
                 : context;
     }
 
-    // 每個 HTTP 請求的指標貼 tier（guest、free、paid，沒登入是 none），儀表板才分得出各等級用了多少。
+    // 每個 HTTP 請求的指標貼 tier（有哪些值見 AccountTierFilter），儀表板才分得出各等級用了多少。
     // 每個請求都貼、沒登入也貼 none：Prometheus 同一個指標的每條序列要有同一組標籤名稱，
     // 有的有 tier、有的沒有的話，Micrometer 的 Prometheus registry 會拒絕登記標籤名稱不一樣的那些序列。
     // 等級在請求處理中就記在 request 上（AccountTierFilter），結束時 Spring Security 已經清掉登入資訊，到那時才查會查不到
