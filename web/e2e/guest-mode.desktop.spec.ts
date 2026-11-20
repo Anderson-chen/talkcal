@@ -76,6 +76,20 @@ test('增刪改的次數用完：存行程時跳出視窗，行程沒有存進�
   expect(api.events).toEqual([])
 })
 
+test('增刪改的次數用完：助理照常提議卡片，按「加入行事曆」也跳出視窗，行程沒有存進去', async ({ page }) => {
+  const api = await fakeApi(page, { loggedIn: false, guestUsed: { writes: 10 } })
+  await enterAsGuest(page)
+
+  await ask(page, '明天下午三點開會')
+  await expect(page.getByText('請確認卡片。')).toBeVisible()
+  await page.getByRole('button', { name: '加入行事曆', exact: true }).click()
+
+  await expect(quotaDialog(page)).toContainText('今天訪客新增、修改、刪除行程的次數用完了')
+  await expect(page.getByText('已加入行事曆')).toHaveCount(0)
+  expect(api.saved).toEqual([])
+  expect(api.events).toEqual([])
+})
+
 test('訪客註冊：變成免費會員（側欄有「登出」），帳號 ID 不變', async ({ page }) => {
   await fakeApi(page, { loggedIn: false })
   await enterAsGuest(page)

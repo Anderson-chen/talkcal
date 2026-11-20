@@ -9,16 +9,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.andersonchen.talkcal.auth.application.port.in.ExpireGuestsUseCase;
 
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import io.github.resilience4j.bulkhead.Bulkhead;
+import io.github.resilience4j.bulkhead.BulkheadRegistry;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.micrometer.core.instrument.MeterRegistry;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -38,18 +51,28 @@ import tools.jackson.databind.ObjectMapper;
  * 每日次數的 interceptor 和規則表（V15）、Redis 的計數、訪客併進正式帳號時跨模組搬資料。
  *
  * 每一題用 BrowserSession.forwardedFor 扮成不同 IP 的訪客，「同 IP 共用、不同 IP 各自算」才測得出來。
- * 模型指到連不上的位址：問助理一律 502，用來驗「模型失敗不扣次數」；要測第 4 次被擋時，直接把 Redis 的計數設成 3。
+ * 模型換成 JDK 內建 HttpServer 做的假 OpenAI server（FakeModel），每一題設定它怎麼回：
+ * 好好回話、回空白、一直呼叫工具、直接關掉連線、回得比逾時還慢。逾時設成 2 秒，回得慢的那題才不用等 2 分鐘。
+ * 要測第 4 次被擋、次數用完時，直接把 Redis 的計數設好。
  * 規則表每次請求都重讀（rules-refresh=0s），「加一列就生效」不用等。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {"spring.ai.openai.chat.base-url=http://127.0.0.1:1/v1", "talkcal.quota.rules-refresh=0s"})
+        properties = {"spring.ai.openai.chat.timeout=2s", "talkcal.quota.rules-refresh=0s"})
 @DisplayName("系統測試：訪客模式和每日次數")
 class GuestModeSystemTest {
+
+    private static final FakeModel MODEL = new FakeModel();
 
     @DynamicPropertySource
     static void stores(DynamicPropertyRegistry registry) {
         TestPostgres.newDatabase().register(registry);
         TestRedis.register(registry);
+        registry.add("spring.ai.openai.chat.base-url", () -> "http://127.0.0.1:" + MODEL.port() + "/v1");
+    }
+
+    @AfterAll
+    static void stopModel() {
+        MODEL.stop();
     }
 
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -57,6 +80,8 @@ class GuestModeSystemTest {
     private static final String JANUARY = EVENTS + "?from=2030-01-01&to=2030-02-01";
     private static final String GUEST_IP = "203.0.113.7";
     private static final String OTHER_IP = "198.51.100.4";
+    // 跟 ChatModelConfiguration.CHAT_MODEL 同名：斷路器、bulkhead 是同一組
+    private static final String CHAT_MODEL = "chat-model";
 
     @LocalServerPort
     int port;
@@ -76,6 +101,12 @@ class GuestModeSystemTest {
     @Autowired
     ExpireGuestsUseCase expireGuests;
 
+    @Autowired
+    CircuitBreakerRegistry breakers;
+
+    @Autowired
+    BulkheadRegistry bulkheads;
+
     @BeforeEach
     void clean() {
         for (String table : new String[] {"calendar_event", "calendar_assistant_message", "assistant_proposal",
@@ -86,6 +117,9 @@ class GuestModeSystemTest {
             connection.serverCommands().flushDb();
             return null;
         }, true);
+        MODEL.reply(FakeModel.Mode.ANSWER);
+        // 模型失敗的那幾題會讓斷路器打開，不重設的話，後面的題目會因為順序不同拿到 503
+        breakers.circuitBreaker(CHAT_MODEL).reset();
     }
 
     // ── 工具 ──────────────────────────────────────────────────────────
@@ -109,6 +143,19 @@ class GuestModeSystemTest {
         return who.postJson("/api/calendar/assistant", JSON.writeValueAsString(Map.of("message", message)));
     }
 
+    /** 問一句，模型照常回話；回傳這段對話的 ID */
+    private static String conversationOf(BrowserSession who) throws Exception {
+        HttpResponse<String> answered = ask(who, "明天我有什麼行程？");
+        assertEquals(200, answered.statusCode(), answered.body());
+        return JSON.readTree(answered.body()).at("/conversationId").asString();
+    }
+
+    private static int linesIn(BrowserSession who, String conversationId) throws Exception {
+        HttpResponse<String> history = who.get("/api/calendar/assistant/" + conversationId);
+        assertEquals(200, history.statusCode(), history.body());
+        return JSON.readTree(history.body()).at("/messages").size();
+    }
+
     private static int eventsIn(BrowserSession who) throws Exception {
         HttpResponse<String> listed = who.get(JANUARY);
         assertEquals(200, listed.statusCode(), listed.body());
@@ -128,6 +175,11 @@ class GuestModeSystemTest {
         return value == null ? 0 : Integer.parseInt(value);
     }
 
+    // 退回在回應送出之後才執行，可能比回應晚一點
+    private void eventuallyCounted(String bucket, String subject, int expected) {
+        await().atMost(Duration.ofSeconds(5)).until(() -> counted(bucket, subject) == expected);
+    }
+
     private static void assertQuotaExceeded(HttpResponse<String> response) throws Exception {
         assertEquals(429, response.statusCode(), response.body());
         assertEquals("QUOTA_EXCEEDED", JSON.readTree(response.body()).at("/code").asString());
@@ -143,7 +195,7 @@ class GuestModeSystemTest {
     // ── 進入、身分 ────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("按「以訪客身分試用」開一個訪客帳號並登入：可以新增行程，問助理也會呼叫模型（模型連不上所以 502，不是 401）")
+    @DisplayName("按「以訪客身分試用」開一個訪客帳號並登入：可以新增行程，自由打字問助理也會呼叫模型")
     void guestUsesTheRealFeatures() throws Exception {
         BrowserSession guest = browserFrom(GUEST_IP);
         JsonNode me = startGuest(guest);
@@ -151,7 +203,9 @@ class GuestModeSystemTest {
 
         assertEquals(201, addEvent(guest, "牙醫").statusCode());
         assertEquals(1, eventsIn(guest));
-        assertEquals(502, ask(guest, "明天我有什麼行程？").statusCode());
+        HttpResponse<String> answered = ask(guest, "明天我有什麼行程？");
+        assertEquals(200, answered.statusCode(), answered.body());
+        assertEquals(FakeModel.ANSWER, JSON.readTree(answered.body()).at("/reply").asString());
     }
 
     @Test
@@ -230,29 +284,70 @@ class GuestModeSystemTest {
         HttpResponse<String> invalid = guest.postJson(EVENTS, """
                 {"events": [{"title": "反了", "start": "2030-01-15T11:00:00", "end": "2030-01-15T10:00:00"}]}""");
         assertEquals(400, invalid.statusCode(), invalid.body());
-        // 退回在回應送出之後才執行，可能比回應晚一點
-        await().atMost(Duration.ofSeconds(5)).until(() -> counted("guest-calendar-writes", GUEST_IP) == 0);
+        eventuallyCounted("guest-calendar-writes", GUEST_IP, 0);
     }
 
     @Test
-    @DisplayName("同一個 IP 第 4 次問助理回 429，沒有呼叫模型")
+    @DisplayName("同一個 IP 問助理 3 次都有回話，第 4 次回 429，沒有呼叫模型")
     void fourthQuestionIs429() throws Exception {
         BrowserSession guest = browserFrom(GUEST_IP);
         startGuest(guest);
-        used("guest-assistant", GUEST_IP, 3);
+        for (int i = 0; i < 3; i++) {
+            assertEquals(200, ask(guest, "明天我有什麼行程？").statusCode());
+        }
+        int called = MODEL.calls();
 
         assertQuotaExceeded(ask(guest, "明天我有什麼行程？"));
+        assertEquals(called, MODEL.calls());
     }
 
     @Test
-    @DisplayName("反例：模型失敗（502）的那幾次不扣次數")
-    void modelFailuresAreNotCounted() throws Exception {
+    @DisplayName("反例：模型連不上（收到請求就關掉連線）、逾時（502），斷路器打開、bulkhead 滿了（503）的那幾次都不扣")
+    void modelNotRespondingIsNotCounted() throws Exception {
         BrowserSession guest = browserFrom(GUEST_IP);
         startGuest(guest);
-        for (int i = 0; i < 4; i++) {
-            assertEquals(502, ask(guest, "明天我有什麼行程？").statusCode());
+
+        MODEL.reply(FakeModel.Mode.HANG_UP);
+        assertEquals(502, ask(guest, "明天我有什麼行程？").statusCode());
+        MODEL.reply(FakeModel.Mode.TOO_SLOW);
+        assertEquals(502, ask(guest, "明天我有什麼行程？").statusCode());
+
+        breakers.circuitBreaker(CHAT_MODEL).transitionToOpenState();
+        assertEquals(503, ask(guest, "明天我有什麼行程？").statusCode());
+        breakers.circuitBreaker(CHAT_MODEL).reset();
+
+        Bulkhead bulkhead = bulkheads.bulkhead(CHAT_MODEL);
+        int full = bulkhead.getBulkheadConfig().getMaxConcurrentCalls();
+        for (int i = 0; i < full; i++) {
+            assertTrue(bulkhead.tryAcquirePermission());
         }
-        await().atMost(Duration.ofSeconds(5)).until(() -> counted("guest-assistant", GUEST_IP) == 0);
+        try {
+            assertEquals(503, ask(guest, "明天我有什麼行程？").statusCode());
+        } finally {
+            for (int i = 0; i < full; i++) {
+                bulkhead.releasePermission();
+            }
+        }
+
+        eventuallyCounted("guest-assistant", GUEST_IP, 0);
+    }
+
+    @Test
+    @DisplayName("反例：拿到模型回覆之後存對話失敗（資料庫出錯，502）的那次不扣")
+    void savingConversationFailureIsNotCounted() throws Exception {
+        BrowserSession guest = browserFrom(GUEST_IP);
+        startGuest(guest);
+        // 讀得到、寫不進去：模型照樣被呼叫、回話，存對話那一步才失敗
+        jdbc.sql("ALTER TABLE calendar_assistant_message ADD CONSTRAINT test_reject_writes CHECK (false) NOT VALID").update();
+        try {
+            int called = MODEL.calls();
+            assertEquals(502, ask(guest, "明天我有什麼行程？").statusCode());
+            assertEquals(called + 1, MODEL.calls(), "模型有被呼叫，失敗在之後");
+        } finally {
+            jdbc.sql("ALTER TABLE calendar_assistant_message DROP CONSTRAINT test_reject_writes").update();
+        }
+
+        eventuallyCounted("guest-assistant", GUEST_IP, 0);
     }
 
     @Test
@@ -338,11 +433,12 @@ class GuestModeSystemTest {
     // ── 轉成正式會員、清理 ────────────────────────────────────────────
 
     @Test
-    @DisplayName("訪客註冊：帳號 ID 不變，原本的行程都在，等級變成免費")
+    @DisplayName("訪客註冊：帳號 ID 不變，原本的行程和對話都在，等級變成免費")
     void registerUpgradesTheSameAccount() throws Exception {
         BrowserSession guest = browserFrom(GUEST_IP);
         String id = startGuest(guest).at("/id").asString();
         addEvent(guest, "牙醫");
+        String conversation = conversationOf(guest);
 
         HttpResponse<String> registered = guest.register("amy", "correct-horse");
         assertEquals(201, registered.statusCode(), registered.body());
@@ -353,11 +449,12 @@ class GuestModeSystemTest {
         assertEquals(id, me.at("/id").asString());
         assertEquals("free", me.at("/tier").asString());
         assertEquals(1, eventsIn(guest));
+        assertEquals(2, linesIn(guest, conversation), "問的那句和助理的回話");
         assertEquals(0, jdbc.sql("SELECT count(*) FROM guest_token").query(Integer.class).single());
     }
 
     @Test
-    @DisplayName("訪客登入已有的帳號：訪客的行程併進那個帳號，訪客帳號被刪掉")
+    @DisplayName("訪客登入已有的帳號：訪客的行程和對話併進那個帳號，訪客帳號被刪掉")
     void loginMergesTheGuest() throws Exception {
         BrowserSession member = browserFrom(OTHER_IP).signUpAndLogIn("amy", "correct-horse");
         addEvent(member, "原本的會議");
@@ -365,19 +462,22 @@ class GuestModeSystemTest {
         BrowserSession guest = browserFrom(GUEST_IP);
         String guestId = startGuest(guest).at("/id").asString();
         addEvent(guest, "訪客時加的牙醫");
+        String conversation = conversationOf(guest);
 
         assertEquals(204, guest.login("amy", "correct-horse").statusCode());
         assertEquals(2, eventsIn(guest));
+        assertEquals(2, linesIn(guest, conversation));
         assertEquals(0, jdbc.sql("SELECT count(*) FROM account WHERE id = :id").param("id", UUID.fromString(guestId))
                 .query(Integer.class).single());
     }
 
     @Test
-    @DisplayName("超過期限沒用的訪客帳號連同行程一起刪掉；反例：最近用過的訪客、會員都還在")
+    @DisplayName("超過期限沒用的訪客帳號連同行程和對話一起刪掉；反例：最近用過的訪客、會員都還在")
     void inactiveGuestsAreDeleted() throws Exception {
         BrowserSession old = browserFrom(GUEST_IP);
         String oldId = startGuest(old).at("/id").asString();
         addEvent(old, "很久以前的行程");
+        conversationOf(old);
         BrowserSession recent = browserFrom(OTHER_IP);
         startGuest(recent);
         BrowserSession member = browserFrom(OTHER_IP).signUpAndLogIn("amy", "correct-horse");
@@ -386,8 +486,10 @@ class GuestModeSystemTest {
                 .param("id", UUID.fromString(oldId)).update();
 
         assertEquals(1, expireGuests.expireInactiveSince(Instant.now().minus(Duration.ofDays(7))));
-        assertEquals(0, jdbc.sql("SELECT count(*) FROM calendar_event WHERE owner_id = :id")
-                .param("id", UUID.fromString(oldId)).query(Integer.class).single());
+        for (String table : new String[] {"calendar_event", "calendar_assistant_message"}) {
+            assertEquals(0, jdbc.sql("SELECT count(*) FROM " + table + " WHERE owner_id = :id")
+                    .param("id", UUID.fromString(oldId)).query(Integer.class).single(), table);
+        }
         assertEquals(200, recent.get("/api/auth/me").statusCode());
         assertEquals(1, eventsIn(member));
     }
@@ -395,21 +497,124 @@ class GuestModeSystemTest {
     // ── 觀測 ─────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("http.server.requests 帶 tier：訪客是 guest、會員是 free；反例：沒登入的是 none，每條都有 tier")
+    @DisplayName("http.server.requests 帶 tier：訪客是 guest、免費是 free、付費是 paid；反例：沒登入的是 none，每條都有 tier")
     void requestsAreTaggedWithTier() throws Exception {
         BrowserSession guest = browserFrom(GUEST_IP);
         startGuest(guest);
         guest.get(JANUARY);
         browserFrom(OTHER_IP).signUpAndLogIn("amy", "correct-horse").get(JANUARY);
+        BrowserSession bob = browserFrom(OTHER_IP).signUpAndLogIn("bob", "correct-horse");
+        // 付費由維護者直接改資料庫（backend/README.md 的「會員等級」），下一個請求就是新的等級
+        jdbc.sql("UPDATE account SET tier = 'paid' WHERE username = 'bob'").update();
+        bob.get(JANUARY);
         browserFrom(OTHER_IP).get(JANUARY);
 
         // 觀測在回應送出之後才結束，指標可能比回應晚一點記上
-        for (String tier : new String[] {"guest", "free", "none"}) {
+        for (String tier : new String[] {"guest", "free", "paid", "none"}) {
             await().atMost(Duration.ofSeconds(5))
                     .until(() -> meters.find("http.server.requests").tag("tier", tier).timer() != null);
         }
-        assertNotNull(meters.find("http.server.requests").tag("tier", "guest").tag("uri", EVENTS).timer());
+        assertNotNull(meters.find("http.server.requests").tag("tier", "paid").tag("uri", EVENTS).timer());
         assertNull(meters.find("http.server.requests").timers().stream()
                 .filter(t -> t.getId().getTag("tier") == null).findFirst().orElse(null));
+    }
+
+    /**
+     * 假的 OpenAI Chat Completions server：回寫死的 JSON，由真的 OpenAiChatModel 解析，
+     * 工具呼叫也交給真的 ToolCallingManager 執行，經過的斷路器、bulkhead、逾時都跟線上一樣。
+     */
+    static final class FakeModel {
+
+        static final String ANSWER = "明天沒有行程。";
+
+        enum Mode {
+            /** 好好回一句話 */
+            ANSWER,
+            /** 回空白的話 */
+            BLANK,
+            /** 每一次都呼叫 list_events，不回話 */
+            TOOLS_FOREVER,
+            /** 收到請求就關掉連線，什麼都不回 */
+            HANG_UP,
+            /** 比 app 的逾時（spring.ai.openai.chat.timeout）晚才回 */
+            TOO_SLOW
+        }
+
+        private final HttpServer server;
+        private final AtomicInteger calls = new AtomicInteger();
+        private volatile Mode mode = Mode.ANSWER;
+
+        FakeModel() {
+            try {
+                server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+            } catch (IOException e) {
+                throw new IllegalStateException(e);
+            }
+            server.createContext("/", this::handle);
+            // 回得慢的那題會占著一條執行緒，其他請求不能排在它後面
+            server.setExecutor(Executors.newCachedThreadPool());
+            server.start();
+        }
+
+        int port() {
+            return server.getAddress().getPort();
+        }
+
+        int calls() {
+            return calls.get();
+        }
+
+        void reply(Mode next) {
+            mode = next;
+        }
+
+        void stop() {
+            server.stop(0);
+        }
+
+        private void handle(HttpExchange exchange) throws IOException {
+            exchange.getRequestBody().readAllBytes();
+            calls.incrementAndGet();
+            Mode now = mode;
+            if (now == Mode.HANG_UP) {
+                // 還沒送出 header 就 close，HttpServer 直接關掉連線
+                exchange.close();
+                return;
+            }
+            if (now == Mode.TOO_SLOW) {
+                try {
+                    Thread.sleep(Duration.ofSeconds(4));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            byte[] body = completion(now).getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            try {
+                exchange.sendResponseHeaders(200, body.length);
+                try (OutputStream out = exchange.getResponseBody()) {
+                    out.write(body);
+                }
+            } catch (IOException e) {
+                // app 已經逾時、關掉連線了
+            }
+        }
+
+        private static String completion(Mode mode) {
+            String message = switch (mode) {
+                case BLANK -> """
+                        {"role":"assistant","content":""}""";
+                case TOOLS_FOREVER -> """
+                        {"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function",\
+                        "function":{"name":"list_events","arguments":"{\\"from\\":\\"2030-01-15\\",\\"to\\":\\"2030-01-16\\"}"}}]}""";
+                default -> """
+                        {"role":"assistant","content":"%s"}""".formatted(ANSWER);
+            };
+            String finish = mode == Mode.TOOLS_FOREVER ? "tool_calls" : "stop";
+            return """
+                    {"id":"chatcmpl-test","object":"chat.completion","created":1760000000,"model":"qwen3-8b",\
+                    "choices":[{"index":0,"message":%s,"finish_reason":"%s"}],\
+                    "usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}""".formatted(message, finish);
+        }
     }
 }

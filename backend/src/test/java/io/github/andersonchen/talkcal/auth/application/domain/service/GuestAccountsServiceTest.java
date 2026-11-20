@@ -25,7 +25,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-@DisplayName("GuestAccountsService、RegisterAccountService.upgradeGuest")
+@DisplayName("GuestAccountsService、RegisterAccountService.registerFrom")
 class GuestAccountsServiceTest {
 
     private static final Duration WEEK = Duration.ofDays(7);

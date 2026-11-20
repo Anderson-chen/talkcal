@@ -1,12 +1,22 @@
 package io.github.andersonchen.talkcal.quota.adapter.out.counter.redis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.andersonchen.talkcal.TestRedis;
+import io.github.andersonchen.talkcal.quota.application.domain.model.QuotaBucket;
+import io.github.andersonchen.talkcal.quota.application.domain.model.QuotaRule;
+import io.github.andersonchen.talkcal.quota.application.domain.model.QuotaRules;
+import io.github.andersonchen.talkcal.quota.application.domain.model.QuotaSubject;
+import io.github.andersonchen.talkcal.quota.application.domain.service.ConsumeQuotaService;
+import io.github.andersonchen.talkcal.quota.application.port.in.ConsumeQuotaUseCase.QuotaRequest;
+import io.github.andersonchen.talkcal.quota.application.port.in.QuotaExceededException;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -117,6 +127,28 @@ class RedisQuotaCounterAdapterTest {
             pool.shutdownNow();
         }
         assertEquals("100", redis.opsForValue().get("shared"));
+    }
+
+    @Test
+    @DisplayName("兩個 app 執行個體各自算每日次數、連同一個 Redis：訪客問助理兩邊合計第 4 次被擋，之後兩邊都擋")
+    void twoInstancesShareTheDailyLimit() {
+        // 跟 V15 的 guest-assistant 一樣：同一個 IP 每天 3 次
+        QuotaRules rules = QuotaRules.of(
+                List.of(new QuotaRule("POST", "/api/calendar/assistant", "guest", "guest-assistant")),
+                List.of(new QuotaBucket("guest-assistant", QuotaSubject.IP, 3, "今天訪客問助理的次數用完了")));
+        Clock clock = Clock.system(ZoneId.of("Asia/Taipei"));
+        ConsumeQuotaService one = new ConsumeQuotaService(() -> rules,
+                new RedisQuotaCounterAdapter(new StringRedisTemplate(appOne)), clock, Duration.ofMinutes(1));
+        ConsumeQuotaService two = new ConsumeQuotaService(() -> rules,
+                new RedisQuotaCounterAdapter(new StringRedisTemplate(appTwo)), clock, Duration.ofMinutes(1));
+        QuotaRequest ask = new QuotaRequest("POST", "/api/calendar/assistant", "guest", "203.0.113.7", "guest-account");
+
+        assertTrue(one.consume(ask).isPresent());
+        assertTrue(two.consume(ask).isPresent());
+        assertTrue(one.consume(ask).isPresent());
+
+        assertThrows(QuotaExceededException.class, () -> two.consume(ask));
+        assertThrows(QuotaExceededException.class, () -> one.consume(ask));
     }
 
     @Test
