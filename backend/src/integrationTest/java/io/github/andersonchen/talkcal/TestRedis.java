@@ -10,7 +10,7 @@ import org.testcontainers.containers.GenericContainer;
  * 整合測試共用一個 Redis 容器，每個測試 class 用不同的 database 編號，計數不會互相干擾。做法和理由見 TestPostgres。
  *
  * 映像檔跟 deploy/compose.yaml 的 redis 用同一個版本，改的時候一起改。
- * Redis 只有 16 個 database（0～15），超過就從頭輪：輪到同一個編號的 class 不會同時執行（Gradle 在同一個 JVM 裡照順序執行）。
+ * Redis 只有 0～15 共 16 個 database，超過就從頭輪：輪到同一個編號的 class 不會同時執行，Gradle 在同一個 JVM 裡照順序執行。
  */
 public final class TestRedis {
 

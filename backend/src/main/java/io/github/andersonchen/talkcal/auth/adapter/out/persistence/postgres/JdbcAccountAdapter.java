@@ -143,7 +143,7 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
 
     /**
      * 記下 identity 對到 account；identity 已經對到別的帳號時回 false，並把整個交易標成 rollback。
-     * 另一個交易正在插同一個 identity 時，PostgreSQL 會等那個交易結束再決定：
+     * 另一個交易正在插入同一個 identity 時，PostgreSQL 會等那個交易結束再決定：
      * 那個交易 commit 了，這邊就是 0 列，兩邊不會都回報成功
      */
     private boolean linkIdentity(TransactionStatus status, AccountId account, ExternalIdentity identity) {

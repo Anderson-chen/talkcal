@@ -248,11 +248,11 @@ class CalendarAssistantControllerTest {
     @DisplayName("反例：模型出錯、逾時、斷路器打開、滿載，或拿到回覆之後存對話失敗：都不是 AssistantGaveUpException")
     void otherFailuresAreNotGaveUp() throws Exception {
         Map<String, Runnable> failures = Map.of(
-                "模型出錯", () -> failure.set(new IllegalStateException("模型掛了")),
+                "模型出錯", () -> failure.set(new IllegalStateException("模型出錯")),
                 "逾時", () -> failure.set(new RuntimeException(new java.net.SocketTimeoutException("逾時"))),
                 "斷路器打開", () -> failure.set(new ModelUnavailableException(ModelUnavailableException.Reason.CIRCUIT_OPEN, Duration.ofSeconds(30), null)),
                 "滿載", () -> failure.set(new ModelUnavailableException(ModelUnavailableException.Reason.BUSY, Duration.ofSeconds(5), null)),
-                "存對話失敗", () -> memoryFailure.set(new RuntimeException("資料庫掛了")));
+                "存對話失敗", () -> memoryFailure.set(new RuntimeException("資料庫無法連線")));
         for (Map.Entry<String, Runnable> broken : failures.entrySet()) {
             reset();
             broken.getValue().run();
@@ -393,7 +393,7 @@ class CalendarAssistantControllerTest {
         }
 
         // 使用者講「開會」就呼叫 propose_events，其他都回「早上還是晚上？」；設了 failure 就丟那個例外。
-        // 講「空白」回空白的話；講「繞圈」每一步都呼叫 list_events，不回話
+        // 講「空白」就回一句空白的內容；講「繞圈」每一步都呼叫 list_events，不回話
         @Bean
         CalendarAssistant calendarAssistant(AtomicReference<RuntimeException> failure, FailingMemory memoryFailure) {
             ChatModel model = new ChatModel() {

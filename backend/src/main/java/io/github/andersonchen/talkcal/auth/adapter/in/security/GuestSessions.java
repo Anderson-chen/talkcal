@@ -52,7 +52,7 @@ public final class GuestSessions {
     private final CookieCsrfTokenRepository csrfTokens = CookieCsrfTokenRepository.withHttpOnlyFalse();
 
     /**
-     * secureCookie：只在 HTTPS 送（雲端），跟 session cookie 的 server.servlet.session.cookie.secure 一樣；
+     * secureCookie：只在 HTTPS 送（雲端），跟 session cookie 的 server.servlet.session.cookie.secure 一樣。
      * keepActiveEvery：session 還在的訪客，隔多久記一次還在使用（見 dueToKeepActive）
      */
     public GuestSessions(MergeGuestUseCase mergeGuest, boolean secureCookie, Duration keepActiveEvery) {
@@ -69,7 +69,7 @@ public final class GuestSessions {
     }
 
     /**
-     * 以這個訪客登入：換新的 session ID（防 session fixation）、清掉舊的 CSRF token（前端下一次會拿到新的），
+     * 以這個訪客登入：換新的 session ID 防 session fixation，清掉舊的 CSRF token 讓前端下一次拿到新的，
      * 再寫回訪客 cookie，期限往後延。
      */
     public void signIn(HttpServletRequest request, HttpServletResponse response, GuestPass pass) {

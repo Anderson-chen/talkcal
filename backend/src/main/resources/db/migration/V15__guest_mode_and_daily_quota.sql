@@ -18,7 +18,7 @@ ALTER TABLE account ADD CONSTRAINT account_tier_known CHECK (tier IN ('guest', '
 -- 訪客最後一次使用的時間。超過期限沒用的訪客帳號由 GuestAccountCleanup 刪掉（連同行程和對話）；會員是 NULL
 ALTER TABLE account ADD COLUMN last_active_at TIMESTAMPTZ;
 
--- 訪客 cookie 裡的 token：同一個瀏覽器關掉再開、session 過期之後，用它回到同一個訪客帳號。
+-- 訪客 cookie 裡的 token：同一個瀏覽器關掉再開、session 過期之後，用這個 token 回到同一個訪客帳號。
 -- 只存 SHA-256，資料庫外洩也拿不到能登入的 token。帳號刪掉（合併、清理、轉成會員時的 DELETE）時一起刪
 CREATE TABLE guest_token (
     token_hash TEXT        PRIMARY KEY CHECK (char_length(token_hash) = 64),
@@ -32,7 +32,7 @@ CREATE INDEX guest_token_account_id ON guest_token (account_id);
 -- 計數不在這裡，在 Redis（見 RedisQuotaCounterAdapter）：每個請求都要加一，放資料庫等於每個請求多一次寫入。
 --
 -- bucket 是一份計數：好幾條規則可以算在同一個 bucket，例如新增、修改、刪除行程合計 10 次。
--- subject 是照什麼分開算：ip（訪客，同一個 IP 的瀏覽器共用）、account（照帳號）、global（全站共用一份）。
+-- subject 是照什麼分開算：ip 是同一個 IP 的瀏覽器共用一份（訪客用這種），account 是照帳號，global 是全站共用一份。
 -- message 是用完時給使用者看的話。
 CREATE TABLE quota_bucket (
     name        TEXT    PRIMARY KEY CHECK (name ~ '^[a-z0-9-]{1,64}$'),

@@ -76,9 +76,9 @@ class SecurityConfiguration {
                                             SignInExternallyUseCase signInExternally, FindAccountUseCase findAccount,
                                             GuestAccessUseCase guestAccess, GuestSessions guestSessions) throws Exception {
         http
-                // 訪客 cookie 要在登出、帳密登入、Google／GitHub 登入的 filter 前面：session 不見了（部署新版、閒置過期）
-                // 才送出的登入，也要先用 cookie 登入回訪客，登入成功時才併得到訪客的資料（GuestSessions.afterSignIn），
-                // 第一次用 Google、GitHub 登入時也才升級得到這個訪客（ExternalSignIn.signedInBefore）。
+                // 訪客 cookie 要在登出、帳密登入、Google／GitHub 登入的 filter 前面：部署新版、閒置過期讓 session 不見之後，
+                // 才送出的登入也要先用 cookie 登入回訪客。這樣登入成功時才併得到訪客的資料，見 GuestSessions.afterSignIn；
+                // 第一次用 Google、GitHub 登入時也才升級得到這個訪客，見 ExternalSignIn.signedInBefore。
                 // 等級要在 AnonymousAuthenticationFilter 後面：這時才確定是誰（包括剛用 cookie 登入的訪客），
                 // 而且還在 AuthorizationFilter 之前，被擋下的 401 也記得到等級（none）
                 .addFilterBefore(new GuestCookieFilter(guestAccess, guestSessions), LogoutFilter.class)
@@ -107,7 +107,7 @@ class SecurityConfiguration {
                         .permitAll())
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout")
-                        // 訪客 cookie 也清掉：留著的話，下一個請求又會用它登入回訪客
+                        // 訪客 cookie 也清掉：留著的話，下一個請求又會用這個 cookie 登入回訪客
                         .addLogoutHandler((request, response, authentication) -> guestSessions.clearCookie(response))
                         .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
                 // token 放在 XSRF-TOKEN cookie（JavaScript 讀得到），前端送出前讀出來放進 X-XSRF-TOKEN header

@@ -11,7 +11,7 @@ import java.util.Optional;
  *
  * displayName 是給人看的名字，可能重複、可能改，不能當身分；身分是 id。
  *
- * 註冊的帳號是免費會員，訪客是訪客；改成付費要由維護者直接改資料庫（見 V14）。
+ * 註冊的帳號是免費會員，按「以訪客身分試用」開的帳號是訪客等級；改成付費要由維護者直接改資料庫（見 V14）。
  */
 public record Account(AccountId id, String displayName, PasswordLogin passwordLogin, MembershipTier tier) {
 

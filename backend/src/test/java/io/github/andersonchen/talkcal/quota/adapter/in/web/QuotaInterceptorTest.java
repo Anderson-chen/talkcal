@@ -88,9 +88,9 @@ class QuotaInterceptorTest {
     }
 
     @Test
-    @DisplayName("反例：controller 丟出沒人處理的例外（回應還沒設狀態碼）也退")
+    @DisplayName("反例：controller 丟出沒有 @ExceptionHandler 處理的例外（回應還沒設狀態碼）也退")
     void unhandledExceptionIsRefunded() {
-        handle(request(), 200, new IllegalStateException("沒人處理"));
+        handle(request(), 200, new IllegalStateException("沒有 @ExceptionHandler 處理"));
 
         assertEquals(1, refunded.size());
     }
@@ -111,7 +111,7 @@ class QuotaInterceptorTest {
     }
 
     @Test
-    @DisplayName("沒人處理、keptOnFailure 判斷成照扣的例外：也不退")
+    @DisplayName("沒有 @ExceptionHandler 處理、keptOnFailure 判斷成照扣的例外：也不退")
     void unhandledKeptFailureIsNotRefunded() {
         handle(request(), 200, new SpentAnyway());
 

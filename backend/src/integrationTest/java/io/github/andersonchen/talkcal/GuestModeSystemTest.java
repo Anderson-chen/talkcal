@@ -58,15 +58,15 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 訪客模式要整個 app 組在一起才測得出來的地方：Spring Security 的 filter（訪客 cookie、等級）、
- * 每日次數的 interceptor 和規則表（V15）、Redis 的計數、訪客併進正式帳號時跨模組搬資料，包括 RustFS 裡的歸檔。
+ * 訪客模式要整個 app 組在一起才測得出來的地方：Spring Security 的 filter 怎麼處理訪客 cookie、記下等級，
+ * 每日次數的 interceptor 和 V15 的規則表，Redis 的計數，訪客併進正式帳號時跨模組搬資料，包括 RustFS 裡的歸檔。
  *
- * 每一題用 BrowserSession.forwardedFor 扮成不同 IP 的訪客，「同 IP 共用、不同 IP 各自算」才測得出來。
- * 模型換成 JDK 內建 HttpServer 做的假 OpenAI server（FakeModel），每一題設定它怎麼回：
+ * 每一題用 BrowserSession.forwardedFor 模擬不同 IP 的訪客，「同 IP 共用、不同 IP 各自算」才測得出來。
+ * 模型換成 JDK 內建 HttpServer 做的假 OpenAI server（FakeModel），每一題各自設定怎麼回：
  * 好好回話、回空白、一直呼叫工具、直接關掉連線、回得比逾時還慢。逾時設成 2 秒，回得慢的那題才不用等 2 分鐘。
  * 要測第 4 次被擋、次數用完時，直接把 Redis 的計數設好。
- * 規則表每次請求都重讀（rules-refresh=0s），「加一列就生效」不用等；session 還在的訪客每個請求都記下使用
- * （keep-active-every=0s），不用等一小時。
+ * 規則表每次請求都重讀（rules-refresh=0s），「加一列就生效」不用等。
+ * session 還在的訪客每個請求都記下使用（keep-active-every=0s），不用等一小時。
  */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -370,7 +370,7 @@ class GuestModeSystemTest {
     }
 
     @Test
-    @DisplayName("模型有回話、助理才放棄的那次照樣扣：回覆是空白、呼叫工具超過上限還沒回話（502）")
+    @DisplayName("模型有回話、助理最後沒有產生回覆的那次照樣扣：回覆是空白、呼叫工具超過上限還沒回話（502）")
     void gaveUpAfterModelRepliedIsCounted() throws Exception {
         BrowserSession guest = browserFrom(GUEST_IP);
         startGuest(guest);
@@ -386,7 +386,7 @@ class GuestModeSystemTest {
     }
 
     @Test
-    @DisplayName("反例：模型連不上（收到請求就關掉連線）、逾時（502），斷路器打開、bulkhead 滿了（503）的那幾次都不扣")
+    @DisplayName("反例：模型連不上、逾時回 502，斷路器打開、bulkhead 滿了回 503，這幾次都不扣")
     void modelNotRespondingIsNotCounted() throws Exception {
         BrowserSession guest = browserFrom(GUEST_IP);
         startGuest(guest);
@@ -703,7 +703,7 @@ class GuestModeSystemTest {
         enum Mode {
             /** 好好回一句話 */
             ANSWER,
-            /** 回空白的話 */
+            /** 回一句空白的內容 */
             BLANK,
             /** 每一次都呼叫 list_events，不回話 */
             TOOLS_FOREVER,
@@ -724,7 +724,7 @@ class GuestModeSystemTest {
                 throw new IllegalStateException(e);
             }
             server.createContext("/", this::handle);
-            // 回得慢的那題會占著一條執行緒，其他請求不能排在它後面
+            // 回得慢的那題會占著一條執行緒，其他請求不能排在那一題後面
             server.setExecutor(Executors.newCachedThreadPool());
             server.start();
         }

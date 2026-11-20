@@ -64,7 +64,7 @@ class GuestAccountsServiceTest {
     }
 
     @Test
-    @DisplayName("token 回來：還是同一個訪客，期限從這次往後延 7 天")
+    @DisplayName("帶著 token 回來：還是同一個訪客，期限從這次往後延 7 天")
     void resumeExtends() {
         GuestPass pass = at(NOW).start();
         Instant later = NOW.plus(Duration.ofDays(6));

@@ -82,7 +82,7 @@ class SignInExternallyServiceTest {
     }
 
     @Test
-    @DisplayName("訪客第一次用 Google 登入：接到同一個訪客帳號，升級成免費會員，顯示名稱是 Google 給的；訪客 token 刪掉")
+    @DisplayName("訪客第一次用 Google 登入：對到同一個訪客帳號，升級成免費會員，顯示名稱是 Google 給的；訪客 token 刪掉")
     void guestUpgradesInPlace() {
         AccountId guest = guest();
 
@@ -110,7 +110,7 @@ class SignInExternallyServiceTest {
     }
 
     @Test
-    @DisplayName("反例：已登入的是會員（不是訪客）：Google 照舊另開一個帳號，不接到會員的帳號上")
+    @DisplayName("反例：已登入的是會員（不是訪客）：Google 照舊另開一個帳號，不對到會員的帳號")
     void memberIsNotUpgraded() {
         Account member = Account.withPassword(AccountId.newId(), Username.of("bob"), "hash");
         accounts.saveIfUsernameFree(member);

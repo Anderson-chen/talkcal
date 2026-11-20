@@ -12,7 +12,7 @@ import java.util.Optional;
  */
 public interface GuestAccessUseCase {
 
-    /** 開一個新的訪客帳號。每天的名額由限流擋在前面，這裡不管 */
+    /** 開一個新的訪客帳號。每天的名額由每日次數限制在呼叫之前擋下，這個方法不檢查 */
     GuestPass start();
 
     /**

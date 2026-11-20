@@ -165,7 +165,7 @@ class JdbcAccountAdapterTest {
             assertThrows(IllegalStateException.class, () -> adapter.load(amy.id()));
         } finally {
             jdbc.sql("DELETE FROM account").update();
-            // 加回 V15 的那個：這個 class 的其他測試會存訪客帳號
+            // 加回 V15 的 CHECK（多了 guest）：這個 class 的其他測試會存訪客帳號
             jdbc.sql("ALTER TABLE account ADD CONSTRAINT account_tier_known CHECK (tier IN ('guest', 'free', 'paid'))").update();
         }
     }
@@ -184,7 +184,7 @@ class JdbcAccountAdapterTest {
     }
 
     @Test
-    @DisplayName("訪客接上 Google：同一個帳號改成免費、名字換成 Google 給的，identity 對到它，訪客 token 刪掉")
+    @DisplayName("訪客用 Google 註冊：同一個帳號改成免費、名字換成 Google 給的，identity 對到這個帳號，訪客 token 刪掉")
     void guestUpgradesWithIdentity() {
         Account guest = guestWithToken();
 
@@ -199,7 +199,7 @@ class JdbcAccountAdapterTest {
     }
 
     @Test
-    @DisplayName("反例：帳號已經不是訪客（另一個分頁先註冊好了）：回 false，名字、等級不變，identity 沒有對到它")
+    @DisplayName("反例：帳號已經不是訪客（另一個分頁先註冊好了）：回 false，名字、等級不變，identity 沒有對到這個帳號")
     void memberIsNotUpgradedWithIdentity() {
         Account amy = Account.withPassword(AccountId.newId(), new Username("amy"), "{bcrypt}hash");
         adapter.saveIfUsernameFree(amy);

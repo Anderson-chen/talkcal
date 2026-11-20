@@ -40,7 +40,7 @@ class QuotaRuleTest {
     }
 
     @Test
-    @DisplayName("反例：規則表寫錯，讀的時候就失敗：規則指到不存在的計數、照帳號計數的套在沒登入上")
+    @DisplayName("反例：規則表寫錯，讀的時候就失敗：規則指到不存在的計數、照帳號計數的規則套在沒登入的等級上")
     void badTablesAreRejected() {
         assertThrows(IllegalArgumentException.class, () -> QuotaRules.of(List.of(UPDATE), List.of()));
         assertThrows(IllegalArgumentException.class, () -> QuotaRules.of(

@@ -213,7 +213,7 @@ public final class CalendarAssistant {
      * 失敗時（模型或資料庫出錯、迴圈超過 MAX_STEPS）一律丟 IllegalStateException：背後的例外五花八門，
      * 混著 IllegalArgumentException 的話會被誤認成呼叫端送錯。ModelUnavailableException 本來就是 IllegalStateException，
      * 原樣丟出去，呼叫端才回得出 503；工具裡被擋下的也一樣（見 toolCallingManager）。
-     * 模型有回話、助理才放棄的（回覆空白、超過 MAX_STEPS）丟 AssistantGaveUpException，呼叫端才分得出來。
+     * 模型有回話、助理最後沒有產生回覆的（回覆空白、超過 MAX_STEPS）丟 AssistantGaveUpException，呼叫端才分得出來。
      */
     public Reply reply(OwnerId owner, String conversationId, String message) {
         Objects.requireNonNull(owner, "owner 不可為 null");

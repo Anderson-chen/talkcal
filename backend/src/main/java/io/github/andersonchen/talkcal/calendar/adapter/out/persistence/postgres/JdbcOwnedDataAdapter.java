@@ -14,7 +14,7 @@ import java.util.Objects;
  * 不然訪客的那份資料會留在已經刪掉的帳號名下（JdbcOwnedDataAdapterTest 會列出所有有 owner_id 欄位的表來對）。
  *
  * calendar_add_request 是冪等鍵，只留一天、只在那一次新增有用：搬過去也沒用，直接刪，
- * 也避免兩邊剛好有同一把鍵時撞主鍵。
+ * 也避免兩邊剛好有同一把鍵時違反主鍵的唯一性。
  */
 public final class JdbcOwnedDataAdapter implements OwnedDataStorePort {
 

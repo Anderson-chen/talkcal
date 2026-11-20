@@ -1,7 +1,7 @@
 package io.github.andersonchen.talkcal.calendar.adapter.in.assistant;
 
 /**
- * 模型有回話，助理才放棄：回覆是空白，或呼叫工具超過 CalendarAssistant.MAX_STEPS 次還沒回話。
+ * 模型有回話，助理最後卻沒有產生回覆：回覆是空白，或呼叫工具超過 CalendarAssistant.MAX_STEPS 次還沒回話。
  *
  * 跟模型出錯、資料庫出錯分開，每日次數照樣扣：這種失敗已經花掉好幾次模型呼叫，而且可以用訊息故意觸發。
  *

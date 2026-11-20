@@ -7,7 +7,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
-/** 訪客帳號和它的 token。tokenHash 是 token 的 SHA-256（hex），不存 token 本身。資料庫出錯丟 IllegalStateException */
+/** 訪客帳號，和用來回到這個帳號的 token。tokenHash 是 token 的 SHA-256（hex），不存 token 本身。資料庫出錯丟 IllegalStateException */
 public interface GuestStorePort {
 
     /** 帳號和 token 一起存，一起成功或一起不算；now 記成最後一次使用的時間 */

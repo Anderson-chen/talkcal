@@ -92,7 +92,7 @@ public final class AuthController {
         } else {
             AccountId current = AccountId.of(signedIn.getName());
             id = registerAccount.registerFrom(current, request.username(), request.password());
-            // 同一個 ID 是訪客升級的
+            // 回傳的 ID 跟登入中的帳號一樣：是訪客在同一個帳號上升級
             if (id.equals(current)) {
                 guestSessions.upgraded(http, response);
             }

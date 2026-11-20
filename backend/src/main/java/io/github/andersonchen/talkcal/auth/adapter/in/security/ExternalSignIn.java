@@ -19,7 +19,7 @@ final class ExternalSignIn {
     }
 
     /**
-     * 轉去 provider 之前這個瀏覽器登入的帳號（例如訪客），沒有是 null。
+     * 轉去 provider 之前這個瀏覽器登入的帳號（例如訪客）；沒有登入時是 null。
      * provider 轉回來的這個請求還沒換成新的登入狀態，SecurityContextHolder 裡還是 session 原本的那個
      */
     static AccountId signedInBefore() {

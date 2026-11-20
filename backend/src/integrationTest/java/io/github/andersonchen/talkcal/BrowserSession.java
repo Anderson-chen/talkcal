@@ -24,7 +24,7 @@ final class BrowserSession {
     private final HttpClient http;
     // 關掉就是模擬別的網站讓瀏覽器送出請求：cookie 照樣帶，但別的網站讀不到 XSRF-TOKEN
     private boolean sendCsrfHeader = true;
-    // 扮成從另一個 IP 來的使用者。測試的 client 一律從 127.0.0.1 連，換不了來源位址，只能靠這個 header：
+    // 模擬從另一個 IP 來的使用者。測試的 client 一律從 127.0.0.1 連，換不了來源位址，只能靠這個 header：
     // app 設了 server.forward-headers-strategy=native，Tomcat 把 127.0.0.1 當成內部的 proxy，照 X-Forwarded-For 還原 remoteAddr，
     // 跟線上經過 nginx 時是同一條路。null 是不帶，來源就是 127.0.0.1
     private String forwardedFor;

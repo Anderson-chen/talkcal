@@ -19,7 +19,7 @@ public interface SaveAccountPort {
     boolean saveIfIdentityFree(Account account, ExternalIdentity identity);
 
     /**
-     * 帳號還是訪客，就補上帳號名稱和密碼、改成免費會員、刪掉它的訪客 token。
+     * 帳號還是訪客，就補上帳號名稱和密碼、改成免費會員、刪掉這個帳號的訪客 token。
      * 回傳 USERNAME_TAKEN、NOT_A_GUEST 不丟例外，理由同上：撞名由資料庫的唯一約束判斷。
      */
     UpgradeResult upgradeGuest(AccountId guest, Account.PasswordLogin login);
@@ -27,7 +27,7 @@ public interface SaveAccountPort {
     enum UpgradeResult { UPGRADED, USERNAME_TAKEN, NOT_A_GUEST }
 
     /**
-     * upgraded.id() 這個帳號還是訪客，就改成 upgraded 的顯示名稱和等級、記下 identity 對到它、刪掉它的訪客 token，
+     * upgraded.id() 這個帳號還是訪客，就改成 upgraded 的顯示名稱和等級、記下 identity 對到這個帳號、刪掉這個帳號的訪客 token，
      * 全部一起成功或一起不算。帳號已經不是訪客、或 identity 已經對到別的帳號時回 false，什麼都不改。
      */
     boolean upgradeGuestWithIdentity(Account upgraded, ExternalIdentity identity);

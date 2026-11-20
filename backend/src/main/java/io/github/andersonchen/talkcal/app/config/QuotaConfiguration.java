@@ -45,7 +45,7 @@ class QuotaConfiguration {
     }
 
     // quota 不 import auth、calendar，在這裡設定：請求者的等級從 auth 的 filter 記在 request 上的屬性讀；
-    // 失敗也照扣的是助理在模型回話之後才放棄的那次（理由見 AssistantGaveUpException）
+    // 失敗也照扣的是模型有回話、助理最後沒有產生回覆的那次（理由見 AssistantGaveUpException）
     @Bean
     WebMvcConfigurer quotaInterceptor(ConsumeQuotaUseCase consumeQuota) {
         QuotaInterceptor interceptor = new QuotaInterceptor(consumeQuota, AccountTierFilter::tierOf,
