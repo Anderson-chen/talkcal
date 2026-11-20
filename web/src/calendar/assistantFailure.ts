@@ -13,6 +13,7 @@ export type FailureKind =
   | 'unavailable' // 503 MODEL_UNAVAILABLE：模型連不上，熔斷打開，這次沒叫模型
   | 'busy' //        503 MODEL_BUSY：同時在等模型的人滿了，這次沒叫模型
   | 'rate-limited' // 429：問得太快（nginx 的限流）
+  | 'quota' //       429 QUOTA_EXCEEDED：今天的次數用完了，換日才能再問
   | 'failed' //      502 ASSISTANT_FAILED：這次叫了模型、失敗了（模型出錯、逾時）
   | 'invalid' //     400：請求本身有問題（例如對話太長），原封不動再送也一樣
   | 'offline' //     沒拿到回應：網路斷了，或伺服器整台連不上
@@ -49,6 +50,10 @@ export function describeAssistantFailure(e: unknown): AssistantFailureView {
       text: '現在問助理的人比較多，忙不過來。等幾秒再試一次。',
       waitSeconds: wait(DEFAULT_WAIT.busy), canRetry: true,
     }
+  }
+  // 要放在一般的 429 前面：要等到換日，不倒數；說明用後端規則表寫的那句
+  if (code === 'QUOTA_EXCEEDED') {
+    return { kind: 'quota', text: message(e), waitSeconds: 0, canRetry: false }
   }
   if (status === 429) {
     return {

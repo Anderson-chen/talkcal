@@ -20,6 +20,12 @@ describe('describeAssistantFailure', () => {
     expect(describeAssistantFailure(failure(429, null, 60))).toMatchObject({ kind: 'rate-limited', waitSeconds: 60, canRetry: true })
   })
 
+  it('今天的次數用完（429 QUOTA_EXCEEDED）：照實說後端的話，不倒數到換日、不給再試；反例：不當成 nginx 的問太快', () => {
+    const view = describeAssistantFailure(failure(429, 'QUOTA_EXCEEDED', 3600, '今天訪客問助理的次數用完了，註冊後就能繼續使用'))
+    expect(view).toMatchObject({ kind: 'quota', waitSeconds: 0, canRetry: false })
+    expect(view.text).toBe('今天訪客問助理的次數用完了，註冊後就能繼續使用')
+  })
+
   it('後端沒給秒數時，用跟後端預設一樣的保底', () => {
     expect(describeAssistantFailure(failure(503, 'MODEL_UNAVAILABLE')).waitSeconds).toBe(30)
     expect(describeAssistantFailure(failure(503, 'MODEL_BUSY')).waitSeconds).toBe(5)

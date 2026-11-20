@@ -170,6 +170,22 @@ class AssistantMemoryArchiveTest {
     }
 
     @Test
+    @DisplayName("訪客併進正式帳號：訪客的對話歸檔改到那個帳號名下，還原得回來；反例：原本的擁有者還原不到")
+    void transferMovesToTheNewOwner() {
+        memory.of(ALICE).add(id, oneTurnWithTool());
+        lastSpokeAt(ALICE, id, MARCH_2026);
+        archive.archiveInactiveSince(cutoff());
+
+        archive.transfer(ALICE, BOB);
+
+        MonthRange march = new MonthRange(YearMonth.of(2026, 3), YearMonth.of(2026, 3));
+        assertEquals(0, archive.restore(ALICE, march));
+        assertEquals(1, archive.restore(BOB, march));
+        assertEquals(4, memory.of(BOB).get(id).size());
+        assertTrue(bucket.list("assistant-conversation/owner=" + ALICE + "/").isEmpty());
+    }
+
+    @Test
     @DisplayName("月份用台北時間算：UTC 2 月底、台北已經 3 月 1 日的對話，放在 3 月")
     void monthFollowsCalendarZone() {
         memory.of(ALICE).add(id, List.of(new UserMessage("月初")));

@@ -24,6 +24,10 @@ final class BrowserSession {
     private final HttpClient http;
     // 關掉就是模擬別的網站讓瀏覽器送出請求：cookie 照樣帶，但別的網站讀不到 XSRF-TOKEN
     private boolean sendCsrfHeader = true;
+    // 模擬從另一個 IP 來的使用者。測試的 client 一律從 127.0.0.1 連，換不了來源位址，只能靠這個 header：
+    // app 設了 server.forward-headers-strategy=native，Tomcat 把 127.0.0.1 當成內部的 proxy，照 X-Forwarded-For 還原 remoteAddr，
+    // 跟線上經過 nginx 時是同一條路。null 是不帶，來源就是 127.0.0.1
+    private String forwardedFor;
 
     BrowserSession(int port) {
         this.baseUrl = "http://localhost:" + port;
@@ -35,12 +39,23 @@ final class BrowserSession {
         return this;
     }
 
+    BrowserSession forwardedFor(String header) {
+        forwardedFor = header;
+        return this;
+    }
+
     HttpResponse<String> get(String path) throws Exception {
         return send(request(path).GET(), false);
     }
 
     HttpResponse<String> postJson(String path, String json) throws Exception {
         return send(request(path).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(json)), true);
+    }
+
+    /** 帶 Idempotency-Key 送，重送時帶同一把（前端的 submitOnce.ts 也是這樣） */
+    HttpResponse<String> postJson(String path, String json, String idempotencyKey) throws Exception {
+        return send(request(path).header("Content-Type", "application/json").header("Idempotency-Key", idempotencyKey)
+                .POST(HttpRequest.BodyPublishers.ofString(json)), true);
     }
 
     HttpResponse<String> putJson(String path, String json) throws Exception {
@@ -81,13 +96,31 @@ final class BrowserSession {
     }
 
     Optional<String> cookie(String name) {
-        return cookies.getCookieStore().get(URI.create(baseUrl)).stream()
+        return cookie(name, "/");
+    }
+
+    /** path 設在某個路徑底下的 cookie（例如訪客 cookie 只送到 /api），要用那個路徑查才查得到 */
+    Optional<String> cookie(String name, String path) {
+        return cookies.getCookieStore().get(URI.create(baseUrl + path)).stream()
                 .filter(c -> c.getName().equals(name)).map(HttpCookie::getValue).findFirst();
+    }
+
+    /** 模擬瀏覽器關掉再開：session cookie 沒了，只剩這個留得比較久的 cookie */
+    BrowserSession withCookie(String name, String value, String path) {
+        HttpCookie cookie = new HttpCookie(name, value);
+        cookie.setPath(path);
+        cookie.setVersion(0);
+        cookies.getCookieStore().add(URI.create(baseUrl + path), cookie);
+        return this;
     }
 
     private HttpRequest.Builder request(String path) {
         // 問助理會等模型，不能比 app 的 spring.ai.openai.chat.timeout 短，改設定時這裡一起改
-        return HttpRequest.newBuilder(URI.create(baseUrl + path)).timeout(Duration.ofMinutes(2));
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(baseUrl + path)).timeout(Duration.ofMinutes(2));
+        if (forwardedFor != null) {
+            builder.header("X-Forwarded-For", forwardedFor);
+        }
+        return builder;
     }
 
     private HttpResponse<String> send(HttpRequest.Builder request, boolean changesSomething) throws Exception {

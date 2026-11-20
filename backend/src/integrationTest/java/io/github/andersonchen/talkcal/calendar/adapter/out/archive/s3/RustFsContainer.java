@@ -40,13 +40,18 @@ public final class RustFsContainer extends GenericContainer<RustFsContainer> {
     }
 
     public void createBucket(String name) {
-        try (S3Client s3 = S3Client.builder()
+        try (S3Client s3 = client()) {
+            s3.createBucket(r -> r.bucket(name));
+        }
+    }
+
+    /** 用完要 close */
+    public S3Client client() {
+        return S3Client.builder()
                 .endpointOverride(URI.create(endpoint()))
                 .forcePathStyle(true)
                 .region(Region.of(REGION))
                 .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(ACCESS_KEY, SECRET_KEY)))
-                .build()) {
-            s3.createBucket(r -> r.bucket(name));
-        }
+                .build();
     }
 }

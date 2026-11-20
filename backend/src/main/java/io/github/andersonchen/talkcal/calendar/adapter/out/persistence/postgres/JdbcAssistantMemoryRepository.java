@@ -142,7 +142,7 @@ public final class JdbcAssistantMemoryRepository {
     public boolean deleteIfInactiveSince(OwnerId owner, UUID conversationId, Instant cutoff) {
         try {
             Boolean deleted = transaction.execute(status -> {
-                lock(owner.value(), conversationId);
+                lock(jdbc, owner.value(), conversationId);
                 return jdbc.sql("""
                                 DELETE FROM calendar_assistant_message
                                 WHERE owner_id = :owner AND conversation_id = :id
@@ -170,7 +170,7 @@ public final class JdbcAssistantMemoryRepository {
     public boolean restore(StoredConversation conversation) {
         try {
             Boolean restored = transaction.execute(status -> {
-                lock(conversation.owner().value(), conversation.conversationId());
+                lock(jdbc, conversation.owner().value(), conversation.conversationId());
                 boolean exists = jdbc.sql("""
                                 SELECT EXISTS (SELECT 1 FROM calendar_assistant_message
                                                WHERE owner_id = :owner AND conversation_id = :id)
@@ -208,8 +208,8 @@ public final class JdbcAssistantMemoryRepository {
     }
 
     // 鎖 (擁有者, 對話) 這一組，交易結束自動釋放；hashtextextended 把 key 轉成 advisory lock 要的 bigint。
-    // 不同對話剛好撞到同一個雜湊值，只是多排一下隊。這段對話的每一種寫入（接上、歸檔刪除、還原）都要先取得
-    private void lock(UUID owner, UUID conversationId) {
+    // 不同對話剛好撞到同一個雜湊值，只是多排一下隊。這段對話的每一種寫入（接上、歸檔刪除、還原、從訪客搬進來）都要先取得
+    static void lock(JdbcClient jdbc, UUID owner, UUID conversationId) {
         jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
                 .param("key", "calendar_assistant_message:" + owner + ":" + conversationId)
                 .query((rs, rowNum) -> 0)
@@ -275,7 +275,7 @@ public final class JdbcAssistantMemoryRepository {
             }
             try {
                 transaction.executeWithoutResult(status -> {
-                    lock(owner, id);
+                    lock(jdbc, owner, id);
                     int next = jdbc.sql("""
                                     SELECT coalesce(max(position) + 1, 0) FROM calendar_assistant_message
                                     WHERE owner_id = :owner AND conversation_id = :id

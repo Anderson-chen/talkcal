@@ -2,9 +2,13 @@ package io.github.andersonchen.talkcal.app.config;
 
 import io.github.andersonchen.talkcal.auth.adapter.in.security.AccountOAuth2UserService;
 import io.github.andersonchen.talkcal.auth.adapter.in.security.AccountOidcUserService;
+import io.github.andersonchen.talkcal.auth.adapter.in.security.AccountTierFilter;
+import io.github.andersonchen.talkcal.auth.adapter.in.security.GuestCookieFilter;
+import io.github.andersonchen.talkcal.auth.adapter.in.security.GuestSessions;
 import io.github.andersonchen.talkcal.auth.adapter.in.security.AccountUserDetailsService;
 import io.github.andersonchen.talkcal.auth.adapter.in.web.LoginProviders;
 import io.github.andersonchen.talkcal.auth.application.port.in.FindAccountUseCase;
+import io.github.andersonchen.talkcal.auth.application.port.in.GuestAccessUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.SignInExternallyUseCase;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -24,7 +28,9 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizedClientRepository;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
+import org.springframework.security.web.authentication.logout.LogoutFilter;
 
 /**
  * 帳密登入，加上有設定 client id 的 Google、GitHub 登入。
@@ -32,7 +38,7 @@ import org.springframework.security.web.authentication.logout.HttpStatusReturnin
  * 瀏覽器和後端之間只有一個 HttpOnly 的 session cookie，前端不碰任何 token；Google 給的 token 也只留在後端的 session。
  * 前端和後端在同一個網域（nginx 把 /api 轉過來），不需要 CORS。
  *
- * - /api 底下除了註冊、登入都要登入；沒登入回 401 JSON，不轉址到登入頁，登入畫面由前端畫
+ * - /api 底下除了註冊、登入、以訪客身分試用都要登入（訪客也是一個帳號，登入後跟會員一樣要帶 session）；沒登入回 401 JSON，不轉址到登入頁，登入畫面由前端畫
  * - POST、PUT、DELETE 要帶 CSRF token：別的網站騙瀏覽器送請求時 cookie 會自動帶上，
  *   但別的網站讀不到這個網域的 XSRF-TOKEN cookie，送不出對的 header
  * - API 文件不擋：nginx 只轉 /api，外面連不到
@@ -67,12 +73,22 @@ class SecurityConfiguration {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, OAuth2Registrations oauth2Registrations,
-                                            SignInExternallyUseCase signInExternally) throws Exception {
+                                            SignInExternallyUseCase signInExternally, FindAccountUseCase findAccount,
+                                            GuestAccessUseCase guestAccess, GuestSessions guestSessions) throws Exception {
         http
+                // 訪客 cookie 要在登出、帳密登入、Google／GitHub 登入的 filter 前面：部署新版、閒置過期讓 session 不見之後，
+                // 才送出的登入也要先用 cookie 登入回訪客。這樣登入成功時才併得到訪客的資料，見 GuestSessions.afterSignIn；
+                // 第一次用 Google、GitHub 登入時也才升級得到這個訪客，見 ExternalSignIn.signedInBefore。
+                // 等級要在 AnonymousAuthenticationFilter 後面：這時才確定是誰（包括剛用 cookie 登入的訪客），
+                // 而且還在 AuthorizationFilter 之前，被擋下的 401 也記得到等級（none）
+                .addFilterBefore(new GuestCookieFilter(guestAccess, guestSessions), LogoutFilter.class)
+                .addFilterAfter(new AccountTierFilter(findAccount), AnonymousAuthenticationFilter.class)
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
                         // 畫登入頁之前要先取得有哪些按鈕，這時還沒登入
                         .requestMatchers(HttpMethod.GET, "/api/auth/providers").permitAll()
+                        // 以訪客身分試用：這時還沒有帳號。每天的名額由每日次數限制（quota_rule）擋
+                        .requestMatchers(HttpMethod.POST, "/api/auth/guest").permitAll()
                         // 出錯時 Spring Boot 會轉到 /error 產生回應；擋住的話，所有錯誤都變成 401
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(EndpointRequest.toAnyEndpoint()).permitAll()
@@ -81,12 +97,18 @@ class SecurityConfiguration {
                 // 成功、失敗都只回狀態碼和 JSON，不轉址：預設的轉址是給伺服器畫頁面用的
                 .formLogin(login -> login
                         .loginProcessingUrl("/api/auth/login")
-                        .successHandler((request, response, authentication) -> response.setStatus(HttpStatus.NO_CONTENT.value()))
+                        // 原本是訪客的話，訪客的行程、對話併進剛登入的帳號（見 GuestSessions.afterSignIn）
+                        .successHandler((request, response, authentication) -> {
+                            guestSessions.afterSignIn(request, response, authentication);
+                            response.setStatus(HttpStatus.NO_CONTENT.value());
+                        })
                         // 不分「沒有這個帳號」和「密碼錯」：分開說等於告訴外人哪些帳號存在
                         .failureHandler((request, response, e) -> json(response, HttpStatus.UNAUTHORIZED, "帳號或密碼錯誤"))
                         .permitAll())
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout")
+                        // 訪客 cookie 也清掉：留著的話，下一個請求又會用這個 cookie 登入回訪客
+                        .addLogoutHandler((request, response, authentication) -> guestSessions.clearCookie(response))
                         .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
                 // token 放在 XSRF-TOKEN cookie（JavaScript 讀得到），前端送出前讀出來放進 X-XSRF-TOKEN header
                 .csrf(csrf -> csrf.spa())
@@ -115,7 +137,10 @@ class SecurityConfiguration {
                             .userService(new AccountOAuth2UserService(signInExternally)))
                     // 整頁轉址，回 JSON 的話使用者會看到一頁 JSON。
                     // 失敗原因只記 log、不放進網址：網址會留在瀏覽紀錄裡，也不該讓使用者看到內部錯誤
-                    .successHandler((request, response, authentication) -> response.sendRedirect("/"))
+                    .successHandler((request, response, authentication) -> {
+                        guestSessions.afterSignIn(request, response, authentication);
+                        response.sendRedirect("/");
+                    })
                     .failureHandler((request, response, e) -> {
                         log.warn("Google／GitHub 登入失敗：{}", e.getMessage(), e);
                         response.sendRedirect("/?login_error=oauth");

@@ -13,4 +13,11 @@ import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
 public interface RegisterAccountUseCase {
 
     AccountId register(String username, String password);
+
+    /**
+     * 已經登入的人註冊：登入的是訪客，就在同一個帳號上補帳號名稱和密碼、改成免費會員，帳號 ID 不變，
+     * 名下的行程和對話不用搬；不是訪客（會員、或另一個分頁已經先註冊好了）就跟 register 一樣開一個新帳號。
+     * 回傳註冊好的帳號 ID：等於 signedIn 就是訪客升級的。失敗跟 register 一樣。
+     */
+    AccountId registerFrom(AccountId signedIn, String username, String password);
 }

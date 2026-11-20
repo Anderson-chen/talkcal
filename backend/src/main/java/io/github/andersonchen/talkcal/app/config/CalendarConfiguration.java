@@ -11,6 +11,9 @@ import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantProposalAdapter;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcCalendarEventAdapter;
+import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcOwnedDataAdapter;
+import io.github.andersonchen.talkcal.calendar.application.domain.service.OwnedDataService;
+import io.github.andersonchen.talkcal.calendar.application.port.in.OwnedDataUseCase;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.AddEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.ArchiveEventsService;
 import io.github.andersonchen.talkcal.calendar.application.domain.service.CountActiveUsersService;
@@ -158,6 +161,15 @@ class CalendarConfiguration {
     @Bean
     RemoveEventUseCase removeEvent(DeleteEventPort deleteEventPort) {
         return new RemoveEventService(deleteEventPort);
+    }
+
+    // ── 整個擁有者的資料：訪客併進正式帳號、清掉太久沒用的訪客 ──────────────
+
+    @Bean
+    OwnedDataUseCase calendarOwnedData(JdbcClient jdbcClient, PlatformTransactionManager transactionManager,
+                                       EventArchivePort eventArchive) {
+        return new OwnedDataService(new JdbcOwnedDataAdapter(jdbcClient, new TransactionTemplate(transactionManager)),
+                eventArchive);
     }
 
     // ── 觀測：活躍使用者 ───────────────────────────────────────────────────

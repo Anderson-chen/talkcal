@@ -99,7 +99,7 @@
       "id": 2,
       "type": "stat",
       "title": "助理對話次數",
-      "description": "助理成功回了幾句話（POST /api/calendar/assistant 的 200）。直接用 Spring 本來就有的 http_server_requests，不另外埋一個一樣的 counter。代價：這條序列要等第一個請求才出現，increase() 會少算 app 啟動後的第一句。數的是右上角選的時間範圍（用 increase()，會依抓取間隔外插，數字小時可能差一兩個）。",
+      "description": "助理成功回了幾句話（POST /api/calendar/assistant 的 200），照等級分開：guest 訪客、free 免費、paid 付費，unknown 是那次讀不到等級（AccountTierFilter）；「加上等級之前」是 app 開始貼 tier 標籤之前留下的序列，範圍拉長才會出現。直接用 Spring 本來就有的 http_server_requests，不另外埋一個一樣的 counter。代價：這條序列要等第一個請求才出現，increase() 會少算 app 啟動後的第一句。數的是右上角選的時間範圍（用 increase()，會依抓取間隔外插，數字小時可能差一兩個）。",
       "gridPos": {
         "h": 5,
         "w": 4,
@@ -117,8 +117,8 @@
             "type": "prometheus",
             "uid": "mimir"
           },
-          "expr": "sum(increase(http_server_requests_seconds_count{job=\"talkcal-app\",uri=\"/api/calendar/assistant\",method=\"POST\",status=\"200\"}[$__range]))",
-          "legendFormat": "對話",
+          "expr": "sum by (tier) (label_replace(increase(http_server_requests_seconds_count{job=\"talkcal-app\",uri=\"/api/calendar/assistant\",method=\"POST\",status=\"200\"}[$__range]), \"tier\", \"加上等級之前\", \"tier\", \"\"))",
+          "legendFormat": "{{tier}}",
           "instant": true,
           "range": false
         }

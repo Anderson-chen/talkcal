@@ -11,12 +11,14 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.Delete;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
 import java.net.URI;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -133,9 +135,42 @@ public final class ArchiveBucket {
         }
     }
 
+    /**
+     * 把 fromPrefix 底下的每一個 key 改放到 toPrefix 底下（後面的部分不變），回傳搬了幾個。
+     * S3 沒有改名，只能複製再刪：全部複製好才刪舊的。中途失敗時丟 IllegalStateException，
+     * 已經複製的留在新的前綴、舊的也還在，再呼叫一次會蓋成同樣的內容，接著把剩下的搬完。
+     *
+     * 列出之後、複製之前就不見的 key 當成已經搬過，不算失敗：同一個前綴同時搬兩次時（例如兩台的排程），
+     * 先搬完的那邊已經複製好、刪掉舊的。
+     */
+    public int moveAll(String fromPrefix, String toPrefix) {
+        List<String> keys = list(fromPrefix);
+        List<String> copied = new ArrayList<>();
+        try {
+            for (String key : keys) {
+                String moved = toPrefix + key.substring(fromPrefix.length());
+                try {
+                    s3.copyObject(r -> r.sourceBucket(bucket).sourceKey(key).destinationBucket(bucket).destinationKey(moved));
+                    copied.add(key);
+                } catch (NoSuchKeyException e) {
+                    // 已經搬過，見上面
+                }
+            }
+        } catch (SdkException e) {
+            throw new IllegalStateException("歸檔搬移失敗：s3://" + bucket + "/" + fromPrefix + " → " + toPrefix, e);
+        }
+        delete(copied, fromPrefix);
+        return copied.size();
+    }
+
     /** 回傳刪了幾個。 */
     public int deleteAll(String prefix) {
         List<String> keys = list(prefix);
+        delete(keys, prefix);
+        return keys.size();
+    }
+
+    private void delete(List<String> keys, String prefix) {
         try {
             for (int from = 0; from < keys.size(); from += DELETE_BATCH) {
                 List<ObjectIdentifier> batch = keys.subList(from, Math.min(from + DELETE_BATCH, keys.size())).stream()
@@ -149,6 +184,5 @@ public final class ArchiveBucket {
         } catch (SdkException e) {
             throw new IllegalStateException("歸檔刪除失敗：s3://" + bucket + "/" + prefix, e);
         }
-        return keys.size();
     }
 }

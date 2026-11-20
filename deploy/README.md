@@ -11,6 +11,7 @@
 | Qwen3-8B 生成模型 | 容器（`llm-chat`） | 8080 |
 | talkcal app | 容器（`app`） | 18090 |
 | PostgreSQL（行程、AI 助理的對話記憶） | 容器（`postgres`） | 5432（只綁 127.0.0.1） |
+| Redis（每日次數的計數） | 容器（`redis`） | 6379（只綁 127.0.0.1） |
 | RustFS（舊資料的歸檔，見[下面](#舊資料的歸檔)） | 容器（`archive`） | 9100 S3 API、9101 管理頁面（只綁 127.0.0.1） |
 | 前端（nginx + Vue） | 容器（`web`） | 18080，用瀏覽器開這個 |
 
@@ -63,7 +64,7 @@ Gradle 指令都在 `backend/` 裡跑。它們只是捷徑，部署步驟寫在 
 ./gradlew deployApp -PdeployWaitTimeout=600      # app 啟動比較慢、等不到 healthy 時，拉長等待（預設 300 秒）
 ```
 
-這只動 app，不碰模型、資料庫和歸檔，所以第一次部署前要在 repo 根目錄先執行 `docker compose -f deploy/compose.yaml up -d postgres archive archive-init`。要用 AI 助理的話，另外啟動 `llm-chat`，步驟見根目錄 README 的[本機模型](../README.md#本機模型選用)。漏了 `archive` 的話 app 不會報錯，見 [cd/README.md](../cd/README.md#為什麼每個服務分開換)。前端也一樣：app 沒啟動的話，nginx 找不到 `app` 這個 upstream，web 無法啟動、會報 unhealthy。
+這只動 app，不碰模型、資料庫、Redis 和歸檔，所以第一次部署前要在 repo 根目錄先執行 `docker compose -f deploy/compose.yaml up -d postgres redis archive archive-init`。要用 AI 助理的話，另外啟動 `llm-chat`，步驟見根目錄 README 的[本機模型](../README.md#本機模型選用)。漏了 `redis`、`archive` 的話 app 不會報錯，見 [cd/README.md](../cd/README.md#為什麼每個服務分開換)。前端也一樣：app 沒啟動的話，nginx 找不到 `app` 這個 upstream，web 無法啟動、會報 unhealthy。
 
 ## 兩種環境怎麼分
 
@@ -76,6 +77,7 @@ Gradle 指令都在 `backend/` 裡跑。它們只是捷徑，部署步驟寫在 
 | actuator 埠（健康檢查、指標） | 8091 | 容器內 8091，不發佈到主機 |
 | 模型位址 | `127.0.0.1:8080` | `llm-chat:8080` |
 | 資料庫位址 | `127.0.0.1:5432`（用 deploy/ 這個 postgres） | `postgres:5432` |
+| 每日次數的計數 | `127.0.0.1:6379`（用 deploy/ 這個 Redis） | `redis:6379` |
 | 歸檔位址 | `127.0.0.1:9100`（用 deploy/ 這個 RustFS） | `archive:9000` |
 | log 格式 | 給人看的彩色文字 | 一行一個 JSON（ECS），方便 Loki 拆欄位 |
 

@@ -2,6 +2,10 @@ package io.github.andersonchen.talkcal.app.config;
 
 import io.github.andersonchen.talkcal.app.job.AssistantMemoryArchive;
 import io.github.andersonchen.talkcal.app.job.EventArchiveJob;
+import io.github.andersonchen.talkcal.app.job.GuestAccountCleanup;
+import io.github.andersonchen.talkcal.app.job.GuestMergeFollowUp;
+import io.github.andersonchen.talkcal.auth.application.port.in.ExpireGuestsUseCase;
+import io.github.andersonchen.talkcal.auth.application.port.in.FinishGuestMergesUseCase;
 import io.github.andersonchen.talkcal.app.job.IdempotencyKeyCleanup;
 import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.ArchiveBucket;
 import io.github.andersonchen.talkcal.calendar.adapter.out.persistence.postgres.JdbcAssistantMemoryRepository;
@@ -36,6 +40,16 @@ class JobConfiguration {
     IdempotencyKeyCleanup idempotencyKeyCleanup(JdbcCalendarEventAdapter calendarEventStore,
                                                 @Value("${calendar.idempotency.retention}") Duration retention) {
         return new IdempotencyKeyCleanup(calendarEventStore, retention, Clock.systemUTC());
+    }
+
+    @Bean
+    GuestAccountCleanup guestAccountCleanup(ExpireGuestsUseCase expireGuests) {
+        return new GuestAccountCleanup(expireGuests);
+    }
+
+    @Bean
+    GuestMergeFollowUp guestMergeFollowUp(FinishGuestMergesUseCase finishGuestMerges) {
+        return new GuestMergeFollowUp(finishGuestMerges);
     }
 
     @Bean

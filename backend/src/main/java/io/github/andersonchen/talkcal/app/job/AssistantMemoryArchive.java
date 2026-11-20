@@ -125,6 +125,14 @@ public final class AssistantMemoryArchive {
     }
 
     /**
+     * from 的全部對話歸檔改到 to 名下，之後 restore(to, …) 放得回來。擁有者只記在 key 裡（見 MessageLine），搬 key 就夠了。
+     * 中途失敗丟 IllegalStateException，再呼叫一次會把剩下的搬完
+     */
+    public void transfer(OwnerId from, OwnerId to) {
+        bucket.moveAll(ArchiveBucket.ownerPrefix(ROOT, from), ArchiveBucket.ownerPrefix(ROOT, to));
+    }
+
+    /**
      * assistant-conversation/owner=&lt;擁有者&gt;/month=&lt;最後說話的月份&gt;/&lt;conversation_id&gt;.jsonl.gz
      * 一段對話一包、key 固定：重傳只會蓋成同樣的內容，不會多出重複的。key 前綴的排法見 ArchiveBucket。
      */

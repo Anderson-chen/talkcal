@@ -35,6 +35,7 @@ public final class AccountOidcUserService implements OAuth2UserService<OidcUserR
         OidcUser user = delegate.loadUser(request);
         String registrationId = request.getClientRegistration().getRegistrationId();
         AccountId accountId = ExternalSignIn.run(registrationId, () -> signIn.signIn(
+                ExternalSignIn.signedInBefore(),
                 new ExternalIdentity(ExternalIdentity.Provider.of(registrationId), user.getSubject()),
                 // 名字來自 profile scope；沒給名字時用 email（email scope），顯示名稱只有本人看得到
                 user.getFullName(),

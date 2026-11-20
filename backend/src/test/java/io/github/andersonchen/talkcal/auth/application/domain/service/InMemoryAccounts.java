@@ -3,10 +3,13 @@ package io.github.andersonchen.talkcal.auth.application.domain.service;
 import io.github.andersonchen.talkcal.auth.application.domain.model.Account;
 import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
 import io.github.andersonchen.talkcal.auth.application.domain.model.ExternalIdentity;
+import io.github.andersonchen.talkcal.auth.application.domain.model.MembershipTier;
 import io.github.andersonchen.talkcal.auth.application.domain.model.Username;
+import io.github.andersonchen.talkcal.auth.application.port.out.GuestStorePort;
 import io.github.andersonchen.talkcal.auth.application.port.out.LoadAccountPort;
 import io.github.andersonchen.talkcal.auth.application.port.out.SaveAccountPort;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -15,8 +18,19 @@ import java.util.Optional;
 
 /**
  * 照 port 的約定，帳號名稱、identity 重複就回 false，不丟例外。
+ * 訪客的 token 照 GuestStorePort 的約定：沒過期、帳號還是訪客才算數，用一次就延期。
  */
-final class InMemoryAccounts implements SaveAccountPort, LoadAccountPort {
+final class InMemoryAccounts implements SaveAccountPort, LoadAccountPort, GuestStorePort {
+
+    record Token(AccountId account, Instant expiresAt) {
+    }
+
+    record RecordedMerge(Merge merge, Instant mergedAt) {
+    }
+
+    final Map<String, Token> tokens = new HashMap<>();
+    final Map<AccountId, Instant> lastActive = new HashMap<>();
+    final List<RecordedMerge> merges = new ArrayList<>();
 
     final List<Account> saved = new ArrayList<>();
     final Map<ExternalIdentity, AccountId> identities = new HashMap<>();
@@ -24,6 +38,8 @@ final class InMemoryAccounts implements SaveAccountPort, LoadAccountPort {
     int identityLookups;
     /** 另一個請求在查和存之間搶先建好的帳號 */
     Account createdConcurrently;
+    /** true 時 deleteMerged 丟 IllegalStateException，當成資料庫出錯 */
+    boolean failMerge;
 
     @Override
     public boolean saveIfUsernameFree(Account account) {
@@ -46,6 +62,104 @@ final class InMemoryAccounts implements SaveAccountPort, LoadAccountPort {
         saved.add(account);
         identities.put(identity, account.id());
         return true;
+    }
+
+    @Override
+    public UpgradeResult upgradeGuest(AccountId guest, Account.PasswordLogin login) {
+        Optional<Account> current = load(guest).filter(Account::isGuest);
+        if (current.isEmpty()) {
+            return UpgradeResult.NOT_A_GUEST;
+        }
+        if (load(login.username()).isPresent()) {
+            return UpgradeResult.USERNAME_TAKEN;
+        }
+        saved.remove(current.get());
+        saved.add(new Account(guest, login.username().value(), login, MembershipTier.FREE));
+        tokens.values().removeIf(token -> token.account().equals(guest));
+        lastActive.remove(guest);
+        return UpgradeResult.UPGRADED;
+    }
+
+    @Override
+    public boolean upgradeGuestWithIdentity(Account upgraded, ExternalIdentity identity) {
+        Optional<Account> current = load(upgraded.id()).filter(Account::isGuest);
+        if (current.isEmpty() || identities.containsKey(identity)) {
+            return false;
+        }
+        saved.remove(current.get());
+        saved.add(upgraded);
+        identities.put(identity, upgraded.id());
+        tokens.values().removeIf(token -> token.account().equals(upgraded.id()));
+        lastActive.remove(upgraded.id());
+        return true;
+    }
+
+    @Override
+    public void saveGuest(Account guest, String tokenHash, Instant now, Instant expiresAt) {
+        saved.add(guest);
+        tokens.put(tokenHash, new Token(guest.id(), expiresAt));
+        lastActive.put(guest.id(), now);
+    }
+
+    @Override
+    public Optional<AccountId> touch(String tokenHash, Instant now, Instant newExpiresAt) {
+        Token token = tokens.get(tokenHash);
+        if (token == null || !token.expiresAt().isAfter(now) || load(token.account()).filter(Account::isGuest).isEmpty()) {
+            return Optional.empty();
+        }
+        tokens.put(tokenHash, new Token(token.account(), newExpiresAt));
+        lastActive.put(token.account(), now);
+        return Optional.of(token.account());
+    }
+
+    @Override
+    public boolean keepActive(AccountId guest, Instant now, Instant newExpiresAt) {
+        if (load(guest).filter(Account::isGuest).isEmpty()) {
+            return false;
+        }
+        tokens.replaceAll((hash, token) -> token.account().equals(guest) && token.expiresAt().isAfter(now)
+                ? new Token(guest, newExpiresAt)
+                : token);
+        lastActive.put(guest, now);
+        return true;
+    }
+
+    @Override
+    public List<AccountId> guestsInactiveSince(Instant cutoff) {
+        return lastActive.entrySet().stream()
+                .filter(entry -> entry.getValue().isBefore(cutoff))
+                .map(Map.Entry::getKey)
+                .filter(id -> load(id).filter(Account::isGuest).isPresent())
+                .toList();
+    }
+
+    @Override
+    public void delete(AccountId account) {
+        saved.removeIf(saved -> saved.id().equals(account) && saved.isGuest());
+        tokens.values().removeIf(token -> token.account().equals(account));
+        lastActive.remove(account);
+    }
+
+    @Override
+    public boolean deleteMerged(AccountId guest, AccountId target, Instant mergedAt) {
+        if (failMerge) {
+            throw new IllegalStateException("記下合併失敗：" + guest);
+        }
+        if (load(guest).filter(Account::isGuest).isEmpty()) {
+            return false;
+        }
+        delete(guest);
+        return merges.add(new RecordedMerge(new Merge(guest, target), mergedAt));
+    }
+
+    @Override
+    public List<Merge> mergedBefore(Instant cutoff) {
+        return merges.stream().filter(m -> m.mergedAt().isBefore(cutoff)).map(RecordedMerge::merge).toList();
+    }
+
+    @Override
+    public void forgetMerge(AccountId guest) {
+        merges.removeIf(m -> m.merge().guest().equals(guest));
     }
 
     @Override

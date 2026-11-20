@@ -4,12 +4,16 @@ import static org.springframework.security.test.web.servlet.setup.SecurityMockMv
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.AssistantGaveUpException;
 import io.github.andersonchen.talkcal.calendar.adapter.in.assistant.CalendarAssistant;
 import io.github.andersonchen.talkcal.calendar.adapter.shared.ModelUnavailableException;
 import io.github.andersonchen.talkcal.calendar.application.domain.model.CalendarEvent;
@@ -55,6 +59,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 @WebMvcTest(CalendarAssistantController.class)
 @Import(CalendarAssistantControllerTest.StubConfiguration.class)
@@ -88,11 +93,15 @@ class CalendarAssistantControllerTest {
     AtomicReference<RuntimeException> failure;
 
     @Autowired
+    FailingMemory memoryFailure;
+
+    @Autowired
     RecordedUsage usage;
 
     @BeforeEach
     void reset() {
         failure.set(null);
+        memoryFailure.set(null);
         usage.clear();
     }
 
@@ -218,6 +227,43 @@ class CalendarAssistantControllerTest {
         assertEquals(List.of(), usage.events);
     }
 
+    private MvcResult talk(String message) throws Exception {
+        return mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"" + message + "\"}"))
+                .andReturn();
+    }
+
+    @Test
+    @DisplayName("模型回了空白、呼叫工具超過上限還沒回話：502，例外是 AssistantGaveUpException（每日次數照扣）")
+    void gaveUpAfterModelReplied() throws Exception {
+        for (String message : List.of("回空白", "一直繞圈")) {
+            MvcResult result = talk(message);
+
+            assertEquals(502, result.getResponse().getStatus(), message);
+            assertEquals("ASSISTANT_FAILED", JsonPath.read(result.getResponse().getContentAsString(), "$.code"), message);
+            assertInstanceOf(AssistantGaveUpException.class, result.getResolvedException(), message);
+        }
+    }
+
+    @Test
+    @DisplayName("反例：模型出錯、逾時、斷路器打開、滿載，或拿到回覆之後存對話失敗：都不是 AssistantGaveUpException")
+    void otherFailuresAreNotGaveUp() throws Exception {
+        Map<String, Runnable> failures = Map.of(
+                "模型出錯", () -> failure.set(new IllegalStateException("模型出錯")),
+                "逾時", () -> failure.set(new RuntimeException(new java.net.SocketTimeoutException("逾時"))),
+                "斷路器打開", () -> failure.set(new ModelUnavailableException(ModelUnavailableException.Reason.CIRCUIT_OPEN, Duration.ofSeconds(30), null)),
+                "滿載", () -> failure.set(new ModelUnavailableException(ModelUnavailableException.Reason.BUSY, Duration.ofSeconds(5), null)),
+                "存對話失敗", () -> memoryFailure.set(new RuntimeException("資料庫無法連線")));
+        for (Map.Entry<String, Runnable> broken : failures.entrySet()) {
+            reset();
+            broken.getValue().run();
+
+            MvcResult result = talk("嗨");
+
+            assertTrue(result.getResponse().getStatus() >= 500, broken.getKey() + "：" + result.getResponse().getStatus());
+            assertFalse(result.getResolvedException() instanceof AssistantGaveUpException, broken.getKey());
+        }
+    }
+
     private String proposeCard(String signedIn) throws Exception {
         String body = mockMvc.perform(post(URL).with(user(signedIn)).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"message\":\"明天下午三點開會\"}"))
@@ -334,6 +380,11 @@ class CalendarAssistantControllerTest {
             return new RecordedUsage();
         }
 
+        @Bean
+        FailingMemory memoryFailure() {
+            return new FailingMemory();
+        }
+
         // 核對卡片的規則在 TrackProposalsService，所以用真的，只把存放和指標換成記憶體
         @Bean
         TrackProposalsService trackProposals(RecordedUsage usage) {
@@ -341,9 +392,10 @@ class CalendarAssistantControllerTest {
             return new TrackProposalsService(proposals, usage);
         }
 
-        // 使用者講「開會」就呼叫 propose_events，其他都回「早上還是晚上？」；設了 failure 就丟那個例外
+        // 使用者講「開會」就呼叫 propose_events，其他都回「早上還是晚上？」；設了 failure 就丟那個例外。
+        // 講「空白」就回一句空白的內容；講「繞圈」每一步都呼叫 list_events，不回話
         @Bean
-        CalendarAssistant calendarAssistant(AtomicReference<RuntimeException> failure) {
+        CalendarAssistant calendarAssistant(AtomicReference<RuntimeException> failure, FailingMemory memoryFailure) {
             ChatModel model = new ChatModel() {
                 @Override
                 public ChatResponse call(Prompt prompt) {
@@ -352,6 +404,13 @@ class CalendarAssistantControllerTest {
                     }
                     List<Message> messages = prompt.getInstructions();
                     Message last = messages.getLast();
+                    String said = messages.stream().filter(m -> m.getMessageType() == MessageType.USER).toList().getLast().getText();
+                    if (said.contains("繞圈")) {
+                        return toolCall("list_events", "{\"from\":\"2026-10-07\",\"to\":\"2026-10-08\"}");
+                    }
+                    if (said.contains("空白")) {
+                        return new ChatResponse(List.of(new Generation(new AssistantMessage(""))));
+                    }
                     if (last.getMessageType() == MessageType.TOOL) {
                         return new ChatResponse(List.of(new Generation(new AssistantMessage("請確認卡片。"))));
                     }
@@ -372,7 +431,7 @@ class CalendarAssistantControllerTest {
             };
             // 每個擁有者一份記憶，跟 JdbcAssistantMemoryRepository 一樣分開
             Map<OwnerId, ChatMemory> memories = new ConcurrentHashMap<>();
-            return new CalendarAssistant(model, owner -> memories.computeIfAbsent(owner, o -> MessageWindowChatMemory.builder().maxMessages(Integer.MAX_VALUE).build()),
+            return new CalendarAssistant(model, owner -> memoryFailure.wrap(memories.computeIfAbsent(owner, o -> MessageWindowChatMemory.builder().maxMessages(Integer.MAX_VALUE).build())),
                     description -> List.of(CalendarEvent.startingAt("開會", LocalDateTime.of(2026, 10, 7, 15, 0))),
                     (owner, start, end) -> List.of(), (owner, id) -> id.equals(LUNCH.id()) ? Optional.of(LUNCH) : Optional.empty(), (owner, start, end, period, minimum) -> List.of(),
                     (owner, start, end, period, length) -> List.of(), Clock.systemDefaultZone());
@@ -383,6 +442,38 @@ class CalendarAssistantControllerTest {
         return new ChatResponse(List.of(new Generation(AssistantMessage.builder().content("")
                 .toolCalls(List.of(new AssistantMessage.ToolCall("call-" + tool, "function", tool, arguments)))
                 .build())));
+    }
+
+    /** 設了例外就在存對話時丟出來：模型已經回話，失敗在之後的資料庫 */
+    static final class FailingMemory {
+
+        private final AtomicReference<RuntimeException> failure = new AtomicReference<>();
+
+        void set(RuntimeException e) {
+            failure.set(e);
+        }
+
+        ChatMemory wrap(ChatMemory memory) {
+            return new ChatMemory() {
+                @Override
+                public void add(String conversationId, List<Message> messages) {
+                    if (failure.get() != null) {
+                        throw failure.get();
+                    }
+                    memory.add(conversationId, messages);
+                }
+
+                @Override
+                public List<Message> get(String conversationId) {
+                    return memory.get(conversationId);
+                }
+
+                @Override
+                public void clear(String conversationId) {
+                    memory.clear(conversationId);
+                }
+            };
+        }
     }
 
     /** 寫成「shown 1」這種字串，比對失敗時一眼看得懂。 */
