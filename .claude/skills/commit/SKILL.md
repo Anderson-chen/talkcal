@@ -16,6 +16,10 @@ description: commit 時使用：commit 標題、內文怎麼寫，commit 前怎�
 
 ## 下一步
 
-沒走流程時，commit 之後照 `CLAUDE.md` 的「沒走流程的改動」執行測試、開 PR。
+沒走流程時（使用者沒打 `/issue`、`/open-pr`），主 session 直接改，不開 issue，也不呼叫修改者、審核者、投票者。commit 之後：
+
+1. 照 [open-pr skill](../open-pr/SKILL.md) 的「照改到的地方驗證」執行測試。
+2. 照 `.claude/rules/commands.md` 先問使用者再 push。
+3. 開 PR，描述照 `open-pr` 的「PR 描述」。沒有 issue 可以連，不寫 `Closes`，也沒有審核、投票的回報可以附。
 
 走流程時，修改者 commit 之後照 [review-levels skill](../review-levels/SKILL.md) 的分級表執行列給修改者的指令，再回報；主 session 接著照 `open-pr` 呼叫審核者。
