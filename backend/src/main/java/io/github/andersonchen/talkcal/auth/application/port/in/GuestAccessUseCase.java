@@ -27,6 +27,9 @@ public interface GuestAccessUseCase {
      */
     Optional<Instant> keepActive(AccountId guest);
 
+    /** 帳號還是訪客回 true；已經註冊成會員、已經刪掉的回 false。只讀，不記使用時間。資料庫出錯丟 IllegalStateException。 */
+    boolean isGuest(AccountId account);
+
     record GuestPass(AccountId accountId, String token, Instant expiresAt) {
     }
 }

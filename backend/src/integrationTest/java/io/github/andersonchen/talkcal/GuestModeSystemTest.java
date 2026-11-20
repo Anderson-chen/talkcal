@@ -683,6 +683,45 @@ class GuestModeSystemTest {
         assertTrue(lastGuestCookie.contains("Max-Age=0"), "訪客 cookie 清掉了：" + lastGuestCookie);
     }
 
+    /** 在共用電腦上複製了訪客 cookie 的人：用那個 cookie 開了自己的 session，跟 browser 是同一個訪客 */
+    private BrowserSession copiedFrom(BrowserSession browser) throws Exception {
+        BrowserSession copied = reopened(browser, GUEST_IP);
+        assertEquals(200, copied.get(JANUARY).statusCode());
+        return copied;
+    }
+
+    @Test
+    @DisplayName("訪客在一個瀏覽器註冊後，另一個還以那個訪客登入的瀏覽器回 401，訪客 cookie 也登不回去；反例：註冊的那個瀏覽器照樣是登入狀態")
+    void registerSignsOutOtherBrowsers() throws Exception {
+        BrowserSession guest = browserFrom(GUEST_IP);
+        String id = startGuest(guest).at("/id").asString();
+        String token = guest.cookie("talkcal_guest", "/api").orElseThrow();
+        BrowserSession copied = copiedFrom(guest);
+
+        assertEquals(201, guest.register("amy", "correct-horse").statusCode());
+
+        assertEquals(401, copied.get(JANUARY).statusCode());
+        assertEquals(401, browserFrom(GUEST_IP).withCookie("talkcal_guest", token, "/api").get(JANUARY).statusCode());
+        assertEquals(200, guest.get(JANUARY).statusCode());
+        assertEquals(204, guest.login("amy", "correct-horse").statusCode());
+        assertEquals(id, JSON.readTree(guest.get("/api/auth/me").body()).at("/id").asString());
+    }
+
+    @Test
+    @DisplayName("訪客併進已有的帳號後，另一個還以那個訪客登入的瀏覽器回 401；反例：登入的那個瀏覽器照樣是登入狀態")
+    void mergeSignsOutOtherBrowsers() throws Exception {
+        browserFrom(OTHER_IP).signUpAndLogIn("amy", "correct-horse");
+        BrowserSession guest = browserFrom(GUEST_IP);
+        startGuest(guest);
+        addEvent(guest, "訪客時加的牙醫");
+        BrowserSession copied = copiedFrom(guest);
+
+        assertEquals(204, guest.login("amy", "correct-horse").statusCode());
+
+        assertEquals(401, copied.get(JANUARY).statusCode());
+        assertEquals(1, eventsIn(guest));
+    }
+
     @Test
     @DisplayName("超過期限沒用的訪客帳號連同行程和對話一起刪掉；反例：最近用過的訪客、會員都還在")
     void inactiveGuestsAreDeleted() throws Exception {

@@ -90,6 +90,12 @@ public final class GuestAccountsService
     }
 
     @Override
+    public boolean isGuest(AccountId account) {
+        Objects.requireNonNull(account, "account 不可為 null");
+        return accounts.load(account).filter(Account::isGuest).isPresent();
+    }
+
+    @Override
     public void mergeInto(AccountId guest, AccountId target) {
         Objects.requireNonNull(guest, "guest 不可為 null");
         Objects.requireNonNull(target, "target 不可為 null");

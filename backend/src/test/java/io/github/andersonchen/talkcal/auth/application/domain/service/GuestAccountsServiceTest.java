@@ -162,6 +162,21 @@ class GuestAccountsServiceTest {
     }
 
     @Test
+    @DisplayName("isGuest：訪客是 true；反例：註冊成會員、併進別的帳號被刪掉的是 false")
+    void isGuestOnlyForGuests() {
+        GuestPass registered = at(NOW).start();
+        GuestPass merged = at(NOW).start();
+        GuestPass stillGuest = at(NOW).start();
+        new RegisterAccountService(accounts, password -> "hashed:" + password)
+                .registerFrom(registered.accountId(), "amy", "correct-horse");
+        at(NOW).mergeInto(merged.accountId(), registered.accountId());
+
+        assertTrue(at(NOW).isGuest(stillGuest.accountId()));
+        assertFalse(at(NOW).isGuest(registered.accountId()));
+        assertFalse(at(NOW).isGuest(merged.accountId()));
+    }
+
+    @Test
     @DisplayName("反例：已經不是訪客（另一個分頁先註冊好了），不搬資料，之後也不再搬")
     void mergeSkipsMembers() {
         Account member = Account.withPassword(AccountId.newId(), Username.of("amy"), "hash");
