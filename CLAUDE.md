@@ -1,3 +1,4 @@
-@AGENTS.md
-
-不用 symlink：Windows 上 Git 預設把 symlink checkout 成一行文字，規則就整份讀不到。
+- 專案介紹、使用方式，看 [README.md](README.md)。
+- 回答用繁體中文。
+- 寫文件、註解、介面文字、prompt、issue、PR、commit 的文字，都照 `.claude/rules/writing.md`。
+- 要執行指令時照 `.claude/rules/commands.md`。
