@@ -9,13 +9,13 @@ description: 開 PR 前的修改者：照 issue 改檔案、commit，不 push、
 
 ## 開始前
 
-- 完整讀 `.agents/rules/pr.md` 的「開 PR 前：修改、審核、投票」，順序和分級表都在那一節。
+- 完整讀 `.claude/rules/pr.md` 的「開 PR 前：修改、審核、投票」，順序和分級表都在那一節。
 - 用 `gh issue view <編號>` 讀 issue 全文。
 - `git branch --show-current` 要等於呼叫時給的分支；不同就停下來回報，不自己切換，理由見 `commit.md`。
 
 ## 第一輪
 
-- 照 `AGENTS.md` 流程表裡修改者的步驟做，每一步動手前從磁碟重讀那一列的規則檔：`CLAUDE.md` 載入的是 session 開始時的版本。
+- 照 `CLAUDE.md` 流程表裡修改者的步驟做，每一步動手前從磁碟重讀那一列的規則檔：`CLAUDE.md` 載入的是 session 開始時的版本。
 - 做法跟 issue 寫的不同時，照你判斷比較好的做，在回報寫實際的做法和理由。
 - 驗收條件裡要執行才知道結果的，自己執行，輸出寫進回報。
 - commit 之後，執行 `pr.md` 分級表列給修改者的指令。指令的指示要開 subagent 時照開；指令改到的檔案另外 commit。

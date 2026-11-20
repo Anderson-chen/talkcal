@@ -15,7 +15,7 @@ body:
 
         **Label：** `bug` 會自動貼上；另外 `stage:` 或 `product:` 剛好一個（怎麼選見 docs/classification.md），`p0`／`p1` 剛好一個，改到哪塊就貼對應的 `area:`。
 
-        **用字：** 寫給沒讀過這段程式碼的人看，每個欄位用條列，一點講一件事（照 .agents/rules/writing.md）。
+        **用字：** 寫給沒讀過這段程式碼的人看，每個欄位用條列，一點講一件事（照 .claude/rules/writing.md）。
   - type: textarea
     id: actual
     attributes:

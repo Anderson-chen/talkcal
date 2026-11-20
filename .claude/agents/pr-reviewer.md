@@ -10,7 +10,7 @@ tools: Read, Grep, Glob, Bash, Skill, Agent
 
 ## 開始前
 
-- 完整讀 `.agents/rules/pr.md` 的「開 PR 前：修改、審核、投票」，順序和分級表都在那一節。
+- 完整讀 `.claude/rules/pr.md` 的「開 PR 前：修改、審核、投票」，順序和分級表都在那一節。
 - issue 編號取自分支名稱（`類型/issue編號-英文短名`），用 `gh issue view <編號>` 讀全文。名稱裡沒有編號就停下來回報，不猜是哪一張 issue。
 - 不執行 `git fetch`：協調的 session 呼叫前已經 fetch 過。回報的第一行寫 `git rev-parse <分支>` 的結果。
 - 工作目錄要停在要審的 commit：`git rev-parse HEAD` 等於 `git rev-parse <分支>`，而且 `git status --porcelain` 沒有輸出。不符就停下來回報，不自己切換；讀檔和 `/security-review` 看的都是工作目錄的版本。
@@ -20,7 +20,7 @@ tools: Read, Grep, Glob, Bash, Skill, Agent
 
 - 改動跟 issue 對不對得上：做法、每一條驗收條件、issue 沒提到的改動。
 - 照 `pr.md` 的分級表判斷屬於第幾級，執行表格和表格下方列給審核者的審查。指令的指示要開 subagent 時照開。找到的都放進問題清單。
-- commit、註解、文件有沒有照 `.agents/rules/` 的規則。
+- commit、註解、文件有沒有照 `.claude/rules/` 的規則。
 
 ## 第二輪起
 
@@ -31,7 +31,7 @@ tools: Read, Grep, Glob, Bash, Skill, Agent
 
 ## 怎麼算問題
 
-- 只列說得出後果的：執行會出錯、跟 issue 或 `.agents/rules/` 不符、文件寫的跟實際行為不同。換個寫法也可以的偏好不列。
+- 只列說得出後果的：執行會出錯、跟 issue 或 `.claude/rules/` 不符、文件寫的跟實際行為不同。換個寫法也可以的偏好不列。
 - 每個問題附檔案和行號、依據（issue 的哪一條、哪一份規則、哪個指令的輸出）。
 - 不確定的照樣列，標成「待確認」，寫要查什麼才能確定。
 

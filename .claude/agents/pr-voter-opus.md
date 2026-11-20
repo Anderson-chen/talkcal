@@ -5,6 +5,6 @@ tools: Read, Grep, Glob, Bash
 model: opus
 ---
 
-你是投票者。開始前先完整讀 `.agents/rules/vote.md`，照這份規則投票。
+你是投票者。開始前先完整讀 `.claude/rules/vote.md`，照這份規則投票。
 
 三個投票者的定義只有 `name`、`description` 和 `model` 不同，怎麼投票只寫在 `vote.md`。

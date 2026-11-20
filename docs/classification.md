@@ -1,6 +1,6 @@
 # issue 怎麼分類
 
-開 issue 時「放在哪」的 label 照這份判斷（規則見 [.agents/rules/issue.md](../.agents/rules/issue.md)）：工程怎麼做到的貼 `stage:`，看[上線準備怎麼分類](#上線準備怎麼分類)；產品要做到什麼的貼 `product:`，看[產品範圍怎麼分類](#產品範圍怎麼分類)。PR 不貼 label，跟著它 `Closes` 的 issue。
+開 issue 時「放在哪」的 label 照這份判斷（規則見 [.claude/rules/issue.md](../.claude/rules/issue.md)）：工程怎麼做到的貼 `stage:`，看[上線準備怎麼分類](#上線準備怎麼分類)；產品要做到什麼的貼 `product:`，看[產品範圍怎麼分類](#產品範圍怎麼分類)。PR 不貼 label，跟著它 `Closes` 的 issue。
 
 ## 上線準備怎麼分類
 
@@ -37,7 +37,7 @@
 
 ITIL 4 已經把 v3 的五段改成不分先後的價值鏈，這裡對照 v3，是因為它的分段最常被拿來講服務的生命週期。
 
-為什麼不像 Mercari 那樣照屬性（Observability、Security…）分：被問到「上線要注意什麼」時，照時間走一輪，比較不會整塊漏掉。改到哪塊技術（CI、前端、資料庫…）改用 `area:` label 標，一張 issue 可以貼好幾個（見 [`.agents/rules/issue.md`](../.agents/rules/issue.md)）。
+為什麼不像 Mercari 那樣照屬性（Observability、Security…）分：被問到「上線要注意什麼」時，照時間走一輪，比較不會整塊漏掉。改到哪塊技術（CI、前端、資料庫…）改用 `area:` label 標，一張 issue 可以貼好幾個（見 [`.claude/rules/issue.md`](../.claude/rules/issue.md)）。
 
 一件事碰到好幾段時：
 
@@ -57,7 +57,7 @@ ITIL 4 已經把 v3 的五段改成不分先後的價值鏈，這裡對照 v3，
 - [AWS Well-Architected Generative AI Lens](https://docs.aws.amazon.com/wellarchitected/latest/generative-ai-lens/generative-ai-lens.html)：把六根支柱套在生成式 AI 的生命週期上（選模型、prompt、整合、部署、持續改進）
 - [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/)、[OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/)：LLM 和 agent 特有的資安風險。epic 裡 `LLM01` 這類編號指的就是這兩份
 - [trunkbaseddevelopment.com](https://trunkbaseddevelopment.com/)、[Git Flow 原文與作者 2020 年的補註](https://nvie.com/posts/a-successful-git-branching-model/)：分支策略和 hotfix 該怎麼選
-- [AGENTS.md](https://agents.md/)、[DORA](https://dora.dev/)：用 AI 寫程式時，規則怎麼跟著 repo 走、怎麼量 AI 對交付的影響
+- [DORA](https://dora.dev/)：用 AI 寫程式時，怎麼量 AI 對交付的影響
 - [GitHub：Linking a pull request to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue)、[Projects 內建自動化](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-built-in-automations)：`Closes #N` 怎麼讓合併自動關 issue、看板怎麼自己轉狀態
 - [Atlassian：Integrate Jira with GitHub](https://support.atlassian.com/jira-cloud-administration/docs/integrate-with-github/)：issue key 寫進分支、commit、PR，Jira 就會把開發進度連回 issue（原本的規劃，後來改用 GitHub Issues）
 - [HikariCP：Dropwizard / Micrometer metrics](https://github.com/brettwooldridge/HikariCP/wiki/Dropwizard-Metrics)、[Spring Boot：Supported metrics（DataSource）](https://docs.spring.io/spring-boot/reference/actuator/metrics.html)：連線池有哪些指標可以看

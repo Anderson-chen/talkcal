@@ -15,7 +15,7 @@ body:
 
         **Label：** `epic` 會自動貼上；另外貼對應的 `stage:` 或 `product:`，和 `p0`／`p1` 其中一個。子 issue 跟 epic 用同一個 `stage:` 或 `product:`。
 
-        **用字：** 寫給沒讀過這段程式碼的人看，每個欄位用條列，一點講一件事（照 .agents/rules/writing.md）。
+        **用字：** 寫給沒讀過這段程式碼的人看，每個欄位用條列，一點講一件事（照 .claude/rules/writing.md）。
   - type: textarea
     id: goal
     attributes:
