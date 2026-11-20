@@ -1,11 +1,11 @@
 ---
 name: open-pr
-description: 分支開好、要開始改到開 PR 時使用（工作流程第 3 步，由主 session 執行，在 `branch` 之後）：照順序呼叫修改者、審核者、三個投票者，兩票通過後執行測試、開 PR 或改 PR。內容包括 agent 的 prompt 格式、輪數上限、審查分級表、要執行的測試、PR 描述的寫法。
+description: 分支開好、要開始改到開 PR 時使用（由主 session 執行，在 `branch` 之後）：照順序呼叫修改者、審核者、三個投票者，兩票通過後執行測試、開 PR 或改 PR。內容包括 agent 的 prompt 格式、輪數上限、審查分級表、要執行的測試、PR 描述的寫法。
 ---
 
 # open-pr
 
-主 session 是使用者正在對話的那個 session。這份寫主 session 怎麼把一張 issue 從分支帶到 PR；修改者、審核者也用定義檔的 `skills:` 預先載入這份，查分級表和輪數。
+這份寫主 session 怎麼把一張 issue 從分支帶到 PR；修改者、審核者也用定義檔的 `skills:` 預先載入這份，查分級表和輪數。
 
 ## 開 PR 前：修改、審核、投票
 
@@ -14,7 +14,7 @@ description: 分支開好、要開始改到開 PR 時使用（工作流程第 3 
 - 五個 agent 都從新的對話開始，讀不到主 session 跟使用者的對話，也讀不到其他 agent 的推論。寫的人重看自己的 diff，會沿用寫的時候的假設；審的人先拿到寫的人的說明，還沒查就會接受那個結論。
 - 定義在 `.claude/agents/`：修改者 [pr-author.md](../../agents/pr-author.md)、審核者 [pr-reviewer.md](../../agents/pr-reviewer.md)，三個投票者 [pr-voter-fable.md](../../agents/pr-voter-fable.md)、[pr-voter-opus.md](../../agents/pr-voter-opus.md)、[pr-voter-sonnet.md](../../agents/pr-voter-sonnet.md)。
 - 主 session 只做這些：開 issue、問分支名稱、照下面的順序呼叫五個 agent、轉交回報、執行測試、開 PR。
-  - 不改檔案。使用者在對話裡交代的事先照 `issue` skill 寫進 issue，修改者才讀得到。修改者回報 issue 要猜才能改時，也回到 `issue` skill 問使用者、改 issue，再重新呼叫修改者，不算一輪。
+  - 不改檔案。使用者在對話裡交代的事先照 `issue` skill 寫進 issue，修改者才讀得到。修改者回報 issue 要猜才能改時，也回到 `issue` skill 問使用者、改 issue，再重新呼叫修改者。
   - agent 的回報原樣存成檔案，一份回報一個檔案，放在 repo 外面的資料夾（scratchpad 這類）。轉交給下一個 agent 時給檔案路徑，不摘要、不改寫，也不貼內文。
   - 回報檔的路徑只給下一步要用的 agent：投票者讀到別的票，就不是各自判斷。
   - 在 checkout 這個分支的資料夾裡呼叫 agent。呼叫前 `git status --porcelain` 要沒有輸出：審核者、投票者讀的是工作目錄的檔案，還沒 commit 的改動會被當成分支的內容。
@@ -22,7 +22,7 @@ description: 分支開好、要開始改到開 PR 時使用（工作流程第 3 
   - 分支改到 `CLAUDE.md`、`.claude/rules/`、`.claude/skills/` 或 `.claude/agents/` 時，從新開的 session 呼叫 agent：`CLAUDE.md` 和 `.claude/rules/` 載入的是 session 開始時的版本，agent 會先照那一版做。
   - 分支名稱裡沒有 issue 編號時（已經 push、照 `branch` skill 不改名的分支），呼叫審核者、投票者之前先停下來問使用者：這兩種 agent 只拿到分支名稱，issue 編號取自名稱。
   - 呼叫審核者、投票者之前先執行 `git fetch origin`。agent 自己不 fetch：三個投票者同時 fetch 會搶同一個 ref 的 lock。
-  - 回報第一行的 commit 不等於 `git rev-parse <分支>`，或 agent 停下來回報工作目錄不對時，那份回報不算數：把工作目錄處理好，重新呼叫同一種 agent，不算一輪。
+  - 回報第一行的 commit 不等於 `git rev-parse <分支>`，或 agent 停下來回報工作目錄不對時，那份回報不算數：把工作目錄處理好，重新呼叫同一種 agent。
 
 ### 呼叫 agent
 
@@ -48,7 +48,7 @@ description: 分支開好、要開始改到開 PR 時使用（工作流程第 3 
 3. 審核者沒有列問題之後，同時呼叫三個投票者，各投一票。
 4. 兩票通過就照下面的「照改到的地方驗證」執行測試、開 PR。沒過就帶著三張票回到第 1 步；測試沒過也回到第 1 步，帶的是測試的輸出。
 
-- 修改和審核最多 3 輪、投票最多 2 次，超過就停下來問使用者。投票沒過回到第 1 步之後，輪數接著算。
+- 修改和審核最多 3 輪、投票最多 2 次，超過就停下來問使用者。投票沒過回到第 1 步之後，輪數接著算。修改者因為 issue 要猜而停下來、回報因為 commit 或工作目錄不對而不算數，重新呼叫時都不算一輪。
 - 審核和投票看的要是分支最後一個 commit。審核者、投票者的回報第一行寫看的 commit；開 PR 前核對最後一輪審核和三張票寫的都等於 `git rev-parse <分支>`。之後又有 commit 就重新審核、投票。
 - 三個投票者用不同的模型（`fable`、`opus`、`sonnet`）：同一個模型的錯誤會一起錯，三票用同一個模型的話，多幾票不會比較準。怎麼投票見 [vote skill](../vote/SKILL.md)。
 

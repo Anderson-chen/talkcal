@@ -1,6 +1,6 @@
 ---
 name: commit
-description: commit 時使用：commit 標題、內文怎麼寫，commit 前怎麼確認分支（工作流程由修改者 `pr-author` 執行，在 `open-pr` 呼叫修改者之後）。PR 標題的寫法也照這份。
+description: commit 時使用：commit 標題、內文怎麼寫，commit 前怎麼確認分支（開 PR 前的工作流程裡由修改者 `pr-author` 執行）。PR 標題的寫法也照這份。
 ---
 
 # commit

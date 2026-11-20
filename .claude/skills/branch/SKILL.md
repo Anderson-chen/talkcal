@@ -1,6 +1,6 @@
 ---
 name: branch
-description: 開分支、開 worktree，或檢查目前分支的名稱合不合規則時使用（工作流程第 2 步，由主 session 執行，在 `issue` 之後）。分支已經建好（例如桌面 app 開 session 時建的）也要用。
+description: 開分支、開 worktree，或檢查目前分支的名稱合不合規則時使用（由主 session 執行，在 `issue` 之後）。分支已經建好（例如桌面 app 開 session 時建的）也要用。
 ---
 
 # branch

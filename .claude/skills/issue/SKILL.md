@@ -1,19 +1,18 @@
 ---
 name: issue
-description: 開 issue、改現有的 issue 時使用（工作流程第 1 步，由主 session 執行）。先進 plan mode 問清楚，使用者核准 issue 草稿後才執行 `gh issue create`。內容是 issue 的標題、欄位、驗收條件、label 怎麼寫，以及 issue 和 PR 各寫什麼。
+description: 開 issue、改現有的 issue 時使用（由主 session 執行，是工作流程的第一步）。先進 plan mode 問清楚，使用者核准 issue 草稿後才執行 `gh issue create`。內容是 issue 的標題、欄位、驗收條件、label 怎麼寫，以及 issue 和 PR 各寫什麼。
 ---
 
 # issue
 
-主 session 是使用者正在對話的那個 session。修改者、審核者、投票者都讀不到這段對話，只讀得到 issue；對話裡沒問清楚的，修改者只能猜，而 subagent 問不了使用者。所以要問使用者的事，都在這一步問完。
+修改者、審核者、投票者都讀不到這段對話，只讀得到 issue；對話裡沒問清楚的，修改者只能猜，而 subagent 問不了使用者。所以要問使用者的事，都在這一步問完。
 
 ## 步驟
 
 1. 用 `EnterPlanMode` 進 plan mode，讀相關的程式碼和文件。
-2. 用 `AskUserQuestion` 問使用者，問到這兩件事都做到才停：
+2. 用 `AskUserQuestion` 問使用者，問到這兩件事都做到才停。讀程式碼、文件查得到的不問。
    - 模板的每個欄位都寫得出來，不用猜。
    - 每條驗收條件都能判斷過或沒過，反例也問到。
-   - 讀程式碼、文件查得到的不問。
 3. 照下面的寫法寫好 issue 草稿，當成 plan 交給 `ExitPlanMode`。使用者核准後才執行 `gh issue create`（改現有的 issue 用 `gh issue edit`）。使用者在對話裡另外交代的事，也寫進 issue。
 
 ## 寫法
