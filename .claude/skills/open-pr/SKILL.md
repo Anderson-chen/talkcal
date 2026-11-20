@@ -1,6 +1,7 @@
 ---
 name: open-pr
 description: 分支開好、要開始改到開 PR 時使用（由主 session 執行，在 `branch` 之後）：照順序呼叫修改者、審核者、三個投票者，兩票通過後執行測試、開 PR 或改 PR。內容包括 agent 的 prompt 格式、輪數上限、審查分級表、要執行的測試、PR 描述的寫法。
+disable-model-invocation: true
 ---
 
 # open-pr

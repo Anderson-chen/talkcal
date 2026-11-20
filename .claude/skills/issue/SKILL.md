@@ -1,6 +1,7 @@
 ---
 name: issue
 description: 開 issue、改現有的 issue 時使用（由主 session 執行，是工作流程的第一步）。先進 plan mode 問清楚，使用者核准 issue 草稿後才執行 `gh issue create`。內容是 issue 的標題、欄位、驗收條件、label 怎麼寫，以及 issue 和 PR 各寫什麼。
+disable-model-invocation: true
 ---
 
 # issue
