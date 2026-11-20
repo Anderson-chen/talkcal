@@ -53,7 +53,7 @@ public final class GuestSessions {
 
     /**
      * secureCookie：只在 HTTPS 送（雲端），跟 session cookie 的 server.servlet.session.cookie.secure 一樣。
-     * keepActiveEvery：session 還在的訪客，隔多久記一次還在使用（見 dueToKeepActive）
+     * keepActiveEvery：session 還在的訪客，隔多久記一次使用時間（見 dueToKeepActive）
      */
     public GuestSessions(MergeGuestUseCase mergeGuest, boolean secureCookie, Duration keepActiveEvery) {
         this.mergeGuest = Objects.requireNonNull(mergeGuest, "mergeGuest 不可為 null");

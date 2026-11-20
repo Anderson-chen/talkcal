@@ -89,7 +89,7 @@ class GuestAccountsServiceTest {
     }
 
     @Test
-    @DisplayName("session 還在的訪客記下使用：token 從這次往後延 7 天，清理不會刪掉；反例：已經不是訪客回 empty")
+    @DisplayName("session 還在的訪客記下使用時間：token 從這次往後延 7 天，清理不會刪掉；反例：已經不是訪客回 empty")
     void keepActiveExtendsWithoutToken() {
         GuestPass pass = at(NOW).start();
         Instant later = NOW.plus(Duration.ofDays(6));

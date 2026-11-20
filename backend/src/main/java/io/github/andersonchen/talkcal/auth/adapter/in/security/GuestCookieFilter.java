@@ -18,7 +18,7 @@ import java.util.Objects;
  * 沒登入、但帶著訪客 cookie 的請求：token 還有效就登入那個訪客帳號，這個請求和之後的請求都是登入狀態。
  * token 過期、查不到、帳號已經不是訪客，就把 cookie 清掉，請求照樣當成沒登入。
  *
- * session 還在的訪客，隔一段時間記一次還在使用（見 GuestSessions.dueToKeepActive）。
+ * session 還在的訪客，隔一段時間記一次使用時間（見 GuestSessions.dueToKeepActive）。
  *
  * 要排在 Spring Security 讀完 session 之後：讀完還是沒登入才用 cookie。排在哪幾個 filter 前面見 SecurityConfiguration。
  */

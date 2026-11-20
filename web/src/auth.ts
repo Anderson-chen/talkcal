@@ -87,7 +87,7 @@ export function onSignedInFromGuest(listener: (guestId: string, accountId: strin
   return () => guestSignInListeners.delete(listener)
 }
 
-/** 送出登入、轉去 Google／GitHub 之前呼叫：記下現在是哪個訪客，不是訪客就清掉舊的紀錄 */
+/** 送出登入、轉址到 Google／GitHub 之前呼叫：記下現在是哪個訪客，不是訪客就清掉舊的紀錄 */
 export function rememberGuestBeforeSignIn() {
   try {
     if (isGuest.value && me.value) sessionStorage.setItem(SIGNING_IN_FROM_GUEST, me.value.id)

@@ -55,7 +55,7 @@ class AuthConfiguration {
     // ── 訪客 ──────────────────────────────────────────────────────────
 
     // 帳號名下的行程、對話在 calendar：auth 不 import calendar，在這裡把 auth 的 OwnedDataPort 設定成呼叫 calendar。
-    // 對話的歸檔不在 calendar 的 use case 裡（見 OwnedDataUseCase），接在後面，順序跟 OwnedDataService 一樣先資料庫、再歸檔
+    // 對話的歸檔不在 calendar 的 use case 裡（見 OwnedDataUseCase），接在後面：先資料庫、再歸檔，理由見 OwnedDataService
     @Bean
     OwnedDataPort accountOwnedData(OwnedDataUseCase calendarData, AssistantMemoryArchive conversationArchive) {
         return new OwnedDataPort() {

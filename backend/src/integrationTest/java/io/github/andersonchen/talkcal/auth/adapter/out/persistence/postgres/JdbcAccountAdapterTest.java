@@ -225,7 +225,7 @@ class JdbcAccountAdapterTest {
         assertEquals(1, guestTokens());
     }
 
-    // ── session 還在的訪客記下使用 ───────────────────────────────────────
+    // ── session 還在的訪客記下使用時間 ─────────────────────────────────────
 
     private static Instant expiresAt(String tokenHash) {
         return jdbc.sql("SELECT expires_at FROM guest_token WHERE token_hash = :hash").param("hash", tokenHash)
@@ -233,7 +233,7 @@ class JdbcAccountAdapterTest {
     }
 
     @Test
-    @DisplayName("訪客記下使用：最後使用時間改成這次，還沒過期的 token 延期；反例：已經過期的 token 不延")
+    @DisplayName("記下訪客的使用時間：最後使用時間改成這次，還沒過期的 token 延期；反例：已經過期的 token 不延")
     void keepActiveExtendsGuest() {
         Account guest = Account.guest(AccountId.newId());
         Instant started = Instant.parse("2026-11-01T00:00:00Z");

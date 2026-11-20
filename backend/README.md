@@ -78,7 +78,7 @@ SELECT account_id FROM account_identity WHERE provider = 'google' AND subject = 
 
 每個 API 每天能呼叫幾次，寫在資料庫的兩張表，計數放 Redis（表的定義和理由見 [V15](src/main/resources/db/migration/V15__guest_mode_and_daily_quota.sql)）：
 
-- `quota_bucket`：一份計數。記著照 IP、帳號或全站分開算，每天的上限，和用完時給使用者看的話。
+- `quota_bucket`：每一列是一份計數，欄位是照什麼分開算（IP、帳號或全站）、每天的上限和用完時顯示的訊息。
 - `quota_rule`：哪個等級呼叫哪個 API 算進哪一份。同一個 API 可以算進好幾份（例如開訪客帳號同時算全站的名額和那個 IP 的上限），任何一份用完就擋下。
 
 要限制一個新的 API，加一列就好，app 最多 1 分鐘內重讀（`talkcal.quota.rules-refresh`），不用改程式、不用重啟：
@@ -95,7 +95,7 @@ VALUES ('POST', '/api/calendar/assistant', 'free', 'free-assistant');
 
 超過上限回 429（`code = QUOTA_EXCEEDED`），`Retry-After` 指到 `calendar.zone` 的午夜。
 
-沒有做成任何事的那次不扣：送錯的 4xx、模型或資料庫出錯的 5xx，還有用同一把 `Idempotency-Key` 重送、回第一次存的結果的那次。
+沒有做成任何事的那次不扣：送錯的 4xx、模型或資料庫出錯的 5xx，還有用同一把 `Idempotency-Key` 重送、拿回第一次結果的請求。
 例外是模型有回話、助理最後沒有產生回覆的那次：回覆是空白、呼叫工具超過上限還沒回話，照扣，理由見 `AssistantGaveUpException`。
 
 Redis 無法連線、讀不到請求者的等級時都不限制次數，服務照常。

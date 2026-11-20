@@ -38,7 +38,7 @@
 - 計數放 Redis（[`RedisQuotaCounterAdapter`](../../backend/src/main/java/io/github/andersonchen/talkcal/quota/adapter/out/counter/redis/RedisQuotaCounterAdapter.java)）：
   加一和設到期在同一段 script。compose 多一個 `redis` 服務，開 AOF（`appendfsync everysec`）並掛 volume。
 - 比對規則、扣次數、退回在 Spring MVC 的 interceptor（[`QuotaInterceptor`](../../backend/src/main/java/io/github/andersonchen/talkcal/quota/adapter/in/web/QuotaInterceptor.java)），
-  這時已經知道登入的是誰、選好了 controller 的方法。
+  這時 Spring Security 已經驗證完登入者，Spring MVC 也選好了 controller 的方法。
 - nginx 的 `limit_req` 留著，擋每分鐘的連發。
 
 不放 PostgreSQL：每個受限的請求都要加一，等於每個請求多一次寫入，PR #339 的計數表就是這樣。
@@ -46,7 +46,7 @@
 
 ## 代價
 
-- 多一個服務要升級、監看；映像檔版本跟整合測試的 `TestRedis.IMAGE` 一起改（Renovate 綁在一起）。
+- 多一個服務要升級、監看；映像檔版本跟整合測試的 `TestRedis.IMAGE` 一起改，Renovate 會在同一個升級 PR 改這兩處。
 - Redis 無法連線時放行（`ConsumeQuotaUseCase`）：那段時間不限制次數，換來 Redis 停止回應時整站照常可用。
 - 計數的 volume 不備份：整個不見的話，當天的次數重新算。
 - 規則比對的是 controller 上的路徑樣板，`quota_rule.path_pattern` 要跟 `@RequestMapping` 一字不差（見 `QuotaRule`）。
@@ -55,11 +55,11 @@
 
 - app 跨機器、跨 AZ，或不想自己管 Redis：換成 ElastiCache、MemoryDB。
 - Redis 停機時不限制次數變得不能接受（例如付費方案按次數收錢）：改成無法連線時擋下，或計數改進資料庫。
-- 受限的請求多到一台 Redis 撐不住：改用 Redis Cluster。
+- 受限的請求超過一台 Redis 的處理能力：改用 Redis Cluster。
 
 ## 證據
 
 - [V15](../../backend/src/main/resources/db/migration/V15__guest_mode_and_daily_quota.sql)：規則表的定義和為什麼計數不在資料庫
 - [`deploy/compose.yaml`](../../deploy/compose.yaml) 的 `redis` 服務：AOF、volume、app 不 `depends_on` Redis 的理由
 - [`RedisQuotaCounterAdapterTest`](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/quota/adapter/out/counter/redis/RedisQuotaCounterAdapterTest.java)：兩個 app 執行個體共用計數、Redis 重啟之後次數還在
-- [`GuestModeSystemTest`](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/GuestModeSystemTest.java)：整個 app 接起來，第 4 次問助理、第 11 次增刪改被擋
+- [`GuestModeSystemTest`](../../backend/src/integrationTest/java/io/github/andersonchen/talkcal/GuestModeSystemTest.java)：啟動整個 app，第 4 次問助理、第 11 次增刪改被擋

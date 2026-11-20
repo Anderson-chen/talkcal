@@ -104,7 +104,7 @@ class ExternalUserServicesTest {
     }
 
     @Test
-    @DisplayName("轉去 Google 之前已經登入（例如訪客）：把那個帳號交給 SignInExternallyUseCase，訪客才能在同一個帳號上升級")
+    @DisplayName("轉址到 Google 之前已經登入（例如訪客）：把那個帳號交給 SignInExternallyUseCase，訪客才能在同一個帳號上升級")
     void passesTheAccountSignedInBefore() {
         AccountId guest = AccountId.newId();
         SecurityContextHolder.getContext().setAuthentication(AccountPrincipals.guest(guest));

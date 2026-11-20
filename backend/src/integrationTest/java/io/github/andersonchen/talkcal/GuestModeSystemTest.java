@@ -72,7 +72,7 @@ import tools.jackson.databind.ObjectMapper;
  * 逾時設成 5 秒：回得慢的那題不用等 2 分鐘，等放行的那題也來得及在逾時之前登入。
  * 要測第 4 次被擋、次數用完時，直接把 Redis 的計數設好；要測合併之後再搬一次時，把合併的時間改早。
  * 規則表每次請求都重讀（rules-refresh=0s），「加一列就生效」不用等。
- * session 還在的訪客每個請求都記下使用（keep-active-every=0s），不用等一小時。
+ * session 還在的訪客每個請求都記下使用時間（keep-active-every=0s），不用等一小時。
  */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
