@@ -166,8 +166,10 @@ class CalendarConfiguration {
     // ── 整個擁有者的資料：訪客併進正式帳號、清掉太久沒用的訪客 ──────────────
 
     @Bean
-    OwnedDataUseCase calendarOwnedData(JdbcClient jdbcClient, PlatformTransactionManager transactionManager) {
-        return new OwnedDataService(new JdbcOwnedDataAdapter(jdbcClient, new TransactionTemplate(transactionManager)));
+    OwnedDataUseCase calendarOwnedData(JdbcClient jdbcClient, PlatformTransactionManager transactionManager,
+                                       EventArchivePort eventArchive) {
+        return new OwnedDataService(new JdbcOwnedDataAdapter(jdbcClient, new TransactionTemplate(transactionManager)),
+                eventArchive);
     }
 
     // ── 觀測：活躍使用者 ───────────────────────────────────────────────────

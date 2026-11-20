@@ -21,6 +21,7 @@ import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -115,6 +116,21 @@ class S3EventArchiveAdapterTest {
         assertEquals(1, archive.deleteAll(ALICE));
         assertTrue(archive.load(ALICE, MARCH, MARCH).isEmpty());
         assertEquals(List.of(bobs), archive.load(BOB, MARCH, MARCH));
+    }
+
+    @Test
+    @DisplayName("訪客併進正式帳號：訪客的歸檔改到那個帳號名下，跟那個帳號原本的一起讀得到；反例：原本的擁有者讀不到")
+    void transferMovesToTheNewOwner() {
+        ScheduledEvent guests = event("訪客的", LocalDateTime.of(2024, 3, 1, 9, 0));
+        ScheduledEvent bobs = event("Bob 的", LocalDateTime.of(2024, 3, 2, 9, 0));
+        archive.store(ALICE, MARCH, List.of(guests));
+        archive.store(BOB, MARCH, List.of(bobs));
+
+        archive.transfer(ALICE, BOB);
+
+        assertTrue(archive.load(ALICE, MARCH, MARCH).isEmpty());
+        assertEquals(Set.of(guests, bobs), Set.copyOf(archive.load(BOB, MARCH, MARCH)));
+        assertEquals(2, bucket.list(ArchiveBucket.ownerPrefix(S3EventArchiveAdapter.ROOT, BOB)).size());
     }
 
     @Test

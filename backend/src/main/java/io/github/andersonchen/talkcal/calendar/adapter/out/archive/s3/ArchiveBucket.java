@@ -133,9 +133,33 @@ public final class ArchiveBucket {
         }
     }
 
+    /**
+     * 把 fromPrefix 底下的每一個 key 改放到 toPrefix 底下（後面的部分不變），回傳搬了幾個。
+     * S3 沒有改名，只能複製再刪：全部複製好才刪舊的。中途失敗時丟 IllegalStateException，
+     * 已經複製的留在新的前綴、舊的也還在，再呼叫一次會蓋成同樣的內容，接著把剩下的搬完。
+     */
+    public int moveAll(String fromPrefix, String toPrefix) {
+        List<String> keys = list(fromPrefix);
+        try {
+            for (String key : keys) {
+                String moved = toPrefix + key.substring(fromPrefix.length());
+                s3.copyObject(r -> r.sourceBucket(bucket).sourceKey(key).destinationBucket(bucket).destinationKey(moved));
+            }
+        } catch (SdkException e) {
+            throw new IllegalStateException("歸檔搬移失敗：s3://" + bucket + "/" + fromPrefix + " → " + toPrefix, e);
+        }
+        delete(keys, fromPrefix);
+        return keys.size();
+    }
+
     /** 回傳刪了幾個。 */
     public int deleteAll(String prefix) {
         List<String> keys = list(prefix);
+        delete(keys, prefix);
+        return keys.size();
+    }
+
+    private void delete(List<String> keys, String prefix) {
         try {
             for (int from = 0; from < keys.size(); from += DELETE_BATCH) {
                 List<ObjectIdentifier> batch = keys.subList(from, Math.min(from + DELETE_BATCH, keys.size())).stream()
@@ -149,6 +173,5 @@ public final class ArchiveBucket {
         } catch (SdkException e) {
             throw new IllegalStateException("歸檔刪除失敗：s3://" + bucket + "/" + prefix, e);
         }
-        return keys.size();
     }
 }

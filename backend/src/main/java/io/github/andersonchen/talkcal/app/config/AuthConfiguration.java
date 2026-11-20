@@ -1,5 +1,6 @@
 package io.github.andersonchen.talkcal.app.config;
 
+import io.github.andersonchen.talkcal.app.job.AssistantMemoryArchive;
 import io.github.andersonchen.talkcal.auth.adapter.in.security.GuestSessions;
 import io.github.andersonchen.talkcal.auth.adapter.out.persistence.postgres.JdbcAccountAdapter;
 import io.github.andersonchen.talkcal.auth.adapter.out.security.spring.SpringPasswordHasher;
@@ -53,18 +54,21 @@ class AuthConfiguration {
 
     // ── 訪客 ──────────────────────────────────────────────────────────
 
-    // 帳號資料在 calendar：auth 不 import calendar，在這裡把 auth 的 OwnedDataPort 設定成呼叫 calendar 的 use case
+    // 帳號名下的行程、對話在 calendar：auth 不 import calendar，在這裡把 auth 的 OwnedDataPort 設定成呼叫 calendar。
+    // 對話的歸檔不在 calendar 的 use case 裡（見 OwnedDataUseCase），接在後面，順序跟 OwnedDataService 一樣先資料庫、再歸檔
     @Bean
-    OwnedDataPort accountOwnedData(OwnedDataUseCase calendarData) {
+    OwnedDataPort accountOwnedData(OwnedDataUseCase calendarData, AssistantMemoryArchive conversationArchive) {
         return new OwnedDataPort() {
             @Override
             public void transfer(AccountId from, AccountId to) {
                 calendarData.transfer(new OwnerId(from.value()), new OwnerId(to.value()));
+                conversationArchive.transfer(new OwnerId(from.value()), new OwnerId(to.value()));
             }
 
             @Override
             public void deleteAll(AccountId owner) {
                 calendarData.deleteAll(new OwnerId(owner.value()));
+                conversationArchive.deleteAll(new OwnerId(owner.value()));
             }
         };
     }

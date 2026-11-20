@@ -204,6 +204,11 @@ class ArchiveControllerTest {
         public int deleteAll(OwnerId owner) {
             throw new UnsupportedOperationException("查看不該刪歸檔");
         }
+
+        @Override
+        public void transfer(OwnerId from, OwnerId to) {
+            throw new UnsupportedOperationException("查看不該搬歸檔");
+        }
     }
 
     static final class StubRestore {

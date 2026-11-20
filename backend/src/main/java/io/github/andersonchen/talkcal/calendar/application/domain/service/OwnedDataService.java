@@ -2,16 +2,23 @@ package io.github.andersonchen.talkcal.calendar.application.domain.service;
 
 import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
 import io.github.andersonchen.talkcal.calendar.application.port.in.OwnedDataUseCase;
+import io.github.andersonchen.talkcal.calendar.application.port.out.EventArchivePort;
 import io.github.andersonchen.talkcal.calendar.application.port.out.OwnedDataStorePort;
 
 import java.util.Objects;
 
+/**
+ * 先改資料庫、再改歸檔：資料庫改完之後，歸檔的排程就不會再把舊擁有者的行程存進舊的前綴；
+ * 歸檔那一步失敗時，再呼叫一次只剩歸檔要處理。
+ */
 public final class OwnedDataService implements OwnedDataUseCase {
 
     private final OwnedDataStorePort store;
+    private final EventArchivePort archive;
 
-    public OwnedDataService(OwnedDataStorePort store) {
+    public OwnedDataService(OwnedDataStorePort store, EventArchivePort archive) {
         this.store = Objects.requireNonNull(store, "store 不可為 null");
+        this.archive = Objects.requireNonNull(archive, "archive 不可為 null");
     }
 
     @Override
@@ -21,6 +28,7 @@ public final class OwnedDataService implements OwnedDataUseCase {
         }
         if (!from.equals(to)) {
             store.transfer(from, to);
+            archive.transfer(from, to);
         }
     }
 
@@ -30,5 +38,6 @@ public final class OwnedDataService implements OwnedDataUseCase {
             throw new IllegalArgumentException("擁有者不可為 null");
         }
         store.deleteAll(owner);
+        archive.deleteAll(owner);
     }
 }

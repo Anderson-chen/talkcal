@@ -7,7 +7,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.andersonchen.talkcal.app.job.AssistantMemoryArchive;
 import io.github.andersonchen.talkcal.auth.application.port.in.ExpireGuestsUseCase;
+import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.ArchiveBucket;
+import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.RustFsContainer;
+import io.github.andersonchen.talkcal.calendar.application.port.in.ArchiveEventsUseCase;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -23,8 +27,11 @@ import java.net.InetSocketAddress;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -33,6 +40,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,12 +52,14 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
  * 訪客模式要整個 app 組在一起才測得出來的地方：Spring Security 的 filter（訪客 cookie、等級）、
- * 每日次數的 interceptor 和規則表（V15）、Redis 的計數、訪客併進正式帳號時跨模組搬資料。
+ * 每日次數的 interceptor 和規則表（V15）、Redis 的計數、訪客併進正式帳號時跨模組搬資料，包括 RustFS 裡的歸檔。
  *
  * 每一題用 BrowserSession.forwardedFor 扮成不同 IP 的訪客，「同 IP 共用、不同 IP 各自算」才測得出來。
  * 模型換成 JDK 內建 HttpServer 做的假 OpenAI server（FakeModel），每一題設定它怎麼回：
@@ -58,6 +68,7 @@ import tools.jackson.databind.ObjectMapper;
  * 規則表每次請求都重讀（rules-refresh=0s），「加一列就生效」不用等；session 還在的訪客每個請求都記下使用
  * （keep-active-every=0s），不用等一小時。
  */
+@Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {"spring.ai.openai.chat.timeout=2s", "talkcal.quota.rules-refresh=0s", "talkcal.guest.keep-active-every=0s"})
 @DisplayName("系統測試：訪客模式和每日次數")
@@ -65,11 +76,24 @@ class GuestModeSystemTest {
 
     private static final FakeModel MODEL = new FakeModel();
 
+    @Container
+    static final RustFsContainer RUSTFS = new RustFsContainer();
+
     @DynamicPropertySource
     static void stores(DynamicPropertyRegistry registry) {
         TestPostgres.newDatabase().register(registry);
         TestRedis.register(registry);
         registry.add("spring.ai.openai.chat.base-url", () -> "http://127.0.0.1:" + MODEL.port() + "/v1");
+        registry.add("talkcal.archive.endpoint", RUSTFS::endpoint);
+        registry.add("talkcal.archive.region", () -> RustFsContainer.REGION);
+        registry.add("talkcal.archive.access-key", () -> RustFsContainer.ACCESS_KEY);
+        registry.add("talkcal.archive.secret-key", () -> RustFsContainer.SECRET_KEY);
+    }
+
+    // app 用的是 application.properties 的 talkcal.archive.bucket
+    @BeforeAll
+    static void createBucket() {
+        RUSTFS.createBucket("talkcal-archive");
     }
 
     @AfterAll
@@ -102,6 +126,15 @@ class GuestModeSystemTest {
 
     @Autowired
     ExpireGuestsUseCase expireGuests;
+
+    @Autowired
+    ArchiveEventsUseCase archiveEvents;
+
+    @Autowired
+    AssistantMemoryArchive conversationArchive;
+
+    @Autowired
+    ArchiveBucket archiveBucket;
 
     @Autowired
     CircuitBreakerRegistry breakers;
@@ -184,6 +217,25 @@ class GuestModeSystemTest {
         assertEquals("QUOTA_EXCEEDED", JSON.readTree(response.body()).at("/code").asString());
         long retryAfter = Long.parseLong(response.headers().firstValue("Retry-After").orElseThrow());
         assertTrue(retryAfter > 0 && retryAfter <= 24 * 3600, "Retry-After 是離換日還有幾秒：" + retryAfter);
+    }
+
+    /** 加一筆 2023 年的行程、問一句，再把兩者都搬進歸檔：行程結束超過 2 年，對話當成 60 天前說的 */
+    private void archivedEventAndConversation(BrowserSession who, String ownerId) throws Exception {
+        HttpResponse<String> added = who.postJson(EVENTS, """
+                {"events": [{"title": "很久以前的牙醫", "start": "2023-05-01T09:00:00", "end": "2023-05-01T10:00:00"}]}""");
+        assertEquals(201, added.statusCode(), added.body());
+        conversationOf(who);
+        jdbc.sql("UPDATE calendar_assistant_message SET created_at = now() - interval '60 days' WHERE owner_id = :owner")
+                .param("owner", UUID.fromString(ownerId)).update();
+
+        assertEquals(1, archiveEvents.archiveEndedBefore(LocalDateTime.now().minusYears(2)).archived());
+        assertEquals(1, conversationArchive.archiveInactiveSince(Instant.now().minus(Duration.ofDays(30))).archived());
+    }
+
+    /** owner 名下的行程歸檔、對話歸檔各有幾包 */
+    private List<Integer> archivesOf(String ownerId) {
+        return List.of(archiveBucket.list("calendar-event/owner=" + ownerId + "/").size(),
+                archiveBucket.list("assistant-conversation/owner=" + ownerId + "/").size());
     }
 
     private BrowserSession reopened(BrowserSession browser, String ip) {
@@ -469,13 +521,15 @@ class GuestModeSystemTest {
     }
 
     @Test
-    @DisplayName("訪客登入已有的帳號：訪客的行程和對話併進那個帳號，訪客帳號被刪掉")
+    @DisplayName("訪客登入已有的帳號：訪客的行程和對話（包括已經歸檔的）併進那個帳號，訪客帳號被刪掉")
     void loginMergesTheGuest() throws Exception {
         BrowserSession member = browserFrom(OTHER_IP).signUpAndLogIn("amy", "correct-horse");
+        String amyId = JSON.readTree(member.get("/api/auth/me").body()).at("/id").asString();
         addEvent(member, "原本的會議");
 
         BrowserSession guest = browserFrom(GUEST_IP);
         String guestId = startGuest(guest).at("/id").asString();
+        archivedEventAndConversation(guest, guestId);
         addEvent(guest, "訪客時加的牙醫");
         String conversation = conversationOf(guest);
 
@@ -484,6 +538,12 @@ class GuestModeSystemTest {
         assertEquals(2, linesIn(guest, conversation));
         assertEquals(0, jdbc.sql("SELECT count(*) FROM account WHERE id = :id").param("id", UUID.fromString(guestId))
                 .query(Integer.class).single());
+
+        HttpResponse<String> archived = guest.get("/api/calendar/archive/events?from=2023-05-01&to=2023-05-01");
+        assertEquals(200, archived.statusCode(), archived.body());
+        assertEquals("很久以前的牙醫", JSON.readTree(archived.body()).at("/events/0/title").asString());
+        assertEquals(List.of(1, 1), archivesOf(amyId), "行程、對話的歸檔都搬到 amy 名下");
+        assertEquals(List.of(0, 0), archivesOf(guestId));
     }
 
     @Test
@@ -514,6 +574,7 @@ class GuestModeSystemTest {
     void inactiveGuestsAreDeleted() throws Exception {
         BrowserSession old = browserFrom(GUEST_IP);
         String oldId = startGuest(old).at("/id").asString();
+        archivedEventAndConversation(old, oldId);
         addEvent(old, "很久以前的行程");
         conversationOf(old);
         BrowserSession recent = browserFrom(OTHER_IP);
@@ -528,6 +589,7 @@ class GuestModeSystemTest {
             assertEquals(0, jdbc.sql("SELECT count(*) FROM " + table + " WHERE owner_id = :id")
                     .param("id", UUID.fromString(oldId)).query(Integer.class).single(), table);
         }
+        assertEquals(List.of(0, 0), archivesOf(oldId), "歸檔也一起刪掉");
         assertEquals(200, recent.get("/api/auth/me").statusCode());
         assertEquals(1, eventsIn(member));
     }
