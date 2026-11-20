@@ -5,7 +5,7 @@ import java.util.Optional;
 
 /**
  * 每個請求進到 controller 之前先算一次：沒有規則對到就不限制；對到了就在每一份計數上加一，
- * 任何一份超過上限就全部退回、丟 QuotaExceededException。請求最後沒有成功時呼叫 refund 退回這一次。
+ * 任何一份超過上限就全部退回、丟 QuotaExceededException。呼叫端判斷這一次不該算（例如請求最後沒有成功）時，呼叫 refund 退回。
  *
  * 計數暫時讀不到（Redis 無法連線）時放行、回 empty：寧可那段時間多給幾次，也不要 Redis 一無法連線，整站就不能用。
  */

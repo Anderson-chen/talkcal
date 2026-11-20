@@ -302,6 +302,22 @@ class GuestModeSystemTest {
     }
 
     @Test
+    @DisplayName("模型有回話、助理才放棄的那次照樣扣：回覆是空白、呼叫工具超過上限還沒回話（502）")
+    void gaveUpAfterModelRepliedIsCounted() throws Exception {
+        BrowserSession guest = browserFrom(GUEST_IP);
+        startGuest(guest);
+
+        MODEL.reply(FakeModel.Mode.BLANK);
+        assertEquals(502, ask(guest, "明天我有什麼行程？").statusCode());
+        MODEL.reply(FakeModel.Mode.TOOLS_FOREVER);
+        assertEquals(502, ask(guest, "明天我有什麼行程？").statusCode());
+
+        // 退回是在回應之後才執行：等一下再看，才不會在退回之前就讀到 2
+        await().during(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(5))
+                .until(() -> counted("guest-assistant", GUEST_IP) == 2);
+    }
+
+    @Test
     @DisplayName("反例：模型連不上（收到請求就關掉連線）、逾時（502），斷路器打開、bulkhead 滿了（503）的那幾次都不扣")
     void modelNotRespondingIsNotCounted() throws Exception {
         BrowserSession guest = browserFrom(GUEST_IP);
