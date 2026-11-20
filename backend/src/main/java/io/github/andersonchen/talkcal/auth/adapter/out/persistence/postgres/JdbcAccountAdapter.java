@@ -124,6 +124,45 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
     }
 
     @Override
+    public boolean upgradeGuestWithIdentity(Account upgraded, ExternalIdentity identity) {
+        try {
+            Boolean saved = transaction.execute(status -> {
+                // tier = 'guest' 是條件，理由見 upgradeGuest
+                int updated = jdbc.sql("""
+                                UPDATE account SET display_name = :displayName, tier = :tier, last_active_at = NULL
+                                WHERE id = :id AND tier = 'guest'
+                                """)
+                        .param("id", upgraded.id().value())
+                        .param("displayName", upgraded.displayName())
+                        .param("tier", upgraded.tier().id())
+                        .update();
+                if (updated == 0) {
+                    return false;
+                }
+                // 同時插同一個 identity 的處理見 saveIfIdentityFree；對到別的帳號就把剛才的升級也撤掉
+                int linked = jdbc.sql("""
+                                INSERT INTO account_identity (provider, subject, account_id)
+                                VALUES (:provider, :subject, :accountId)
+                                ON CONFLICT (provider, subject) DO NOTHING
+                                """)
+                        .param("provider", identity.provider().id())
+                        .param("subject", identity.subject())
+                        .param("accountId", upgraded.id().value())
+                        .update();
+                if (linked == 0) {
+                    status.setRollbackOnly();
+                    return false;
+                }
+                jdbc.sql("DELETE FROM guest_token WHERE account_id = :id").param("id", upgraded.id().value()).update();
+                return true;
+            });
+            return Boolean.TRUE.equals(saved);
+        } catch (DataAccessException e) {
+            throw new IllegalStateException("訪客升級成會員失敗：" + identity, e);
+        }
+    }
+
+    @Override
     public void saveGuest(Account guest, String tokenHash, Instant now, Instant expiresAt) {
         try {
             transaction.executeWithoutResult(status -> {

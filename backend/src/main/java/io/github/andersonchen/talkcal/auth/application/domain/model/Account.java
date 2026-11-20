@@ -71,7 +71,10 @@ public record Account(AccountId id, String displayName, PasswordLogin passwordLo
         return new Account(id, cleaned, null, MembershipTier.FREE);
     }
 
-    /** 按「以訪客身分試用」時開的帳號：沒有帳號名稱和密碼，註冊時在同一個帳號上補（見 RegisterAccountUseCase.upgradeGuest） */
+    /**
+     * 按「以訪客身分試用」時開的帳號：沒有帳號名稱和密碼。註冊時在同一個帳號上升級：
+     * 帳密見 RegisterAccountUseCase.registerFrom，Google、GitHub 見 SignInExternallyUseCase
+     */
     public static Account guest(AccountId id) {
         return new Account(id, MembershipTier.GUEST.label(), null, MembershipTier.GUEST);
     }

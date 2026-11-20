@@ -25,4 +25,10 @@ public interface SaveAccountPort {
     UpgradeResult upgradeGuest(AccountId guest, Account.PasswordLogin login);
 
     enum UpgradeResult { UPGRADED, USERNAME_TAKEN, NOT_A_GUEST }
+
+    /**
+     * upgraded.id() 這個帳號還是訪客，就改成 upgraded 的顯示名稱和等級、記下 identity 對到它、刪掉它的訪客 token，
+     * 全部一起成功或一起不算。帳號已經不是訪客、或 identity 已經對到別的帳號時回 false，什麼都不改。
+     */
+    boolean upgradeGuestWithIdentity(Account upgraded, ExternalIdentity identity);
 }

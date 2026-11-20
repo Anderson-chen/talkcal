@@ -13,6 +13,8 @@ import io.github.andersonchen.talkcal.auth.application.domain.model.ExternalIden
 import io.github.andersonchen.talkcal.auth.application.domain.model.MembershipTier;
 import io.github.andersonchen.talkcal.auth.application.domain.model.Username;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -161,8 +163,63 @@ class JdbcAccountAdapterTest {
             assertThrows(IllegalStateException.class, () -> adapter.load(amy.id()));
         } finally {
             jdbc.sql("DELETE FROM account").update();
-            jdbc.sql("ALTER TABLE account ADD CONSTRAINT account_tier_known CHECK (tier IN ('free', 'paid'))").update();
+            // 加回 V15 的那個：這個 class 的其他測試會存訪客帳號
+            jdbc.sql("ALTER TABLE account ADD CONSTRAINT account_tier_known CHECK (tier IN ('guest', 'free', 'paid'))").update();
         }
+    }
+
+    // ── 訪客用 Google、GitHub 註冊 ─────────────────────────────────────
+
+    private static Account guestWithToken() {
+        Account guest = Account.guest(AccountId.newId());
+        Instant now = Instant.now();
+        adapter.saveGuest(guest, "a".repeat(64), now, now.plus(Duration.ofDays(7)));
+        return guest;
+    }
+
+    private static int guestTokens() {
+        return jdbc.sql("SELECT count(*) FROM guest_token").query(Integer.class).single();
+    }
+
+    @Test
+    @DisplayName("訪客接上 Google：同一個帳號改成免費、名字換成 Google 給的，identity 對到它，訪客 token 刪掉")
+    void guestUpgradesWithIdentity() {
+        Account guest = guestWithToken();
+
+        assertTrue(adapter.upgradeGuestWithIdentity(Account.external(guest.id(), "Amy Chen", null), AMY_GOOGLE));
+
+        Account upgraded = adapter.load(AMY_GOOGLE).orElseThrow();
+        assertEquals(guest.id(), upgraded.id());
+        assertEquals(MembershipTier.FREE, upgraded.tier());
+        assertEquals("Amy Chen", upgraded.displayName());
+        assertEquals(0, guestTokens());
+        assertEquals(1, accounts());
+    }
+
+    @Test
+    @DisplayName("反例：帳號已經不是訪客（另一個分頁先註冊好了）：回 false，名字、等級不變，identity 沒有對到它")
+    void memberIsNotUpgradedWithIdentity() {
+        Account amy = Account.withPassword(AccountId.newId(), new Username("amy"), "{bcrypt}hash");
+        adapter.saveIfUsernameFree(amy);
+
+        assertFalse(adapter.upgradeGuestWithIdentity(Account.external(amy.id(), "Amy Chen", null), AMY_GOOGLE));
+
+        assertEquals(amy, adapter.load(amy.id()).orElseThrow());
+        assertTrue(adapter.load(AMY_GOOGLE).isEmpty());
+    }
+
+    @Test
+    @DisplayName("反例：identity 已經對到別的帳號：回 false，訪客的升級一起撤掉，還是訪客、token 還在")
+    void identityTakenRollsBackUpgrade() {
+        Account other = Account.external(AccountId.newId(), "Amy（另一個分頁）", null);
+        adapter.saveIfIdentityFree(other, AMY_GOOGLE);
+        Account guest = guestWithToken();
+
+        assertFalse(adapter.upgradeGuestWithIdentity(Account.external(guest.id(), "Amy Chen", null), AMY_GOOGLE));
+
+        assertEquals(guest, adapter.load(guest.id()).orElseThrow());
+        assertEquals(other.id(), adapter.load(AMY_GOOGLE).orElseThrow().id());
+        assertEquals(1, guestTokens());
     }
 
     @Test

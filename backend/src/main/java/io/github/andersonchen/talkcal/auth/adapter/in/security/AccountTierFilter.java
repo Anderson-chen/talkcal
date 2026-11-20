@@ -1,7 +1,6 @@
 package io.github.andersonchen.talkcal.auth.adapter.in.security;
 
 import io.github.andersonchen.talkcal.auth.application.domain.model.Account;
-import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
 import io.github.andersonchen.talkcal.auth.application.domain.model.MembershipTier;
 import io.github.andersonchen.talkcal.auth.application.port.in.FindAccountUseCase;
 
@@ -9,8 +8,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -48,16 +45,10 @@ public final class AccountTierFilter extends OncePerRequestFilter {
     }
 
     private String currentTier() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (!AccountPrincipals.signedIn(authentication)) {
-            return NONE;
-        }
-        AccountId id;
-        try {
-            id = AccountId.of(authentication.getName());
-        } catch (IllegalArgumentException e) {
-            return NONE;
-        }
-        return findAccount.byId(id).map(Account::tier).map(MembershipTier::id).orElse(NONE);
+        return AccountPrincipals.signedInAccount()
+                .flatMap(findAccount::byId)
+                .map(Account::tier)
+                .map(MembershipTier::id)
+                .orElse(NONE);
     }
 }

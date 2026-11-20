@@ -1,6 +1,7 @@
 package io.github.andersonchen.talkcal.auth.adapter.in.security;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
@@ -12,10 +13,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.config.oauth2.client.CommonOAuth2Provider;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
@@ -38,14 +42,19 @@ class ExternalUserServicesTest {
     private static final OAuth2AccessToken ACCESS_TOKEN =
             new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER, "access-token", NOW, NOW.plusSeconds(60));
 
-    private record SignInCall(ExternalIdentity identity, String name, String fallbackName) {
+    private record SignInCall(AccountId signedIn, ExternalIdentity identity, String name, String fallbackName) {
     }
 
     private final List<SignInCall> calls = new ArrayList<>();
-    private final SignInExternallyUseCase signIn = (identity, name, fallbackName) -> {
-        calls.add(new SignInCall(identity, name, fallbackName));
+    private final SignInExternallyUseCase signIn = (signedIn, identity, name, fallbackName) -> {
+        calls.add(new SignInCall(signedIn, identity, name, fallbackName));
         return ACCOUNT;
     };
+
+    @AfterEach
+    void signOut() {
+        SecurityContextHolder.clearContext();
+    }
 
     private static ClientRegistration registration(CommonOAuth2Provider provider, String id) {
         return provider.getBuilder(id).clientId("client-id").clientSecret("client-secret").build();
@@ -67,7 +76,7 @@ class ExternalUserServicesTest {
 
         OidcUser user = service.loadUser(googleRequest(token));
 
-        assertEquals(List.of(new SignInCall(new ExternalIdentity(ExternalIdentity.Provider.GOOGLE, "google-sub-1"),
+        assertEquals(List.of(new SignInCall(null, new ExternalIdentity(ExternalIdentity.Provider.GOOGLE, "google-sub-1"),
                 "Amy Chen", "amy@example.com")), calls);
         assertEquals(ACCOUNT.toString(), user.getName(), "跟帳密登入一樣，Authentication.getName() 是帳號 ID");
         assertEquals("google-sub-1", user.getSubject(), "Google 給的資料照樣留著");
@@ -88,16 +97,40 @@ class ExternalUserServicesTest {
 
         OAuth2User user = service.loadUser(new OAuth2UserRequest(github, ACCESS_TOKEN));
 
-        assertEquals(List.of(new SignInCall(new ExternalIdentity(ExternalIdentity.Provider.GITHUB, "583231"),
+        assertEquals(List.of(new SignInCall(null, new ExternalIdentity(ExternalIdentity.Provider.GITHUB, "583231"),
                 null, "amy-gh")), calls);
         assertEquals(ACCOUNT.toString(), user.getName());
         assertEquals("amy-gh", user.getAttribute("login"));
     }
 
     @Test
+    @DisplayName("轉去 Google 之前已經登入（例如訪客）：把那個帳號交給 SignInExternallyUseCase，訪客才能在同一個帳號上升級")
+    void passesTheAccountSignedInBefore() {
+        AccountId guest = AccountId.newId();
+        SecurityContextHolder.getContext().setAuthentication(AccountPrincipals.guest(guest));
+        var service = new AccountOidcUserService(request -> new DefaultOidcUser(AuthorityUtils.NO_AUTHORITIES, request.getIdToken()), signIn);
+
+        service.loadUser(googleRequest(idToken(Map.of("sub", "google-sub-1"))));
+
+        assertEquals(guest, calls.getFirst().signedIn());
+    }
+
+    @Test
+    @DisplayName("反例：沒登入時 Spring Security 放的是匿名的 Authentication，不算已經登入")
+    void anonymousIsNotSignedIn() {
+        SecurityContextHolder.getContext().setAuthentication(new AnonymousAuthenticationToken("key", "anonymousUser",
+                AuthorityUtils.createAuthorityList("ROLE_ANONYMOUS")));
+        var service = new AccountOidcUserService(request -> new DefaultOidcUser(AuthorityUtils.NO_AUTHORITIES, request.getIdToken()), signIn);
+
+        service.loadUser(googleRequest(idToken(Map.of("sub", "google-sub-1"))));
+
+        assertNull(calls.getFirst().signedIn());
+    }
+
+    @Test
     @DisplayName("對帳號時出錯（資料庫掛了）：翻成 OAuth2AuthenticationException，交給 failure handler 轉回登入頁，不是 500")
     void failureBecomesAuthenticationFailure() {
-        SignInExternallyUseCase broken = (identity, name, fallbackName) -> {
+        SignInExternallyUseCase broken = (signedIn, identity, name, fallbackName) -> {
             throw new IllegalStateException("讀取帳號失敗");
         };
         var service = new AccountOidcUserService(request -> new DefaultOidcUser(AuthorityUtils.NO_AUTHORITIES, request.getIdToken()), broken);

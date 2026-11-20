@@ -39,6 +39,7 @@ public final class AccountOAuth2UserService implements OAuth2UserService<OAuth2U
         OAuth2User user = delegate.loadUser(request);
         String registrationId = request.getClientRegistration().getRegistrationId();
         AccountId accountId = ExternalSignIn.run(registrationId, () -> signIn.signIn(
+                ExternalSignIn.signedInBefore(),
                 new ExternalIdentity(ExternalIdentity.Provider.of(registrationId), user.getName()),
                 user.getAttribute("name"),
                 user.getAttribute("login")));

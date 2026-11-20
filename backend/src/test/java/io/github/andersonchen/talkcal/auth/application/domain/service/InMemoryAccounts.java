@@ -75,6 +75,20 @@ final class InMemoryAccounts implements SaveAccountPort, LoadAccountPort, GuestS
     }
 
     @Override
+    public boolean upgradeGuestWithIdentity(Account upgraded, ExternalIdentity identity) {
+        Optional<Account> current = load(upgraded.id()).filter(Account::isGuest);
+        if (current.isEmpty() || identities.containsKey(identity)) {
+            return false;
+        }
+        saved.remove(current.get());
+        saved.add(upgraded);
+        identities.put(identity, upgraded.id());
+        tokens.values().removeIf(token -> token.account().equals(upgraded.id()));
+        lastActive.remove(upgraded.id());
+        return true;
+    }
+
+    @Override
     public void saveGuest(Account guest, String tokenHash, Instant now, Instant expiresAt) {
         saved.add(guest);
         tokens.put(tokenHash, new Token(guest.id(), expiresAt));

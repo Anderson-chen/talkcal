@@ -72,7 +72,8 @@ public final class GuestSessions {
 
     /**
      * 登入成功（帳密、Google、GitHub）之後呼叫：這個 session 原本是訪客的話，把訪客的資料併進剛登入的帳號，
-     * 訪客 cookie 清掉。訪客註冊成會員再登入時是同一個帳號，MergeGuestUseCase 什麼都不做，只清 cookie。
+     * 訪客 cookie 清掉。訪客帳密註冊後再登入、第一次用 Google、GitHub 登入時，登入的就是升級過的同一個帳號，
+     * MergeGuestUseCase 什麼都不做，只清 cookie。
      */
     public void afterSignIn(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
         Optional<AccountId> guest = guestOf(request);
