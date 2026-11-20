@@ -339,6 +339,23 @@ class GuestModeSystemTest {
     }
 
     @Test
+    @DisplayName("反例：用同一把 Idempotency-Key 重送新增（回第一次存的結果）不扣增刪改的次數")
+    void replayedAddIsNotCounted() throws Exception {
+        BrowserSession guest = browserFrom(GUEST_IP);
+        startGuest(guest);
+        String body = """
+                {"events": [{"title": "牙醫", "start": "2030-01-15T10:00:00", "end": "2030-01-15T11:00:00"}]}""";
+
+        assertEquals(201, guest.postJson(EVENTS, body, "add-1").statusCode());
+        HttpResponse<String> replayed = guest.postJson(EVENTS, body, "add-1");
+        assertEquals(201, replayed.statusCode(), replayed.body());
+        assertEquals("true", replayed.headers().firstValue("Idempotent-Replayed").orElseThrow());
+
+        eventuallyCounted("guest-calendar-writes", GUEST_IP, 1);
+        assertEquals(1, eventsIn(guest));
+    }
+
+    @Test
     @DisplayName("同一個 IP 問助理 3 次都有回話，第 4 次回 429，沒有呼叫模型")
     void fourthQuestionIs429() throws Exception {
         BrowserSession guest = browserFrom(GUEST_IP);

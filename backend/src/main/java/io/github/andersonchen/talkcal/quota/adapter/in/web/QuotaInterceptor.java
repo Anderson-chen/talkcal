@@ -26,11 +26,13 @@ import java.util.function.Predicate;
  *
  * 回應是 4xx、5xx 時退回這一次：模型出錯、資料庫出錯不是使用者的問題；送錯的請求（400、409）什麼都沒做成，
  * 也不該用掉次數。例外是 keptOnFailure 判斷成照扣的失敗：失敗之前已經用掉了要限制的資源。
+ * 成功、但回應帶 Idempotent-Replayed: true 的也退回：同一把 Idempotency-Key 重送，回的是第一次存的結果，這次什麼都沒做。
  * 被每日次數擋下的那次在 ConsumeQuotaUseCase 裡就退回了。
  */
 public final class QuotaInterceptor implements HandlerInterceptor {
 
     private static final String CONSUMED = QuotaInterceptor.class.getName() + ".consumed";
+    private static final String REPLAYED = "Idempotent-Replayed";
 
     private final ConsumeQuotaUseCase quota;
     private final Function<HttpServletRequest, String> tierOf;
@@ -61,9 +63,11 @@ public final class QuotaInterceptor implements HandlerInterceptor {
 
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
-        if (request.getAttribute(CONSUMED) instanceof Consumed consumed
-                && (ex != null || response.getStatus() >= HttpStatus.BAD_REQUEST.value())
-                && !kept(request, ex)) {
+        if (!(request.getAttribute(CONSUMED) instanceof Consumed consumed)) {
+            return;
+        }
+        boolean failed = ex != null || response.getStatus() >= HttpStatus.BAD_REQUEST.value();
+        if (failed ? !kept(request, ex) : "true".equals(response.getHeader(REPLAYED))) {
             quota.refund(consumed);
         }
     }

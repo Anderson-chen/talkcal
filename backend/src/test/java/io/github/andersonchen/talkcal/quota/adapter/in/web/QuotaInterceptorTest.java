@@ -53,10 +53,19 @@ class QuotaInterceptorTest {
     }
 
     private void handle(MockHttpServletRequest request, int status, Exception ex) {
-        MockHttpServletResponse response = new MockHttpServletResponse();
+        handle(request, status, ex, new MockHttpServletResponse());
+    }
+
+    private void handle(MockHttpServletRequest request, int status, Exception ex, MockHttpServletResponse response) {
         interceptor.preHandle(request, response, new Object());
         response.setStatus(status);
         interceptor.afterCompletion(request, response, new Object(), ex);
+    }
+
+    private static MockHttpServletResponse replayed(String value) {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        response.setHeader("Idempotent-Replayed", value);
+        return response;
     }
 
     @ParameterizedTest(name = "{0}")
@@ -107,6 +116,16 @@ class QuotaInterceptorTest {
         handle(request(), 200, new SpentAnyway());
 
         assertEquals(List.of(), refunded);
+    }
+
+    @Test
+    @DisplayName("同一把 Idempotency-Key 重送，回的是第一次存的結果（Idempotent-Replayed: true）：退回；反例：第一次（false）照扣")
+    void replayIsRefunded() {
+        handle(request(), 201, null, replayed("false"));
+        assertEquals(List.of(), refunded);
+
+        handle(request(), 201, null, replayed("true"));
+        assertEquals(1, refunded.size());
     }
 
     @Test

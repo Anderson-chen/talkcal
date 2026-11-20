@@ -52,6 +52,12 @@ final class BrowserSession {
         return send(request(path).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(json)), true);
     }
 
+    /** 帶 Idempotency-Key 送，重送時帶同一把（前端的 submitOnce.ts 也是這樣） */
+    HttpResponse<String> postJson(String path, String json, String idempotencyKey) throws Exception {
+        return send(request(path).header("Content-Type", "application/json").header("Idempotency-Key", idempotencyKey)
+                .POST(HttpRequest.BodyPublishers.ofString(json)), true);
+    }
+
     HttpResponse<String> putJson(String path, String json) throws Exception {
         return send(request(path).header("Content-Type", "application/json").PUT(HttpRequest.BodyPublishers.ofString(json)), true);
     }
