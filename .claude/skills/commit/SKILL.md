@@ -18,4 +18,4 @@ description: commit 時使用：commit 標題、內文怎麼寫，commit 前怎�
 
 沒走流程時，commit 之後照 `CLAUDE.md` 的「沒走流程的改動」執行測試、開 PR。
 
-走流程時，修改者 commit 之後照 [open-pr skill](../open-pr/SKILL.md) 的分級表執行列給修改者的指令，再回報；主 session 接著照 `open-pr` 呼叫審核者。
+走流程時，修改者 commit 之後照 [review-levels skill](../review-levels/SKILL.md) 的分級表執行列給修改者的指令，再回報；主 session 接著照 `open-pr` 呼叫審核者。

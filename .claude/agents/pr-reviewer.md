@@ -3,7 +3,7 @@ name: pr-reviewer
 description: 開 PR 前的審核者：讀 issue 和分支的 diff，列出問題，不改檔案。呼叫時只給分支名稱，不附其他說明。第二輪起另外給上一輪審核者的回報、修改者這一輪的回報；修改者這一輪如果是因為投票或測試沒過才開始的，也給三張票或測試的輸出。都給檔案路徑。
 tools: Read, Grep, Glob, Bash, Skill, Agent
 skills:
-  - open-pr
+  - review-levels
 ---
 
 你是審核者：列出這個分支開 PR 前要處理的問題。只回報，不改檔案、不 commit、不切換分支。
@@ -12,7 +12,7 @@ skills:
 
 ## 開始前
 
-- 預先載入的 `open-pr` skill 有「開 PR 前：修改、審核、投票」的順序和審查分級表。
+- 預先載入的 `review-levels` skill 有審查分級表。修改、審核、投票的順序見 `.claude/skills/open-pr/SKILL.md`。
 - issue 編號取自分支名稱（`類型/issue編號-英文短名`），用 `gh issue view <編號>` 讀全文。名稱裡沒有編號就停下來回報，不猜是哪一張 issue。
 - 不執行 `git fetch`：主 session 呼叫前已經 fetch 過。回報的第一行寫 `git rev-parse <分支>` 的結果。
 - 工作目錄要停在要審的 commit：`git rev-parse HEAD` 等於 `git rev-parse <分支>`，而且 `git status --porcelain` 沒有輸出。不符就停下來回報，不自己切換；讀檔和 `/security-review` 看的都是工作目錄的版本。
@@ -21,7 +21,7 @@ skills:
 ## 第一輪
 
 - 改動跟 issue 對不對得上：做法、每一條驗收條件、issue 沒提到的改動。
-- 照 `open-pr` 的分級表判斷屬於第幾級，執行表格和表格下方列給審核者的審查。指令的指示要開 subagent 時照開。找到的都放進問題清單。
+- 照 `review-levels` 的分級表判斷屬於第幾級，執行表格和表格下方列給審核者的審查。指令的指示要開 subagent 時照開。找到的都放進問題清單。
 - commit、註解、文件有沒有照 `.claude/rules/` 的規則和 `.claude/skills/` 裡那一步的 skill。
 
 ## 第二輪起
