@@ -26,7 +26,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** 表的定義在 db/migration/V9、V10、V14、V15。 */
+/** 表的定義在 db/migration/V9、V10、V14、V15、V17。 */
 public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPort, GuestStorePort {
 
     private static final String COLUMNS = "account.id, account.display_name, account.username, account.password_hash, account.tier";
@@ -263,6 +263,50 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
             jdbc.sql("DELETE FROM account WHERE id = :id AND tier = 'guest'").param("id", account.value()).update();
         } catch (DataAccessException e) {
             throw new IllegalStateException("刪除訪客帳號失敗：" + account, e);
+        }
+    }
+
+    @Override
+    public void deleteMerged(AccountId guest, AccountId target, Instant mergedAt) {
+        try {
+            // 刪帳號和記下合併在同一句 SQL，真的刪到訪客才記。分成兩句又沒包在交易裡的話，中途失敗會刪了沒記，
+            // 之後存進訪客名下的就不會再搬
+            jdbc.sql("""
+                            WITH deleted AS (
+                                DELETE FROM account WHERE id = :guest AND tier = 'guest'
+                                RETURNING id
+                            )
+                            INSERT INTO guest_merge (guest_id, target_id, merged_at)
+                            SELECT id, :target, :mergedAt FROM deleted
+                            """)
+                    .param("guest", guest.value())
+                    .param("target", target.value())
+                    .param("mergedAt", utc(mergedAt))
+                    .update();
+        } catch (DataAccessException e) {
+            throw new IllegalStateException("刪除併進 " + target + " 的訪客帳號失敗：" + guest, e);
+        }
+    }
+
+    @Override
+    public List<Merge> mergedBefore(Instant cutoff) {
+        try {
+            return jdbc.sql("SELECT guest_id, target_id FROM guest_merge WHERE merged_at < :cutoff ORDER BY merged_at")
+                    .param("cutoff", utc(cutoff))
+                    .query((rs, n) -> new Merge(new AccountId(rs.getObject("guest_id", UUID.class)),
+                            new AccountId(rs.getObject("target_id", UUID.class))))
+                    .list();
+        } catch (DataAccessException e) {
+            throw new IllegalStateException("讀取訪客的合併紀錄失敗", e);
+        }
+    }
+
+    @Override
+    public void forgetMerge(AccountId guest) {
+        try {
+            jdbc.sql("DELETE FROM guest_merge WHERE guest_id = :guest").param("guest", guest.value()).update();
+        } catch (DataAccessException e) {
+            throw new IllegalStateException("刪除訪客的合併紀錄失敗：" + guest, e);
         }
     }
 

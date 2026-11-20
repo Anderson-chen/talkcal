@@ -8,8 +8,9 @@ import io.github.andersonchen.talkcal.calendar.application.port.out.OwnedDataSto
 import java.util.Objects;
 
 /**
- * 先改資料庫、再改歸檔：資料庫改完之後，歸檔的排程就不會再把舊擁有者的行程存進舊的前綴；
+ * 先改資料庫、再改歸檔：資料庫改完之後才開始的歸檔排程，不會再把舊擁有者的行程存進舊的前綴；
  * 歸檔那一步失敗時，再呼叫一次只剩歸檔要處理。
+ * 排程在資料庫改完之前就讀了的行程，還是會存進舊的前綴，要等那一輪結束後再呼叫一次 transfer 才搬得到。
  */
 public final class OwnedDataService implements OwnedDataUseCase {
 

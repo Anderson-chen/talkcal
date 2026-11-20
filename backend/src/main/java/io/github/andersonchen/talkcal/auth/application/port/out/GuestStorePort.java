@@ -27,4 +27,18 @@ public interface GuestStorePort {
 
     /** 刪掉帳號，token 跟著刪（外鍵 ON DELETE CASCADE） */
     void delete(AccountId account);
+
+    /**
+     * 訪客併進 target 之後刪掉訪客帳號，同時記下這次合併（mergedBefore 查得到）。
+     * 帳號已經不是訪客（例如另一個分頁剛註冊）時不刪也不記。
+     */
+    void deleteMerged(AccountId guest, AccountId target, Instant mergedAt);
+
+    /** 合併時間在 cutoff 之前、還沒 forgetMerge 的合併，最早的先 */
+    List<Merge> mergedBefore(Instant cutoff);
+
+    void forgetMerge(AccountId guest);
+
+    record Merge(AccountId guest, AccountId target) {
+    }
 }

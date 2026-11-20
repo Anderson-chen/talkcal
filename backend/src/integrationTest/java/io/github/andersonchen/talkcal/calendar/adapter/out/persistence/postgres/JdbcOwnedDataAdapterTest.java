@@ -104,6 +104,41 @@ class JdbcOwnedDataAdapterTest {
         }
     }
 
+    private static void said(OwnerId owner, UUID conversation, int position, String type, String content) {
+        jdbc.sql("""
+                        INSERT INTO calendar_assistant_message (owner_id, conversation_id, position, type, content)
+                        VALUES (:owner, :conversation, :position, :type, :content)
+                        """)
+                .param("owner", owner.value()).param("conversation", conversation).param("position", position)
+                .param("type", type).param("content", content).update();
+    }
+
+    private static List<String> conversation(OwnerId owner, UUID conversation) {
+        return jdbc.sql("""
+                        SELECT content FROM calendar_assistant_message
+                        WHERE owner_id = :owner AND conversation_id = :conversation ORDER BY position
+                        """)
+                .param("owner", owner.value()).param("conversation", conversation).query(String.class).list();
+    }
+
+    @Test
+    @DisplayName("同一段對話兩邊都有（合併時還在處理中的那一輪，之後才存進訪客名下）：訪客的接在 Amy 那段後面；反例：只有訪客有的那段照原樣搬")
+    void transferAppendsToTheSameConversation() {
+        UUID shared = UUID.randomUUID();
+        said(AMY, shared, 0, "USER", "明天有什麼行程？");
+        said(AMY, shared, 1, "ASSISTANT", "明天沒有行程。");
+        said(GUEST, shared, 0, "USER", "後天呢？");
+        said(GUEST, shared, 1, "ASSISTANT", "後天也沒有。");
+        UUID guestOnly = UUID.randomUUID();
+        said(GUEST, guestOnly, 0, "USER", "下週呢？");
+
+        adapter.transfer(GUEST, AMY);
+
+        assertEquals(List.of("明天有什麼行程？", "明天沒有行程。", "後天呢？", "後天也沒有。"), conversation(AMY, shared));
+        assertEquals(List.of("下週呢？"), conversation(AMY, guestOnly));
+        assertEquals(0, owned("calendar_assistant_message", GUEST));
+    }
+
     @Test
     @DisplayName("刪除：訪客名下的全部刪掉；反例：Bob 的不動")
     void deleteAllRemovesEverything() {

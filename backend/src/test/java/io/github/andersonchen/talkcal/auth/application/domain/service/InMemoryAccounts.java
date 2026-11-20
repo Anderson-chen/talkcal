@@ -25,8 +25,12 @@ final class InMemoryAccounts implements SaveAccountPort, LoadAccountPort, GuestS
     record Token(AccountId account, Instant expiresAt) {
     }
 
+    record RecordedMerge(Merge merge, Instant mergedAt) {
+    }
+
     final Map<String, Token> tokens = new HashMap<>();
     final Map<AccountId, Instant> lastActive = new HashMap<>();
+    final List<RecordedMerge> merges = new ArrayList<>();
 
     final List<Account> saved = new ArrayList<>();
     final Map<ExternalIdentity, AccountId> identities = new HashMap<>();
@@ -132,6 +136,25 @@ final class InMemoryAccounts implements SaveAccountPort, LoadAccountPort, GuestS
         saved.removeIf(saved -> saved.id().equals(account) && saved.isGuest());
         tokens.values().removeIf(token -> token.account().equals(account));
         lastActive.remove(account);
+    }
+
+    @Override
+    public void deleteMerged(AccountId guest, AccountId target, Instant mergedAt) {
+        if (load(guest).filter(Account::isGuest).isEmpty()) {
+            return;
+        }
+        delete(guest);
+        merges.add(new RecordedMerge(new Merge(guest, target), mergedAt));
+    }
+
+    @Override
+    public List<Merge> mergedBefore(Instant cutoff) {
+        return merges.stream().filter(m -> m.mergedAt().isBefore(cutoff)).map(RecordedMerge::merge).toList();
+    }
+
+    @Override
+    public void forgetMerge(AccountId guest) {
+        merges.removeIf(m -> m.merge().guest().equals(guest));
     }
 
     @Override

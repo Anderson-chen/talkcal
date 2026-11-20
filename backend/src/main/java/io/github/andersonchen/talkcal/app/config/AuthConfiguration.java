@@ -76,8 +76,9 @@ class AuthConfiguration {
     // 回傳型別寫實作：同一個物件是好幾個 use case（開帳號、合併、清理），理由見 CalendarConfiguration.calendarEventStore
     @Bean
     GuestAccountsService guestAccounts(JdbcAccountAdapter accountStore, OwnedDataPort ownedData,
-                                       @Value("${talkcal.guest.lifetime}") Duration lifetime) {
-        return new GuestAccountsService(accountStore, accountStore, ownedData, lifetime, Clock.systemUTC());
+                                       @Value("${talkcal.guest.lifetime}") Duration lifetime,
+                                       @Value("${talkcal.guest.merge-finish-after}") Duration finishMergeAfter) {
+        return new GuestAccountsService(accountStore, accountStore, ownedData, lifetime, finishMergeAfter, Clock.systemUTC());
     }
 
     // 訪客 cookie 只在 HTTPS 送：跟 session cookie 用同一個設定，雲端（compose.ec2.yaml）一起打開

@@ -11,7 +11,7 @@ import io.github.andersonchen.talkcal.calendar.application.domain.model.OwnerId;
  */
 public interface OwnedDataUseCase {
 
-    /** from 名下的全部改到 to 名下；from、to 一樣時什麼都不做 */
+    /** from 名下的全部改到 to 名下，同一段對話兩邊都有時 from 的接在後面；from、to 一樣時什麼都不做 */
     void transfer(OwnerId from, OwnerId to);
 
     void deleteAll(OwnerId owner);

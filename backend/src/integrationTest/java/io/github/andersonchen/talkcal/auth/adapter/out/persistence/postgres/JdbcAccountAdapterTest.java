@@ -12,6 +12,7 @@ import io.github.andersonchen.talkcal.auth.application.domain.model.ExternalIden
 import io.github.andersonchen.talkcal.auth.application.domain.model.ExternalIdentity.Provider;
 import io.github.andersonchen.talkcal.auth.application.domain.model.MembershipTier;
 import io.github.andersonchen.talkcal.auth.application.domain.model.Username;
+import io.github.andersonchen.talkcal.auth.application.port.out.GuestStorePort.Merge;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -262,6 +263,57 @@ class JdbcAccountAdapterTest {
         assertFalse(adapter.keepActive(amy.id(), now, now.plus(Duration.ofDays(7))));
         assertFalse(adapter.keepActive(AccountId.newId(), now, now.plus(Duration.ofDays(7))));
         assertEquals(0, jdbc.sql("SELECT count(*) FROM account WHERE last_active_at IS NOT NULL").query(Integer.class).single());
+    }
+
+    // ── 訪客併進正式帳號 ───────────────────────────────────────────────
+
+    private static Account member(String username) {
+        Account account = Account.withPassword(AccountId.newId(), new Username(username), "{bcrypt}hash");
+        adapter.saveIfUsernameFree(account);
+        return account;
+    }
+
+    @Test
+    @DisplayName("訪客併進 Amy：訪客帳號和 token 刪掉，合併時間之後查得到這次合併；forgetMerge 之後查不到")
+    void deleteMergedRecordsTheMerge() {
+        Account amy = member("amy");
+        Account guest = guestWithToken();
+        Instant mergedAt = Instant.parse("2026-11-20T00:00:00Z");
+
+        adapter.deleteMerged(guest.id(), amy.id(), mergedAt);
+
+        assertTrue(adapter.load(guest.id()).isEmpty());
+        assertEquals(0, guestTokens());
+        assertTrue(adapter.mergedBefore(mergedAt).isEmpty());
+        assertEquals(List.of(new Merge(guest.id(), amy.id())), adapter.mergedBefore(mergedAt.plusSeconds(1)));
+
+        adapter.forgetMerge(guest.id());
+        assertTrue(adapter.mergedBefore(mergedAt.plusSeconds(1)).isEmpty());
+    }
+
+    @Test
+    @DisplayName("反例：帳號已經不是訪客（另一個分頁剛註冊）：不刪，也不記合併")
+    void deleteMergedSkipsMembers() {
+        Account amy = member("amy");
+        Account bob = member("bob");
+        Instant now = Instant.now();
+
+        adapter.deleteMerged(bob.id(), amy.id(), now);
+
+        assertEquals(bob, adapter.load(bob.id()).orElseThrow());
+        assertTrue(adapter.mergedBefore(now.plusSeconds(1)).isEmpty());
+    }
+
+    @Test
+    @DisplayName("併進的帳號刪掉時，合併紀錄跟著刪：已經沒有帳號可以搬過去")
+    void mergeGoesWithTheTarget() {
+        Account amy = member("amy");
+        Instant now = Instant.now();
+        adapter.deleteMerged(guestWithToken().id(), amy.id(), now);
+
+        jdbc.sql("DELETE FROM account WHERE id = :id").param("id", amy.id().value()).update();
+
+        assertTrue(adapter.mergedBefore(now.plusSeconds(1)).isEmpty());
     }
 
     @Test

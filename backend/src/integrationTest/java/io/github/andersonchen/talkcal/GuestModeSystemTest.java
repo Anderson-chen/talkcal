@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.andersonchen.talkcal.app.job.AssistantMemoryArchive;
 import io.github.andersonchen.talkcal.auth.application.port.in.ExpireGuestsUseCase;
+import io.github.andersonchen.talkcal.auth.application.port.in.FinishGuestMergesUseCase;
 import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.ArchiveBucket;
 import io.github.andersonchen.talkcal.calendar.adapter.out.archive.s3.RustFsContainer;
 import io.github.andersonchen.talkcal.calendar.application.port.in.ArchiveEventsUseCase;
@@ -34,7 +35,11 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -63,14 +68,15 @@ import tools.jackson.databind.ObjectMapper;
  *
  * 每一題用 BrowserSession.forwardedFor 模擬不同 IP 的訪客，「同 IP 共用、不同 IP 各自算」才測得出來。
  * 模型換成 JDK 內建 HttpServer 做的假 OpenAI server（FakeModel），每一題各自設定怎麼回：
- * 好好回話、回空白、一直呼叫工具、直接關掉連線、回得比逾時還慢。逾時設成 2 秒，回得慢的那題才不用等 2 分鐘。
- * 要測第 4 次被擋、次數用完時，直接把 Redis 的計數設好。
+ * 好好回話、回空白、一直呼叫工具、直接關掉連線、回得比逾時還慢、等測試放行才回話。
+ * 逾時設成 5 秒：回得慢的那題不用等 2 分鐘，等放行的那題也來得及在逾時之前登入。
+ * 要測第 4 次被擋、次數用完時，直接把 Redis 的計數設好；要測合併之後再搬一次時，把合併的時間改早。
  * 規則表每次請求都重讀（rules-refresh=0s），「加一列就生效」不用等。
  * session 還在的訪客每個請求都記下使用（keep-active-every=0s），不用等一小時。
  */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {"spring.ai.openai.chat.timeout=2s", "talkcal.quota.rules-refresh=0s", "talkcal.guest.keep-active-every=0s"})
+        properties = {"spring.ai.openai.chat.timeout=5s", "talkcal.quota.rules-refresh=0s", "talkcal.guest.keep-active-every=0s"})
 @DisplayName("系統測試：訪客模式和每日次數")
 class GuestModeSystemTest {
 
@@ -128,6 +134,9 @@ class GuestModeSystemTest {
     ExpireGuestsUseCase expireGuests;
 
     @Autowired
+    FinishGuestMergesUseCase finishGuestMerges;
+
+    @Autowired
     ArchiveEventsUseCase archiveEvents;
 
     @Autowired
@@ -145,7 +154,7 @@ class GuestModeSystemTest {
     @BeforeEach
     void clean() {
         for (String table : new String[] {"calendar_event", "calendar_assistant_message", "assistant_proposal",
-                "calendar_add_request", "guest_token", "account"}) {
+                "calendar_add_request", "guest_token", "guest_merge", "account"}) {
             jdbc.sql("DELETE FROM " + table).update();
         }
         TestRedis.flush(redis);
@@ -236,6 +245,11 @@ class GuestModeSystemTest {
     private List<Integer> archivesOf(String ownerId) {
         return List.of(archiveBucket.list("calendar-event/owner=" + ownerId + "/").size(),
                 archiveBucket.list("assistant-conversation/owner=" + ownerId + "/").size());
+    }
+
+    private int ownedBy(String table, String ownerId) {
+        return jdbc.sql("SELECT count(*) FROM " + table + " WHERE owner_id = :owner")
+                .param("owner", UUID.fromString(ownerId)).query(Integer.class).single();
     }
 
     private BrowserSession reopened(BrowserSession browser, String ip) {
@@ -564,6 +578,55 @@ class GuestModeSystemTest {
     }
 
     @Test
+    @DisplayName("訪客問了助理、還沒收到回覆就登入已有的帳號：那一則回覆存進訪客名下，合併過了 10 分鐘再搬一次，就出現在那個帳號裡")
+    void lateReplyFollowsTheMerge() throws Exception {
+        BrowserSession member = browserFrom(OTHER_IP).signUpAndLogIn("amy", "correct-horse");
+        String amyId = JSON.readTree(member.get("/api/auth/me").body()).at("/id").asString();
+        BrowserSession guest = browserFrom(GUEST_IP);
+        String guestId = startGuest(guest).at("/id").asString();
+        String conversation = conversationOf(guest);
+
+        HttpResponse<String> answered;
+        try (ExecutorService background = Executors.newSingleThreadExecutor()) {
+            MODEL.hold();
+            Future<HttpResponse<String>> answering;
+            try {
+                answering = background.submit(() -> guest.postJson("/api/calendar/assistant",
+                        JSON.writeValueAsString(Map.of("message", "後天呢？", "conversationId", conversation))));
+                MODEL.awaitHeld();
+                assertEquals(204, guest.login("amy", "correct-horse").statusCode());
+            } finally {
+                MODEL.release();
+            }
+            answered = answering.get(30, TimeUnit.SECONDS);
+        }
+        assertEquals(200, answered.statusCode(), answered.body());
+        assertEquals(2, ownedBy("calendar_assistant_message", guestId), "合併之後才存好的那一輪，存在已經刪掉的訪客名下");
+        assertEquals(2, linesIn(guest, conversation), "還沒再搬：Amy 只看得到合併時搬過去的第一輪");
+        // 合併時還在處理中的新增行程，和歸檔的排程合併之前讀了訪客的行程、合併之後才存好的那一包
+        jdbc.sql("""
+                        INSERT INTO calendar_event (id, owner_id, title, start_at, end_at)
+                        VALUES (:id, :owner, '合併之後才存好的牙醫', '2030-01-20 10:00', '2030-01-20 11:00')
+                        """)
+                .param("id", UUID.randomUUID()).param("owner", UUID.fromString(guestId)).update();
+        archiveBucket.put("calendar-event/owner=" + guestId + "/month=2023-05/late.jsonl.gz", new byte[] {1});
+
+        assertEquals(0, finishGuestMerges.finishDue(), "反例：合併之後還不到 10 分鐘，不搬");
+        jdbc.sql("UPDATE guest_merge SET merged_at = now() - interval '11 minutes'").update();
+        // 每 5 分鐘的排程也可能剛好先搬了，所以不看回傳值，只看結果
+        finishGuestMerges.finishDue();
+
+        assertEquals(4, linesIn(guest, conversation), "那一輪接在同一段對話後面");
+        assertEquals(1, eventsIn(guest));
+        for (String table : new String[] {"calendar_event", "calendar_assistant_message", "assistant_proposal"}) {
+            assertEquals(0, ownedBy(table, guestId), table + " 沒有留在已經刪掉的訪客名下");
+        }
+        assertEquals(List.of(0, 0), archivesOf(guestId));
+        assertEquals(List.of(1, 0), archivesOf(amyId));
+        assertEquals(0, jdbc.sql("SELECT count(*) FROM guest_merge").query(Integer.class).single(), "搬完就刪掉合併紀錄");
+    }
+
+    @Test
     @DisplayName("停在登入頁的期間 session 不見了（部署新版、閒置過期），只剩訪客 cookie：送出登入照樣併進那個帳號")
     void loginAfterSessionLostStillMerges() throws Exception {
         BrowserSession member = browserFrom(OTHER_IP).signUpAndLogIn("amy", "correct-horse");
@@ -710,12 +773,16 @@ class GuestModeSystemTest {
             /** 收到請求就關掉連線，什麼都不回 */
             HANG_UP,
             /** 比 app 的逾時（spring.ai.openai.chat.timeout）晚才回 */
-            TOO_SLOW
+            TOO_SLOW,
+            /** 收到請求後等 release() 才照常回一句，模擬助理還在「思考中」 */
+            HOLD
         }
 
         private final HttpServer server;
         private final AtomicInteger calls = new AtomicInteger();
         private volatile Mode mode = Mode.ANSWER;
+        private volatile CountDownLatch arrived = new CountDownLatch(0);
+        private volatile CountDownLatch released = new CountDownLatch(0);
 
         FakeModel() {
             try {
@@ -741,6 +808,21 @@ class GuestModeSystemTest {
             mode = next;
         }
 
+        void hold() {
+            arrived = new CountDownLatch(1);
+            released = new CountDownLatch(1);
+            mode = Mode.HOLD;
+        }
+
+        /** 等到 hold() 之後的請求送到模型 */
+        void awaitHeld() throws InterruptedException {
+            assertTrue(arrived.await(10, TimeUnit.SECONDS), "模型沒有收到請求");
+        }
+
+        void release() {
+            released.countDown();
+        }
+
         void stop() {
             server.stop(0);
         }
@@ -754,12 +836,15 @@ class GuestModeSystemTest {
                 exchange.close();
                 return;
             }
-            if (now == Mode.TOO_SLOW) {
-                try {
-                    Thread.sleep(Duration.ofSeconds(4));
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
+            try {
+                if (now == Mode.TOO_SLOW) {
+                    Thread.sleep(Duration.ofSeconds(7));
+                } else if (now == Mode.HOLD) {
+                    arrived.countDown();
+                    released.await(10, TimeUnit.SECONDS);
                 }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
             byte[] body = completion(now).getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
