@@ -6,7 +6,7 @@ name: talkcal-observability
 
 services:
   mimir:
-    image: grafana/mimir:3.2.3
+    image: grafana/mimir:3.2.4
     container_name: talkcal-mimir
     command:
       - -config.file=/etc/mimir/mimir.yaml
@@ -82,7 +82,7 @@ services:
     restart: unless-stopped
 
   alloy:
-    image: grafana/alloy:v1.21.2
+    image: grafana/alloy:v1.21.3
     container_name: talkcal-alloy
     command:
       - run
