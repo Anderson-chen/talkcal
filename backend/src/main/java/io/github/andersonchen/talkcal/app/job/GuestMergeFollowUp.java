@@ -9,7 +9,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import java.util.Objects;
 
 /**
- * 每 5 分鐘把訪客合併之後才存進訪客名下的資料再搬一次（見 FinishGuestMergesUseCase）：
+ * 每 5 分鐘把訪客合併之後還留在訪客名下的資料再搬一次（見 FinishGuestMergesUseCase）：
  * 合併之後最晚過 talkcal.guest.merge-finish-after 再加 5 分鐘，資料就在併進的那個帳號裡。
  */
 public final class GuestMergeFollowUp {

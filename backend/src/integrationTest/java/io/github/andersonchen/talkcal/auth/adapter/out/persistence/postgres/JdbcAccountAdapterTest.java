@@ -274,13 +274,13 @@ class JdbcAccountAdapterTest {
     }
 
     @Test
-    @DisplayName("訪客併進 Amy：訪客帳號和 token 刪掉，合併時間之後查得到這次合併；forgetMerge 之後查不到")
+    @DisplayName("訪客併進 Amy：回 true，訪客帳號和 token 刪掉，合併時間之後查得到這次合併；forgetMerge 之後查不到")
     void deleteMergedRecordsTheMerge() {
         Account amy = member("amy");
         Account guest = guestWithToken();
         Instant mergedAt = Instant.parse("2026-11-20T00:00:00Z");
 
-        adapter.deleteMerged(guest.id(), amy.id(), mergedAt);
+        assertTrue(adapter.deleteMerged(guest.id(), amy.id(), mergedAt));
 
         assertTrue(adapter.load(guest.id()).isEmpty());
         assertEquals(0, guestTokens());
@@ -292,13 +292,13 @@ class JdbcAccountAdapterTest {
     }
 
     @Test
-    @DisplayName("反例：帳號已經不是訪客（另一個分頁剛註冊）：不刪，也不記合併")
+    @DisplayName("反例：帳號已經不是訪客（另一個分頁剛註冊）：回 false，不刪，也不記合併")
     void deleteMergedSkipsMembers() {
         Account amy = member("amy");
         Account bob = member("bob");
         Instant now = Instant.now();
 
-        adapter.deleteMerged(bob.id(), amy.id(), now);
+        assertFalse(adapter.deleteMerged(bob.id(), amy.id(), now));
 
         assertEquals(bob, adapter.load(bob.id()).orElseThrow());
         assertTrue(adapter.mergedBefore(now.plusSeconds(1)).isEmpty());

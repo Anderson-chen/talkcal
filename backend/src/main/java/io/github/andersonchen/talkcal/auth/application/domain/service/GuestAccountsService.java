@@ -6,6 +6,7 @@ import io.github.andersonchen.talkcal.auth.application.port.in.ExpireGuestsUseCa
 import io.github.andersonchen.talkcal.auth.application.port.in.FinishGuestMergesUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.GuestAccessUseCase;
 import io.github.andersonchen.talkcal.auth.application.port.in.MergeGuestUseCase;
+import io.github.andersonchen.talkcal.auth.application.port.in.MergePendingException;
 import io.github.andersonchen.talkcal.auth.application.port.out.GuestStorePort;
 import io.github.andersonchen.talkcal.auth.application.port.out.LoadAccountPort;
 import io.github.andersonchen.talkcal.auth.application.port.out.OwnedDataPort;
@@ -95,12 +96,17 @@ public final class GuestAccountsService
         if (guest.equals(target)) {
             return;
         }
-        // 已經不是訪客：可能是另一個分頁先註冊成正式會員了，那是別人的資料，不能搬
-        if (accounts.load(guest).filter(Account::isGuest).isEmpty()) {
+        // 先記下合併再搬：搬到一半失敗時紀錄已經在，排程會搬完（FinishGuestMergesUseCase）。
+        // 記下、刪掉訪客帳號、判斷是不是訪客在同一句：另一個分頁先註冊成正式會員的話，那是別人的資料，不能搬。
+        // 資料不靠外鍵連著帳號，帳號刪了，資料還在訪客名下
+        if (!guests.deleteMerged(guest, target, clock.instant())) {
             return;
         }
-        ownedData.transfer(guest, target);
-        guests.deleteMerged(guest, target, clock.instant());
+        try {
+            ownedData.transfer(guest, target);
+        } catch (IllegalStateException e) {
+            throw new MergePendingException(guest, target, e);
+        }
     }
 
     @Override

@@ -627,6 +627,40 @@ class GuestModeSystemTest {
     }
 
     @Test
+    @DisplayName("登入時搬資料失敗、接著登出：合併已經記下，排程照樣把訪客的行程和對話搬到那個帳號")
+    void failedMoveFinishesAfterLogout() throws Exception {
+        BrowserSession member = browserFrom(OTHER_IP).signUpAndLogIn("amy", "correct-horse");
+        BrowserSession guest = browserFrom(GUEST_IP);
+        String guestId = startGuest(guest).at("/id").asString();
+        addEvent(guest, "訪客時加的牙醫");
+        String conversation = conversationOf(guest);
+
+        // 搬資料的交易最後才刪冪等鍵：這張表讀不到，整個交易 rollback，資料都留在訪客名下
+        jdbc.sql("ALTER TABLE calendar_add_request RENAME TO calendar_add_request_unreadable").update();
+        HttpResponse<String> loggedIn;
+        try {
+            loggedIn = guest.login("amy", "correct-horse");
+        } finally {
+            jdbc.sql("ALTER TABLE calendar_add_request_unreadable RENAME TO calendar_add_request").update();
+        }
+        assertEquals(204, loggedIn.statusCode(), loggedIn.body());
+        assertEquals(204, guest.logout().statusCode());
+        assertEquals(0, eventsIn(member), "這次沒搬");
+        assertEquals(1, ownedBy("calendar_event", guestId));
+
+        jdbc.sql("UPDATE guest_merge SET merged_at = now() - interval '11 minutes'").update();
+        // 理由見 lateReplyFollowsTheMerge
+        finishGuestMerges.finishDue();
+
+        assertEquals(1, eventsIn(member));
+        assertEquals(2, linesIn(member, conversation));
+        for (String table : new String[] {"calendar_event", "calendar_assistant_message"}) {
+            assertEquals(0, ownedBy(table, guestId), table);
+        }
+        assertEquals(0, jdbc.sql("SELECT count(*) FROM guest_merge").query(Integer.class).single());
+    }
+
+    @Test
     @DisplayName("停在登入頁的期間 session 不見了（部署新版、閒置過期），只剩訪客 cookie：送出登入照樣併進那個帳號")
     void loginAfterSessionLostStillMerges() throws Exception {
         BrowserSession member = browserFrom(OTHER_IP).signUpAndLogIn("amy", "correct-horse");

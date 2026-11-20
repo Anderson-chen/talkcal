@@ -3,6 +3,7 @@ package io.github.andersonchen.talkcal.auth.adapter.in.security;
 import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
 import io.github.andersonchen.talkcal.auth.application.port.in.GuestAccessUseCase.GuestPass;
 import io.github.andersonchen.talkcal.auth.application.port.in.MergeGuestUseCase;
+import io.github.andersonchen.talkcal.auth.application.port.in.MergePendingException;
 
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -123,6 +124,8 @@ public final class GuestSessions {
      * 登入成功（帳密、Google、GitHub）之後呼叫：這個 session 原本是訪客的話，把訪客的資料併進剛登入的帳號，
      * 訪客 cookie 清掉。訪客帳密註冊後再登入、第一次用 Google、GitHub 登入時，登入的就是升級過的同一個帳號，
      * MergeGuestUseCase 什麼都不做，只清 cookie。
+     *
+     * 搬資料失敗也不讓使用者看到登入失敗：登入本身已經成功。
      */
     public void afterSignIn(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
         Optional<AccountId> guest = guestOf(request);
@@ -131,10 +134,12 @@ public final class GuestSessions {
         }
         try {
             mergeGuest.mergeInto(guest.get(), AccountId.of(authentication.getName()));
+        } catch (MergePendingException e) {
+            // 合併已經記下，剩下的由排程搬完，不靠這個 session 和訪客 cookie
+            log.warn("訪客的資料這次沒搬完，之後由排程再搬：guest={} target={}", guest.get(), authentication.getName(), e);
         } catch (IllegalStateException e) {
-            // 登入本身已經成功，不因為搬資料失敗讓使用者看到登入失敗。訪客的標記和 cookie 留著：
-            // 下一次在這個瀏覽器登入時再搬一次（這次搬到一半的話，搬好的那些已經在新帳號名下，剩下的下次搬）
-            log.error("訪客的資料搬不過去，這次先不搬：guest={} target={}", guest.get(), authentication.getName(), e);
+            // 合併沒記下，訪客的標記和 cookie 留著：下一次在這個瀏覽器登入時再合併一次
+            log.error("訪客的合併沒記下，這次先不搬：guest={} target={}", guest.get(), authentication.getName(), e);
             return;
         }
         leaveGuest(request, response);
@@ -158,7 +163,7 @@ public final class GuestSessions {
         writeCookie(response, "", Duration.ZERO);
     }
 
-    private static Optional<AccountId> guestOf(HttpServletRequest request) {
+    static Optional<AccountId> guestOf(HttpServletRequest request) {
         HttpSession session = request.getSession(false);
         if (session == null || !(session.getAttribute(GUEST_ATTRIBUTE) instanceof String id)) {
             return Optional.empty();

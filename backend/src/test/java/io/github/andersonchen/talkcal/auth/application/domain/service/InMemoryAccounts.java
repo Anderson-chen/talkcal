@@ -38,6 +38,8 @@ final class InMemoryAccounts implements SaveAccountPort, LoadAccountPort, GuestS
     int identityLookups;
     /** 另一個請求在查和存之間搶先建好的帳號 */
     Account createdConcurrently;
+    /** true 時 deleteMerged 丟 IllegalStateException，當成資料庫出錯 */
+    boolean failMerge;
 
     @Override
     public boolean saveIfUsernameFree(Account account) {
@@ -139,12 +141,15 @@ final class InMemoryAccounts implements SaveAccountPort, LoadAccountPort, GuestS
     }
 
     @Override
-    public void deleteMerged(AccountId guest, AccountId target, Instant mergedAt) {
+    public boolean deleteMerged(AccountId guest, AccountId target, Instant mergedAt) {
+        if (failMerge) {
+            throw new IllegalStateException("記下合併失敗：" + guest);
+        }
         if (load(guest).filter(Account::isGuest).isEmpty()) {
-            return;
+            return false;
         }
         delete(guest);
-        merges.add(new RecordedMerge(new Merge(guest, target), mergedAt));
+        return merges.add(new RecordedMerge(new Merge(guest, target), mergedAt));
     }
 
     @Override

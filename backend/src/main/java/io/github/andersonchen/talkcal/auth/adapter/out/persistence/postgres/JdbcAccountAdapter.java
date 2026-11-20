@@ -259,7 +259,7 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
     @Override
     public void delete(AccountId account) {
         try {
-            // 只刪訪客：這個方法只給訪客的合併、清理用，條件寫在 SQL 裡，傳錯 id 也刪不到正式會員
+            // 只刪訪客：條件寫在 SQL 裡，傳錯 id 也刪不到正式會員
             jdbc.sql("DELETE FROM account WHERE id = :id AND tier = 'guest'").param("id", account.value()).update();
         } catch (DataAccessException e) {
             throw new IllegalStateException("刪除訪客帳號失敗：" + account, e);
@@ -267,11 +267,11 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
     }
 
     @Override
-    public void deleteMerged(AccountId guest, AccountId target, Instant mergedAt) {
+    public boolean deleteMerged(AccountId guest, AccountId target, Instant mergedAt) {
         try {
             // 刪帳號和記下合併在同一句 SQL，真的刪到訪客才記。分成兩句又沒包在交易裡的話，中途失敗會刪了沒記，
-            // 之後存進訪客名下的就不會再搬
-            jdbc.sql("""
+            // 訪客名下的資料就沒有排程會搬
+            return jdbc.sql("""
                             WITH deleted AS (
                                 DELETE FROM account WHERE id = :guest AND tier = 'guest'
                                 RETURNING id
@@ -282,7 +282,7 @@ public final class JdbcAccountAdapter implements SaveAccountPort, LoadAccountPor
                     .param("guest", guest.value())
                     .param("target", target.value())
                     .param("mergedAt", utc(mergedAt))
-                    .update();
+                    .update() == 1;
         } catch (DataAccessException e) {
             throw new IllegalStateException("刪除併進 " + target + " 的訪客帳號失敗：" + guest, e);
         }

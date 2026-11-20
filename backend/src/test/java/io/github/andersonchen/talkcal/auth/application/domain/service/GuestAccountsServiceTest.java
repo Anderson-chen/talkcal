@@ -1,6 +1,7 @@
 package io.github.andersonchen.talkcal.auth.application.domain.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -10,6 +11,7 @@ import io.github.andersonchen.talkcal.auth.application.domain.model.AccountId;
 import io.github.andersonchen.talkcal.auth.application.domain.model.MembershipTier;
 import io.github.andersonchen.talkcal.auth.application.domain.model.Username;
 import io.github.andersonchen.talkcal.auth.application.port.in.GuestAccessUseCase.GuestPass;
+import io.github.andersonchen.talkcal.auth.application.port.in.MergePendingException;
 import io.github.andersonchen.talkcal.auth.application.port.in.UsernameTakenException;
 import io.github.andersonchen.talkcal.auth.application.port.out.OwnedDataPort;
 
@@ -127,6 +129,36 @@ class GuestAccountsServiceTest {
         at(NOW).mergeInto(pass.accountId(), amy);
         assertEquals(List.of("transfer " + pass.accountId() + " -> " + amy), data.calls);
         assertEquals(Optional.empty(), accounts.load(pass.accountId()));
+    }
+
+    @Test
+    @DisplayName("登入時搬資料失敗：合併已經記下、訪客帳號刪掉，丟 MergePendingException；過了 10 分鐘由 finishDue 搬完")
+    void failedMoveIsFinishedLater() {
+        GuestPass pass = at(NOW).start();
+        AccountId amy = AccountId.newId();
+        data.failFrom = pass.accountId();
+
+        assertThrows(MergePendingException.class, () -> at(NOW).mergeInto(pass.accountId(), amy));
+        assertEquals(Optional.empty(), accounts.load(pass.accountId()));
+        assertTrue(data.calls.isEmpty());
+
+        data.failFrom = null;
+        assertEquals(1, at(NOW.plus(Duration.ofMinutes(11))).finishDue());
+        assertEquals(List.of("transfer " + pass.accountId() + " -> " + amy), data.calls);
+    }
+
+    @Test
+    @DisplayName("反例：記下合併之前就失敗，丟的不是 MergePendingException；不搬資料，訪客帳號還在，之後也不會搬")
+    void unrecordedMergeChangesNothing() {
+        GuestPass pass = at(NOW).start();
+        accounts.failMerge = true;
+
+        IllegalStateException failed = assertThrows(IllegalStateException.class,
+                () -> at(NOW).mergeInto(pass.accountId(), AccountId.newId()));
+        assertFalse(failed instanceof MergePendingException);
+        assertTrue(data.calls.isEmpty());
+        assertEquals(MembershipTier.GUEST, accounts.load(pass.accountId()).orElseThrow().tier());
+        assertEquals(0, at(NOW.plus(Duration.ofHours(1))).finishDue());
     }
 
     @Test
