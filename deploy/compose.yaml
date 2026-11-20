@@ -182,14 +182,11 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # ── 舊資料的歸檔：S3 相容的物件儲存 ──────────────────────────────
-  # app 把舊行程、舊對話壓成 JSON Lines + gzip 放進來，存好才從 PostgreSQL 刪。雲端換成 S3（infra/envs/1-ec2/archive.tf），
-  # app 只差 endpoint。用 RustFS：MinIO 不發社群版的映像檔了；整合測試（RustFsContainer）也用這個映像檔
   # ── 每日次數的計數：Redis ─────────────────────────────────────────
-  # 規則在 PostgreSQL（V15 的 quota_rule），每個受限的請求加一放這裡（見 RedisQuotaCounterAdapter）。
+  # 規則在 PostgreSQL 的 quota_rule（V15），每個受限的請求在這裡加一，見 RedisQuotaCounterAdapter。
   # AOF、每秒寫一次磁碟：重啟後最多少掉約 1 秒的計數。計數只跟「今天」有關，volume 不另外備份，
   # 整個不見的代價是當天的次數重新算。
-  # app 不 depends_on 它：Redis 停了 app 照常服務，只是那段時間不限制次數（ConsumeQuotaUseCase 放行）
+  # app 不 depends_on Redis：Redis 停了 app 照常服務，只是那段時間不限制次數（ConsumeQuotaUseCase 放行）
   redis:
     # 版本跟 backend 整合測試的 TestRedis.IMAGE 一起改
     image: redis:8.10.3-alpine
@@ -206,6 +203,9 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # ── 舊資料的歸檔：S3 相容的物件儲存 ──────────────────────────────
+  # app 把舊行程、舊對話壓成 JSON Lines + gzip 放進來，存好才從 PostgreSQL 刪。雲端換成 S3（infra/envs/1-ec2/archive.tf），
+  # app 只差 endpoint。用 RustFS：MinIO 不發社群版的映像檔了；整合測試（RustFsContainer）也用這個映像檔
   archive:
     image: rustfs/rustfs:1.0.3
     container_name: talkcal-archive

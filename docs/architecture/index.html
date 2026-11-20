@@ -211,7 +211,7 @@ footer{margin-top:28px;font-size:12px;color:var(--text-muted)}
 <span><i class="sw" style="background:var(--surface-1);border:0.5px solid var(--border-strong);opacity:.3"></i>目前 model_backend 不建</span>
 </div>
 <div id="panel"></div>
-<footer><p id="checked">最後核對：2026-11-19（業界說法於同日查證，來源附在每個元件下；行號每次發佈時從 master 算出）</p></footer>
+<footer><p id="checked">最後核對：2026-11-20（業界說法於同日查證，來源附在每個元件下；行號每次發佈時從 master 算出）</p></footer>
 <dialog id="code" aria-labelledby="code-title">
 <div class="dlg">
 <div class="dlg-h">
@@ -373,7 +373,7 @@ budget:{"limit_amount":B+"variables.tf:variable \"budget_limit_usd\" › default
 caddy:{"image":E+"compose.ec2.yaml:image:","ports":E+"compose.ec2.yaml:ports:","caddy-data:/data":E+"compose.ec2.yaml:- caddy-data:","reverse_proxy":E+"Caddyfile:reverse_proxy web"},
 web:{"ports":D+":- \"127.0.0.1:18080:80\"","limit_req":"web/nginx.conf:limit_req_zone $assistant_per_ip","set_real_ip_from":"web/nginx.conf:set_real_ip_from","resolver":"web/nginx.conf:resolver 127.0.0.11","X-Forwarded-Proto":"web/nginx.conf:proxy_set_header X-Forwarded-Proto","proxy_read_timeout":"web/nginx.conf:proxy_read_timeout","otel_trace":"web/nginx.conf:otel_trace on","image":"web/Dockerfile:FROM nginx"},
 app:{"image":D+":^  app: › image:","mem_limit":E+"compose.ec2.yaml:mem_limit:","SESSION_COOKIE_SECURE":E+"compose.ec2.yaml:SERVER_SERVLET_SESSION_COOKIE_SECURE:","SPRING_AI_OPENAI_*":{bedrock:E+"compose.bedrock.yaml:SPRING_AI_OPENAI_CHAT_BASEURL:",gpu:"backend/src/main/resources/application-docker.properties:spring.ai.openai.chat.base-url="},"TALKCAL_AI_BACKEND":{bedrock:E+"compose.bedrock.yaml:TALKCAL_AI_BACKEND:",gpu:"backend/src/main/resources/application.properties:talkcal.ai.backend="},"depends_on":{bedrock:E+"compose.bedrock.yaml:depends_on:",gpu:D+":^  app: › depends_on:"},"management 埠":"backend/src/main/resources/application.properties:management.server.port=","healthcheck":D+":^  app: › healthcheck:","stop_grace_period":D+":stop_grace_period:","TALKCAL_ARCHIVE_*":E+"compose.ec2.yaml:TALKCAL_ARCHIVE_ENDPOINT:"},
-redis:{"image":D+":^  redis: › image:","appendonly / appendfsync":D+":command: [\"redis-server\", \"--appendonly\"","redis-data volume":D+":- redis-data:/data","app 不 depends_on":D+":# app 不 depends_on 它","埠":D+":- \"127.0.0.1:6379:6379\""},
+redis:{"image":D+":^  redis: › image:","appendonly / appendfsync":D+":command: [\"redis-server\", \"--appendonly\"","redis-data volume":D+":- redis-data:/data","app 不 depends_on":D+":# app 不 depends_on Redis","埠":D+":- \"127.0.0.1:6379:6379\""},
 postgres:{"image":"deploy/postgres/Dockerfile:FROM postgres","POSTGRES_PASSWORD":E+"compose.ec2.yaml:POSTGRES_PASSWORD:","密碼同步":E+"deploy.sh:printf \"ALTER ROLE talkcal PASSWORD '%s';\\n\" \"$db_password\"","部署前備份":E+"deploy.sh:bash infra/envs/1-ec2/backup-to-s3.sh","備份排程":E+"deploy.sh:echo \"── 6. 備份排程（#45）：每小時一次、關機前一次\"","postgres-exporter":D+":^  postgres-exporter: › image:","--no-collector.stat_user_tables":D+":- --no-collector.stat_user_tables"},
 llm:{"-ngl":D+":- -ngl","-c / -np":D+":- -c","--kv-unified":D+":- --kv-unified"},
 seed:{"sha256sum -c":D+":sha256sum -c -"},
