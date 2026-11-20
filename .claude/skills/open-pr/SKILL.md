@@ -26,7 +26,7 @@ description: 分支開好、要開始改到開 PR 時使用（由主 session 執
 
 ### 呼叫 agent
 
-- 每一次都用 `Agent` 開新的 agent，`subagent_type` 填定義檔的 `name`。不用 `SendMessage` 接著問上一輪的 agent：它記得自己上一輪的推論，等於讀過寫的人的說明。
+- 每一次都用 `Agent` 開新的 agent，`subagent_type` 填定義檔的 `name`。不用 `SendMessage` 接著問上一輪的 agent：上一輪 agent 的 context 還留著那一輪的推論，等於讀過寫的人的說明。
 - 不另外指定模型：呼叫時指定的模型優先於定義檔的 `model`，三個投票者可能變成同一個模型。
 - prompt 只照下面的格式填，不加其他說明。`<回報檔>` 一行一個路徑，第一輪沒有就整行拿掉：
 
