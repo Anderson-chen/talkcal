@@ -8,7 +8,7 @@
 # --checksum 比對 release 頁上的 sha256，不一致 build 就失敗：release 的檔案被換掉也不會被執行
 FROM ubuntu:24.04 AS fetch
 ADD --checksum=sha256:f002864be6dd8d5d7bdb123aaf7291ec8e291012bd9f70b6d2362f730db52aeb \
-    https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.2/codeql-bundle-linux64.tar.gz \
+    https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.4/codeql-bundle-linux64.tar.gz \
     /tmp/codeql.tar.gz
 # 只留 java、javascript、actions，和這三種語言解析設定檔要的 html、xml、yaml、properties，映像檔小一半
 RUN tar -xzf /tmp/codeql.tar.gz -C /opt \
