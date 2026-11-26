@@ -65,6 +65,12 @@ public final class S3EventArchiveAdapter implements EventArchivePort {
         return bucket.deleteAll(ArchiveBucket.ownerPrefix(ROOT, owner));
     }
 
+    // 檔名帶存的時間和亂數，搬到 to 的前綴底下不會蓋掉 to 自己的那幾包
+    @Override
+    public void transfer(OwnerId from, OwnerId to) {
+        bucket.moveAll(ArchiveBucket.ownerPrefix(ROOT, from), ArchiveBucket.ownerPrefix(ROOT, to));
+    }
+
     /**
      * 不直接序列化 domain 的型別：domain 改了欄位，舊的歸檔照樣讀得回來。
      * v 是格式的版本：之後欄位的意思變了，讀的時候看 v 決定怎麼轉換。

@@ -14,7 +14,7 @@
 // - 還沒送出的字放 sessionStorage：登入過期跳回登入頁、或重新整理，回來時還在
 
 import { computed, inject, onScopeDispose, ref, watch, type InjectionKey } from 'vue'
-import { me } from '../auth'
+import { me, onSignedInFromGuest } from '../auth'
 import { assistantHistory, dismissProposals, talkToAssistant, type AssistantChange, type EventFields, type SavedEvent } from '../calendar'
 import { UnauthorizedError } from '../http'
 import { describeAssistantFailure, type FailureKind } from './assistantFailure'
@@ -69,7 +69,21 @@ const GREETING = '嗨！我是你的行事曆助理。可以幫你新增、修�
 
 // 私密視窗、被封鎖的網站資料會讓 localStorage 丟例外，下面一律捕捉後忽略，最壞就是重新整理後開新對話。
 // key 帶登入者的 id，換人登入才不會讀回上一個人的對話。擋住讀別人對話的是後端的授權，這裡只是不主動去要
-const storageKey = () => `talkcal.calendar.assistant.conversation.${me.value?.id ?? 'anonymous'}`
+const conversationKey = (userId: string | undefined) => `talkcal.calendar.assistant.conversation.${userId ?? 'anonymous'}`
+const storageKey = () => conversationKey(me.value?.id)
+
+// 訪客登入已有的帳號：後端已經把對話搬到那個帳號，記的 id 也從訪客的 key 搬過去，不然換成那個帳號之後接不回這段對話
+// （前端沒有對話列表）。那個帳號原本在這個瀏覽器記的那段會被換掉，那段還在後端，只是畫面上接不回
+onSignedInFromGuest((guestId, accountId) => {
+  try {
+    const id = localStorage.getItem(conversationKey(guestId))
+    if (!id) return
+    localStorage.setItem(conversationKey(accountId), id)
+    localStorage.removeItem(conversationKey(guestId))
+  } catch {
+    // 存不了只是接不回這段對話
+  }
+})
 // key 在建立助理時算一次就好：登入過期時 401 的通知比例外早到，me 已經是 null，那時才算會存到 anonymous 的 key
 const draftKey = (userId: string | undefined) => `talkcal.calendar.assistant.draft.${userId ?? 'anonymous'}`
 

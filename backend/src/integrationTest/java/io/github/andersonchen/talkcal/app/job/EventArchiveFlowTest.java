@@ -159,6 +159,11 @@ class EventArchiveFlowTest {
             public int deleteAll(OwnerId owner) {
                 return archive.deleteAll(owner);
             }
+
+            @Override
+            public void transfer(OwnerId from, OwnerId to) {
+                archive.transfer(from, to);
+            }
         };
 
         ArchiveEventsUseCase.Report report = archiving(failsForBob).archiveEndedBefore(CUTOFF);

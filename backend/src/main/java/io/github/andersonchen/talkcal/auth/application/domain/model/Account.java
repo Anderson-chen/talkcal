@@ -11,7 +11,7 @@ import java.util.Optional;
  *
  * displayName 是給人看的名字，可能重複、可能改，不能當身分；身分是 id。
  *
- * 新帳號都是免費會員；改成付費要由維護者直接改資料庫（見 V14）。
+ * 註冊的帳號是免費會員，按「以訪客身分試用」開的帳號是訪客等級；改成付費要由維護者直接改資料庫（見 V14）。
  */
 public record Account(AccountId id, String displayName, PasswordLogin passwordLogin, MembershipTier tier) {
 
@@ -69,6 +69,18 @@ public record Account(AccountId id, String displayName, PasswordLogin passwordLo
             cleaned = cleaned.substring(0, cleaned.offsetByCodePoints(0, MAX_DISPLAY_NAME_LENGTH));
         }
         return new Account(id, cleaned, null, MembershipTier.FREE);
+    }
+
+    /**
+     * 按「以訪客身分試用」時開的帳號：沒有帳號名稱和密碼。註冊時在同一個帳號上升級：
+     * 帳密見 RegisterAccountUseCase.registerFrom，Google、GitHub 見 SignInExternallyUseCase
+     */
+    public static Account guest(AccountId id) {
+        return new Account(id, MembershipTier.GUEST.label(), null, MembershipTier.GUEST);
+    }
+
+    public boolean isGuest() {
+        return tier == MembershipTier.GUEST;
     }
 
     public Optional<PasswordLogin> password() {

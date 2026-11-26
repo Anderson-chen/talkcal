@@ -16,6 +16,8 @@ import java.util.List;
  * - load：結束在 firstMonth～lastMonth（兩端都含）的、owner 的全部行程，順序不保證；同一個 id 出現好幾次只回一筆
  * - load 只讀得到 owner 的，別人的那幾包不會混進來
  * - deleteAll：刪掉 owner 在歸檔裡的全部資料，回傳刪了幾包。刪帳號時歸檔也要跟著刪，不能變成刪不掉的備份
+ * - transfer：from 在歸檔裡的全部改到 to 名下，之後 load(to, …) 讀得到、load(from, …) 讀不到。
+ *   中途失敗時已經搬好的留在 to，再呼叫一次會把剩下的搬完
  * - 失敗時丟 IllegalStateException
  */
 public interface EventArchivePort {
@@ -25,4 +27,6 @@ public interface EventArchivePort {
     List<ScheduledEvent> load(OwnerId owner, YearMonth firstMonth, YearMonth lastMonth);
 
     int deleteAll(OwnerId owner);
+
+    void transfer(OwnerId from, OwnerId to);
 }

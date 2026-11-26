@@ -55,10 +55,10 @@
    cp deploy/.env.example deploy/.env
    ```
 
-2. 啟動資料庫和歸檔用的 RustFS：
+2. 啟動資料庫、記錄 API 每日呼叫次數的 Redis、歸檔用的 RustFS：
 
    ```bash
-   docker compose -f deploy/compose.yaml up -d postgres archive archive-init
+   docker compose -f deploy/compose.yaml up -d postgres redis archive archive-init
    ```
 
 ### 本機部署

@@ -239,10 +239,21 @@
       // 架構頁（docs/architecture/index.html）抄了一份映像檔版本，升級 PR 一起改，頁面才不會跟 compose 對不上。
       // 頁尾的「最後核對」日期和說明文字還是要人看過再改（見 .claude/rules/infra.md）
       customType: 'regex',
-      description: '架構頁的 image 欄位（caddy、postgres）',
+      description: '架構頁的 image 欄位（caddy、postgres、redis）',
       managerFilePatterns: ['/^docs/architecture/index\\.html$/'],
       matchStrings: [
         '\\["image","(?<depName>[a-z0-9./-]+):(?<currentValue>[^"]+)"',
+      ],
+      datasourceTemplate: 'docker',
+    },
+    {
+      // 整合測試用的 Redis 要跟 deploy/compose.yaml 同一版，測的才是部署的版本。compose 檔裡的 redis 由 Renovate 內建的
+      // docker-compose manager 升級，這條規則讓同一個升級 PR 也改 TestRedis.IMAGE
+      customType: 'regex',
+      description: '整合測試的 Redis 映像檔（TestRedis.IMAGE）',
+      managerFilePatterns: ['/^backend/src/integrationTest/java/.+/TestRedis\\.java$/'],
+      matchStrings: [
+        'IMAGE = "(?<depName>redis):(?<currentValue>[^"]+)"',
       ],
       datasourceTemplate: 'docker',
     },

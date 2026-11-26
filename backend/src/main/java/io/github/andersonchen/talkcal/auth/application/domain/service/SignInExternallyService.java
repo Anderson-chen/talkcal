@@ -24,11 +24,19 @@ public final class SignInExternallyService implements SignInExternallyUseCase {
     }
 
     @Override
-    public AccountId signIn(ExternalIdentity identity, String name, String fallbackName) {
+    public AccountId signIn(AccountId signedIn, ExternalIdentity identity, String name, String fallbackName) {
         Objects.requireNonNull(identity, "identity 不可為 null");
         return loadAccountPort.load(identity)
                 .map(Account::id)
-                .orElseGet(() -> createFor(identity, name, fallbackName));
+                .orElseGet(() -> upgradeGuest(signedIn, identity, name, fallbackName)
+                        ? signedIn
+                        : createFor(identity, name, fallbackName));
+    }
+
+    // 是不是訪客由資料庫在同一個交易裡判斷，不先查再改：另一個分頁可能同時在註冊
+    private boolean upgradeGuest(AccountId signedIn, ExternalIdentity identity, String name, String fallbackName) {
+        return signedIn != null
+                && saveAccountPort.upgradeGuestWithIdentity(Account.external(signedIn, name, fallbackName), identity);
     }
 
     private AccountId createFor(ExternalIdentity identity, String name, String fallbackName) {

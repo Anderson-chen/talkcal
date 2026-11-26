@@ -3,8 +3,11 @@
 // session 在後端，瀏覽器只拿到 HttpOnly cookie，目前登入的人由 GET /api/auth/me 回傳。
 // 登入、登出是 Spring Security 的端點：登入送表單格式，成功回 204。
 // Google、GitHub 登入是整頁轉址，不經過這裡的 fetch；轉回首頁時 session 已經登入，App 照常 loadMe()。
+//
+// 訪客也是登入狀態（後端開的訪客帳號，tier 是 guest），功能跟會員一樣，只是每天有次數上限。
+// 瀏覽器關掉再開時，後端用訪客 cookie 自動登入回同一個訪客，這裡不用另外處理。
 
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { message, onUnauthorized, send, UnauthorizedError } from './http'
 
 /** id 是行程、對話的擁有者；name 給人看 */
@@ -14,6 +17,7 @@ export interface Me {
   name: string
   // 只用 Google、GitHub 登入的帳號沒有帳號名稱
   username: string | null
+  tier: 'guest' | 'free' | 'paid'
   // 畫面上顯示的會員等級，文字由後端決定
   tierLabel: string
 }
@@ -44,6 +48,8 @@ export function providerLoginUrl(provider: Provider): string {
  */
 export const me = ref<Me | null | undefined>(undefined)
 
+export const isGuest = computed(() => me.value?.tier === 'guest')
+
 // 任何 API 回 401（登入過期、在別的分頁登出）都換回登入畫面
 onUnauthorized(() => {
   me.value = null
@@ -55,13 +61,71 @@ onUnauthorized(() => {
  */
 export const meUnreachable = ref<string | null>(null)
 
+/**
+ * 訪客要登入或註冊時顯示登入頁：null 是照常顯示行事曆。reason 是為什麼要登入（例如次數用完），有的話顯示在登入頁上。
+ * 沒登入的人一律看到登入頁，用不到這個
+ */
+export interface LoginPrompt {
+  mode: 'login' | 'register'
+  reason?: string
+}
+
+export const loginPrompt = ref<LoginPrompt | null>(null)
+
+export function requestLogin(mode: LoginPrompt['mode'] = 'login', reason?: string) {
+  loginPrompt.value = { mode, reason }
+}
+
+// 訪客登入已有的帳號時，後端把訪客的對話搬到那個帳號，前端記的對話 id 也要跟著換到那個帳號（useAssistant 註冊的 listener）。
+// 從哪個訪客登入的記在 sessionStorage：Google、GitHub 登入是整頁轉址，同一個分頁轉回來還讀得到
+const SIGNING_IN_FROM_GUEST = 'talkcal.auth.signingInFromGuest'
+const guestSignInListeners = new Set<(guestId: string, accountId: string) => void>()
+
+/** 登入完成、換成另一個帳號時通知：guestId 是登入前的訪客，accountId 是登入的帳號 */
+export function onSignedInFromGuest(listener: (guestId: string, accountId: string) => void): () => void {
+  guestSignInListeners.add(listener)
+  return () => guestSignInListeners.delete(listener)
+}
+
+/** 送出登入、轉址到 Google／GitHub 之前呼叫：記下現在是哪個訪客，不是訪客就清掉舊的紀錄 */
+export function rememberGuestBeforeSignIn() {
+  try {
+    if (isGuest.value && me.value) sessionStorage.setItem(SIGNING_IN_FROM_GUEST, me.value.id)
+    else sessionStorage.removeItem(SIGNING_IN_FROM_GUEST)
+  } catch {
+    // 私密視窗等存不了：登入之後畫面接不回訪客時的對話，對話本身還在後端
+  }
+}
+
+function takeGuestBeforeSignIn(): string | null {
+  try {
+    const id = sessionStorage.getItem(SIGNING_IN_FROM_GUEST)
+    sessionStorage.removeItem(SIGNING_IN_FROM_GUEST)
+    return id
+  } catch {
+    return null
+  }
+}
+
+/** 以訪客身分試用：後端開一個訪客帳號並登入。今天的訪客名額滿了丟 ApiError（429），訊息直接給使用者看 */
+export async function startGuest(): Promise<void> {
+  await send('/api/auth/guest', { method: 'POST' }, { notifyUnauthorized: false })
+  await loadMe()
+}
+
 /** 401 記成沒登入，其他錯誤丟出去 */
 export async function loadMe(): Promise<void> {
   try {
     const res = await send('/api/auth/me', { method: 'GET' }, { notifyUnauthorized: false })
-    me.value = (await res.json()) as Me
+    const loaded = (await res.json()) as Me
+    // 在換掉 me 之前通知：新帳號的行事曆一建立就讀得到搬過去的對話 id
+    const guest = takeGuestBeforeSignIn()
+    if (guest && guest !== loaded.id) guestSignInListeners.forEach((listener) => listener(guest, loaded.id))
+    me.value = loaded
+    loginPrompt.value = null
   } catch (e) {
     if (!(e instanceof UnauthorizedError)) throw e
+    takeGuestBeforeSignIn()
     me.value = null
   }
 }
@@ -78,6 +142,7 @@ export async function connect(): Promise<void> {
 
 /** 帳密錯丟 UnauthorizedError 但不通知 App，留在登入頁顯示 */
 export async function logIn(username: string, password: string): Promise<void> {
+  rememberGuestBeforeSignIn()
   await send('/api/auth/login', { method: 'POST', body: new URLSearchParams({ username, password }) },
     { contentType: 'application/x-www-form-urlencoded', notifyUnauthorized: false })
   await loadMe()

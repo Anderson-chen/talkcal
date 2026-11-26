@@ -25,10 +25,28 @@ public final class RegisterAccountService implements RegisterAccountUseCase {
     public AccountId register(String username, String password) {
         Username name = Username.of(username);
         Account.checkNewPassword(password);
+        return saveNew(new Account.PasswordLogin(name, hashPasswordPort.hash(password)));
+    }
 
-        Account account = Account.withPassword(AccountId.newId(), name, hashPasswordPort.hash(password));
+    @Override
+    public AccountId registerFrom(AccountId signedIn, String username, String password) {
+        Objects.requireNonNull(signedIn, "signedIn 不可為 null");
+        Username name = Username.of(username);
+        Account.checkNewPassword(password);
+
+        Account.PasswordLogin login = new Account.PasswordLogin(name, hashPasswordPort.hash(password));
+        // 先試著升級：是不是訪客由資料庫在同一句 UPDATE 判斷，不先查再改（另一個分頁可能同時在註冊）
+        return switch (saveAccountPort.upgradeGuest(signedIn, login)) {
+            case UPGRADED -> signedIn;
+            case USERNAME_TAKEN -> throw new UsernameTakenException(name);
+            case NOT_A_GUEST -> saveNew(login);
+        };
+    }
+
+    private AccountId saveNew(Account.PasswordLogin login) {
+        Account account = Account.withPassword(AccountId.newId(), login.username(), login.passwordHash());
         if (!saveAccountPort.saveIfUsernameFree(account)) {
-            throw new UsernameTakenException(name);
+            throw new UsernameTakenException(login.username());
         }
         return account.id();
     }

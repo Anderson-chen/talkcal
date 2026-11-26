@@ -73,6 +73,9 @@ dependencies {
     // Flyway 對 PostgreSQL 的支援是獨立模組，少了這個模組 Flyway 無法連 PostgreSQL
     runtimeOnly 'org.flywaydb:flyway-database-postgresql'
 
+    // 每日次數的計數（見 RedisQuotaCounterAdapter）：每個受限的請求都要加一，放 PostgreSQL 等於每個請求多一次寫入
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
     // 歸檔放 S3 相容的物件儲存（雲端 S3、本機 RustFS），兩邊只差 endpoint。
     // 排掉 netty-nio-client：只用同步的 S3Client，用不到 async 的那套，少 10 MB 依賴、少一份要追的漏洞
     implementation platform('software.amazon.awssdk:bom:2.55.16')

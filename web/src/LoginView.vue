@@ -4,13 +4,20 @@
 //
 // Google、GitHub 登入只在後端有設定時才出現。這兩個按鈕是一般的連結，不是 fetch：要整頁轉到對方去同意，
 // 失敗時後端轉回 /?login_error=oauth。
+//
+// 「以訪客身分試用」開一個訪客帳號，直接進行事曆。訪客按了註冊、登入（auth.ts 的 loginPrompt）也來這裡：
+// 訪客註冊時後端在同一個帳號上升級，登入別的帳號時後端把訪客的行程、對話併過去，這裡照常送出就好。
 import { computed, onMounted, ref } from 'vue'
-import { loadProviders, logIn, providerLoginUrl, signUp, type Provider } from './auth'
+import { isGuest, loadProviders, logIn, loginPrompt, providerLoginUrl, rememberGuestBeforeSignIn, signUp, startGuest, type Provider } from './auth'
+import { oneAtATime } from './calendar/submitOnce'
 import { savedThemeVars } from './calendar/theme'
+import { message } from './http'
 
 const vars = savedThemeVars()
 
-const mode = ref<'login' | 'register'>('login')
+const mode = ref<'login' | 'register'>(loginPrompt.value?.mode ?? 'login')
+// 為什麼要登入，例如訪客的次數用完了
+const notice = loginPrompt.value?.reason
 const username = ref('')
 const password = ref('')
 const error = ref<string | null>(null)
@@ -34,6 +41,20 @@ onMounted(async () => {
   }
   providers.value = await loadProviders()
 })
+
+const tryAsGuest = oneAtATime(busy, async () => {
+  error.value = null
+  try {
+    await startGuest()
+  } catch (e) {
+    // 今天的訪客名額滿了（429）時，後端的訊息會請使用者註冊
+    error.value = message(e)
+  }
+})
+
+function backToCalendar() {
+  loginPrompt.value = null
+}
 
 function switchMode() {
   mode.value = mode.value === 'login' ? 'register' : 'login'
@@ -59,6 +80,7 @@ async function submit() {
   <div class="login" :style="vars">
     <form class="card" @submit.prevent="submit">
       <h1>{{ title }}</h1>
+      <p v-if="notice" role="status" class="notice">{{ notice }}</p>
       <div class="field">
         <label for="login-username">帳號名稱</label>
         <input id="login-username" v-model="username" autocomplete="username" autocapitalize="none" spellcheck="false" />
@@ -74,13 +96,16 @@ async function submit() {
       <button type="submit" class="primary" :disabled="busy">{{ busy ? '請稍候…' : title }}</button>
       <template v-if="providers.length">
         <div class="divider"><span>或</span></div>
-        <a v-for="provider in providers" :key="provider" class="provider" :href="providerLoginUrl(provider)">
+        <a v-for="provider in providers" :key="provider" class="provider" :href="providerLoginUrl(provider)"
+           @click="rememberGuestBeforeSignIn">
           用 {{ PROVIDER_LABELS[provider] }} 登入
         </a>
       </template>
       <button type="button" class="switch" @click="switchMode">
         {{ mode === 'login' ? '還沒有帳號？註冊' : '已經有帳號？登入' }}
       </button>
+      <button v-if="isGuest" type="button" class="switch" @click="backToCalendar">先不登入，回到行事曆</button>
+      <button v-else type="button" class="switch" :disabled="busy" @click="tryAsGuest">以訪客身分試用</button>
     </form>
   </div>
 </template>
@@ -96,6 +121,7 @@ label { font-size: 13px; font-weight: 500; color: var(--muted); }
 input { height: 44px; border: 1px solid var(--field); border-radius: 10px; padding: 0 12px; font-size: 15px;
   background: var(--card); color: var(--ink); font-family: inherit; }
 input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.notice { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--seg); font-size: 14px; }
 .hint { margin: 0; font-size: 13px; color: var(--muted); }
 .error { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--dangerSoft); color: var(--danger); font-size: 14px; }
 .primary { height: 44px; border: 0; border-radius: 10px; background: var(--accent); color: var(--onAccent); font-size: 15px;

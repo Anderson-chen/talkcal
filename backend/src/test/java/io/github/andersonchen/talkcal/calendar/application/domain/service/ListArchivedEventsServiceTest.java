@@ -54,6 +54,11 @@ class ListArchivedEventsServiceTest {
         public int deleteAll(OwnerId owner) {
             return fail("查看不該刪歸檔");
         }
+
+        @Override
+        public void transfer(OwnerId from, OwnerId to) {
+            fail("查看不該搬歸檔");
+        }
     }
 
     @Test

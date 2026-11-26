@@ -21,6 +21,7 @@ import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -31,6 +32,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
+import software.amazon.awssdk.services.s3.model.CopyObjectResponse;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 
 /**
  * 歸檔格式要不靠這個 app 也讀得懂，存不進去時要丟例外，不能回傳得像成功了一樣。
@@ -115,6 +123,80 @@ class S3EventArchiveAdapterTest {
         assertEquals(1, archive.deleteAll(ALICE));
         assertTrue(archive.load(ALICE, MARCH, MARCH).isEmpty());
         assertEquals(List.of(bobs), archive.load(BOB, MARCH, MARCH));
+    }
+
+    @Test
+    @DisplayName("訪客併進正式帳號：訪客的歸檔改到那個帳號名下，跟那個帳號原本的一起讀得到；反例：原本的擁有者讀不到")
+    void transferMovesToTheNewOwner() {
+        ScheduledEvent guests = event("訪客的", LocalDateTime.of(2024, 3, 1, 9, 0));
+        ScheduledEvent bobs = event("Bob 的", LocalDateTime.of(2024, 3, 2, 9, 0));
+        archive.store(ALICE, MARCH, List.of(guests));
+        archive.store(BOB, MARCH, List.of(bobs));
+
+        archive.transfer(ALICE, BOB);
+
+        assertTrue(archive.load(ALICE, MARCH, MARCH).isEmpty());
+        assertEquals(Set.of(guests, bobs), Set.copyOf(archive.load(BOB, MARCH, MARCH)));
+        assertEquals(2, bucket.list(ArchiveBucket.ownerPrefix(S3EventArchiveAdapter.ROOT, BOB)).size());
+    }
+
+    /**
+     * 第一次複製之前先執行 beforeFirstCopy：模擬另一台在這邊列出 key 之後、複製之前，就把同一個前綴整個搬完。
+     * ArchiveBucket.moveAll 只用到列出、複製、刪除，其他方法沿用 S3Client 的預設（丟 UnsupportedOperationException）。
+     */
+    private static final class OtherHostMovesFirst implements S3Client {
+
+        private final S3Client s3;
+        private Runnable beforeFirstCopy;
+
+        OtherHostMovesFirst(S3Client s3, Runnable beforeFirstCopy) {
+            this.s3 = s3;
+            this.beforeFirstCopy = beforeFirstCopy;
+        }
+
+        @Override
+        public String serviceName() {
+            return s3.serviceName();
+        }
+
+        @Override
+        public void close() {
+        }
+
+        @Override
+        public ListObjectsV2Response listObjectsV2(ListObjectsV2Request request) {
+            return s3.listObjectsV2(request);
+        }
+
+        @Override
+        public CopyObjectResponse copyObject(CopyObjectRequest request) {
+            if (beforeFirstCopy != null) {
+                Runnable otherHost = beforeFirstCopy;
+                beforeFirstCopy = null;
+                otherHost.run();
+            }
+            return s3.copyObject(request);
+        }
+
+        @Override
+        public DeleteObjectsResponse deleteObjects(DeleteObjectsRequest request) {
+            return s3.deleteObjects(request);
+        }
+    }
+
+    @Test
+    @DisplayName("同一個人的歸檔同時搬兩次（兩台的排程）：後到的那邊列出之後才被先到的搬走，當成已經搬過，不丟例外")
+    void concurrentTransferTreatsMovedKeysAsDone() {
+        ScheduledEvent guests = event("訪客的", LocalDateTime.of(2024, 3, 1, 9, 0));
+        archive.store(ALICE, MARCH, List.of(guests));
+
+        try (S3Client s3 = RUSTFS.client()) {
+            ArchiveBucket racing = new ArchiveBucket(new OtherHostMovesFirst(s3, () -> archive.transfer(ALICE, BOB)), "events");
+            new S3EventArchiveAdapter(racing, Clock.systemUTC()).transfer(ALICE, BOB);
+        }
+
+        assertTrue(archive.load(ALICE, MARCH, MARCH).isEmpty());
+        assertEquals(List.of(guests), archive.load(BOB, MARCH, MARCH));
     }
 
     @Test
