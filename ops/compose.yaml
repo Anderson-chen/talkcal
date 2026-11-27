@@ -6,7 +6,7 @@ name: talkcal-observability
 
 services:
   mimir:
-    image: grafana/mimir:3.2.3
+    image: grafana/mimir:3.2.5
     container_name: talkcal-mimir
     command:
       - -config.file=/etc/mimir/mimir.yaml
@@ -21,7 +21,7 @@ services:
     restart: unless-stopped
 
   loki:
-    image: grafana/loki:3.7.9
+    image: grafana/loki:3.7.10
     container_name: talkcal-loki
     command: -config.file=/etc/loki/loki-config.yaml
     ports:
@@ -45,7 +45,7 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:12.4.14
+    image: grafana/grafana:12.4.15
     container_name: talkcal-grafana
     ports:
       # 一定要綁 127.0.0.1：下面關掉了登入，誰連得到誰就是 Admin。
@@ -82,7 +82,7 @@ services:
     restart: unless-stopped
 
   alloy:
-    image: grafana/alloy:v1.21.2
+    image: grafana/alloy:v1.22.0
     container_name: talkcal-alloy
     command:
       - run
